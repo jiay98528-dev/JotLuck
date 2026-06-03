@@ -10,7 +10,8 @@
     "./types": "./src/types.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
   },
   "dependencies": {
     "dompurify": "^3.4.7",
