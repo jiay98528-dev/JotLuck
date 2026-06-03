@@ -18,12 +18,44 @@ import { EditorView, keymap, lineNumbers, highlightActiveLine } from '@codemirro
 import { EditorState } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
 import {
   markluckExtensions,
   markdownKeymap,
   setBlocksForDecorations,
 } from '@/utils/cm6-extensions';
 import type { MarkdownBlock } from '@/types';
+
+// M1 syntax highlighting theme (OKLCH-based minimal light)
+const markluckHighlightStyle = HighlightStyle.define([
+  { tag: tags.heading, color: 'oklch(0.22 0.01 260)', fontWeight: 'bold' },
+  { tag: tags.heading1, fontSize: '1.6em' },
+  { tag: tags.heading2, fontSize: '1.4em' },
+  { tag: tags.heading3, fontSize: '1.2em' },
+  { tag: tags.comment, color: 'oklch(0.55 0.02 145)', fontStyle: 'italic' },
+  { tag: tags.string, color: 'oklch(0.45 0.12 145)' },
+  { tag: tags.keyword, color: 'oklch(0.45 0.15 285)', fontWeight: 'bold' },
+  { tag: tags.number, color: 'oklch(0.5 0.14 50)' },
+  { tag: tags.typeName, color: 'oklch(0.45 0.13 230)' },
+  { tag: tags.bool, color: 'oklch(0.45 0.15 285)' },
+  { tag: tags.regexp, color: 'oklch(0.5 0.15 15)' },
+  { tag: tags.url, color: 'oklch(0.5 0.13 230)', textDecoration: 'underline' },
+  { tag: tags.link, color: 'oklch(0.5 0.13 230)', textDecoration: 'underline' },
+  { tag: tags.escape, color: 'oklch(0.45 0.15 50)' },
+  { tag: tags.operator, color: 'oklch(0.3 0.005 260)' },
+  { tag: tags.punctuation, color: 'oklch(0.5 0.01 260)' },
+  { tag: tags.tagName, color: 'oklch(0.45 0.13 285)' },
+  { tag: tags.attributeName, color: 'oklch(0.45 0.12 230)' },
+  { tag: tags.attributeValue, color: 'oklch(0.45 0.12 145)' },
+  { tag: tags.quote, color: 'oklch(0.5 0.02 145)' },
+  { tag: tags.list, color: 'oklch(0.5 0.13 230)' },
+  { tag: tags.monospace, color: 'oklch(0.45 0.12 15)', fontFamily: 'monospace' },
+  { tag: tags.emphasis, fontStyle: 'italic' },
+  { tag: tags.strong, fontWeight: 'bold' },
+  { tag: tags.strikethrough, textDecoration: 'line-through' },
+  { tag: tags.content, color: 'oklch(0.28 0.005 260)' },
+]);
 
 const props = defineProps<{
   modelValue: string;
@@ -56,6 +88,7 @@ onMounted(() => {
       lineNumbers(),
       highlightActiveLine(),
       markdown(),
+      syntaxHighlighting(markluckHighlightStyle),
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       keymap.of(Object.entries(markdownKeymap()).map(([key, fn]) => ({ key, run: fn }))),
@@ -121,120 +154,6 @@ defineExpose({
   focus: () => editorView?.focus(),
 });
 </script>
-
-<style>
-/* CM6 Syntax Highlighting Theme — M1 Minimal Light */
-/* Must NOT be scoped — CM6 classes are global */
-
-.cm-editor .ͼ1 {
-  /* heading */
-  color: oklch(0.25 0.01 260);
-  font-weight: 700;
-  font-size: 1.2em;
-}
-.cm-editor .ͼ2 {
-  /* comment */
-  color: oklch(0.55 0.02 145);
-  font-style: italic;
-}
-.cm-editor .ͼ3 {
-  /* string */
-  color: oklch(0.45 0.12 145);
-}
-.cm-editor .ͼ4 {
-  /* keyword */
-  color: oklch(0.45 0.15 285);
-  font-weight: 600;
-}
-.cm-editor .ͼ5 {
-  /* number */
-  color: oklch(0.5 0.14 50);
-}
-.cm-editor .ͼ6 {
-  /* typeName */
-  color: oklch(0.45 0.13 230);
-}
-.cm-editor .ͼ7 {
-  /* literal / boolean */
-  color: oklch(0.45 0.15 285);
-}
-.cm-editor .ͼ8 {
-  /* regexp */
-  color: oklch(0.5 0.15 15);
-}
-.cm-editor .ͼ9 {
-  /* url / link */
-  color: oklch(0.5 0.13 230);
-  text-decoration: underline;
-}
-.cm-editor .ͼa {
-  /* escape */
-  color: oklch(0.45 0.15 50);
-}
-.cm-editor .ͼb {
-  /* operator */
-  color: oklch(0.3 0.005 260);
-}
-.cm-editor .ͼc {
-  /* bracket */
-  color: oklch(0.45 0.01 260);
-}
-.cm-editor .ͼd {
-  /* punctuation */
-  color: oklch(0.5 0.01 260);
-}
-.cm-editor .ͼe {
-  /* tagName (XML/HTML) */
-  color: oklch(0.45 0.13 285);
-}
-.cm-editor .ͼf {
-  /* attributeName */
-  color: oklch(0.45 0.12 230);
-}
-.cm-editor .ͼg {
-  /* attributeValue */
-  color: oklch(0.45 0.12 145);
-}
-.cm-editor .ͼh {
-  /* heading marker (# ## ###) */
-  color: oklch(0.5 0.13 230);
-  font-weight: 700;
-}
-.cm-editor .ͼi {
-  /* quote */
-  color: oklch(0.5 0.02 145);
-}
-.cm-editor .ͼj {
-  /* list marker (- * 1.) */
-  color: oklch(0.5 0.13 230);
-}
-.cm-editor .ͼk {
-  /* code */
-  color: oklch(0.45 0.12 15);
-  background: oklch(0.96 0.003 260);
-  padding: 1px 3px;
-  border-radius: 3px;
-  font-family: var(--font-mono, monospace);
-}
-.cm-editor .ͼl {
-  /* emphasis */
-  font-style: italic;
-}
-.cm-editor .ͼm {
-  /* strong */
-  font-weight: 700;
-}
-.cm-editor .ͼn {
-  /* strikethrough */
-  text-decoration: line-through;
-}
-
-/* List formatting: bold/italic markers inside lists */
-.cm-editor .ͼ1.ͼ1 {
-  /* override for nested */
-  font-size: inherit;
-}
-</style>
 
 <style scoped>
 .markdown-editor {
