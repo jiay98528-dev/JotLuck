@@ -36,10 +36,16 @@ const props = withDefaults(
   { depth: 0, isOpen: false },
 );
 
+const emit = defineEmits<{
+  select: [path: string];
+}>();
+
 const isActive = props.activePath === props.node.path;
 
 function onClick(): void {
-  // M1 basic: just emit select for files
+  if (props.node.isFile) {
+    emit('select', props.node.path);
+  }
 }
 </script>
 

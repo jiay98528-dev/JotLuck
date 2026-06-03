@@ -18,6 +18,7 @@
         :node="file"
         :depth="0"
         :active-path="activePath"
+        @select="(path: string) => $emit('selectFile', path)"
       />
     </ul>
   </div>
@@ -43,6 +44,7 @@ defineProps<{
 }>();
 
 defineEmits<{
+  selectFile: [path: string];
   retry: [];
 }>();
 </script>

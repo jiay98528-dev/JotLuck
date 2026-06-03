@@ -2,26 +2,24 @@
   <div class="app-layout" :class="{ 'app-layout--mobile': isMobile }">
     <!-- 左侧文件边栏 -->
     <aside v-if="!isMobile || showMobileSidebar" class="app-layout__left">
-      <slot name="left-sidebar">
-        <FileSidebar />
-      </slot>
+      <slot name="left-sidebar" />
     </aside>
 
     <!-- 中间编辑区 -->
     <main class="app-layout__center">
       <slot name="editor">
-        <MarkdownEditor
-          v-if="currentContent !== undefined"
-          :model-value="currentContent"
-          @update:model-value="(v: string) => $emit('updateContent', v)"
-        />
+        <div class="app-layout__empty">
+          <p>选择一条笔记开始编辑</p>
+        </div>
       </slot>
     </main>
 
     <!-- 右侧导航面板 -->
     <aside v-if="!isMobile && showRightSidebar" class="app-layout__right">
       <slot name="right-sidebar">
-        <NavTree />
+        <div class="app-layout__empty">
+          <p>导航面板 (M2)</p>
+        </div>
       </slot>
     </aside>
 
@@ -43,17 +41,6 @@
  * @see components.md §3
  */
 import { ref } from 'vue';
-import FileSidebar from '@/components/file-tree/FileSidebar.vue';
-import MarkdownEditor from '@/components/editor/MarkdownEditor.vue';
-import NavTree from '@/components/nav/NavTree.vue';
-
-defineProps<{
-  currentContent?: string;
-}>();
-
-defineEmits<{
-  updateContent: [content: string];
-}>();
 
 const showRightSidebar = ref(true);
 const showMobileSidebar = ref(false);
@@ -98,6 +85,15 @@ if (typeof window !== 'undefined') {
   border-left: 1px solid var(--clr-border, #e0e0e0);
   overflow-y: auto;
   background: var(--clr-zone-navtree, #f8faf8);
+}
+
+.app-layout__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--clr-text-secondary, #999);
+  font-size: var(--text-lg, 16px);
 }
 
 .app-layout__overlay {
