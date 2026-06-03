@@ -3,8 +3,6 @@
 // ============================================================
 // Source: spec/types/note.ts + spec/types/editor.ts (BlockType)
 
-import type { BlockType } from './editor';
-
 /** 笔记相对路径（统一使用 / 分隔符） */
 export type NotePath = string;
 
@@ -40,19 +38,6 @@ export interface WikiLink {
   alias?: string;
   anchor?: string;
   isValid: boolean;
-}
-
-/** 编辑器中的一个语法块 */
-export interface NoteBlock {
-  id: string;
-  type: BlockType;
-  rawContent: string;
-  renderedContent: string;
-  mode: 'source' | 'render';
-  isValid: boolean;
-  startOffset: number;
-  endOffset: number;
-  meta?: Record<string, unknown>;
 }
 
 /** MarkLuck 核心实体 — 笔记 */

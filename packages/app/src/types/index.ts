@@ -28,7 +28,6 @@ export type {
   InlineFormatType,
   NoteFrontmatter,
   WikiLink,
-  NoteBlock,
   Note,
   Nullable,
   Optional,

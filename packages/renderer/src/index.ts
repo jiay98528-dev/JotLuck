@@ -1,18 +1,54 @@
 /**
- * @markluck/renderer — Markdown rendering pipeline
+ * @markluck/renderer — Markdown 渲染管线入口
  *
- * Markdown text → marked parse → DOMPurify sanitize → highlight.js → safe HTML
+ * Markdown text → marked parse (with extensions) → DOMPurify sanitize → safe HTML
+ *                                                                    ↓
+ *                                              highlight.js ← DOM insert ←
  *
  * Shared by @markluck/app (main editor) and @markluck/vscode-ext (VS Code webview).
+ *
+ * @see TAD.md §4
  */
 
+import { marked } from 'marked';
+import { markluckExtensions } from './marked-extensions';
+import { sanitize } from './sanitize';
+import { highlightCodeBlocks } from './highlight';
+import type { RendererOptions } from './types';
+
+// 配置 marked 使用 MarkLuck 自定义扩展
+marked.use({ extensions: markluckExtensions });
+
+// 启用 GFM (GitHub Flavored Markdown: 表格、任务列表、删除线等)
+marked.setOptions({ gfm: true, breaks: false });
+
 /**
- * Render Markdown string to safe HTML.
- * Placeholder implementation — full pipeline built in M1.
+ * 渲染 Markdown 字符串为安全 HTML。
+ *
+ * 管线流程：
+ *   1. marked.parse(source) — Markdown → HTML（含 Wiki-link + #tag 扩展）
+ *   2. sanitize(html)       — DOMPurify 清洗 → 安全 HTML
+ *   3. (DOM insert)         — 由调用方插入 DOM
+ *   4. highlightCodeBlocks  — 对 <pre><code> 执行语法高亮
+ *
+ * @param source - Raw Markdown source text
+ * @param _options - Renderer options (reserved for future use)
+ * @returns Rendered safe HTML string
  */
-export function renderMarkdown(_source: string): string {
-  // M0 placeholder — implementation in M1
-  return '';
+export function renderMarkdown(source: string, _options?: RendererOptions): string {
+  // Step 1: Parse Markdown with custom extensions
+  const rawHtml = marked.parse(source, { async: false }) as string;
+
+  // Step 2: Sanitize against XSS
+  const cleanHtml = sanitize(rawHtml);
+
+  return cleanHtml;
 }
+
+/**
+ * 对已插入 DOM 的 HTML 容器执行代码高亮。
+ * 必须在 mounted/updated 生命周期中调用。
+ */
+export { highlightCodeBlocks };
 
 export type { RendererOptions, RenderResult } from './types';
