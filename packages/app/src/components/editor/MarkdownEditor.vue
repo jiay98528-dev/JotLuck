@@ -122,6 +122,120 @@ defineExpose({
 });
 </script>
 
+<style>
+/* CM6 Syntax Highlighting Theme — M1 Minimal Light */
+/* Must NOT be scoped — CM6 classes are global */
+
+.cm-editor .ͼ1 {
+  /* heading */
+  color: oklch(0.25 0.01 260);
+  font-weight: 700;
+  font-size: 1.2em;
+}
+.cm-editor .ͼ2 {
+  /* comment */
+  color: oklch(0.55 0.02 145);
+  font-style: italic;
+}
+.cm-editor .ͼ3 {
+  /* string */
+  color: oklch(0.45 0.12 145);
+}
+.cm-editor .ͼ4 {
+  /* keyword */
+  color: oklch(0.45 0.15 285);
+  font-weight: 600;
+}
+.cm-editor .ͼ5 {
+  /* number */
+  color: oklch(0.5 0.14 50);
+}
+.cm-editor .ͼ6 {
+  /* typeName */
+  color: oklch(0.45 0.13 230);
+}
+.cm-editor .ͼ7 {
+  /* literal / boolean */
+  color: oklch(0.45 0.15 285);
+}
+.cm-editor .ͼ8 {
+  /* regexp */
+  color: oklch(0.5 0.15 15);
+}
+.cm-editor .ͼ9 {
+  /* url / link */
+  color: oklch(0.5 0.13 230);
+  text-decoration: underline;
+}
+.cm-editor .ͼa {
+  /* escape */
+  color: oklch(0.45 0.15 50);
+}
+.cm-editor .ͼb {
+  /* operator */
+  color: oklch(0.3 0.005 260);
+}
+.cm-editor .ͼc {
+  /* bracket */
+  color: oklch(0.45 0.01 260);
+}
+.cm-editor .ͼd {
+  /* punctuation */
+  color: oklch(0.5 0.01 260);
+}
+.cm-editor .ͼe {
+  /* tagName (XML/HTML) */
+  color: oklch(0.45 0.13 285);
+}
+.cm-editor .ͼf {
+  /* attributeName */
+  color: oklch(0.45 0.12 230);
+}
+.cm-editor .ͼg {
+  /* attributeValue */
+  color: oklch(0.45 0.12 145);
+}
+.cm-editor .ͼh {
+  /* heading marker (# ## ###) */
+  color: oklch(0.5 0.13 230);
+  font-weight: 700;
+}
+.cm-editor .ͼi {
+  /* quote */
+  color: oklch(0.5 0.02 145);
+}
+.cm-editor .ͼj {
+  /* list marker (- * 1.) */
+  color: oklch(0.5 0.13 230);
+}
+.cm-editor .ͼk {
+  /* code */
+  color: oklch(0.45 0.12 15);
+  background: oklch(0.96 0.003 260);
+  padding: 1px 3px;
+  border-radius: 3px;
+  font-family: var(--font-mono, monospace);
+}
+.cm-editor .ͼl {
+  /* emphasis */
+  font-style: italic;
+}
+.cm-editor .ͼm {
+  /* strong */
+  font-weight: 700;
+}
+.cm-editor .ͼn {
+  /* strikethrough */
+  text-decoration: line-through;
+}
+
+/* List formatting: bold/italic markers inside lists */
+.cm-editor .ͼ1.ͼ1 {
+  /* override for nested */
+  font-size: inherit;
+}
+</style>
+
 <style scoped>
 .markdown-editor {
   height: 100%;
@@ -130,12 +244,39 @@ defineExpose({
 
 .markdown-editor :deep(.cm-editor) {
   height: 100%;
+  background: #fff;
 }
 
 .markdown-editor :deep(.cm-scroller) {
   font-family: var(--font-mono, 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace);
   font-size: var(--text-base, 14px);
   line-height: 1.7;
+}
+
+.markdown-editor :deep(.cm-content) {
+  padding: 16px;
+}
+
+.markdown-editor :deep(.cm-line) {
+  padding: 0 4px;
+}
+
+.markdown-editor :deep(.cm-gutters) {
+  border-right: 1px solid #e8e8e8;
+  background: #fafafa;
+  color: #999;
+}
+
+.markdown-editor :deep(.cm-activeLine) {
+  background: oklch(0.97 0.003 260);
+}
+
+.markdown-editor :deep(.cm-cursor) {
+  border-left-color: oklch(0.3 0.01 260);
+}
+
+.markdown-editor :deep(.cm-selectionBackground) {
+  background: oklch(0.6 0.15 230 / 0.25) !important;
 }
 
 /* Block marker styles */

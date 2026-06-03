@@ -12,15 +12,18 @@
     >
       <span class="node-icon">{{ node.isDirectory ? (isOpen ? '📂' : '📁') : '📄' }}</span>
       <span class="node-name">{{ node.name }}</span>
+      <button v-if="node.isFile" class="node-delete" title="删除笔记" @click.stop="onDelete">
+        ×
+      </button>
     </div>
   </li>
 </template>
 
 <script setup lang="ts">
 /**
- * FileTreeNode.vue — 单个文件树节点
+ * FileTreeNode.vue — 单个文件树节点（含删除按钮）
  *
- * M1-15: 递归树节点，区分文件夹/文件图标。
+ * M1-15: 递归树节点。
  *
  * @see components.md §7
  */
@@ -38,6 +41,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   select: [path: string];
+  delete: [path: string];
 }>();
 
 const isActive = props.activePath === props.node.path;
@@ -46,6 +50,10 @@ function onClick(): void {
   if (props.node.isFile) {
     emit('select', props.node.path);
   }
+}
+
+function onDelete(): void {
+  emit('delete', props.node.path);
 }
 </script>
 
@@ -66,6 +74,7 @@ export default { name: 'FileTreeNode' };
   cursor: pointer;
   user-select: none;
   font-size: 13px;
+  position: relative;
 }
 
 .node-item:hover {
@@ -82,8 +91,33 @@ export default { name: 'FileTreeNode' };
 }
 
 .node-name {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.node-delete {
+  display: none;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: none;
+  color: #999;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0;
+}
+
+.node-item:hover .node-delete {
+  display: block;
+}
+
+.node-delete:hover {
+  background: oklch(0.6 0.15 20 / 0.2);
+  color: oklch(0.5 0.15 25);
 }
 </style>

@@ -9,6 +9,7 @@
           :error="errorMessage"
           :active-path="activePath"
           @select-file="onSelectFile"
+          @delete-file="onDeleteFile"
           @retry="initNotebook"
         />
       </div>
@@ -74,6 +75,21 @@ async function onSelectFile(path: string): Promise<void> {
     errorMessage.value = e instanceof Error ? e.message : '读取文件失败';
   } finally {
     loading.value = false;
+  }
+}
+
+async function onDeleteFile(path: string): Promise<void> {
+  try {
+    await fs.deleteFile(path);
+    if (activePath.value === path) {
+      activePath.value = '';
+      currentContent.value = '';
+    }
+    // Refresh file list
+    const entries = await fs.listDirectory('/');
+    files.value = entries;
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : '删除失败';
   }
 }
 

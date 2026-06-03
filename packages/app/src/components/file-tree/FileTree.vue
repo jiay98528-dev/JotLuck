@@ -19,6 +19,7 @@
         :depth="0"
         :active-path="activePath"
         @select="(path: string) => $emit('selectFile', path)"
+        @delete="(path: string) => $emit('deleteFile', path)"
       />
     </ul>
   </div>
@@ -45,6 +46,7 @@ defineProps<{
 
 defineEmits<{
   selectFile: [path: string];
+  deleteFile: [path: string];
   retry: [];
 }>();
 </script>

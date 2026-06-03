@@ -31,10 +31,51 @@ export class MockFSService implements IFileSystemService {
   /** 模拟延迟（ms），暴露竞态条件 */
   private delay: number;
 
+  private storageKey = 'markluck-mock-fs';
+
   constructor(delay = 50) {
     this.delay = delay;
-    // 初始化一个示例笔记本
-    this.initSampleNotebook();
+    // 尝试从 localStorage 恢复
+    if (!this.loadFromStorage()) {
+      this.initSampleNotebook();
+      this.saveToStorage();
+    }
+  }
+
+  /** 从 localStorage 恢复文件树 */
+  private loadFromStorage(): boolean {
+    try {
+      const raw = localStorage.getItem(this.storageKey);
+      if (!raw) return false;
+      const data = JSON.parse(raw) as Record<
+        string,
+        { type: 'file' | 'directory'; content?: string; mtime: number; size: number }
+      >;
+      for (const [path, node] of Object.entries(data)) {
+        this.tree.set(path, { ...node });
+      }
+      return this.tree.size > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /** 持久化文件树到 localStorage */
+  private saveToStorage(): void {
+    try {
+      const data: Record<string, unknown> = {};
+      for (const [path, node] of this.tree) {
+        data[path] = {
+          type: node.type,
+          content: node.content,
+          mtime: node.mtime,
+          size: node.size,
+        };
+      }
+      localStorage.setItem(this.storageKey, JSON.stringify(data));
+    } catch {
+      // Storage full or unavailable — silent fail
+    }
   }
 
   private async wait(): Promise<void> {
@@ -102,6 +143,7 @@ created: 2026-06-03
       mtime: Date.now(),
       size: content.length,
     });
+    this.saveToStorage();
   }
 
   async deleteFile(path: string): Promise<void> {
@@ -110,6 +152,7 @@ created: 2026-06-03
       throw new Error(`文件不存在: ${path}`);
     }
     this.tree.delete(path);
+    this.saveToStorage();
   }
 
   async renameFile(oldPath: string, newPath: string): Promise<void> {
