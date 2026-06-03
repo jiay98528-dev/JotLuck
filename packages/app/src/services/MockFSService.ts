@@ -54,7 +54,9 @@ export class MockFSService implements IFileSystemService {
       for (const [path, node] of Object.entries(data)) {
         this.tree.set(path, { ...node });
       }
-      return this.tree.size > 0;
+      // Only count .md files, not directories
+      const fileCount = [...this.tree.values()].filter((n) => n.type === 'file').length;
+      return fileCount > 0;
     } catch {
       return false;
     }
