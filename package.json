@@ -36,6 +36,7 @@
     "@commitlint/cli": "^21.0.2",
     "@commitlint/config-conventional": "^21.0.2",
     "@playwright/test": "^1.60.0",
+    "@types/js-yaml": "^4.0.9",
     "@typescript-eslint/eslint-plugin": "^8.60.1",
     "@typescript-eslint/parser": "^8.60.1",
     "@vue/test-utils": "^2.4.10",
@@ -55,5 +56,11 @@
     "node": ">=20.0.0",
     "pnpm": ">=9.0.0"
   },
-  "packageManager": "pnpm@11.5.1"
+  "packageManager": "pnpm@11.5.1",
+  "dependencies": {
+    "docx": "^9.7.1",
+    "js-yaml": "^4.2.0",
+    "minisearch": "^7.2.0",
+    "xlsx": "^0.18.5"
+  }
 }

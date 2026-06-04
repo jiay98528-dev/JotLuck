@@ -1,0 +1,279 @@
+/* ===== MarkLuck Main Stylesheet =====
+ * Paper theme — single theme system
+ *
+ * Import order:
+ * 1. tokens — shared design tokens (typography, spacing, z-index, motion)
+ * 2. paper — color theme (light warm paper + dark cardstock)
+ * 3. accessibility — focus ring, WCAG, reduced motion
+ */
+
+@import './tokens.css';
+@import './themes/paper.css';
+@import './accessibility.css';
+
+/* ===== Global Reset ===== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-family: var(--ff-body);
+  font-size: var(--text-base);
+  line-height: var(--lh-reading);
+  color: var(--ink-primary);
+  background: var(--paper-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color-scheme: light dark;
+}
+
+body {
+  min-height: 100vh;
+  background: var(--paper-bg);
+  color: var(--ink-primary);
+}
+
+/* ===== Scrollbar — Native, minimal styling ===== */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* ===== Selection ===== */
+::selection {
+  background: var(--accent-soft);
+  color: inherit;
+}
+
+/* ===== Focus Ring — keyboard only ===== */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: var(--radius);
+}
+
+/* ===== Paper Layout: Hairline Dividers =====
+ * Three-panel layout separated by 1px hairlines.
+ * No background color differences between zones.
+ * Structure through spacing and type, not colored panels.
+ */
+.app-layout__left {
+  border-right: 1px solid var(--rule);
+}
+
+.app-layout__right {
+  border-left: 1px solid var(--rule);
+}
+
+/* ===== Dark Mode: Dialog + Form Overrides ===== */
+[data-color-scheme='dark'] {
+  /* Secondary buttons */
+  .btn--secondary,
+  button.btn--secondary {
+    background: var(--paper-surface);
+    color: var(--ink-primary);
+    border-color: var(--rule);
+  }
+  .btn--secondary:hover {
+    background: var(--paper-raised);
+    color: var(--ink-primary);
+    border-color: var(--rule-strong);
+  }
+
+  /* Primary buttons */
+  .btn--primary,
+  button.btn--primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: oklch(0.995 0 0);
+  }
+  .btn--primary:hover {
+    background: var(--accent-hover);
+  }
+  .btn--primary:disabled {
+    opacity: 0.45;
+  }
+
+  /* Dialog chrome */
+  .dialog-header {
+    border-bottom-color: var(--rule);
+    background: var(--paper-raised);
+  }
+  .dialog-body {
+    background: var(--paper-surface);
+    color: var(--ink-primary);
+  }
+  .dialog-footer {
+    border-top-color: var(--rule);
+    background: var(--paper-surface);
+  }
+  .dialog-close {
+    color: var(--ink-muted);
+  }
+  .dialog-close:hover {
+    background: var(--surface-hover);
+    color: var(--ink-primary);
+  }
+
+  /* Section labels */
+  .section-label {
+    color: var(--ink-secondary);
+  }
+
+  /* Format / channel selection cards */
+  .format-card,
+  .format-option,
+  .channel-option,
+  .template-card {
+    background: var(--paper-surface);
+    border-color: var(--rule);
+    color: var(--ink-primary);
+  }
+  .format-card:hover,
+  .format-option:hover,
+  .channel-option:hover,
+  .template-card:hover {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .format-card--selected,
+  .format-option--selected,
+  .template-card--selected {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--ink-primary);
+  }
+
+  /* Checkboxes */
+  .option-item {
+    color: var(--ink-secondary);
+  }
+  .option-hint {
+    color: var(--ink-muted);
+  }
+  .option-hint code {
+    background: var(--code-bg);
+    color: var(--code-text);
+  }
+  .option-hint em {
+    color: var(--ink-muted);
+  }
+
+  /* Template preview */
+  .preview-box {
+    background: var(--code-block-bg);
+    border-color: var(--rule);
+    color: var(--ink-primary);
+  }
+
+  /* Progress bar */
+  .progress-bar {
+    background: var(--rule);
+  }
+
+  /* Status messages */
+  .export-success {
+    color: var(--signal-success);
+  }
+  .export-error {
+    background: var(--signal-error-soft);
+    color: var(--signal-error);
+  }
+  .share-result {
+    background: var(--signal-success-soft);
+    color: var(--signal-success);
+  }
+  .share-result--error {
+    background: var(--signal-error-soft);
+    color: var(--signal-error);
+  }
+  .share-status {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  /* Editor toolbar */
+  .editor-toolbar {
+    background: var(--paper-surface);
+    border-bottom-color: var(--rule);
+  }
+  .editor-file-name {
+    color: var(--ink-secondary);
+  }
+
+  /* Action buttons */
+  .btn-action {
+    background: var(--paper-surface);
+    color: var(--ink-secondary);
+    border-color: var(--rule);
+  }
+  .btn-action:hover {
+    background: var(--paper-raised);
+    color: var(--ink-primary);
+  }
+
+  /* New note button */
+  .btn-new-note {
+    background: var(--paper-surface);
+    color: var(--ink-secondary);
+    border-color: var(--rule);
+  }
+  .btn-new-note:hover {
+    background: var(--paper-raised);
+    color: var(--ink-primary);
+  }
+
+  /* Progress spinner */
+  .progress-spinner {
+    border-color: var(--rule);
+    border-top-color: var(--accent);
+  }
+  .progress-text {
+    color: var(--ink-secondary);
+  }
+}
+
+/* ===== RTL / Special Character Support ===== */
+.markdown-editor :deep(.cm-content),
+.markdown-body {
+  unicode-bidi: plaintext;
+}
+
+/* ===== Markdown Content ===== */
+.markdown-body {
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* ===== Reduced Motion ===== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

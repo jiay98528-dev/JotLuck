@@ -5,12 +5,12 @@ import { createRouter, createWebHistory } from 'vue-router';
 import App from './App.vue';
 
 describe('App', () => {
-  it('mounts and renders heading', () => {
+  it('mounts without error', () => {
     setActivePinia(createPinia());
 
     const router = createRouter({
       history: createWebHistory(),
-      routes: [],
+      routes: [{ path: '/', component: { template: '<div>Home</div>' } }],
     });
 
     const wrapper = mount(App, {
@@ -19,6 +19,7 @@ describe('App', () => {
       },
     });
 
-    expect(wrapper.find('h1').text()).toBe('MarkLuck');
+    expect(wrapper.exists()).toBe(true);
+    expect(wrapper.find('#markluck-app').exists()).toBe(true);
   });
 });

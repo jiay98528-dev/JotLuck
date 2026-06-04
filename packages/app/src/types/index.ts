@@ -11,7 +11,6 @@ export type {
   HeadingItem,
   TabItem,
   ToolbarItemConfig,
-  ThemeMode,
   AppSettings,
   BacklinkEntry,
   TagEntry,

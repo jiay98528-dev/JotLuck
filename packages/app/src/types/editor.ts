@@ -80,13 +80,11 @@ export interface ToolbarItemConfig {
   shortcut?: string;
 }
 
-/** 主题模式 */
-export type ThemeMode = 'construct' | 'glass';
+/** 颜色方案 */
 export type ColorScheme = 'light' | 'dark';
 
 /** 应用全局设置 */
 export interface AppSettings {
-  theme: ThemeMode;
   colorScheme: ColorScheme;
   autoFormat: boolean;
   autoFormatDelay: number;

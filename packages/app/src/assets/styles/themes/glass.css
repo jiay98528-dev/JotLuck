@@ -1,0 +1,10 @@
+/* ===== Legacy Glass Theme — Removed =====
+ *
+ * The dual-theme system (construct + glass) has been consolidated into
+ * a single paper theme. All glass-* and glow-* tokens have been removed.
+ *
+ * Color scheme switching (light/dark) is now handled by the paper theme
+ * base stylesheet via [data-color-scheme] attribute only.
+ *
+ * This file is retained as a placeholder to avoid breaking existing imports.
+ */

@@ -11,6 +11,8 @@ export interface DirEntry {
   isFile: boolean;
   size?: number;
   mtime?: number;
+  /** MIME type for binary files (e.g. 'image/png') */
+  mimeType?: string;
 }
 
 /** 文件 stat 信息 */
@@ -46,6 +48,12 @@ export type UnwatchFn = () => void;
 export interface IFileSystemService {
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
+  /** Write binary file (base64 encoded payload) */
+  writeBinary(path: string, base64: string): Promise<void>;
+  /** Read binary file (returns base64 encoded string) */
+  readBinary(path: string): Promise<string>;
+  /** Check if path corresponds to a known binary file type */
+  isBinaryPath(path: string): boolean;
   deleteFile(path: string): Promise<void>;
   renameFile(oldPath: string, newPath: string): Promise<void>;
   createDirectory(path: string): Promise<void>;

@@ -1,11 +1,11 @@
 <template>
   <div class="app-layout" :class="{ 'app-layout--mobile': isMobile }">
-    <!-- 左侧文件边栏 -->
+    <!-- Left file sidebar — paper stack on the left -->
     <aside v-if="!isMobile || showMobileSidebar" class="app-layout__left">
       <slot name="left-sidebar" />
     </aside>
 
-    <!-- 中间编辑区 -->
+    <!-- Center editor — the main sheet of paper -->
     <main class="app-layout__center">
       <slot name="editor">
         <div class="app-layout__empty">
@@ -14,16 +14,16 @@
       </slot>
     </main>
 
-    <!-- 右侧导航面板 -->
+    <!-- Right navigation panel — paper stack on the right -->
     <aside v-if="!isMobile && showRightSidebar" class="app-layout__right">
       <slot name="right-sidebar">
         <div class="app-layout__empty">
-          <p>导航面板 (M2)</p>
+          <p>导航面板</p>
         </div>
       </slot>
     </aside>
 
-    <!-- 移动端遮罩 -->
+    <!-- Mobile overlay -->
     <div
       v-if="isMobile && showMobileSidebar"
       class="app-layout__overlay"
@@ -34,11 +34,16 @@
 
 <script setup lang="ts">
 /**
- * AppLayout.vue — 三联画布局容器
+ * AppLayout.vue — 纸面三栏布局容器
  *
- * M1-20: 桌面端三栏布局（260px : flex : 240px），移动端单栏 + 抽屉。
+ * Paper metaphor: three sheets side by side.
+ * - Center: the main sheet (brightest, highest contrast)
+ * - Left/Right: stacked sheets (slightly subdued)
+ * - Zones separated by 1px hairline rules, not colored panels
+ * - No zone color temperature — all paper shares the same hue
  *
- * @see components.md §3
+ * Desktop: 260px | 1fr | 240px grid
+ * Mobile: single column + drawer overlay
  */
 import { ref } from 'vue';
 
@@ -46,7 +51,6 @@ const showRightSidebar = ref(true);
 const showMobileSidebar = ref(false);
 const isMobile = ref(false);
 
-// Detect mobile viewport
 if (typeof window !== 'undefined') {
   const mq = window.matchMedia('(max-width: 767px)');
   isMobile.value = mq.matches;
@@ -59,47 +63,54 @@ if (typeof window !== 'undefined') {
 <style scoped>
 .app-layout {
   display: grid;
-  grid-template-columns: var(--sidebar-width, 260px) 1fr var(--navtree-width, 240px);
+  grid-template-columns: var(--sidebar-width) 1fr var(--navtree-width);
   height: 100vh;
   overflow: hidden;
+  background: var(--paper-bg);
 }
 
 .app-layout--mobile {
   grid-template-columns: 1fr;
 }
 
+/* --- Left panel: stacked sheet --- */
 .app-layout__left {
-  border-right: 1px solid var(--clr-border, #e0e0e0);
   overflow-y: auto;
-  background: var(--clr-zone-sidebar, #f8f9fa);
+  background: var(--paper-bg);
+  border-right: var(--border-thin) solid var(--rule);
 }
 
+/* --- Center editor: the main sheet (brightest) --- */
 .app-layout__center {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: var(--clr-zone-editor, #fffef9);
+  background: var(--editor-bg);
 }
 
+/* --- Right panel: stacked sheet --- */
 .app-layout__right {
-  border-left: 1px solid var(--clr-border, #e0e0e0);
   overflow-y: auto;
-  background: var(--clr-zone-navtree, #f8faf8);
+  background: var(--paper-bg);
+  border-left: var(--border-thin) solid var(--rule);
 }
 
+/* --- Empty state --- */
 .app-layout__empty {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--clr-text-secondary, #999);
-  font-size: var(--text-lg, 16px);
+  color: var(--ink-muted);
+  font-size: var(--text-base);
+  font-style: italic;
 }
 
+/* --- Mobile overlay --- */
 .app-layout__overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.3);
-  z-index: 20;
+  background: var(--overlay);
+  z-index: calc(var(--z-overlay) - 1);
 }
 </style>

@@ -1,0 +1,17 @@
+/* ===== Paper Theme — Light/Dark Color Scheme =====
+ *
+ * Single-theme system: only data-color-scheme drives the look.
+ * All paper-theme tokens are defined at :root in the base stylesheet.
+ *
+ * This file is retained as a hook point for future color scheme overrides.
+ */
+
+/* Light scheme — paper theme defaults */
+[data-color-scheme='light'] {
+  /* All tokens are defined in the shared base stylesheet */
+}
+
+/* Dark scheme */
+[data-color-scheme='dark'] {
+  /* All tokens are defined in the shared base stylesheet */
+}

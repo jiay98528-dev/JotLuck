@@ -21,6 +21,8 @@ export interface ExportOptions {
   includeWikiLinks: boolean;
   codeLineNumbers: boolean;
   imageHandling: 'embed' | 'attach' | 'link' | 'omit';
+  /** P2-1: async function to resolve image path → base64 (for embed mode) */
+  readBinary?: (path: string) => Promise<string>;
 }
 
 /** Channels through which an exported document can be shared */
@@ -40,6 +42,9 @@ export interface ShareOptions {
 /** Result returned after an export operation completes */
 export interface ExportResult {
   success: boolean;
+  format?: ExportFormat;
+  fileName?: string;
   filePath?: string;
+  message?: string;
   error?: string;
 }
