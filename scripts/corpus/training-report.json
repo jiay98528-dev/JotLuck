@@ -1,0 +1,108 @@
+{
+  "generatedAt": "2026-06-09T12:15:08.582Z",
+  "totalEntries": 15623,
+  "totalRawEntries": 167830,
+  "estimatedSize": "419KB",
+  "sources": {
+    "novel-zh": {
+      "files": 66,
+      "entries": 126934,
+      "rawSize": 466605,
+      "coverage": "75.6%"
+    },
+    "creative-zh": {
+      "files": 3,
+      "entries": 3987,
+      "rawSize": 11392,
+      "coverage": "2.4%"
+    },
+    "tech-writing-zh": {
+      "files": 3,
+      "entries": 2771,
+      "rawSize": 8839,
+      "coverage": "1.7%"
+    },
+    "code-doc-en": {
+      "files": 2,
+      "entries": 2735,
+      "rawSize": 5874,
+      "coverage": "1.6%"
+    },
+    "markdown-structures": {
+      "files": 1,
+      "entries": 1235,
+      "rawSize": 3270,
+      "coverage": "0.7%"
+    },
+    "../../doc": {
+      "files": 6,
+      "entries": 8207,
+      "rawSize": 176432,
+      "coverage": "4.9%"
+    },
+    "../../spec": {
+      "files": 7,
+      "entries": 26014,
+      "rawSize": 166891,
+      "coverage": "15.5%"
+    },
+    "hardcoded-p0": {
+      "files": 0,
+      "entries": 38,
+      "rawSize": 0,
+      "coverage": "0.0%"
+    }
+  },
+  "topContexts": [
+    {
+      "ctx": "20202020",
+      "preds": " /|",
+      "from": "various"
+    },
+    {
+      "ctx": "2d2d2d2d",
+      "preds": "-/ /|",
+      "from": "various"
+    },
+    {
+      "ctx": "2020207c",
+      "preds": " /\r",
+      "from": "various"
+    },
+    {
+      "ctx": "0d0a0d0a",
+      "preds": "#/\r/-",
+      "from": "various"
+    },
+    {
+      "ctx": "207c0d0a",
+      "preds": "|/\r",
+      "from": "various"
+    },
+    {
+      "ctx": "7c0d0a7c",
+      "preds": " /-",
+      "from": "various"
+    },
+    {
+      "ctx": "20207c0d",
+      "preds": "\n",
+      "from": "various"
+    },
+    {
+      "ctx": "20207c20",
+      "preds": " /2/T",
+      "from": "various"
+    },
+    {
+      "ctx": "0a232323",
+      "preds": " /#",
+      "from": "various"
+    },
+    {
+      "ctx": "0d0a7c20",
+      "preds": "M/*/ ",
+      "from": "various"
+    }
+  ]
+}

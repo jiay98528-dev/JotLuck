@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "description": "MarkLuck 文字补全 — 基准 L2 语料配置",
+  "ngramN": 4,
+  "minCount": 3,
+  "maxPredsPerContext": 3,
+  "outputFile": "../../packages/app/public/baseline-ngram.v1.compact.txt",
+  "reportFile": "training-report.json",
+  "hardcodedFormatRules": {
+    "enabled": true,
+    "description": "P0 Markdown 格式闭合规则：**→闭合、`→闭合、[→](、![→](、## →空格等。这些是语法规则而非语言习惯，不会改变。"
+  },
+  "sources": [
+    {
+      "path": "novel-zh/",
+      "weight": 2.0,
+      "description": "小说类语料 (用户提供): 都市/系统流 + 仙侠/古典"
+    },
+    {
+      "path": "creative-zh/",
+      "weight": 2.0,
+      "description": "中文创作类语料: 日记/散文/笔记"
+    },
+    {
+      "path": "tech-writing-zh/",
+      "weight": 2.0,
+      "description": "中文技术写作语料: 教程/API文档/README"
+    },
+    {
+      "path": "code-doc-en/",
+      "weight": 1.5,
+      "description": "英文编程文档语料: JS/TS + Python/Rust"
+    },
+    {
+      "path": "markdown-structures/",
+      "weight": 1.0,
+      "description": "Markdown 结构模式: 列表/表格/引用"
+    },
+    {
+      "path": "../../doc/",
+      "weight": 1.5,
+      "description": "项目文档 (PRD/TAD/标准规范)"
+    },
+    {
+      "path": "../../spec/",
+      "weight": 1.5,
+      "description": "项目规格文档 (决策/里程碑/类型)"
+    }
+  ]
+}

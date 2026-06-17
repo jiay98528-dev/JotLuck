@@ -30,8 +30,9 @@ export const useThemeStore = defineStore('theme', () => {
           colorScheme.value = parsed.c;
         }
       }
-    } catch {
-      // corrupted storage
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[themeStore] localStorage 解析失败', e);
     }
 
     if (!localStorage.getItem(STORAGE_KEY)) {

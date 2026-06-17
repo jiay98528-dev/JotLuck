@@ -56,7 +56,10 @@ export class TauriIPCService implements IFileSystemService {
     try {
       const raw = localStorage.getItem(RECENT_KEY);
       return raw ? JSON.parse(raw) : [];
-    } catch {
+    } catch (e) {
+      // localStorage 读取失败时静默降级为空列表，不阻断应用启动
+      // eslint-disable-next-line no-console
+      console.warn('[TauriIPCService] getRecentNotebooks localStorage 解析失败:', e);
       return [];
     }
   }
@@ -68,8 +71,9 @@ export class TauriIPCService implements IFileSystemService {
       const filtered = list.filter((p) => p !== root);
       filtered.unshift(root);
       localStorage.setItem(RECENT_KEY, JSON.stringify(filtered.slice(0, 10)));
-    } catch {
-      /* non-critical */
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[TauriIPCService] saveRecent 失败', e);
     }
   }
 

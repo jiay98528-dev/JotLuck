@@ -63,14 +63,14 @@ export class IndexService {
     // Load full file content into the search engine for content-based matching
     await this.engine.preloadContent(documents, (path) => this.fs.readFile(path));
     return {
-      documents,
       version: '1',
       lastUpdated: new Date().toISOString(),
+      documents,
       invertedIndex: {},
       termIndex: {},
-      wikiLinks: { outgoing: {}, incoming: {} },
-      tagIndex: {},
-    } as unknown as SearchIndex;
+      wikiLinks: Object.fromEntries(this.wikiOutgoing),
+      tagIndex: Object.fromEntries(this.tagIndex),
+    } satisfies SearchIndex;
   }
 
   private async scanDirectory(dir: string): Promise<void> {
@@ -83,8 +83,9 @@ export class IndexService {
           await this.indexFile(entry.path);
         }
       }
-    } catch {
-      // skip unreadable directories
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[IndexService] scanDirectory 失败:', e);
     }
   }
 
@@ -142,8 +143,9 @@ export class IndexService {
         if (!this.tagIndex.has(tag)) this.tagIndex.set(tag, []);
         this.tagIndex.get(tag)!.push(path);
       }
-    } catch {
-      // skip unreadable files
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[IndexService] indexFile 失败:', e);
     }
   }
 
@@ -155,7 +157,9 @@ export class IndexService {
       try {
         const content = await this.fs.readFile(path);
         this.engine.updateDocument(path, entry, content);
-      } catch {
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('[IndexService] updateDocument 读取文件内容失败，使用空内容更新索引:', e);
         this.engine.updateDocument(path, entry, '');
       }
     }

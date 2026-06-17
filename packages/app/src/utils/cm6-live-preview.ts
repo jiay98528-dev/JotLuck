@@ -913,7 +913,8 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           // Remove click/pointerdown listeners from dom
           const dom = this.editorView.dom;
           if (this.onClick) dom.removeEventListener('click', this.onClick);
-          if (this.onPointerDownCapture) dom.removeEventListener('pointerdown', this.onPointerDownCapture, true);
+          if (this.onPointerDownCapture)
+            dom.removeEventListener('pointerdown', this.onPointerDownCapture, true);
           this.editorView = null;
         }
         this.onCompStart = null;

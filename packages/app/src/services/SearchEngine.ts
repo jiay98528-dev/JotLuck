@@ -31,7 +31,10 @@ export class SearchEngine {
       try {
         const content = await contentProvider(path);
         this.docs.set(path, { entry, content });
-      } catch {
+      } catch (e) {
+        // 读取文件内容失败时静默降级为空内容，索引仍可基于标题匹配
+        // eslint-disable-next-line no-console
+        console.error('[SearchEngine] preloadContent 读取文件失败，使用空内容:', path, e);
         this.docs.set(path, { entry, content: '' });
       }
     }
@@ -74,8 +77,9 @@ export class SearchEngine {
       try {
         const re = new RegExp(query.regex, (query as { regexFlags?: string }).regexFlags ?? 'gi');
         candidates = candidates.filter((c) => re.test(c.doc.content) || re.test(c.doc.entry.title));
-      } catch {
-        // invalid regex — skip regex filtering
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[SearchEngine] 无效正则表达式', e);
       }
     }
 

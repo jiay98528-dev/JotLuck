@@ -1,0 +1,99 @@
+/* ===== Shared Dialog Skeleton =====
+ * Extracted from ExportDialog, ShareDialog, TemplateDialog, SettingsDialog.
+ * All four modals shared identical overlay, card, header, close-button, and footer CSS.
+ *
+ * Each dialog still sets its own .modal-card { width } and .modal-body in scoped styles.
+ *
+ * Import order: after tokens.css + paper.css, before editor.css (see main.css)
+ *
+ * Winged upgrade: uses --radius-lg (12px), --shadow-wing-float (feathered multi-layer)
+ */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: var(--overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: modal-overlay-in var(--dur-page) var(--ease-fade);
+}
+
+@keyframes modal-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal-card {
+  max-height: 80vh;
+  background: var(--paper-raised);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-wing-float);
+  display: flex;
+  flex-direction: column;
+  animation: modal-card-in var(--dur-page) var(--ease-enter);
+}
+
+@keyframes modal-card-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-16) var(--space-20);
+  border-bottom: var(--border-thin) solid var(--rule);
+  flex-shrink: 0;
+}
+
+.modal-header h2 {
+  font-size: var(--text-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-primary);
+  margin: 0;
+}
+
+.modal-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background var(--dur-micro) var(--ease-fade),
+    color var(--dur-micro) var(--ease-fade);
+}
+
+.modal-close:hover {
+  background: var(--surface-hover);
+  color: var(--ink-primary);
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-8);
+  padding: var(--space-12) var(--space-20);
+  border-top: var(--border-thin) solid var(--rule);
+  flex-shrink: 0;
+}

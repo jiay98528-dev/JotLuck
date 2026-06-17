@@ -185,8 +185,10 @@ export class MockFSService implements IFileSystemService {
         const parsed = JSON.parse(raw) as MockFSData;
         if (parsed.version === STORAGE_VERSION) return parsed;
       }
-    } catch {
-      // corrupted, fall through
+    } catch (e) {
+      // localStorage 解析失败或版本不匹配 → 静默降级到示例数据，不阻断应用启动
+      // eslint-disable-next-line no-console
+      console.error('[MockFSService] localStorage 数据损坏，降级使用示例数据:', e);
     }
     const sample = createSampleNotebook();
     // recalculate sizes

@@ -22,12 +22,12 @@ async function main() {
   const info = await page.evaluate(() => {
     // All elements with class attribute
     const classNames = new Set<string>();
-    document.querySelectorAll('[class]').forEach(el => {
-      el.classList.forEach(c => classNames.add(c));
+    document.querySelectorAll('[class]').forEach((el) => {
+      el.classList.forEach((c) => classNames.add(c));
     });
 
     // All buttons
-    const buttons = Array.from(document.querySelectorAll('button')).map(b => ({
+    const buttons = Array.from(document.querySelectorAll('button')).map((b) => ({
       text: b.textContent?.trim().substring(0, 50) || '',
       ariaLabel: b.getAttribute('aria-label') || '',
       title: b.getAttribute('title') || '',
@@ -35,7 +35,7 @@ async function main() {
     }));
 
     // All inputs
-    const inputs = Array.from(document.querySelectorAll('input, textarea')).map(i => ({
+    const inputs = Array.from(document.querySelectorAll('input, textarea')).map((i) => ({
       placeholder: i.getAttribute('placeholder') || '',
       ariaLabel: i.getAttribute('aria-label') || '',
       type: i.getAttribute('type') || '',
@@ -76,13 +76,17 @@ async function main() {
   console.log(JSON.stringify(info.structure, null, 2));
 
   console.log('\n=== BUTTONS ===');
-  info.buttons.forEach(b => console.log(`  [${b.className}] "${b.text}" aria="${b.ariaLabel}" title="${b.title}"`));
+  info.buttons.forEach((b) =>
+    console.log(`  [${b.className}] "${b.text}" aria="${b.ariaLabel}" title="${b.title}"`),
+  );
 
   console.log('\n=== INPUTS ===');
-  info.inputs.forEach(i => console.log(`  [${i.className}] placeholder="${i.placeholder}" aria="${i.ariaLabel}"`));
+  info.inputs.forEach((i) =>
+    console.log(`  [${i.className}] placeholder="${i.placeholder}" aria="${i.ariaLabel}"`),
+  );
 
   console.log('\n=== CLASS NAMES (first 100) ===');
-  info.classNames.slice(0, 100).forEach(c => console.log(`  .${c}`));
+  info.classNames.slice(0, 100).forEach((c) => console.log(`  .${c}`));
 
   // Check initial localStorage state
   const storage = await page.evaluate(() => {

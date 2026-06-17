@@ -393,8 +393,9 @@ async function initNotebook(): Promise<void> {
   }
   try {
     await indexStore.initialize(fs);
-  } catch {
-    /* ok */
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[NotebookHome] indexStore.initialize 失败', e);
   }
 }
 
@@ -423,6 +424,7 @@ async function onSelectNote(path: string): Promise<void> {
       return;
     }
   } catch {
+    // statFile 失败意味着路径不是文件（可能是目录或不存在），继续尝试作为文件打开
     /* open as file */
   }
 
@@ -457,8 +459,9 @@ async function onSelectNote(path: string): Promise<void> {
   updateSplitPreview();
   try {
     await indexStore.refreshDocument(fs, path);
-  } catch {
-    /* ok */
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[NotebookHome] indexStore.refreshDocument 失败', e);
   }
   showLeftDrawer.value = false; // 选择笔记后关闭文件抽屉，避免 overlay 遮挡
   loading.value = false;
@@ -562,7 +565,9 @@ function updateSplitPreview(): void {
         );
         if (previewEl) highlightCodeBlocks(previewEl);
       });
-    } catch {
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[NotebookHome] 渲染预览失败:', e);
       splitPreviewHtml.value = '<p class="render-error">渲染失败</p>';
     }
   }, 50);

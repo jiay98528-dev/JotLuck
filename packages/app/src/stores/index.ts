@@ -37,6 +37,8 @@ export const useIndexStore = defineStore('index', () => {
       recentNotes.value = indexService.getRecentNotes(20);
       status.value = 'ready';
     } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[indexStore] initialize 索引构建失败:', e);
       error.value = e instanceof Error ? e.message : '索引构建失败';
       status.value = 'error';
     }
@@ -48,8 +50,9 @@ export const useIndexStore = defineStore('index', () => {
       await indexService.updateDocument(path);
       tags.value = indexService.getAllTags();
       recentNotes.value = indexService.getRecentNotes(20);
-    } catch {
-      // non-fatal
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[indexStore] refreshDocument 失败', e);
     }
   }
 

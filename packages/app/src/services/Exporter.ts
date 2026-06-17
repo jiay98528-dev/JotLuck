@@ -46,6 +46,13 @@ function buildInternalOpts(options?: Partial<ExportOptions>): InternalExportOpti
   };
 }
 
+// DOCX 颜色常量（docx 库 API 仅接受 6 位 hex 字符串，无法使用 oklch()）
+// 值来源于 paper.css Light 主题 OKLCH Token 的 sRGB 近似
+const DOCX_COLORS = {
+  TABLE_HEADER_BG: 'E8E8E8', // ~oklch(0.93 0.002 85) — --table-stripe
+  HR_BORDER: 'CCCCCC', // ~oklch(0.80 0.003 85) — --rule-mid
+} as const;
+
 // ============================================================================
 // Markdown Preprocessing
 // ============================================================================
@@ -474,7 +481,11 @@ function buildDocxChildren(blocks: Token[], _opts: InternalExportOptions): (Para
           headerCells.push(
             new TableCell({
               // OKLCH equivalent: oklch(0.93 0.002 85) — ~ --table-stripe in paper.css
-              shading: { type: ShadingType.SOLID, color: 'E8E8E8', fill: 'E8E8E8' },
+              shading: {
+                type: ShadingType.SOLID,
+                color: DOCX_COLORS.TABLE_HEADER_BG,
+                fill: DOCX_COLORS.TABLE_HEADER_BG,
+              },
               children: [
                 new Paragraph({
                   children: buildTextRuns(cell.tokens),
@@ -519,7 +530,9 @@ function buildDocxChildren(blocks: Token[], _opts: InternalExportOptions): (Para
           new Paragraph({
             spacing: { before: 240, after: 240 },
             // OKLCH equivalent: oklch(0.80 0.003 85) — ~ --rule-mid in paper.css
-            border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: 'CCCCCC' } },
+            border: {
+              bottom: { style: BorderStyle.SINGLE, size: 2, color: DOCX_COLORS.HR_BORDER },
+            },
             children: [],
           }),
         );

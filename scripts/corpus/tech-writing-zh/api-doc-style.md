@@ -1,0 +1,73 @@
+# API 文档风格语料
+
+以下为中文技术 API 文档风格的 Markdown 文本。
+
+---
+
+## 概述
+
+MarkLuck 文件系统抽象层提供了一套统一的文件操作接口。所有文件操作都通过此接口进行，业务代码不应直接访问底层文件系统 API。
+
+此接口在 Web 端和 Tauri 桌面端分别有不同的实现，但它们共享相同的接口签名。这种设计使得应用可以在不同的运行环境下无缝切换文件访问方式。
+
+---
+
+## 接口定义
+
+### `IFileSystemService`
+
+文件系统抽象层的核心接口。所有文件操作方法都定义在此接口中。
+
+| 方法 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `readFile` | `path: string` | `Promise<string>` | 读取文本文件内容，自动检测 UTF-8 编码 |
+| `writeFile` | `path: string, content: string` | `Promise<void>` | 原子写入文件，先写临时文件再重命名 |
+| `deleteFile` | `path: string` | `Promise<void>` | 删除指定路径的文件 |
+| `renameFile` | `oldPath: string, newPath: string` | `Promise<void>` | 重命名或移动文件 |
+| `createDirectory` | `path: string` | `Promise<void>` | 递归创建目录 |
+| `listDirectory` | `path: string` | `Promise<DirEntry[]>` | 列出目录内容，仅返回 .md 文件和子目录 |
+| `statFile` | `path: string` | `Promise<FileStat>` | 获取文件大小、修改时间和类型信息 |
+
+### `DirEntry`
+
+表示目录中的一个条目，可以是文件或子目录。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `name` | `string` | 文件或目录的名称 |
+| `path` | `string` | 相对于笔记本根目录的路径，使用 `/` 分隔 |
+| `isDirectory` | `boolean` | 是否为目录 |
+| `isFile` | `boolean` | 是否为文件 |
+| `size` | `number` | 文件大小（字节），仅文件有此字段 |
+| `mtime` | `number` | 最后修改时间（Unix 毫秒时间戳） |
+
+### `FileStat`
+
+文件的元数据信息。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `size` | `number` | 文件大小（字节） |
+| `mtime` | `number` | 最后修改时间 |
+| `isDirectory` | `boolean` | 是否为目录 |
+| `isFile` | `boolean` | 是否为文件 |
+
+---
+
+## 使用示例
+
+### 读取文件
+
+读取笔记本中的 Markdown 文件内容。文件路径使用相对路径，自动处理 UTF-8 编码。如果文件不存在，抛出带有详细错误信息的异常。
+
+如果读取过程中发生权限错误或磁盘错误，同样会抛出异常，需要在调用方进行捕获和处理。
+
+### 写入文件
+
+保存编辑后的内容到文件中。内部使用原子写入机制：先将内容写入到一个临时文件，写入成功后再将临时文件重命名为目标文件名。这种方式可以防止写入过程中断电或崩溃导致的数据损坏。
+
+写入前会检查文件的修改时间，如果发现文件在外部被修改过，会提示用户处理冲突。
+
+### 列出目录
+
+获取笔记本根目录下的所有文件和子目录。结果自动过滤，只返回 Markdown 文件和目录，二进制文件和其他类型的文件不会出现在结果中。

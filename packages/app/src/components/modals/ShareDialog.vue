@@ -81,6 +81,7 @@
 import { ref, computed, watch } from 'vue';
 import { ExportFormat, ShareChannel } from '@/types';
 import Button from '@/components/common/Button.vue';
+import { exportNote } from '@/services/Exporter';
 
 // ============================================================
 // Props & Emits
@@ -255,18 +256,28 @@ function wrapHtml(md: string, title: string): string {
 <html lang="zh-CN">
 <head><meta charset="UTF-8"><title>${escapeHtml(title)}</title>
 <style>
-  body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;max-width:720px;margin:48px auto;padding:0 24px;line-height:1.8;color:#222}
+  :root {
+    --ink-primary: oklch(0.15 0.003 85);
+    --ink-muted: oklch(0.6 0.002 85);
+    --accent: oklch(0.52 0.12 250);
+    --link: oklch(0.5 0.11 250);
+    --rule: oklch(0.88 0.003 85);
+    --code-block-bg: oklch(0.97 0.002 85);
+    --code-bg: oklch(0.96 0.002 85);
+    --table-stripe: oklch(0.97 0.002 85);
+  }
+  body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;max-width:720px;margin:48px auto;padding:0 24px;line-height:1.8;color:var(--ink-primary)}
   h1,h2,h3{line-height:1.3;margin:1.5em 0 .5em}
-  pre{background:#f8f8f8;padding:16px;border-radius:2px;overflow-x:auto;font-size:14px}
-  code{font-family:'Fira Code',monospace;font-size:.9em;background:#f4f4f5;padding:2px 6px;border-radius:2px}
+  pre{background:var(--code-block-bg);padding:16px;border-radius:2px;overflow-x:auto;font-size:14px}
+  code{font-family:'Fira Code',monospace;font-size:.9em;background:var(--code-bg);padding:2px 6px;border-radius:2px}
   pre code{background:none;padding:0}
-  blockquote{border-left:3px solid #4a90d9;padding:.5em 1em;color:#666;margin:1em 0}
+  blockquote{border-left:3px solid var(--accent);padding:.5em 1em;color:var(--ink-muted);margin:1em 0}
   table{border-collapse:collapse;width:100%;margin:1em 0}
-  th,td{border:1px solid #ddd;padding:8px 12px;text-align:left}
-  th{background:#fafafa}
-  hr{border:none;border-top:2px solid #eee;margin:2em 0}
+  th,td{border:1px solid var(--rule);padding:8px 12px;text-align:left}
+  th{background:var(--table-stripe)}
+  hr{border:none;border-top:2px solid var(--rule);margin:2em 0}
   img{max-width:100%}
-  a{color:#4a90d9}
+  a{color:var(--link)}
 </style></head>
 <body>${escapeHtml(md)}</body></html>`;
 }
@@ -347,19 +358,7 @@ async function shareViaClipboard(content: string): Promise<void> {
 
 async function shareViaLocalExport(title: string, content: string): Promise<void> {
   if (selectedFormat.value === ExportFormat.PDF) {
-    // PDF: open print window (zero-dependency approach per ADR-005)
-    const w = window.open('', '_blank');
-    if (!w) return;
-    const safeContent = escapeHtml(props.markdownContent!);
-    w.document
-      .write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escapeHtml(title)}</title>
-      <style>body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;max-width:800px;margin:40px auto;line-height:1.8;font-size:14px}
-      pre{background:#f5f5f5;padding:12px;overflow-x:auto}code{font-family:'Fira Code',monospace;font-size:13px}
-      table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px}
-      blockquote{border-left:3px solid #4a90d9;padding-left:16px;color:#666}
-      @media print{body{margin:20mm}}</style></head><body>${safeContent}</body></html>`);
-    w.document.close();
-    setTimeout(() => w.print(), 300);
+    await exportNote(props.markdownContent!, title, { format: ExportFormat.PDF });
     return;
   }
 
