@@ -1,11 +1,11 @@
 /* ===== MarkLuck Design Tokens =====
- * Paper theme — shared tokens that do not change between light/dark modes.
+ * Winged Editor — Open Book Metaphor
+ *
+ * Shared tokens that do not change between light/dark modes.
  * Color tokens are in themes/paper.css
  *
- * Metaphor: quiet paper. Every token serves readability and calm.
- * No decoration. No noise. The UI steps back so content can step forward.
- *
- * @see PRODUCT.md §Design Philosophy
+ * Metaphor: 一本摊开的书。
+ * 左页 = 彩色书签 (索引), 中间 = 正文, 右页 = 批注 (参考)
  */
 
 :root {
@@ -17,34 +17,34 @@
     'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'SF Mono', 'Source Code Pro', 'Consolas',
     monospace;
 
-  /* Font sizes — 1.25 major third scale, fixed rem for product UI */
-  --text-xs: 0.75rem; /* 12px — captions, shortcuts, legal */
-  --text-sm: 0.875rem; /* 14px — secondary UI, metadata */
-  --text-base: 1rem; /* 16px — body */
-  --text-lg: 1.25rem; /* 20px — subheadings, lead */
-  --text-xl: 1.563rem; /* 25px — section headings */
-  --text-2xl: 1.953rem; /* 31px — page titles */
-  --text-3xl: 2.441rem; /* 39px — hero (rarely used) */
+  /* Type Scale — 1.25 major third */
+  --text-xs: 0.75rem; /* 12px — captions, shortcuts */
+  --text-sm: 0.875rem; /* 14px — right wing, tooltips */
+  --text-base: 1rem; /* 16px — editor body */
+  --text-lg: 1.25rem; /* 20px — panel headers */
+  --text-xl: 1.563rem; /* 25px — dialog titles */
+  --text-2xl: 1.953rem; /* 31px — page headings */
+  --text-hero: 2.5rem; /* 40px — empty state */
 
-  /* Font weights */
+  /* Font Weights */
   --fw-normal: 400;
   --fw-medium: 500;
   --fw-semibold: 600;
   --fw-bold: 700;
 
-  /* Line heights */
-  --lh-reading: 1.6; /* body prose */
-  --lh-ui: 1.4; /* UI labels, buttons, lists */
+  /* Line Heights */
+  --lh-body: 1.8; /* prose reading */
+  --lh-ui: 1.4; /* panel lists, buttons */
   --lh-heading: 1.25; /* headings */
   --lh-code: 1.5; /* code blocks */
   --lh-none: 1; /* icons, single-line */
 
-  /* Letter spacing */
+  /* Letter Spacing */
   --ls-tight: -0.02em;
   --ls-normal: 0;
-  --ls-wide: 0.04em; /* all-caps labels */
+  --ls-wide: 0.04em;
 
-  /* === Spacing — 4pt base grid === */
+  /* === Spacing — 4pt grid === */
   --space-0: 0;
   --space-4: 4px;
   --space-8: 8px;
@@ -57,28 +57,41 @@
   --space-48: 48px;
   --space-64: 64px;
   --space-96: 96px;
+  --space-120: 120px;
 
   /* === Layout === */
-  --sidebar-width: 260px;
-  --navtree-width: 240px;
-  --content-min-width: 400px;
-  --content-max-width: 860px;
-  --toolbar-height: 40px;
-  --statusbar-height: 26px;
+  --wing-left-width: 56px;
+  --wing-right-width: 240px;
+  --wing-right-min: 200px;
+  --wing-right-max: 400px;
+  --editor-max-width: 680px;
+  --editor-top-pad: 120px;
+  --statusbar-height: 28px;
+  --topbar-height: 44px;
+  --palette-width: 560px;
+  --drawer-width: 320px;
 
-  /* === Z-Index Scale === */
+  /* === Z-Index === */
   --z-base: 0;
-  --z-panel: 100;
-  --z-toolbar: 200;
-  --z-dropdown: 400;
-  --z-overlay: 600;
+  --z-wing: 100;
+  --z-overlay: 400;
+  --z-drawer: 500;
+  --z-palette: 700;
   --z-modal: 800;
   --z-toast: 1000;
 
   /* === Border Widths === */
   --border-thin: 1px;
   --border-medium: 2px;
-  --border-thick: 3px;
+
+  /* === Radius === */
+  --radius: 6px;
+  --radius-full: 9999px;
+
+  /* === Opacity === */
+  --opacity-disabled: 0.35;
+  --opacity-inactive: 0.6;
+  --opacity-overlay: 0.35;
 
   /* === Icon Sizes === */
   --icon-sm: 14px;
@@ -86,87 +99,84 @@
   --icon-lg: 24px;
   --icon-xl: 32px;
 
-  /* === Opacity === */
-  --opacity-disabled: 0.35;
-  --opacity-inactive: 0.6;
-  --opacity-overlay: 0.4;
-
   /* === Focus Ring === */
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
 
-  /* === Surface States (paper-agnostic: works on any background) === */
+  /* ========================================
+   * Motion System — Paper Physics
+   * ======================================== */
+
+  /* Easing Curves */
+  --ease-press: cubic-bezier(0.16, 1, 0.3, 1); /* quick decel */
+  --ease-back: cubic-bezier(0.34, 1.3, 0.64, 1); /* micro overshoot */
+  --ease-fold: cubic-bezier(0.33, 1, 0.68, 1); /* paper fold */
+  --ease-enter: cubic-bezier(0.22, 1, 0.36, 1); /* arrival */
+  --ease-exit: cubic-bezier(0.55, 0, 1, 0.45); /* departure */
+  --ease-fade: cubic-bezier(0.4, 0, 0.2, 1); /* opacity only */
+
+  /* Tier 1 — Tactile (80-200ms) */
+  --dur-press: 80ms;
+  --dur-release: 200ms;
+  --dur-micro: 120ms;
+
+  /* Tier 2 — Spatial (250-400ms) */
+  --dur-expand: 350ms;
+  --dur-collapse: 250ms;
+  --dur-drawer: 350ms;
+  --dur-palette: 300ms;
+  --dur-page: 300ms;
+
+  /* Tier 3 — Ambient (1.5-3s) */
+  --dur-shimmer: 1.8s;
+  --dur-breathe: 2s;
+  --dur-ripple: 2s;
+
+  /* Stagger Delays */
+  --stagger-dot: 30ms; /* bookmark dots cascade */
+  --stagger-item: 25ms; /* list items cascade */
+
+  /* === Shadow — Paper Stack === */
+  --shadow-none: none;
+  --shadow-sheet: 0 1px 3px oklch(0.15 0.003 85 / 0.04);
+  --shadow-stack: 0 2px 8px oklch(0.15 0.003 85 / 0.06);
+  --shadow-float: 0 4px 16px oklch(0.15 0.003 85 / 0.1);
+
+  /* === Surface States (paper-agnostic) === */
   --surface-hover: oklch(0 0 0 / 0.03);
   --surface-active: oklch(0 0 0 / 0.05);
   --surface-selected: oklch(0 0 0 / 0.06);
-  --surface-hover-dark: oklch(1 0 0 / 0.04);
-  --surface-active-dark: oklch(1 0 0 / 0.06);
-  --surface-selected-dark: oklch(1 0 0 / 0.08);
 
-  /* ============================================================
-   * Motion System — Luxury Animation Tokens
-   *
-   * Three tiers, matching the design brief motion architecture:
-   *   Tier 1 — Tactile response (80-120ms): button press, icon toggle
-   *   Tier 2 — Spatial rhythm (250-400ms): panel expand, page transition
-   *   Tier 3 — Ambient breath (1.5-3s): skeleton shimmer, focus pulse
-   * ============================================================ */
+  /* ========================================
+   * Winged (羽翼化) Extension
+   * ======================================== */
 
-  /* --- Easing Curves --- */
+  /* === Radius — Winged === */
+  --radius-sm: 4px; /* compact controls: segmented, badges */
+  --radius-md: 8px; /* default: buttons, inputs, cards */
+  --radius-lg: 12px; /* panels, dialogs */
 
-  /* Spring press: quick deceleration with micro-overshoot feel */
-  --ease-press: cubic-bezier(0.16, 1, 0.3, 1);
+  /* === Shadow — Winged Feathered Multi-Layer === */
+  --shadow-wing-sheet:
+    0 0 0 1px oklch(0.15 0.003 85 / 0.03), 0 1px 2px oklch(0.15 0.003 85 / 0.04),
+    0 2px 4px oklch(0.15 0.003 85 / 0.02);
+  --shadow-wing-stack:
+    0 0 0 1px oklch(0.15 0.003 85 / 0.04), 0 2px 4px oklch(0.15 0.003 85 / 0.06),
+    0 4px 12px oklch(0.15 0.003 85 / 0.04);
+  --shadow-wing-float:
+    0 0 0 1px oklch(0.15 0.003 85 / 0.05), 0 4px 8px oklch(0.15 0.003 85 / 0.08),
+    0 8px 24px oklch(0.15 0.003 85 / 0.06), 0 16px 32px oklch(0.15 0.003 85 / 0.02);
 
-  /* Paper fold: gentle, natural deceleration for spatial changes */
-  --ease-fold: cubic-bezier(0.33, 1, 0.68, 1);
+  /* === Motion Duration — Winged === */
+  --dur-hover-lift: 150ms; /* hover feather-lift upward */
+  --dur-hover-settle: 250ms; /* hover return to rest */
+  --dur-active-press: 80ms; /* mousedown press in */
+  --dur-active-release: 200ms; /* mouseup spring-back */
 
-  /* Fade: standard ease-out for opacity-only transitions */
-  --ease-fade: cubic-bezier(0.4, 0, 0.2, 1);
+  /* === Stagger — Winged === */
+  --stagger-entrance: 40ms; /* item entrance cascade delay */
 
-  /* Back: subtle overshoot for button release (spring physics) */
-  --ease-back: cubic-bezier(0.34, 1.3, 0.64, 1);
-
-  /* Enter: for elements arriving */
-  --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
-
-  /* Exit: for elements leaving (faster, ease-in) */
-  --ease-exit: cubic-bezier(0.55, 0, 1, 0.45);
-
-  /* --- Durations --- */
-
-  /* Tier 1: Tactile */
-  --dur-press: 80ms; /* button press down */
-  --dur-release: 200ms; /* button spring release */
-  --dur-micro: 120ms; /* hover, focus ring, icon toggle */
-
-  /* Tier 2: Spatial */
-  --dur-expand: 350ms; /* panel / tree node expand */
-  --dur-collapse: 250ms; /* panel / tree node collapse */
-  --dur-page-enter: 300ms; /* page route enter */
-  --dur-page-exit: 200ms; /* page route exit */
-  --dur-list-item: 250ms; /* list item enter */
-
-  /* Tier 3: Ambient */
-  --dur-shimmer: 1.8s; /* skeleton sweep */
-  --dur-breathe: 2s; /* focus ring / indicator pulse */
-  --dur-feedback: 400ms; /* success checkmark draw */
-  --dur-shake: 350ms; /* error shake */
-
-  /* --- Stagger Delays --- */
-  --stagger-item: 30ms; /* list items cascade */
-  --stagger-child: 25ms; /* panel children cascade */
-
-  /* ============================================================
-   * Radius — Paper has a single subtle radius
-   * ============================================================ */
-  --radius: 2px;
-
-  /* ============================================================
-   * Shadow Elevation Scale — Extremely subtle
-   * Paper metaphor: shadows are faint, like stacked sheets
-   * ============================================================ */
-  --shadow-none: none;
-  --shadow-raised: 0 1px 3px oklch(0 0 0 / 0.04);
-  --shadow-overlay: 0 2px 8px oklch(0 0 0 / 0.06);
-  --shadow-float: 0 4px 16px oklch(0 0 0 / 0.08);
+  /* === Transform — Winged === */
+  --lift-hover: translateY(-1px);
+  --lift-active: translateY(0) scale(0.96);
 }

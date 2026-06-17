@@ -1,162 +1,120 @@
 <template>
-  <AppLayout>
-    <template #left-sidebar>
-      <div class="sidebar-content">
-        <div class="sidebar-header">
-          <span class="sidebar-title">MarkLuck</span>
-          <div class="sidebar-header-actions">
-            <ThemeSelector compact />
-            <button class="btn-new-note" title="新建笔记（从模板）" @click="showTemplate = true">
-              +
-            </button>
-          </div>
-        </div>
-        <FileTree
-          :files="files"
-          :root-dir="currentDir"
-          :loading="loading"
-          :error="errorMessage"
-          :active-path="activePath"
-          @select-file="onSelectFileOrDir"
-          @delete-file="onDeleteFile"
-          @rename-file="onRenameFile"
-          @navigate-dir="onNavigateDir"
-          @create-file="onCreateFile"
-          @retry="initNotebook"
-        />
-      </div>
-    </template>
-
+  <AppShell
+    :recent-notes="recentNotesWithColors"
+    :active-path="activePath"
+    :note-title="noteTitle"
+    :notebook-name="notebookName"
+    :show-top-bar="true"
+    :show-right-wing="showRightWing"
+    :headings="headings"
+    :backlinks="currentBacklinks"
+    :tags="allTags"
+    :active-heading-id="activeHeadingId"
+    :char-count="editorStats.charCount"
+    :word-count="editorStats.wordCount"
+    :line-count="editorStats.lineCount"
+    :cursor-line="editorStats.cursorLine"
+    :cursor-col="editorStats.cursorCol"
+    :is-dirty="isDirty"
+    :is-saving="isSaving"
+    :save-error="saveError"
+    :last-saved-at="lastSavedAt"
+    @select-note="onSelectNote"
+    @create-note="showTemplate = true"
+    @open-settings="showSettings = true"
+    @toggle-left-wing="showLeftDrawer = !showLeftDrawer"
+    @open-palette="searchVisible = true"
+    @open-export="showExport = true"
+    @open-share="showShare = true"
+    @toggle-theme="theme.toggleColorScheme()"
+    @navigate-heading="onNavTreeNavigate"
+    @navigate-backlink="onBacklinkNavigate"
+    @select-tag="onTagSelect"
+    @toggle-right-wing="showRightWing = !showRightWing"
+  >
     <template #editor>
-      <WelcomePage
-        v-if="!activePath && !loading && files.length === 0"
-        @create-note="showTemplate = true"
+      <!-- View Mode Toggle Button -->
+      <button
+        class="view-mode-toggle"
+        :title="`点击切换到 ${nextModeLabels[viewMode]} 模式`"
+        @click="cycleViewMode"
+      >
+        {{ viewModeLabel }}
+      </button>
+      <!-- Format Bubble (floating, on text selection) -->
+      <FormatBubble :visible="bubbleVisible" :position="bubblePosition" @format="onBubbleFormat" />
+      <!-- Split Mode: left editor + right preview -->
+      <div v-if="viewMode === 'split'" class="split-pane">
+        <div class="split-left" :style="{ flex: `0 0 ${splitRatio}%` }">
+          <MarkdownEditor
+            ref="editorRef"
+            :key="'split-' + activePath"
+            :model-value="currentContent"
+            :show-line-numbers="true"
+            :live-preview="false"
+            @update:model-value="onSplitContentUpdate"
+            @selection-change="onSelectionChange"
+          />
+        </div>
+        <div
+          class="split-divider"
+          :style="{ left: `${splitRatio}%` }"
+          @mousedown="onSplitDragStart"
+        />
+        <div class="split-right" :style="{ flex: `0 0 ${100 - splitRatio}%` }">
+          <!-- eslint-disable-next-line vue/no-v-html -->
+          <div class="markdown-body split-preview" v-html="splitPreviewHtml" />
+        </div>
+      </div>
+      <!-- Live Mode: single editor with block-level live preview -->
+      <MarkdownEditor
+        v-if="viewMode === 'live'"
+        ref="editorRef"
+        :key="'live-' + activePath"
+        :model-value="currentContent"
+        :show-line-numbers="false"
+        :live-preview="true"
+        :on-live-preview-external-link-click="onLivePreviewExternalLinkClick"
+        :on-live-preview-tag-click="onLivePreviewTagClick"
+        :on-live-preview-wiki-link-click="onLivePreviewWikiLinkClick"
+        @update:model-value="onContentUpdate"
+        @selection-change="onSelectionChange"
       />
-      <div v-else-if="!activePath" class="editor-empty">
-        <h1>MarkLuck</h1>
-        <p>选择左侧一条笔记开始编辑</p>
-        <p class="editor-hint">Ctrl+Shift+P 搜索笔记</p>
-      </div>
-      <div v-if="activePath" class="editor-wrapper">
-        <div class="editor-toolbar">
-          <span class="editor-file-name">{{ activePath }}</span>
-          <div class="editor-actions">
-            <button
-              class="btn-action btn-preview-toggle"
-              :title="showPreview ? '切换到编辑模式' : '切换到预览模式'"
-              @click="showPreview = !showPreview"
-            >
-              {{ showPreview ? '编辑' : '预览' }}
-            </button>
-            <button class="btn-action" title="导出" @click="showExport = true">导出</button>
-            <button class="btn-action" title="分享" @click="showShare = true">分享</button>
-          </div>
-        </div>
-        <!-- M7-01: Large file warning -->
-        <div v-if="largeFileWarning" class="file-warning">
-          {{ largeFileWarning }}
-          <button
-            v-if="largeFileWarning.includes('外部程序修改')"
-            class="file-warning-btn"
-            @click="largeFileWarning = ''"
-          >
-            x
-          </button>
-        </div>
-        <FormatToolbar v-if="!showPreview" :disabled="!activePath" @format="onFormat" />
-        <!-- Edit Mode -->
-        <MarkdownEditor
-          v-show="!showPreview"
-          ref="editorRef"
-          :key="activePath"
-          :model-value="currentContent"
-          :blocks="currentBlocks"
-          :on-editor-drop="imageUpload.handleDrop"
-          :on-editor-drag-over="imageUpload.handleDragOver"
-          :on-editor-paste="imageUpload.handlePaste"
-          @update:model-value="onContentUpdate"
-        />
-        <!-- Preview Mode (M1-08: full-document rendered preview) -->
-        <!-- eslint-disable-next-line vue/no-v-html -->
-        <div v-if="showPreview" class="markdown-preview" v-html="renderedHtml" />
-        <StatusBar
-          :char-count="editorStats.charCount"
-          :word-count="editorStats.wordCount"
-          :line-count="editorStats.lineCount"
-          :cursor-line="showPreview ? null : editorStats.cursorLine"
-          :cursor-col="showPreview ? null : editorStats.cursorCol"
-          :is-dirty="isDirty"
-          :is-saving="isSaving"
-          :save-error="saveError"
-        />
-      </div>
     </template>
+  </AppShell>
 
-    <template #right-sidebar>
-      <div class="right-sidebar-content">
-        <!-- NavTree -->
-        <NavTree
-          :headings="headings"
-          :active-heading-id="activeHeadingId"
-          :collapsed="navTreeCollapsed"
-          :loading="indexStatus === 'building'"
-          @navigate-to="onNavTreeNavigate"
-          @toggle-collapse="navTreeCollapsed = !navTreeCollapsed"
-        />
-
-        <!-- Backlinks -->
-        <BacklinksPanel
-          :backlinks="currentBacklinks"
-          :collapsed="backlinksCollapsed"
-          :loading="indexStatus === 'building'"
-          @navigate="onBacklinkNavigate"
-          @toggle-collapse="backlinksCollapsed = !backlinksCollapsed"
-        />
-
-        <!-- Tag Cloud -->
-        <TagCloudPanel
-          :tags="allTags"
-          :collapsed="tagsCollapsed"
-          :loading="indexStatus === 'building'"
-          @select-tag="onTagSelect"
-          @toggle-collapse="tagsCollapsed = !tagsCollapsed"
-        />
-
-        <!-- Recent Notes -->
-        <RecentNotes
-          :notes="recentNotes"
-          :loading="indexStatus === 'building'"
-          @select-note="onSelectFileOrDir"
-        />
-
-        <!-- Theme Selector (M5-06) — 已移至编辑器工具栏 -->
-      </div>
-    </template>
-  </AppLayout>
-
-  <!-- Search Panel (Teleported to body) -->
-  <SearchPanel
+  <!-- Command Palette -->
+  <CommandPalette
     :visible="searchVisible"
     @update:visible="searchVisible = $event"
-    @select-result="onSearchResultSelect"
+    @select-result="onSearchSelectResult"
+    @quick-action="onQuickAction"
+  />
+
+  <!-- File Drawer (left slide) -->
+  <FileDrawer
+    :visible="showLeftDrawer"
+    :files="files"
+    :root-dir="currentDir"
+    :active-path="activePath"
+    :loading="loading"
+    :error="errorMessage"
+    @update:visible="showLeftDrawer = $event"
+    @select-file="onSelectNote"
+    @navigate-dir="loadDirectory"
+    @create-file="onCreateFile"
+    @delete-file="onDeleteFile"
+    @rename-file="onRenameFile"
+    @retry="initNotebook"
   />
 
   <!-- Export Dialog -->
   <ExportDialog
     :visible="showExport"
     :note-path="activePath"
-    :note-title="activePath.replace(/\.md$/, '').replace(/^\//, '')"
+    :note-title="noteTitle"
     :markdown-content="currentContent"
-    :read-binary="(path: string) => fs.readBinary(path)"
     @update:visible="showExport = $event"
-  />
-
-  <!-- Share Dialog -->
-  <ShareDialog
-    :visible="showShare"
-    :note-title="activePath.replace(/\.md$/, '').replace(/^\//, '')"
-    :markdown-content="currentContent"
-    @update:visible="showShare = $event"
   />
 
   <!-- Template Dialog -->
@@ -168,317 +126,208 @@
     @create-blank="onCreateBlank"
   />
 
-  <!-- P2-1: Hidden file input for image upload -->
-  <input
-    ref="imageFileInput"
-    type="file"
-    accept="image/*"
-    style="display: none"
-    @change="onImageFileSelected"
+  <!-- Settings Dialog -->
+  <SettingsDialog :visible="showSettings" @update:visible="showSettings = $event" />
+
+  <!-- Share Dialog -->
+  <ShareDialog
+    :visible="showShare"
+    :note-title="noteTitle"
+    :markdown-content="currentContent"
+    @update:visible="showShare = $event"
   />
+
+  <!-- Toast Container -->
+  <ToastContainer />
+
+  <!-- Update Notification -->
+  <UpdateNotification
+    :visible="showUpdateNotification"
+    :latest-version="updateLatestVersion"
+    :release-url="updateReleaseUrl"
+    :release-notes="updateReleaseNotes"
+    @update:visible="showUpdateNotification = $event"
+    @dismiss-version="onDismissVersion"
+  />
+
+  <!-- Markdown Cheat Sheet -->
+  <MarkdownCheatSheet />
+
+  <!-- New File Dialog -->
+  <Teleport to="body">
+    <div v-if="showNewFileDialog" class="modal-overlay" @click.self="cancelNewFile">
+      <div class="modal-card" style="width: 360px">
+        <div class="modal-header">
+          <h2>新建文件</h2>
+        </div>
+        <div class="modal-body">
+          <input
+            v-model="newFileName"
+            class="file-name-input"
+            placeholder="文件名（.md 或 .txt）"
+            autofocus
+            @keydown.escape="cancelNewFile"
+            @keydown.enter="confirmNewFile"
+          />
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn--secondary" @click="cancelNewFile">取消</button>
+          <button class="btn btn--primary" :disabled="!newFileName.trim()" @click="confirmNewFile">
+            确定
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
 /**
- * NotebookHome.vue — 笔记本主页
+ * NotebookHome.vue — 羽翼編纂主页面
  *
- * M1: 集成 FileTree + MarkdownEditor + MockFSService。
- * M2: 集成 SearchPanel + NavTree + Backlinks + Tags + RecentNotes + Index。
+ * 集成 AppShell 布局 + MarkdownEditor + 所有浮层/对话框。
  *
- * @see pages.md §2
+ * @see migration-map.md §2
  */
-import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import AppLayout from '@/components/layout/AppLayout.vue';
-import FileTree from '@/components/file-tree/FileTree.vue';
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import AppShell from '@/components/layout/AppShell.vue';
 import MarkdownEditor from '@/components/editor/MarkdownEditor.vue';
-import SearchPanel from '@/components/search/SearchPanel.vue';
+import FormatBubble from '@/components/editor/FormatBubble.vue';
+import CommandPalette from '@/components/overlays/CommandPalette.vue';
+import FileDrawer from '@/components/overlays/FileDrawer.vue';
 import ExportDialog from '@/components/modals/ExportDialog.vue';
-import ShareDialog from '@/components/modals/ShareDialog.vue';
 import TemplateDialog from '@/components/modals/TemplateDialog.vue';
-import StatusBar from '@/components/editor/StatusBar.vue';
-import FormatToolbar from '@/components/editor/FormatToolbar.vue';
-import ThemeSelector from '@/components/common/ThemeSelector.vue';
-import WelcomePage from '@/components/common/WelcomePage.vue';
-import NavTree from '@/components/nav/NavTree.vue';
-import BacklinksPanel from '@/components/panels/BacklinksPanel.vue';
-import TagCloudPanel from '@/components/panels/TagCloud.vue';
-import RecentNotes from '@/components/panels/RecentNotes.vue';
+import SettingsDialog from '@/components/modals/SettingsDialog.vue';
+import ShareDialog from '@/components/modals/ShareDialog.vue';
+import ToastContainer, { useToast } from '@/components/common/Toast.vue';
 import { MockFSService } from '@/services/MockFSService';
+import { TauriIPCService } from '@/services/TauriIPCService';
 import { useIndexStore } from '@/stores/index';
 import { useSearchStore } from '@/stores/search';
+import { useThemeStore } from '@/stores/theme';
 import { useHeadings } from '@/composables/useHeadings';
-import { parseBlocks } from '@/utils/blockParser';
-import { scanContentWarnings, humanizeError } from '@/utils/contentUtils';
-import { useImageUpload } from '@/composables/useImageUpload';
-import { setImageResolver } from '@/utils/cm6-live-preview';
 import { renderMarkdown, highlightCodeBlocks } from '@markluck/renderer';
-import type {
-  DirEntry,
-  IFileSystemService,
-  SearchResult,
-  BacklinkEntry,
-  MarkdownBlock,
-} from '@/types';
+import type { DirEntry, BacklinkEntry, SearchResult, IFileSystemService } from '@/types';
+import UpdateNotification from '@/components/overlays/UpdateNotification.vue';
+import MarkdownCheatSheet from '@/components/overlays/MarkdownCheatSheet.vue';
+import { useVersionCheck } from '@/composables/useVersionCheck';
+import { normalizeUrl } from '@/utils/urlUtils';
 
 // --- File System ---
-const fs: IFileSystemService = new MockFSService(50);
-
+// Tauri 桌面端使用真实文件系统，Web/E2E 使用虚拟 MockFS
+function createFileSystem(): IFileSystemService {
+  if (window.__TAURI__) return new TauriIPCService();
+  return new MockFSService(50);
+}
+const fs: IFileSystemService = createFileSystem();
 const files = ref<DirEntry[]>([]);
 const currentContent = ref('');
 const activePath = ref('');
-const loading = ref(true); // Start loading to avoid WelcomePage flash before init
+const loading = ref(true);
 const errorMessage = ref('');
-const showTemplate = ref(false);
-
-// --- P2-2: 文件管理器状态 ---
 const currentDir = ref('/');
 
-/** 加载指定目录的文件列表 */
-async function loadDirectory(dir: string): Promise<void> {
-  currentDir.value = dir;
-  try {
-    const entries = await fs.listDirectory(dir);
-    files.value = entries;
-  } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : '加载目录失败';
-  }
-}
-
-/** 导航到目录 */
-function onNavigateDir(path: string): void {
-  loadDirectory(path);
-}
-
-// --- Save State (M4-08: StatusBar feedback) ---
-const isDirty = ref(false);
-const isSaving = ref(false);
-const saveError = ref<string | null>(null);
-let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-const MIN_SAVE_DISPLAY_MS = 500;
+// --- Theme ---
+const theme = useThemeStore();
 
 // --- Index & Search ---
 const indexStore = useIndexStore();
+const searchStore = useSearchStore();
 const { headings, update: updateHeadings, getActiveHeadingId } = useHeadings();
+
+// --- UI State ---
+type ViewMode = 'split' | 'live';
+const viewMode = ref<ViewMode>('live');
+const splitRatio = ref(50); // 50:50 default for split pane
+const splitPreviewHtml = ref('');
+let splitDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+const showRightWing = ref(true);
+const showLeftDrawer = ref(false);
 const searchVisible = ref(false);
-
-// --- Panel collapse states ---
-const navTreeCollapsed = ref(false);
-const backlinksCollapsed = ref(false);
-const tagsCollapsed = ref(false);
 const showExport = ref(false);
+const showTemplate = ref(false);
+const showNewFileDialog = ref(false);
+const newFileName = ref('新笔记.md');
+const showSettings = ref(false);
 const showShare = ref(false);
+const notebookName = ref('示例笔记本');
 
-// --- M1-08: Preview Mode ---
-const showPreview = ref(false);
-const renderedHtml = ref('');
+// --- Format Bubble ---
+const bubbleVisible = ref(false);
+const bubblePosition = ref({ x: 0, y: 0 });
+const editorRef = ref<InstanceType<typeof MarkdownEditor> | null>(null);
 
-async function updatePreview(content: string): Promise<void> {
-  try {
-    // 解析本地图片路径为 data URI（预览模式）
-    const imgRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
-    let resolved = content;
-    const matches = [...content.matchAll(imgRegex)];
-    for (const m of matches.reverse()) {
-      const path = m[2] || '';
-      if (path.startsWith('data:') || path.startsWith('http')) continue;
-      try {
-        const base64 = await fs.readBinary(path);
-        if (base64) {
-          const ext = path.split('.').pop()?.toLowerCase() ?? 'png';
-          const mime = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
-          const dataUri = base64.startsWith('data:') ? base64 : `data:${mime};base64,${base64}`;
-          resolved =
-            resolved.slice(0, m.index!) +
-            `![${m[1] || ''}](${dataUri})` +
-            resolved.slice(m.index! + m[0].length);
-        }
-      } catch {
-        // 图片不可用 — 保留原始语法
-      }
-    }
+// --- View Mode ---
+const viewModeLabels: Record<ViewMode, string> = { split: '分栏', live: '即时' };
+const viewModeLabel = computed(() => viewModeLabels[viewMode.value]);
+const nextModeLabels: Record<ViewMode, string> = { split: '即时', live: '分栏' };
 
-    renderedHtml.value = renderMarkdown(resolved);
-    // Apply syntax highlighting to code blocks after DOM insert
-    nextTick(() => {
-      const previewEl = document.querySelector('.markdown-preview');
-      if (previewEl) {
-        highlightCodeBlocks(previewEl as HTMLElement);
-      }
-    });
-  } catch {
-    renderedHtml.value = '<p class="render-error">渲染失败</p>';
+function cycleViewMode(): void {
+  const modes: ViewMode[] = ['split', 'live'];
+  const idx = modes.indexOf(viewMode.value);
+  viewMode.value = modes[(idx + 1) % 2]!;
+  if (viewMode.value === 'split') {
+    updateSplitPreview();
   }
 }
 
-// Watch content changes to update preview when visible
-// (preview is updated on-demand when toggling to preview mode)
-
-// When user toggles preview on, render current content
-watch(showPreview, (visible) => {
-  if (visible && currentContent.value) {
-    void updatePreview(currentContent.value);
+// --- Split Pane ---
+function onSplitContentUpdate(content: string): void {
+  currentContent.value = content;
+  updateHeadings(content);
+  updateEditorStats(content);
+  if (activePath.value) {
+    isDirty.value = true;
+    saveError.value = null;
+    if (saveTimer) clearTimeout(saveTimer);
+    const savingPath = activePath.value;
+    saveTimer = setTimeout(() => debouncedSave(savingPath, content), 600);
   }
-});
-
-// --- M7-01: Large file handling ---
-const FILE_SIZE_WARN = 1 * 1024 * 1024; // 1MB soft warning
-const FILE_SIZE_MAX = 5 * 1024 * 1024; // 5MB hard limit for full rendering
-const largeFileWarning = ref('');
-const isLargeFile = ref(false);
-
-// --- M7-04: Concurrent edit conflict detection ---
-const fileMtimeAtOpen = ref<number | null>(null);
-
-// --- M1-08: Block Parser ---
-const currentBlocks = ref<MarkdownBlock[]>([]);
-function updateBlocks(content: string): void {
-  currentBlocks.value = parseBlocks(content, activePath.value);
+  // Debounce preview update for split mode
+  if (splitDebounceTimer) clearTimeout(splitDebounceTimer);
+  splitDebounceTimer = setTimeout(() => updateSplitPreview(), 300);
 }
 
-const indexStatus = computed(() => indexStore.status);
-const allTags = computed(() => indexStore.tags);
-const recentNotes = computed(() => indexStore.recentNotes);
-const activeHeadingId = computed(() => {
-  // M2-15: heading scroll-follow — use line 0 for now (top of document)
-  return getActiveHeadingId(0);
-});
+let splitDragActive = false;
+let splitDragCleanup: (() => void) | null = null;
 
-const currentBacklinks = computed((): BacklinkEntry[] => {
-  if (!activePath.value) return [];
-  return indexStore.getBacklinks(activePath.value);
-});
-
-// --- Initialize ---
-async function initNotebook(): Promise<void> {
-  loading.value = true;
-  errorMessage.value = '';
-  try {
-    await loadDirectory('/');
-  } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : '加载笔记本失败';
-  } finally {
-    loading.value = false;
-  }
-
-  // Build index (async, non-blocking)
-  try {
-    await indexStore.initialize(fs);
-  } catch {
-    // Index build failure is non-fatal
-  }
+function onSplitDragStart(e: MouseEvent): void {
+  e.preventDefault();
+  splitDragActive = true;
+  const onMove = (ev: MouseEvent) => {
+    if (!splitDragActive) return;
+    const container = (e.target as HTMLElement).parentElement;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const pct = ((ev.clientX - rect.left) / rect.width) * 100;
+    splitRatio.value = Math.max(30, Math.min(70, pct));
+  };
+  const onUp = () => {
+    splitDragActive = false;
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    splitDragCleanup = null;
+  };
+  // Clean up any stale listeners first
+  if (splitDragCleanup) splitDragCleanup();
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+  splitDragCleanup = () => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  };
 }
 
-// --- File Operations ---
+// --- Save State ---
+const isDirty = ref(false);
+const isSaving = ref(false);
+const saveError = ref<string | null>(null);
+const lastSavedAt = ref<number | null>(null);
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let saveGeneration = 0;
 
-/** 选择文件或目录：文件→打开编辑；目录→进入文件夹 */
-async function onSelectFileOrDir(path: string): Promise<void> {
-  try {
-    const stat = await fs.statFile(path);
-    if (stat.isDirectory) {
-      // 进入子目录
-      await loadDirectory(path);
-      return;
-    }
-  } catch {
-    // statFile 失败，尝试作为文件打开
-  }
-
-  // 当作文件打开
-  activePath.value = path;
-  // P2-2: 自动定位到文件所在目录
-  const dir = path.substring(0, path.lastIndexOf('/') + 1) || '/';
-  if (dir !== currentDir.value) {
-    currentDir.value = dir;
-    loadDirectory(dir); // fire-and-forget 更新侧栏
-  }
-
-  loading.value = true;
-  // Reset save state for new file
-  if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
-  isDirty.value = false;
-  isSaving.value = false;
-  saveError.value = null;
-  largeFileWarning.value = '';
-  isLargeFile.value = false;
-
-  // M7-01: Check file size before loading
-  try {
-    const stat = await fs.statFile(path);
-    fileMtimeAtOpen.value = stat.mtime;
-    if (stat.size > FILE_SIZE_MAX) {
-      isLargeFile.value = true;
-      largeFileWarning.value = `文件过大（${(stat.size / 1024 / 1024).toFixed(1)}MB），已切换为纯文本模式。超过 5MB 的文件不支持完整渲染。`;
-    } else if (stat.size > FILE_SIZE_WARN) {
-      largeFileWarning.value = `文件较大（${(stat.size / 1024 / 1024).toFixed(1)}MB），加载可能较慢。`;
-    }
-  } catch {
-    fileMtimeAtOpen.value = null;
-  }
-
-  try {
-    currentContent.value = await fs.readFile(path);
-    updateHeadings(currentContent.value);
-    updateEditorStats(currentContent.value);
-    updateBlocks(currentContent.value);
-    if (showPreview.value) void updatePreview(currentContent.value);
-
-    // Update recent notes in index
-    try {
-      await indexStore.refreshDocument(fs, path);
-    } catch {
-      // non-fatal
-    }
-  } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : '读取文件失败';
-  } finally {
-    loading.value = false;
-  }
-}
-
-/** 新建文本文件 */
-async function onCreateFile(): Promise<void> {
-  // eslint-disable-next-line no-alert
-  const name = prompt('文件名（.md 或 .txt）：', '新笔记.md');
-  if (!name) return;
-
-  const path = currentDir.value === '/' ? `/${name}` : `${currentDir.value}${name}`;
-
-  try {
-    const content = name.endsWith('.md') ? `# ${name.replace(/\.md$/, '')}\n\n` : '';
-    await fs.writeFile(path, content);
-    await loadDirectory(currentDir.value);
-
-    // 如果是 .md 文件，自动打开
-    if (name.endsWith('.md')) {
-      activePath.value = path;
-      currentContent.value = content;
-      updateHeadings(content);
-      updateEditorStats(content);
-    }
-  } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : '创建文件失败';
-  }
-}
-
-/** 重命名文件 */
-async function onRenameFile(oldPath: string, newName: string): Promise<void> {
-  try {
-    const newPath = newName.startsWith('/') ? newName : currentDir.value + newName;
-    await fs.renameFile(oldPath, newPath);
-
-    // 更新当前活动路径
-    if (activePath.value === oldPath) {
-      activePath.value = newPath;
-    }
-
-    await loadDirectory(currentDir.value);
-    await indexStore.refreshDocument(fs, newPath);
-  } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : '重命名失败';
-  }
-}
-
-// Editor stats (reactive)
+// --- Editor Stats ---
 const editorStats = reactive({
   charCount: 0,
   wordCount: 0,
@@ -487,637 +336,598 @@ const editorStats = reactive({
   cursorCol: null as number | null,
 });
 
-// Watch content changes for stats
-const updateEditorStats = (content: string): void => {
-  editorStats.charCount = content.length;
-  editorStats.wordCount = content ? content.split(/\s+/).filter(Boolean).length : 0;
-  editorStats.lineCount = content ? content.split('\n').length : 0;
-};
+// --- Computed ---
+const noteTitle = computed(() => {
+  if (!activePath.value) return '';
+  return activePath.value.split('/').pop()?.replace(/\.md$/, '') ?? '';
+});
 
-// --- M1-12: FormatToolbar ---
-const editorRef = ref<InstanceType<typeof MarkdownEditor> | null>(null);
+const allTags = computed(() => indexStore.tags);
+const activeHeadingId = computed(() => getActiveHeadingId(editorStats.cursorLine ?? 0));
+const currentBacklinks = computed((): BacklinkEntry[] => {
+  if (!activePath.value) return [];
+  return indexStore.getBacklinks(activePath.value);
+});
 
-// --- P2-1: Image Upload ---
-const imageFileInput = ref<HTMLInputElement | null>(null);
-const imageUpload = useImageUpload(fs, () => editorRef.value?.getEditorView() ?? null);
+// Recent notes with auto-assigned bookmark colors
+const recentNotesWithColors = computed(() =>
+  indexStore.recentNotes.map((n, i) => ({
+    path: n.path,
+    title: n.title,
+    colorIndex: Math.abs(hashString(n.path)) % 8,
+    _i: i,
+  })),
+);
 
-/** 工具栏图片按钮 → 触发文件选择器 */
-function triggerImagePicker(): void {
-  imageFileInput.value?.click();
+function hashString(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
 }
 
-/** 文件选择器回调 */
-async function onImageFileSelected(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  if (!file) return;
+// Debug watcher — log recentNotes population
+watch(
+  () => indexStore.recentNotes.length,
+  (len) => {
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.debug(
+        `[NotebookHome] recentNotes.length = ${len}`,
+        indexStore.recentNotes.map((n) => n.path),
+      );
+    }
+  },
+  { immediate: true },
+);
 
-  const handler = imageUpload.createFilePickerHandler();
-  await handler(file);
-
-  // 重置 input 以允许重复选择同一文件
-  input.value = '';
-}
-
-function applyFormat(wrapper: string, placeholder = '', blockPrefix = false): void {
-  const view = editorRef.value?.getEditorView();
-  if (!view) return;
-
-  const { from, to } = view.state.selection.main;
-  const selected = view.state.sliceDoc(from, to) || placeholder;
-
-  if (blockPrefix) {
-    const lines = selected.split('\n');
-    const prefixed = lines.map((l) => wrapper + l).join('\n');
-    view.dispatch({
-      changes: { from, to, insert: prefixed },
-      selection: { anchor: from + prefixed.length, head: from + prefixed.length },
-    });
-  } else if (wrapper.includes('$1')) {
-    const result = wrapper.replace('$1', selected);
-    const cursorOffset = result.indexOf(selected);
-    view.dispatch({
-      changes: { from, to, insert: result },
-      selection: { anchor: from + cursorOffset, head: from + cursorOffset + selected.length },
-    });
-  } else {
-    const wrapped = wrapper + selected + wrapper;
-    view.dispatch({
-      changes: { from, to, insert: wrapped },
-      selection: { anchor: from + wrapper.length, head: from + wrapper.length + selected.length },
-    });
+// --- Initialize ---
+async function initNotebook(): Promise<void> {
+  loading.value = true;
+  errorMessage.value = '';
+  try {
+    await loadDirectory('/');
+  } catch (e) {
+    errorMessage.value = String(e);
+  } finally {
+    loading.value = false;
+  }
+  try {
+    await indexStore.initialize(fs);
+  } catch {
+    /* ok */
   }
 }
 
-function onFormat(type: string): void {
-  switch (type) {
-    case 'bold':
-      applyFormat('**', '粗体文字');
-      break;
-    case 'italic':
-      applyFormat('*', '斜体文字');
-      break;
-    case 'strikethrough':
-      applyFormat('~~', '删除文字');
-      break;
-    case 'heading':
-      applyFormat('## ', '标题', true);
-      break;
-    case 'unorderedList':
-      applyFormat('- ', '列表项', true);
-      break;
-    case 'orderedList':
-      applyFormat('1. ', '列表项', true);
-      break;
-    case 'taskList':
-      applyFormat('- [ ] ', '待办项', true);
-      break;
-    case 'blockquote':
-      applyFormat('> ', '引用文字', true);
-      break;
-    case 'codeBlock':
-      applyFormat('```\n', 'code', false);
-      break;
-    case 'link':
-      applyFormat('[$1](url)', '', false);
-      break;
-    case 'image':
-      triggerImagePicker();
-      break;
-    case 'horizontalRule':
-      applyFormat('\n---\n', '', false);
-      break;
-  }
+async function loadDirectory(dir: string): Promise<void> {
+  currentDir.value = dir;
+  files.value = await fs.listDirectory(dir);
 }
 
-async function onTemplateSelect(_tpl: unknown, content: string): Promise<void> {
-  // Use template title as note name
-  const titleMatch = content.match(/^#\s+(.+)$/m);
-  const name = titleMatch?.[1]?.trim() || '新笔记';
-  const path = `/${name}.md`;
+// --- File Operations ---
+async function onSelectNote(path: string): Promise<void> {
+  // Flush any pending save before switching notes
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  // 防御性刷新：即使 saveTimer 已触发但 debouncedSave 尚未完成，
+  // 只要 isDirty 为 true 就执行保存，确保内容不丢失
+  if (isDirty.value && activePath.value) {
+    await debouncedSave(activePath.value, currentContent.value);
+  }
 
   try {
-    await fs.writeFile(path, content);
-    const entries = await fs.listDirectory('/');
-    files.value = entries;
-    activePath.value = path;
-    currentContent.value = content;
-    updateHeadings(content);
-    updateEditorStats(content);
-
-    try {
-      await indexStore.refreshDocument(fs, path);
-    } catch {
-      /* ok */
+    const stat = await fs.statFile(path);
+    if (stat.isDirectory) {
+      await loadDirectory(path);
+      return;
     }
-  } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : '创建笔记失败';
+  } catch {
+    /* open as file */
   }
-}
 
-async function onCreateBlank(): Promise<void> {
-  const today = new Date().toISOString().slice(0, 10);
-  const name = `笔记-${today}`;
-  const path = `/${name}.md`;
-  const content = `# 新笔记\n\n`;
+  loading.value = true;
+  isDirty.value = false;
+  isSaving.value = false;
+  saveError.value = null;
 
+  // Read content BEFORE setting activePath — prevents editor mounting with empty content
+  // while onMounted is still async (predictor.initialize blocking view creation).
+  let content: string;
   try {
-    await fs.writeFile(path, content);
-    const entries = await fs.listDirectory('/');
-    files.value = entries;
-    activePath.value = path;
-    currentContent.value = content;
-    updateHeadings(content);
-    updateEditorStats(content);
-
-    try {
-      await indexStore.refreshDocument(fs, path);
-    } catch {
-      /* ok */
-    }
+    content = await fs.readFile(path);
   } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : '创建笔记失败';
+    errorMessage.value = String(e);
+    loading.value = false;
+    return;
   }
+
+  // Now set reactive state — editor mounts with content already available
+  activePath.value = path;
+  currentContent.value = content;
+
+  const dir = path.substring(0, path.lastIndexOf('/') + 1) || '/';
+  if (dir !== currentDir.value) {
+    currentDir.value = dir;
+    loadDirectory(dir);
+  }
+
+  updateHeadings(content);
+  updateEditorStats(content);
+  updateSplitPreview();
+  try {
+    await indexStore.refreshDocument(fs, path);
+  } catch {
+    /* ok */
+  }
+  showLeftDrawer.value = false; // 选择笔记后关闭文件抽屉，避免 overlay 遮挡
+  loading.value = false;
 }
 
 async function onDeleteFile(path: string): Promise<void> {
-  try {
-    await fs.deleteFile(path);
-    if (activePath.value === path) {
-      activePath.value = '';
-      currentContent.value = '';
-    }
-    indexStore.removeDocument(path);
-    const entries = await fs.listDirectory('/');
-    files.value = entries;
-  } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : '删除失败';
+  await fs.deleteFile(path);
+  if (activePath.value === path) {
+    activePath.value = '';
+    currentContent.value = '';
+  }
+  indexStore.removeDocument(path);
+  files.value = await fs.listDirectory(currentDir.value);
+}
+
+async function onRenameFile(oldPath: string, newName: string): Promise<void> {
+  const newPath = currentDir.value + newName;
+  await fs.renameFile(oldPath, newPath);
+  if (activePath.value === oldPath) activePath.value = newPath;
+  await loadDirectory(currentDir.value);
+}
+
+async function onCreateFile(): Promise<void> {
+  newFileName.value = '新笔记.md';
+  showNewFileDialog.value = true;
+}
+
+async function confirmNewFile(): Promise<void> {
+  const name = newFileName.value.trim();
+  if (!name) return;
+  showNewFileDialog.value = false;
+  const path = currentDir.value === '/' ? `/${name}` : `${currentDir.value}${name}`;
+  const content = name.endsWith('.md') ? `# ${name.replace(/\.md$/, '')}\n\n` : '';
+  await fs.writeFile(path, content);
+  files.value = await fs.listDirectory(currentDir.value);
+  await indexStore.refreshDocument(fs, path);
+  if (name.endsWith('.md')) {
+    activePath.value = path;
+    currentContent.value = content;
+    updateSplitPreview();
   }
 }
 
+function cancelNewFile(): void {
+  showNewFileDialog.value = false;
+}
+
+// --- Preview Render ---
+let previewRenderTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * 逐行渲染源码为 HTML，保持源码行号与渲染行 1:1 对应。
+ * 与即时模式（parseLiveBlocks）相同的策略：每行独立调用 renderMarkdown()，
+ * 避免 marked 将无空行分隔的相邻内联行合并为同一段落。
+ * 代码围栏内部作为整体渲染，保留语法高亮。
+ */
+function renderLineByLine(source: string): string {
+  const lines = source.split('\n');
+  const result: string[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i] ?? '';
+
+    // Code fence: collect all lines between ``` markers
+    if (line.trimStart().startsWith('```')) {
+      const fenceLines: string[] = [line];
+      i++;
+      while (i < lines.length) {
+        const fl = lines[i] ?? '';
+        fenceLines.push(fl);
+        i++;
+        if (fl.trimStart().startsWith('```')) break;
+      }
+      // Render the entire fence block as one unit
+      const fenceSrc = fenceLines.join('\n');
+      result.push(renderMarkdown(fenceSrc));
+      continue;
+    }
+
+    // Regular line — render independently
+    if (line.trim() === '') {
+      result.push(''); // empty line → blank row in preview
+    } else {
+      result.push(renderMarkdown(line));
+    }
+    i++;
+  }
+
+  return result.join('\n');
+}
+
+function updateSplitPreview(): void {
+  if (previewRenderTimer) clearTimeout(previewRenderTimer);
+  previewRenderTimer = setTimeout(() => {
+    try {
+      splitPreviewHtml.value = renderLineByLine(currentContent.value);
+      void nextTick(() => {
+        const previewEl = document.querySelector<HTMLElement>(
+          '.split-preview, .markdown-body--full',
+        );
+        if (previewEl) highlightCodeBlocks(previewEl);
+      });
+    } catch {
+      splitPreviewHtml.value = '<p class="render-error">渲染失败</p>';
+    }
+  }, 50);
+}
+
+// --- Content Updates ---
 function onContentUpdate(content: string): void {
   currentContent.value = content;
   updateHeadings(content);
   updateEditorStats(content);
-  updateBlocks(content);
-
-  // Update preview if visible (live preview)
-  if (showPreview.value) {
-    void updatePreview(content);
-  }
-
-  // M7-03: Check for problematic characters on each update (debounced)
-  if (content.length > 0 && content.length % 500 < 10) {
-    const warnings = scanContentWarnings(content);
-    if (warnings.length > 0 && !largeFileWarning.value) {
-      largeFileWarning.value = warnings[0]?.message ?? '';
-    }
-  }
-
-  // Mark dirty, debounce save
   if (activePath.value) {
     isDirty.value = true;
     saveError.value = null;
-
-    if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
-    saveDebounceTimer = setTimeout(() => {
-      void debouncedSave(activePath.value!, content);
-    }, 600);
+    if (saveTimer) clearTimeout(saveTimer);
+    const savingPath = activePath.value;
+    saveTimer = setTimeout(() => debouncedSave(savingPath, content), 600);
   }
 }
 
-/** M7-04: 防抖保存 + 外部修改冲突检测 */
+function updateEditorStats(content: string): void {
+  editorStats.charCount = content.length;
+  editorStats.wordCount = content ? content.split(/\s+/).filter(Boolean).length : 0;
+  editorStats.lineCount = content ? content.split('\n').length : 0;
+}
+
 async function debouncedSave(path: string, content: string): Promise<void> {
+  const gen = ++saveGeneration;
   isSaving.value = true;
   const start = Date.now();
-
-  // M7-04: Check for external modifications before saving
-  try {
-    const stat = await fs.statFile(path);
-    if (fileMtimeAtOpen.value !== null && stat.mtime !== fileMtimeAtOpen.value) {
-      // File was modified externally since we opened it
-      largeFileWarning.value = '此文件已被外部程序修改。继续保存将覆盖外部更改。';
-    }
-  } catch {
-    // statFile may fail; skip conflict check
-  }
-
   try {
     await fs.writeFile(path, content);
+    if (gen !== saveGeneration) return; // 新保存已启动，放弃本次后续操作
     await indexStore.refreshDocument(fs, path);
-    // Update our mtime reference after successful save
-    try {
-      const stat = await fs.statFile(path);
-      fileMtimeAtOpen.value = stat.mtime;
-    } catch {
-      /* ok */
-    }
-
-    // Ensure "保存中" visible for at least MIN_SAVE_DISPLAY_MS
+    if (gen !== saveGeneration) return;
+    lastSavedAt.value = Date.now();
     const elapsed = Date.now() - start;
-    if (elapsed < MIN_SAVE_DISPLAY_MS) {
-      await new Promise((r) => setTimeout(r, MIN_SAVE_DISPLAY_MS - elapsed));
-    }
-
+    if (elapsed < 500) await new Promise((r) => setTimeout(r, 500 - elapsed));
+    if (gen !== saveGeneration) return;
     isDirty.value = false;
-    saveError.value = null;
   } catch (e) {
-    saveError.value = humanizeError(e);
+    saveError.value = String(e);
   } finally {
-    isSaving.value = false;
+    if (gen === saveGeneration) isSaving.value = false;
   }
+}
+
+// --- Format Bubble ---
+const FORMAT_HINT_KEY = 'markluck:formatBubble:hintShown';
+const toast = useToast();
+
+function onSelectionChange(sel: { from: number; to: number } | null): void {
+  if (!sel || sel.from === sel.to) {
+    bubbleVisible.value = false;
+    return;
+  }
+
+  // BUG-013: 首次选中文字 → 显示一次性格式气泡提示
+  if (!localStorage.getItem(FORMAT_HINT_KEY)) {
+    localStorage.setItem(FORMAT_HINT_KEY, '1');
+    toast.show('选中文字后使用格式气泡进行加粗、斜体等操作', 'info', 5000);
+  }
+
+  // Use CodeMirror 6 API to get pixel coordinates — window.getSelection() is unreliable inside CM6
+  const view = editorRef.value?.getEditorView();
+  if (view) {
+    const headCoords = view.coordsAtPos(sel.from);
+    if (headCoords) {
+      bubblePosition.value = {
+        x:
+          headCoords.left +
+          (view.coordsAtPos(sel.to)?.left ?? headCoords.left) / 2 -
+          (headCoords.left > (view.coordsAtPos(sel.to)?.left ?? headCoords.left) ? 0 : 0),
+        y: headCoords.top,
+      };
+      // Recalculate: center of selection
+      const tailCoords = view.coordsAtPos(sel.to);
+      if (tailCoords) {
+        bubblePosition.value.x = (headCoords.left + tailCoords.right) / 2;
+        bubblePosition.value.y = headCoords.top;
+      }
+      bubbleVisible.value = true;
+    }
+  }
+}
+
+function onBubbleFormat(type: string): void {
+  const view = editorRef.value?.getEditorView();
+  if (!view) return;
+  const { from, to } = view.state.selection.main;
+  const selected = view.state.sliceDoc(from, to) || '';
+  const wrappers: Record<string, [string, string]> = {
+    bold: ['**', '**'],
+    italic: ['*', '*'],
+    strikethrough: ['~~', '~~'],
+    inlineCode: ['`', '`'],
+    link: ['[', '](url)'],
+  };
+  const w = wrappers[type];
+  if (w) {
+    view.dispatch({ changes: { from, to, insert: `${w[0]}${selected}${w[1]}` } });
+  }
+  bubbleVisible.value = false;
 }
 
 // --- Search ---
-function onSearchResultSelect(result: SearchResult): void {
+function onSearchSelectResult(result: SearchResult): void {
   searchVisible.value = false;
-  onSelectFileOrDir(result.notePath);
+  onSelectNote(result.notePath);
 }
-
-function onTagSelect(tagName: string): void {
-  searchVisible.value = true;
-  const searchStore = useSearchStore();
-  setTimeout(() => {
-    searchStore.open(`tag:${tagName}`);
-  }, 50);
+function onQuickAction(action: 'new-note' | 'export' | 'settings'): void {
+  searchVisible.value = false;
+  if (action === 'new-note') showTemplate.value = true;
+  else if (action === 'export') showExport.value = true;
+  else if (action === 'settings') showSettings.value = true;
 }
 
 // --- Navigation ---
 function onNavTreeNavigate(_headingId: string, lineNumber: number): void {
-  // Scroll CM6 editor to the line (via editorView ref — not directly accessible here)
-  // M2-14: Scroll to heading via CodeMirror dispatch
-  // For now, log the intent — full integration requires exposing scrollTo from MarkdownEditor
-  if (lineNumber > 0) {
-    // EditorView.dispatch({ selection: { anchor: line }, scrollIntoView: true })
+  const view = editorRef.value?.getEditorView();
+  if (!view || lineNumber <= 0) return;
+  const line = view.state.doc.line(Math.min(lineNumber, view.state.doc.lines));
+  view.dispatch({
+    selection: { anchor: line.from, head: line.from },
+    scrollIntoView: true,
+  });
+  view.focus();
+}
+function onBacklinkNavigate(entry: BacklinkEntry): void {
+  onSelectNote(entry.notePath);
+}
+function onTagSelect(tagName: string): void {
+  searchStore.open(`tag:${tagName}`);
+  searchVisible.value = true;
+}
+
+function onLivePreviewExternalLinkClick(href: string): void {
+  window.open(normalizeUrl(href), '_blank', 'noopener,noreferrer');
+}
+
+function onLivePreviewTagClick(tagName: string): void {
+  onTagSelect(tagName);
+}
+
+async function onLivePreviewWikiLinkClick(noteTitle: string, anchor: null | string): Promise<void> {
+  const docs = Object.values(indexStore.getIndexService()?.getAllDocuments() ?? {});
+  const exact =
+    docs.find((doc) => doc.title === noteTitle) ??
+    docs.find((doc) => doc.path.split('/').pop()?.replace(/\.md$/, '') === noteTitle);
+
+  if (!exact) {
+    toast.show(`未找到笔记：${noteTitle}`, 'warning', 3000);
+    return;
+  }
+
+  await onSelectNote(exact.path);
+  if (!anchor) return;
+
+  const targetHeading = headings.value.find((heading) => heading.text.trim() === anchor.trim());
+  if (targetHeading) {
+    onNavTreeNavigate(targetHeading.id, targetHeading.lineNumber);
   }
 }
 
-function onBacklinkNavigate(entry: BacklinkEntry): void {
-  onSelectFileOrDir(entry.notePath);
+// --- Templates ---
+async function onTemplateSelect(_tpl: unknown, content: string): Promise<void> {
+  const titleMatch = content.match(/^#\s+(.+)$/m);
+  const name = titleMatch?.[1]?.trim() || '新笔记';
+  const path = `/${name}.md`;
+  // Set activePath + currentContent BEFORE async write so editor mounts immediately
+  activePath.value = path;
+  currentContent.value = content;
+  await fs.writeFile(path, content);
+  files.value = await fs.listDirectory('/');
+  await indexStore.refreshDocument(fs, path);
+  updateHeadings(content);
+  updateEditorStats(content);
+  updateSplitPreview();
+  showTemplate.value = false;
 }
 
-// --- Keyboard Shortcuts ---
-function handleGlobalKeydown(e: KeyboardEvent): void {
-  // Ctrl+Shift+P → open search (avoid Chinese IME conflict with Ctrl+Shift+F)
+async function onCreateBlank(): Promise<void> {
+  const today = new Date().toISOString().slice(0, 10);
+  const path = `/笔记-${today}.md`;
+  const content = '# 新笔记\n\n';
+  // Set activePath + currentContent BEFORE async write so editor mounts immediately
+  activePath.value = path;
+  currentContent.value = content;
+  await fs.writeFile(path, content);
+  files.value = await fs.listDirectory('/');
+  await indexStore.refreshDocument(fs, path);
+  updateHeadings(content);
+  updateEditorStats(content);
+  updateSplitPreview();
+  showTemplate.value = false;
+}
+
+// --- Keyboard ---
+function onGlobalKeydown(e: KeyboardEvent): void {
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
+    e.preventDefault();
+    searchVisible.value = true;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
     e.preventDefault();
     searchVisible.value = true;
   }
 }
 
-onMounted(() => {
-  // P2-1: 注册图片解析器（供 CM6 ImageWidget 异步加载图片）
-  setImageResolver(async (path: string) => {
-    try {
-      return await fs.readBinary(path);
-    } catch {
-      return null;
-    }
+/** Wire predictor to IndexStore for structured completions ([[/#/path). */
+function connectPredictor(): void {
+  const pred = editorRef.value?.predictor;
+  if (!pred) return;
+  const svc = indexStore.getIndexService();
+  pred.setIndexData({
+    getAllNoteTitles: () => svc?.getAllNoteTitles() ?? [],
+    getAllTags: () => (indexStore.tags ?? []).map((t) => t.name),
+    matchFilePaths: (prefix: string) => {
+      const docs = svc?.getAllDocuments() ?? {};
+      return Object.keys(docs).filter((p) => p.toLowerCase().includes(prefix.toLowerCase()));
+    },
   });
-  initNotebook();
-  window.addEventListener('keydown', handleGlobalKeydown);
+  const titles = svc?.getAllNoteTitles() ?? [];
+  pred.ingestExcerpts(titles);
+}
+
+// Reconnect predictor when editor remounts due to :key changes (view-mode / note switch).
+watch([activePath, viewMode], async () => {
+  await nextTick();
+  connectPredictor();
+});
+
+// ── Version Check ──────────────────────────────────────────
+const { hasUpdate, latestVersion, releaseUrl, releaseNotes, checkNow } = useVersionCheck();
+const showUpdateNotification = ref(false);
+const updateLatestVersion = computed(() => latestVersion.value);
+const updateReleaseUrl = computed(() => releaseUrl.value);
+const updateReleaseNotes = computed(() => releaseNotes.value);
+
+// Show update notification 15s after mount if update available
+let updateTimer: ReturnType<typeof setTimeout> | null = null;
+
+onMounted(async () => {
+  theme.init();
+  await initNotebook();
+  window.addEventListener('keydown', onGlobalKeydown);
+
+  // Listen for file-association events (double-click .md in Explorer)
+  if (window.__TAURI__) {
+    const { listen } = await import('@tauri-apps/api/event');
+    listen<string>('opened-file', (event) => {
+      const filePath = event.payload;
+      if (filePath) {
+        // Extract notebook folder from file path, then open the file
+        const dir = filePath.substring(0, filePath.lastIndexOf('/') + 1) || '/';
+        currentDir.value = dir;
+        loadDirectory(dir).then(() => onSelectNote(filePath));
+      }
+    });
+  }
+
+  await nextTick();
+  connectPredictor();
+
+  // Check for updates after a delay
+  updateTimer = setTimeout(async () => {
+    await checkNow();
+    if (hasUpdate.value) {
+      showUpdateNotification.value = true;
+    }
+  }, 15000); // 15 seconds after mount
 });
 
 onUnmounted(() => {
-  window.removeEventListener('keydown', handleGlobalKeydown);
-  if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
+  window.removeEventListener('keydown', onGlobalKeydown);
+  if (saveTimer) clearTimeout(saveTimer);
+  if (splitDebounceTimer) clearTimeout(splitDebounceTimer);
+  if (previewRenderTimer) clearTimeout(previewRenderTimer);
+  if (updateTimer) clearTimeout(updateTimer);
+  if (splitDragCleanup) splitDragCleanup();
 });
+
+function onDismissVersion(version: string) {
+  localStorage.setItem('markluck:version:dismissedVersion', version);
+  showUpdateNotification.value = false;
+}
 </script>
 
 <style scoped>
-.sidebar-content {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--rule, oklch(0.88 0.003 85));
-}
-
-.sidebar-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.sidebar-title {
-  font-weight: 700;
-  font-size: 14px;
-  color: var(--ink-primary, oklch(0.15 0.003 85));
-}
-
-.btn-new-note {
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--rule, oklch(0.88 0.003 85));
-  border-radius: var(--radius, 2px);
-  background: var(--paper-surface, oklch(0.985 0.002 85));
-  font-size: 18px;
-  line-height: 1;
+/* ===== View Mode Toggle ===== */
+.view-mode-toggle {
+  position: absolute;
+  top: calc(var(--topbar-height) + var(--space-8));
+  right: var(--space-12);
+  z-index: calc(var(--z-overlay) + 1);
+  padding: var(--space-4) var(--space-10);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-surface);
+  color: var(--ink-secondary);
+  font-size: var(--text-xs);
   cursor: pointer;
-  color: var(--ink-secondary, oklch(0.42 0.003 85));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 150ms var(--ease-fade, cubic-bezier(0.4, 0, 0.2, 1));
-}
-
-.btn-new-note:hover {
-  background: var(--accent-soft, oklch(0.92 0.03 250 / 0.55));
-  color: var(--ink-primary, oklch(0.15 0.003 85));
-}
-
-.new-note-input {
-  display: flex;
-  gap: 4px;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--rule, oklch(0.88 0.003 85));
-}
-
-.new-note-input input {
-  flex: 1;
-  padding: 4px 8px;
-  border: 1px solid var(--rule, oklch(0.88 0.003 85));
-  border-radius: var(--radius, 2px);
-  font-size: 13px;
-  background: var(--paper-surface, oklch(0.985 0.002 85));
-  color: var(--ink-primary, oklch(0.15 0.003 85));
-}
-
-.new-note-input button {
-  padding: 4px 8px;
-  border: 1px solid var(--rule, oklch(0.88 0.003 85));
-  border-radius: var(--radius, 2px);
-  background: var(--paper-surface, oklch(0.985 0.002 85));
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--ink-secondary, oklch(0.42 0.003 85));
-}
-
-.new-note-input button:first-of-type {
-  background: var(--accent, oklch(0.52 0.12 250));
-  color: oklch(0.995 0 0);
-  border-color: var(--accent, oklch(0.52 0.12 250));
-}
-
-.editor-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--ink-secondary, oklch(0.42 0.003 85));
-}
-
-.editor-empty h1 {
-  font-size: 24px;
-  margin-bottom: 8px;
-  color: var(--ink-primary, oklch(0.15 0.003 85));
-}
-
-.editor-hint {
-  margin-top: 16px;
-  font-size: 12px;
-  color: var(--ink-muted, oklch(0.6 0.002 85));
-}
-
-.right-sidebar-content {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.editor-wrapper {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.editor-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--rule, oklch(0.88 0.003 85));
-  background: var(--paper-surface, oklch(0.985 0.002 85));
-}
-
-.editor-file-name {
-  font-size: 12px;
-  color: var(--ink-secondary, oklch(0.42 0.003 85));
-  font-family: var(--ff-mono, monospace);
-}
-
-.file-warning {
-  padding: 8px 12px;
-  background: oklch(0.95 0.08 80 / 0.25);
-  color: var(--signal-warning, oklch(0.63 0.15 82));
-  font-size: 12px;
-  border-bottom: 1px solid oklch(0.85 0.08 80 / 0.3);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.file-warning-btn {
-  margin-left: auto;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: inherit;
-  font-size: 14px;
-}
-
-.editor-actions {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-
-.btn-action {
-  padding: 4px 10px;
-  border: 1px solid var(--rule, oklch(0.88 0.003 85));
-  border-radius: var(--radius, 2px);
-  background: var(--paper-surface, oklch(0.985 0.002 85));
-  font-size: 12px;
-  cursor: pointer;
-  color: var(--ink-secondary, oklch(0.42 0.003 85));
   transition:
-    background 150ms var(--ease-fade, cubic-bezier(0.4, 0, 0.2, 1)),
-    color 150ms var(--ease-fade, cubic-bezier(0.4, 0, 0.2, 1));
+    background var(--dur-micro) var(--ease-fade),
+    color var(--dur-micro) var(--ease-fade),
+    border-color var(--dur-micro) var(--ease-fade);
 }
 
-.btn-action:hover {
-  background: var(--accent-soft, oklch(0.92 0.03 250 / 0.55));
-  color: var(--ink-primary, oklch(0.15 0.003 85));
+.view-mode-toggle:hover {
+  background: var(--accent-soft);
+  color: var(--ink-primary);
+  border-color: var(--accent);
 }
 
-/* Preview toggle button — accent highlight when active */
-.btn-preview-toggle {
-  font-weight: 600;
+.view-mode-toggle:active {
+  transform: scale(0.97);
 }
 
-/* ===== Markdown Preview (rendered HTML) ===== */
-.markdown-preview {
-  flex: 1;
+/* ===== Split Pane ===== */
+.split-pane {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.split-left,
+.split-right {
+  min-width: 300px;
+  overflow: hidden;
+}
+
+.split-left {
+  border-right: none;
+}
+
+.split-right {
+  background: var(--paper-surface);
+}
+
+.split-divider {
+  width: 3px;
+  background: var(--rule);
+  cursor: col-resize;
+  flex-shrink: 0;
+  transition: background var(--dur-micro) var(--ease-fade);
+  position: relative;
+}
+
+.split-divider:hover,
+.split-divider:active {
+  background: var(--accent);
+}
+
+.split-preview {
+  height: 100%;
   overflow-y: auto;
-  padding: 24px 32px;
-  background: var(--editor-bg, oklch(0.985 0.001 85));
-  color: var(--ink-primary, oklch(0.15 0.003 85));
-  line-height: var(--lh-reading, 1.8);
-  font-family: var(--ff-body, system-ui, sans-serif);
-  font-size: var(--text-base, 15px);
+  padding: var(--space-16) var(--space-20);
   scroll-behavior: smooth;
 }
 
-/* Markdown rendered content typography */
-.markdown-preview :deep(h1) {
-  font-size: 2em;
-  font-weight: 700;
-  margin: 0.67em 0;
-  padding-bottom: 0.3em;
-  border-bottom: 1px solid var(--rule, oklch(0.88 0.003 85));
-  color: var(--ink-primary, oklch(0.15 0.003 85));
-}
-
-.markdown-preview :deep(h2) {
-  font-size: 1.5em;
-  font-weight: 700;
-  margin: 0.83em 0 0.4em;
-  padding-bottom: 0.25em;
-  border-bottom: 1px solid var(--rule, oklch(0.88 0.003 85));
-  color: var(--ink-primary, oklch(0.15 0.003 85));
-}
-
-.markdown-preview :deep(h3) {
-  font-size: 1.25em;
-  font-weight: 700;
-  margin: 1em 0 0.3em;
-}
-
-.markdown-preview :deep(h4) {
-  font-size: 1.1em;
-  font-weight: 700;
-  margin: 0.8em 0 0.2em;
-}
-
-.markdown-preview :deep(p) {
-  margin: 0.6em 0;
-}
-
-.markdown-preview :deep(ul),
-.markdown-preview :deep(ol) {
-  padding-left: 2em;
-  margin: 0.5em 0;
-}
-
-.markdown-preview :deep(li) {
-  margin: 0.25em 0;
-}
-
-.markdown-preview :deep(blockquote) {
-  margin: 0.8em 0;
-  padding: 0.5em 1em;
-  border-left: 4px solid var(--accent, oklch(0.52 0.12 250));
-  background: var(--accent-soft, oklch(0.92 0.03 250 / 0.55));
-  color: var(--ink-secondary, oklch(0.42 0.003 85));
-}
-
-.markdown-preview :deep(code) {
-  background: var(--code-bg, oklch(0.96 0.002 85));
-  color: var(--code-text, oklch(0.18 0.005 85));
-  padding: 2px 6px;
-  border-radius: var(--radius, 2px);
-  font-family: var(--ff-mono, 'Fira Code', monospace);
-  font-size: 0.9em;
-}
-
-.markdown-preview :deep(pre) {
-  background: var(--code-block-bg, oklch(0.97 0.002 85));
-  border: 1px solid var(--rule, oklch(0.88 0.003 85));
-  border-radius: var(--radius, 2px);
-  padding: 16px;
-  overflow-x: auto;
-  margin: 0.8em 0;
-}
-
-.markdown-preview :deep(pre code) {
-  background: none;
-  padding: 0;
-  font-size: 0.9em;
-  line-height: 1.5;
-}
-
-.markdown-preview :deep(table) {
-  border-collapse: collapse;
-  margin: 0.8em 0;
-  width: 100%;
-}
-
-.markdown-preview :deep(th),
-.markdown-preview :deep(td) {
-  border: 1px solid var(--rule, oklch(0.88 0.003 85));
-  padding: 8px 12px;
-  text-align: left;
-}
-
-.markdown-preview :deep(th) {
-  background: var(--table-stripe, var(--surface-hover, oklch(0 0 0 / 0.03)));
-  font-weight: 700;
-}
-
-.markdown-preview :deep(tr:nth-child(even)) {
-  background: var(--table-stripe, var(--surface-hover, oklch(0 0 0 / 0.03)));
-}
-
-.markdown-preview :deep(hr) {
-  border: none;
-  border-top: 2px solid var(--rule, oklch(0.88 0.003 85));
-  margin: 1.5em 0;
-}
-
-.markdown-preview :deep(a) {
-  color: var(--link, oklch(0.5 0.11 250));
-  text-decoration: none;
-}
-
-.markdown-preview :deep(a:hover) {
-  text-decoration: underline;
-}
-
-.markdown-preview :deep(img) {
-  max-width: 100%;
-  height: auto;
-}
-
-.markdown-preview :deep(.wiki-link) {
-  color: var(--link, oklch(0.5 0.11 250));
-  cursor: pointer;
-  text-decoration: underline dotted;
-}
-
-.markdown-preview :deep(.wiki-link--broken) {
-  color: var(--link-broken, var(--signal-error, oklch(0.48 0.17 25)));
-  text-decoration: underline wavy;
-}
-
-.markdown-preview :deep(.inline-tag) {
-  color: var(--accent, oklch(0.52 0.12 250));
-  background: var(--accent-soft, oklch(0.92 0.03 250 / 0.55));
-  padding: 1px 6px;
-  border-radius: var(--radius, 2px);
-  font-size: 0.85em;
-}
-
-.markdown-preview :deep(.render-error) {
-  color: var(--signal-error, oklch(0.48 0.17 25));
-  padding: 16px;
-  border: 1px dashed var(--signal-error, oklch(0.48 0.17 25));
-  border-radius: var(--radius, 2px);
+.markdown-body--full {
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--editor-top-pad) var(--space-32) var(--space-96);
+  max-width: var(--editor-max-width);
+  margin: 0 auto;
 }
 </style>

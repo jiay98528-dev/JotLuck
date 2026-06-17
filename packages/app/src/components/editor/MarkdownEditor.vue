@@ -1,496 +1,327 @@
 <template>
-  <div ref="editorContainer" class="markdown-editor" />
+  <div ref="editorHost" class="markdown-editor" />
 </template>
 
 <script setup lang="ts">
 /**
  * MarkdownEditor.vue — CodeMirror 6 编辑器封装
  *
- * M1-05: CodeMirror 6 集成
- * M1-07~11: BlockDecorator, BlockWidget, FormatAutoDetector,
- *            RestoreButton, IME handler, keyboard shortcuts
+ * 纸张主题。支持 v-model、块解析、拖放/粘贴回调。
+ * 暴露 getEditorView() 和 focus() 供父组件调用。
  *
- * @see TAD.md §3
- * @see components.md §12
+ * @see migration-map.md §1.2
  */
 import { ref, onMounted, onUnmounted, watch } from 'vue';
-import { EditorView, keymap, lineNumbers, highlightActiveLine } from '@codemirror/view';
+import { EditorView, lineNumbers, keymap } from '@codemirror/view';
 import { EditorState, Compartment } from '@codemirror/state';
-import { markdown } from '@codemirror/lang-markdown';
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
-import { tags } from '@lezer/highlight';
-import {
-  markluckExtensions,
-  markdownKeymap,
-  setBlocksForDecorations,
-} from '@/utils/cm6-extensions';
-import { livePreviewExtension, toggleBlockRender } from '@/utils/cm6-live-preview';
-import { useThemeStore } from '@/stores/theme';
+import { markluckExtensions } from '@/utils/cm6-extensions';
+import { livePreviewExtension, unpinFocusedBlock } from '@/utils/cm6-live-preview';
+import { ghostTextPlugin } from '@/utils/cm6-ghost-text';
+import { MarkdownPredictor } from '@/services/MarkdownPredictor';
 import type { MarkdownBlock } from '@/types';
 
-// M5-02/04: Dark syntax highlighting (VSCode Dark+ inspired)
-const darkHighlightStyle = HighlightStyle.define([
-  { tag: tags.heading, color: 'oklch(0.68 0.1 240)', fontWeight: 'bold' },
-  { tag: tags.heading1, fontSize: '1.6em' },
-  { tag: tags.heading2, fontSize: '1.4em' },
-  { tag: tags.heading3, fontSize: '1.2em' },
-  { tag: tags.comment, color: 'oklch(0.55 0.07 145)', fontStyle: 'italic' },
-  { tag: tags.string, color: 'oklch(0.65 0.1 50)' },
-  { tag: tags.keyword, color: 'oklch(0.62 0.13 250)', fontWeight: 'bold' },
-  { tag: tags.number, color: 'oklch(0.72 0.06 150)' },
-  { tag: tags.typeName, color: 'oklch(0.67 0.1 180)' },
-  { tag: tags.bool, color: 'oklch(0.62 0.13 250)' },
-  { tag: tags.regexp, color: 'oklch(0.68 0.14 30)' },
-  { tag: tags.url, color: 'oklch(0.58 0.16 250)', textDecoration: 'underline' },
-  { tag: tags.link, color: 'oklch(0.58 0.16 250)', textDecoration: 'underline' },
-  { tag: tags.escape, color: 'oklch(0.65 0.1 70)' },
-  { tag: tags.operator, color: 'oklch(0.8 0.003 260)' },
-  { tag: tags.punctuation, color: 'oklch(0.68 0.005 260)' },
-  { tag: tags.tagName, color: 'oklch(0.62 0.13 250)' },
-  { tag: tags.attributeName, color: 'oklch(0.72 0.08 220)' },
-  { tag: tags.attributeValue, color: 'oklch(0.65 0.1 50)' },
-  { tag: tags.quote, color: 'oklch(0.6 0.02 145)' },
-  { tag: tags.list, color: 'oklch(0.62 0.13 250)' },
-  { tag: tags.monospace, color: 'oklch(0.7 0.08 30)', fontFamily: 'monospace' },
-  { tag: tags.emphasis, fontStyle: 'italic' },
-  { tag: tags.strong, fontWeight: 'bold' },
-  { tag: tags.strikethrough, textDecoration: 'line-through' },
-  { tag: tags.content, color: 'oklch(0.85 0.003 260)' },
-]);
+const props = withDefaults(
+  defineProps<{
+    modelValue: string;
+    blocks?: MarkdownBlock[];
+    readOnly?: boolean;
+    showLineNumbers?: boolean;
+    livePreview?: boolean;
+    enableAutocomplete?: boolean;
+    onLivePreviewExternalLinkClick?: (href: string) => void;
+    onLivePreviewTagClick?: (tag: string) => void;
+    onLivePreviewWikiLinkClick?: (note: string, anchor: null | string) => void;
+    onEditorDrop?: (event: DragEvent) => void;
+    onEditorDragOver?: (event: DragEvent) => void;
+    onEditorPaste?: (event: ClipboardEvent) => boolean | void | Promise<boolean>;
+  }>(),
+  {
+    blocks: () => [],
+    readOnly: false,
+    showLineNumbers: false,
+    livePreview: false,
+    enableAutocomplete: true,
+    onLivePreviewExternalLinkClick: undefined,
+    onLivePreviewTagClick: undefined,
+    onLivePreviewWikiLinkClick: undefined,
+    onEditorDrop: undefined,
+    onEditorDragOver: undefined,
+    onEditorPaste: undefined,
+  },
+);
 
-// M1 syntax highlighting theme (light mode)
-const lightHighlightStyle = HighlightStyle.define([
-  { tag: tags.heading, color: 'oklch(0.22 0.01 260)', fontWeight: 'bold' },
-  { tag: tags.heading1, fontSize: '1.6em' },
-  { tag: tags.heading2, fontSize: '1.4em' },
-  { tag: tags.heading3, fontSize: '1.2em' },
-  { tag: tags.comment, color: 'oklch(0.55 0.02 145)', fontStyle: 'italic' },
-  { tag: tags.string, color: 'oklch(0.45 0.12 145)' },
-  { tag: tags.keyword, color: 'oklch(0.45 0.15 285)', fontWeight: 'bold' },
-  { tag: tags.number, color: 'oklch(0.5 0.14 50)' },
-  { tag: tags.typeName, color: 'oklch(0.45 0.13 230)' },
-  { tag: tags.bool, color: 'oklch(0.45 0.15 285)' },
-  { tag: tags.regexp, color: 'oklch(0.5 0.15 15)' },
-  { tag: tags.url, color: 'oklch(0.5 0.13 230)', textDecoration: 'underline' },
-  { tag: tags.link, color: 'oklch(0.5 0.13 230)', textDecoration: 'underline' },
-  { tag: tags.escape, color: 'oklch(0.45 0.15 50)' },
-  { tag: tags.operator, color: 'oklch(0.3 0.005 260)' },
-  { tag: tags.punctuation, color: 'oklch(0.5 0.01 260)' },
-  { tag: tags.tagName, color: 'oklch(0.45 0.13 285)' },
-  { tag: tags.attributeName, color: 'oklch(0.45 0.12 230)' },
-  { tag: tags.attributeValue, color: 'oklch(0.45 0.12 145)' },
-  { tag: tags.quote, color: 'oklch(0.5 0.02 145)' },
-  { tag: tags.list, color: 'oklch(0.5 0.13 230)' },
-  { tag: tags.monospace, color: 'oklch(0.45 0.12 15)', fontFamily: 'monospace' },
-  { tag: tags.emphasis, fontStyle: 'italic' },
-  { tag: tags.strong, fontWeight: 'bold' },
-  { tag: tags.strikethrough, textDecoration: 'line-through' },
-  { tag: tags.content, color: 'oklch(0.28 0.005 260)' },
-]);
+const lineNumberCompartment = new Compartment();
+const livePreviewCompartment = new Compartment();
+const autocompleteCompartment = new Compartment();
 
-const props = defineProps<{
-  modelValue: string;
-  blocks?: MarkdownBlock[];
-  readOnly?: boolean;
-  /** P2-1: Drop event handler (image/file drag into editor) */
-  onEditorDrop?: (event: DragEvent) => void;
-  /** P2-1: Dragover event handler */
-  onEditorDragOver?: (event: DragEvent) => void;
-  /** P2-1: Paste event handler (returns true/void if handled) */
-  onEditorPaste?: (event: ClipboardEvent) => boolean | void | Promise<boolean>;
-}>();
+// Respect user's autocomplete preference from localStorage
+const AUTOCOMPLETE_ENABLED_KEY = 'markluck:autocomplete:enabled';
+const isAutocompleteEnabled = () => localStorage.getItem(AUTOCOMPLETE_ENABLED_KEY) !== 'false';
+
+// Shared predictor instance for ghost text + structured knowledge
+const predictor = new MarkdownPredictor(4);
 
 const emit = defineEmits<{
   'update:modelValue': [value: string];
   'blocks-updated': [blocks: MarkdownBlock[]];
+  'selection-change': [sel: { from: number; to: number } | null];
 }>();
 
-const themeStore = useThemeStore();
-const editorContainer = ref<HTMLElement | null>(null);
-let editorView: EditorView | null = null;
+const editorHost = ref<HTMLDivElement | null>(null);
+let view: EditorView | null = null;
+let suppressSync = false; // guard against feedback loop: watch → dispatch → updateListener → emit
 
-/** Compartment for dynamic syntax highlighting theme switching */
-const syntaxCompartment = new Compartment();
+// E2E content reader — registered in onMounted (NOT setup!) because Vue 3 :key patching
+// runs setup before old component's onUnmounted, causing old unmount to delete new registration.
+// @see BUG-027, memory/bug_log.md
+const getEditorContentFn = () => view?.state.doc.toString() ?? '';
+const getEditorViewFn = () => view;
 
-/** Get the correct HighlightStyle based on current color scheme */
-function getHighlightStyle() {
-  return themeStore.colorScheme === 'dark' ? darkHighlightStyle : lightHighlightStyle;
-}
+// Lifecycle tracer for BUG-027 diagnosis
+const INSTANCE_ID = Math.random().toString(36).slice(2, 8);
+window.__markluck_lifecycleLog = window.__markluck_lifecycleLog || [];
+window.__markluck_lifecycleLog!.push({
+  event: 'setup',
+  id: INSTANCE_ID,
+  t: performance.now(),
+});
 
-/** Reconfigure syntax highlighting without recreating the editor */
-function reconfigureHighlight() {
-  if (!editorView) return;
-  editorView.dispatch({
-    effects: syntaxCompartment.reconfigure(syntaxHighlighting(getHighlightStyle())),
-  });
-}
-
-/** 初始化 CodeMirror 6 编辑器 */
-onMounted(() => {
-  if (!editorContainer.value) return;
-
-  const updateListener = EditorView.updateListener.of((update) => {
-    if (update.docChanged) {
-      const content = update.state.doc.toString();
-      emit('update:modelValue', content);
-    }
-  });
-
-  const state = EditorState.create({
-    doc: props.modelValue,
+function createState(doc: string) {
+  return EditorState.create({
+    doc,
     extensions: [
-      lineNumbers(),
-      highlightActiveLine(),
-      markdown(),
-      syntaxCompartment.of(syntaxHighlighting(getHighlightStyle())),
-      history(),
-      keymap.of([...defaultKeymap, ...historyKeymap]),
-      keymap.of(Object.entries(markdownKeymap()).map(([key, fn]) => ({ key, run: fn }))),
-      // Tab: toggle block between source/live-preview mode
-      keymap.of([{ key: 'Tab', run: toggleBlockRender, shift: () => true }]),
-      updateListener,
+      // Ghost text keymap must precede defaultKeymap (indentWithTab) so Tab
+      // is intercepted for ghost text acceptance before indentation logic.
+      autocompleteCompartment.of(
+        props.enableAutocomplete !== false ? ghostTextPlugin(predictor) : [],
+      ),
       ...markluckExtensions(),
-      ...livePreviewExtension(),
-      EditorView.editable.of(!props.readOnly),
-      EditorView.updateListener.of((_update) => {
-        // Pass blocks to decoration system when available
-        if (props.blocks) {
-          setBlocksForDecorations(props.blocks);
+      lineNumberCompartment.of(props.showLineNumbers ? lineNumbers() : []),
+      livePreviewCompartment.of(
+        props.livePreview
+          ? livePreviewExtension({
+              onExternalLinkClick: props.onLivePreviewExternalLinkClick,
+              onTagClick: props.onLivePreviewTagClick,
+              onWikiLinkClick: props.onLivePreviewWikiLinkClick,
+            })
+          : [],
+      ),
+      keymap.of([
+        {
+          key: 'Escape',
+          run: (v) => {
+            // Don't unpin blocks during IME composition — let the IME
+            // consume Escape (e.g. cancel candidate window) first.
+            if (v.composing || v.compositionStarted) return false;
+            return props.livePreview ? unpinFocusedBlock(v) : false;
+          },
+        },
+      ]),
+      EditorView.updateListener.of((update) => {
+        if (update.docChanged && !suppressSync) {
+          emit('update:modelValue', update.state.doc.toString());
         }
       }),
     ],
   });
+}
 
-  editorView = new EditorView({
-    state,
-    parent: editorContainer.value,
+// Dynamic line number toggle
+watch(
+  () => props.showLineNumbers,
+  (visible) => {
+    if (!view) return;
+    view.dispatch({
+      effects: lineNumberCompartment.reconfigure(visible ? lineNumbers() : []),
+    });
+  },
+);
+
+// Dynamic live preview toggle
+watch(
+  () => props.livePreview,
+  (active) => {
+    if (!view) return;
+    view.dispatch({
+      effects: livePreviewCompartment.reconfigure(
+        active
+          ? livePreviewExtension({
+              onExternalLinkClick: props.onLivePreviewExternalLinkClick,
+              onTagClick: props.onLivePreviewTagClick,
+              onWikiLinkClick: props.onLivePreviewWikiLinkClick,
+            })
+          : [],
+      ),
+    });
+  },
+);
+
+// Dynamic autocomplete toggle
+watch(
+  () => props.enableAutocomplete,
+  (enabled) => {
+    if (!view) return;
+    view.dispatch({
+      effects: autocompleteCompartment.reconfigure(
+        enabled !== false ? ghostTextPlugin(predictor) : [],
+      ),
+    });
+  },
+);
+
+onMounted(() => {
+  if (!editorHost.value) return;
+
+  // Ensure CM6 does NOT use Chrome's EditContext API on Windows.
+  // EditContext causes IME composition bugs on Chrome 126+:
+  //  - Candidate window mispositioning after Enter
+  //  - Cursor jumping to wrong line during composition
+  //  - Text appearing on previous line instead of current
+  // CM6 6.28+ auto-detects EditContext; this disables it via the
+  // internal flag (not exposed as a typed static in 6.43.x).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (EditorView as any).EDIT_CONTEXT = false;
+
+  // E2E diagnostic: log modelValue at editor creation time
+  window.__markluck_editorInitValue = props.modelValue;
+  view = new EditorView({
+    state: createState(props.modelValue),
+    parent: editorHost.value,
+  });
+  // Register E2E helpers AFTER view creation and AFTER old component's onUnmounted cleanup.
+  // Must be in onMounted, not setup: Vue 3 :key patching runs setup BEFORE old unmount.
+  window.__markluck_getEditorContent = getEditorContentFn;
+  window.__markluck_getEditorView = getEditorViewFn;
+  window.__markluck_lifecycleLog!.push({
+    event: 'mounted',
+    id: INSTANCE_ID,
+    docLen: view.state.doc.length,
+    t: performance.now(),
   });
 
-  // Listen for throttle parser events
-  editorView.dom.addEventListener('markluck-parse', ((event: CustomEvent) => {
-    emit('update:modelValue', event.detail.content);
-  }) as EventListener);
+  window.__markluck_predictor = predictor;
 
-  // P2-1: Register drag-drop and paste handlers on editor DOM
-  if (props.onEditorDragOver) {
-    editorView.dom.addEventListener('dragover', props.onEditorDragOver);
-  }
-  if (props.onEditorDrop) {
-    editorView.dom.addEventListener('drop', props.onEditorDrop);
-  }
-  if (props.onEditorPaste) {
-    editorView.dom.addEventListener('paste', async (e: Event) => {
-      const handled = await props.onEditorPaste!(e as ClipboardEvent);
-      if (handled === true) e.preventDefault();
+  // Fire-and-forget predictor init (BUG-027 fix: 消除 async onMounted 导致的 view=null 窗口期).
+  // predict.initialize() 下载 429KB baseline 文件可能耗时 200-500ms，
+  // 这段延迟不能阻塞 EditorView 创建，否则 E2E waitForEditorReady 轮询时 view 为 null。
+  if (props.enableAutocomplete !== false && isAutocompleteEnabled()) {
+    predictor.initialize().then(() => {
+      predictor.scanOpenedDocument(props.modelValue);
     });
   }
 
-  // M5: Watch theme changes and reconfigure syntax highlighting
-  watch(
-    () => themeStore.colorScheme,
-    () => {
-      reconfigureHighlight();
-    },
-  );
+  // Sync changes back to v-model (DOM events as safety net; updateListener is the primary path)
+  view.dom.addEventListener('keyup', syncContent);
+  view.dom.addEventListener('mouseup', syncContent);
+  view.dom.addEventListener('paste', syncContent);
+
+  // Drag/drop handlers
+  if (props.onEditorDrop) {
+    editorHost.value.addEventListener('drop', props.onEditorDrop);
+  }
+  if (props.onEditorDragOver) {
+    editorHost.value.addEventListener('dragover', props.onEditorDragOver);
+  }
+  if (props.onEditorPaste) {
+    editorHost.value.addEventListener('paste', (e) => {
+      const result = props.onEditorPaste!(e);
+      if (result === true) e.preventDefault();
+    });
+  }
+
+  // Selection tracking
+  document.addEventListener('selectionchange', onSelectionChange);
 });
-
-/** 外部更新 modelValue 时同步编辑器内容 */
-watch(
-  () => props.modelValue,
-  (newValue) => {
-    if (!editorView) return;
-    const currentContent = editorView.state.doc.toString();
-    if (newValue !== currentContent) {
-      editorView.dispatch({
-        changes: { from: 0, to: currentContent.length, insert: newValue },
-      });
-    }
-  },
-);
-
-/** 更新块装饰 */
-watch(
-  () => props.blocks,
-  (blocks) => {
-    if (blocks) {
-      setBlocksForDecorations(blocks);
-      editorView?.dispatch({}); // trigger decoration update
-    }
-  },
-  { deep: true },
-);
-
-/** 更新只读状态 — M1 保留，后续迭代实现动态切换 */
-
-// Expose editor content getter for E2E tests
-(window as unknown as Record<string, unknown>).__markluck_getEditorContent = (): string => {
-  return editorView?.state.doc.toString() ?? '';
-};
 
 onUnmounted(() => {
-  editorView?.destroy();
-  editorView = null;
-  delete (window as unknown as Record<string, unknown>).__markluck_getEditorContent;
+  window.__markluck_lifecycleLog!.push({
+    event: 'unmounting',
+    id: INSTANCE_ID,
+    hasView: !!view,
+    docLen: view?.state?.doc?.length,
+    t: performance.now(),
+  });
+  delete window.__markluck_getEditorContent;
+  delete window.__markluck_getEditorView;
+  delete window.__markluck_editorInitValue;
+  delete window.__markluck_modelOverwrites;
+  document.removeEventListener('selectionchange', onSelectionChange);
+  if (view) {
+    view.dom.removeEventListener('keyup', syncContent);
+    view.dom.removeEventListener('mouseup', syncContent);
+    view.dom.removeEventListener('paste', syncContent);
+    suppressSync = true;
+    view.destroy();
+    view = null;
+  }
+  // Persist L1→L2 before component is destroyed.
+  // Without this, L2 never accumulates and ghost text always cold-starts.
+  predictor.closeDocument();
+  window.__markluck_lifecycleLog!.push({
+    event: 'unmounted',
+    id: INSTANCE_ID,
+    t: performance.now(),
+  });
 });
 
-/** Expose editorView for parent access */
-defineExpose({
-  getEditorView: () => editorView,
-  focus: () => editorView?.focus(),
-});
+// External modelValue change → sync to editor (suppress feedback to avoid re-dirtying)
+watch(
+  () => props.modelValue,
+  (val) => {
+    if (view && val !== view.state.doc.toString()) {
+      // E2E diagnostic: log modelValue overwrites
+      window.__markluck_modelOverwrites = window.__markluck_modelOverwrites || [];
+      window.__markluck_modelOverwrites.push({
+        fromLen: view.state.doc.length,
+        toLen: val.length,
+        fromStart: view.state.doc.toString().substring(0, 40),
+        toStart: val.substring(0, 40),
+        time: Date.now(),
+      });
+      suppressSync = true;
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: val },
+      });
+      suppressSync = false;
+    }
+  },
+);
+
+function syncContent(): void {
+  if (!view || suppressSync) return;
+  const content = view.state.doc.toString();
+  emit('update:modelValue', content);
+}
+
+function onSelectionChange(): void {
+  if (!view || !view.hasFocus) return;
+  const sel = view.state.selection.main;
+  emit('selection-change', { from: sel.from, to: sel.to });
+}
+
+function getEditorView(): EditorView | null {
+  return view;
+}
+
+function focus(): void {
+  view?.focus();
+}
+
+defineExpose({ getEditorView, focus, predictor });
 </script>
 
 <style scoped>
 .markdown-editor {
   height: 100%;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .markdown-editor :deep(.cm-editor) {
   height: 100%;
-  background: var(--editor-bg);
 }
 
 .markdown-editor :deep(.cm-scroller) {
-  font-family: var(--ff-mono);
-  font-size: var(--text-base);
-  line-height: 1.7;
-  color: var(--ink-primary);
-}
-
-.markdown-editor :deep(.cm-content) {
-  padding: var(--space-16);
-}
-
-.markdown-editor :deep(.cm-line) {
-  padding: 0 var(--space-4);
-}
-
-.markdown-editor :deep(.cm-gutters) {
-  border-right: var(--border-thin) solid var(--rule);
-  background: var(--paper-bg);
-  color: var(--ink-muted);
-}
-
-.markdown-editor :deep(.cm-activeLine) {
-  background: var(--editor-line-highlight);
-}
-
-.markdown-editor :deep(.cm-cursor) {
-  border-left-color: var(--editor-cursor);
-}
-
-.markdown-editor :deep(.cm-selectionBackground) {
-  background: var(--editor-selection) !important;
-}
-
-/* Block marker styles */
-.markdown-editor :deep(.cm-block-marker--source) {
-  border-left: var(--border-medium) solid var(--accent);
-}
-
-.markdown-editor :deep(.cm-block-marker--render) {
-  border-left: var(--border-medium) solid var(--signal-success);
-}
-
-.markdown-editor :deep(.cm-block-marker--invalid) {
-  border-left: var(--border-medium) solid var(--signal-error);
-}
-
-/* ===== Live Preview Styles ===== */
-
-/* Hidden syntax markers */
-.markdown-editor :deep(.cm-live-hidden) {
-  font-size: 0 !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-  user-select: none !important;
-  color: transparent !important;
-  display: inline !important;
-  line-height: 0 !important;
-  letter-spacing: 0 !important;
-  word-spacing: 0 !important;
-  vertical-align: middle !important;
-  text-decoration: none !important;
-  max-width: 0 !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  border: none !important;
-}
-
-/* Block markers: colored left borders */
-.markdown-editor :deep(.cm-live-marker--source) {
-  border-left: var(--border-medium) solid var(--accent);
-}
-
-.markdown-editor :deep(.cm-live-marker--live) {
-  border-left: var(--border-medium) solid var(--signal-success);
-}
-
-/* Headings */
-.markdown-editor :deep(.cm-live-heading) {
-  font-weight: var(--fw-bold);
-  color: var(--ink-primary);
-}
-
-.markdown-editor :deep(.cm-live-h1) {
-  font-size: 1.8em;
-  line-height: var(--lh-heading);
-}
-
-.markdown-editor :deep(.cm-live-h2) {
-  font-size: 1.5em;
-  line-height: var(--lh-heading);
-}
-
-.markdown-editor :deep(.cm-live-h3) {
-  font-size: 1.25em;
-  line-height: var(--lh-heading);
-}
-
-.markdown-editor :deep(.cm-live-h4) {
-  font-size: 1.1em;
-}
-
-.markdown-editor :deep(.cm-live-h5) {
-  font-size: 1em;
-}
-
-.markdown-editor :deep(.cm-live-h6) {
-  font-size: 0.9em;
-  color: var(--ink-secondary);
-}
-
-/* Inline formatting */
-.markdown-editor :deep(.cm-live-bold) {
-  font-weight: var(--fw-bold);
-}
-.markdown-editor :deep(.cm-live-italic) {
-  font-style: italic;
-}
-
-.markdown-editor :deep(.cm-live-strikethrough) {
-  text-decoration: line-through;
-  color: var(--ink-muted);
-}
-
-/* Image rendering */
-.markdown-editor :deep(.cm-live-image-wrap) {
-  display: inline-block;
-  vertical-align: middle;
-  margin: 2px 0;
-  line-height: 0;
-  max-width: 100%;
-}
-
-.markdown-editor :deep(.cm-live-image) {
-  max-width: 100%;
-  max-height: 300px;
-  border-radius: var(--radius);
-  border: var(--border-thin) solid var(--rule);
-}
-
-/* Task checkbox */
-.markdown-editor :deep(.cm-live-checkbox-wrap) {
-  display: inline-flex;
-  align-items: center;
-  vertical-align: middle;
-  margin-right: 4px;
-}
-
-.markdown-editor :deep(.cm-live-checkbox) {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  cursor: pointer;
-  accent-color: var(--accent);
-}
-
-/* Inline code */
-.markdown-editor :deep(.cm-live-code) {
-  font-family: var(--ff-mono);
-  background: var(--code-bg);
-  color: var(--code-text);
-  padding: 1px 4px;
-  border-radius: var(--radius);
-  font-size: 0.9em;
-}
-
-/* Code blocks */
-.markdown-editor :deep(.cm-live-codeblock) {
-  background: var(--code-block-bg);
-  font-family: var(--ff-mono);
-  font-size: 0.9em;
-  padding-left: var(--space-8);
-}
-
-/* Blockquote */
-.markdown-editor :deep(.cm-live-blockquote) {
-  border-left: 4px solid var(--blockquote-rule);
-  padding-left: var(--space-12);
-  color: var(--ink-secondary);
-}
-
-/* Horizontal rule widget */
-.markdown-editor :deep(.cm-live-hr) {
-  border-top: var(--border-medium) solid var(--rule);
-  margin: var(--space-8) 0;
-  height: 0;
-}
-
-/* Wiki-link */
-.markdown-editor :deep(.cm-live-wikilink) {
-  color: var(--link);
-  text-decoration: underline dotted;
-  cursor: pointer;
-}
-
-/* Inline tag */
-.markdown-editor :deep(.cm-live-tag) {
-  color: var(--accent);
-  background: var(--accent-soft);
-  padding: 0 4px;
-  border-radius: var(--radius);
-  font-size: 0.85em;
-}
-
-/* URL detection */
-.markdown-editor :deep(.cm-live-url) {
-  color: var(--link);
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-/* Markdown link — display text */
-.markdown-editor :deep(.cm-live-link-text) {
-  color: var(--link);
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-/* Markdown link — URL portion */
-.markdown-editor :deep(.cm-live-link-url) {
-  color: var(--ink-muted);
-  font-size: 0.85em;
-}
-
-/* ===== Dark Mode: Editor Chrome ===== */
-[data-color-scheme='dark'] .markdown-editor :deep(.cm-editor) {
-  background: var(--editor-bg);
-}
-
-[data-color-scheme='dark'] .markdown-editor :deep(.cm-gutters) {
-  background: var(--paper-bg);
-  border-right-color: var(--rule);
-  color: var(--ink-muted);
-}
-
-[data-color-scheme='dark'] .markdown-editor :deep(.cm-activeLine) {
-  background: var(--editor-line-highlight);
-}
-
-[data-color-scheme='dark'] .markdown-editor :deep(.cm-cursor) {
-  border-left-color: var(--editor-cursor);
+  overflow-y: auto;
+  height: 100%;
 }
 </style>

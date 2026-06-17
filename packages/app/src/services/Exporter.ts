@@ -1,492 +1,947 @@
 /**
- * Exporter — 多格式导出服务
+ * Exporter — 6 格式导出服务
  *
- * M3-01~05: PDF / DOCX / XLSX+CSV / TXT / HTML 导出。
+ * PDF (window.print + rendered HTML) / DOCX (docx.js) / XLSX (sheetjs) /
+ * CSV / TXT / HTML (self-contained)
  *
- * @module Exporter
- * @see milestones.md M3-01~05
- * @see TAD.md — PDF 使用 window.print()，零依赖库
+ * @see TAD.md §7.2
+ * @see doc/PRD.md §F-09
  */
-
-import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx';
-import * as XLSX from 'xlsx';
+import type { ExportOptions, ExportResult } from '@/types';
+import { ExportFormat } from '@/types';
 import { renderMarkdown } from '@markluck/renderer';
-import { ExportFormat, type ExportOptions, type ExportResult } from '@/types';
+import {
+  Document,
+  Packer,
+  Paragraph,
+  TextRun,
+  HeadingLevel,
+  Table,
+  TableRow,
+  TableCell,
+  BorderStyle,
+  ShadingType,
+} from 'docx';
+import * as XLSX from 'xlsx';
+import { marked } from 'marked';
+import type { Token, Tokens } from 'marked';
 
-/** 导出选项默认值 */
-const DEFAULT_OPTIONS: ExportOptions = {
-  format: ExportFormat.PDF,
-  includeFrontmatter: true,
-  includeWikiLinks: true,
-  codeLineNumbers: true,
-  imageHandling: 'omit',
-};
+// ============================================================================
+// Internal Options — aligned with ExportOptions type
+// ============================================================================
 
-/**
- * 执行导出
- *
- * @param markdown - Markdown 原始内容
- * @param fileName - 文件名（不含扩展名）
- * @param options - 导出选项
- */
-export async function exportNote(
-  markdown: string,
-  fileName: string,
-  options: Partial<ExportOptions> = {},
-): Promise<ExportResult> {
-  const opts = { ...DEFAULT_OPTIONS, ...options };
-  let content = preprocessMarkdown(markdown, opts);
+interface InternalExportOptions {
+  includeFrontmatter: boolean;
+  includeWikiLinks: boolean;
+  codeLineNumbers: boolean;
+  imageHandling: 'embed' | 'attach' | 'link' | 'omit';
+}
 
-  // P2-1: 图片嵌入 — 将本地路径替换为 base64 data URI
-  if (opts.imageHandling === 'embed' && opts.readBinary) {
-    content = await resolveImages(content, opts.readBinary);
-  } else if (opts.imageHandling === 'omit') {
-    content = content.replace(/!\[([^\]]*)\]\([^)]+\)/g, '');
-  }
+function buildInternalOpts(options?: Partial<ExportOptions>): InternalExportOptions {
+  return {
+    includeFrontmatter: options?.includeFrontmatter ?? true,
+    includeWikiLinks: options?.includeWikiLinks ?? true,
+    codeLineNumbers: options?.codeLineNumbers ?? false,
+    imageHandling: options?.imageHandling ?? 'link',
+  };
+}
 
-  switch (opts.format) {
-    case ExportFormat.PDF:
-      return await exportPDF(content, fileName);
-    case ExportFormat.DOCX:
-      return await exportDocx(content, fileName);
-    case ExportFormat.XLSX:
-      return await exportXlsx(content, fileName);
-    case ExportFormat.CSV:
-      return await exportCsv(content, fileName);
-    case ExportFormat.TXT:
-      return await exportTxt(content, fileName);
-    case ExportFormat.HTML:
-      return await exportHtml(content, fileName);
-    default:
-      throw new Error(`不支持的导出格式: ${opts.format}`);
-  }
+// ============================================================================
+// Markdown Preprocessing
+// ============================================================================
+
+const FRONTMATTER_RE = /^---\s*\n[\s\S]*?\n---\s*\n/;
+
+function stripFrontmatter(md: string): string {
+  return md.replace(FRONTMATTER_RE, '');
 }
 
 /**
- * PDF 导出 — 使用 window.print()，依赖打印 CSS
+ * Convert wiki-links [[...]] to regular Markdown links or plain text.
+ * Wiki-links with | alias: [[target|alias]] → [alias](target) or alias
+ * Wiki-links with # anchor: [[target#section]] → [target > section](target)
  */
-async function exportPDF(content: string, fileName: string): Promise<ExportResult> {
-  // 创建隐藏 iframe 用于打印
-  const html = buildHtmlWrapper(content, fileName);
-  const blob = new Blob([html], { type: 'text/html' });
-  const url = URL.createObjectURL(blob);
-
-  return new Promise((resolve) => {
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = url;
-    document.body.appendChild(iframe);
-
-    iframe.onload = () => {
-      try {
-        iframe.contentWindow?.print();
-        resolve({
-          success: true,
-          format: ExportFormat.PDF,
-          fileName: `${fileName}.pdf`,
-          message: '已发送到打印机',
-        });
-      } catch (e) {
-        resolve({
-          success: false,
-          format: ExportFormat.PDF,
-          fileName: `${fileName}.pdf`,
-          error: e instanceof Error ? e.message : '打印失败',
-        });
-      } finally {
-        setTimeout(() => {
-          document.body.removeChild(iframe);
-          URL.revokeObjectURL(url);
-        }, 1000);
-      }
-    };
+function convertWikiLinks(md: string, include: boolean): string {
+  if (include) {
+    // Convert [[target]] → [target](target) for proper link rendering in exports
+    return md.replace(/\[\[([^\]]+)\]\]/g, (_m: string, inner: string) => {
+      const parts = inner.split('|');
+      const target = parts[0]!.split('#');
+      const note = target[0]!;
+      const anchor = target[1] ? `#${target[1]}` : '';
+      const text = parts[1] || target[0];
+      return `[${text}](${note}${anchor})`;
+    });
+  }
+  // Strip wiki-link syntax, keep text
+  return md.replace(/\[\[([^\]]+)\]\]/g, (_m: string, inner: string) => {
+    const parts = inner.split('|');
+    return parts[1] || parts[0]!.split('#')[0]!;
   });
 }
 
+function preprocessMarkdown(md: string, opts: InternalExportOptions): string {
+  let result = md;
+  if (!opts.includeFrontmatter) {
+    result = stripFrontmatter(result);
+  }
+  result = convertWikiLinks(result, opts.includeWikiLinks);
+  return result;
+}
+
+// ============================================================================
+// HTML Rendering (used by PDF & HTML exports)
+// ============================================================================
+
+function renderToStyledHtml(md: string, opts: InternalExportOptions): string {
+  const processed = preprocessMarkdown(md, opts);
+  return renderMarkdown(processed);
+}
+
+// ============================================================================
+// Download Helper
+// ============================================================================
+
+function triggerDownload(content: string | Blob, fileName: string, mime: string): void {
+  const blob = content instanceof Blob ? content : new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ============================================================================
+// PDF — hidden iframe + rendered HTML + window.print()
+// ============================================================================
+
+function exportPDF(
+  md: string,
+  fileName: string,
+  options?: Partial<ExportOptions>,
+): Promise<ExportResult> {
+  const opts = buildInternalOpts(options);
+  const bodyHtml = renderToStyledHtml(md, opts);
+
+  return new Promise((resolve) => {
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText =
+      'position:fixed;top:0;left:0;width:100%;height:100%;border:none;z-index:99999;';
+    // Hidden until print dialog appears — use opacity to keep printing working
+    iframe.style.opacity = '0';
+    document.body.appendChild(iframe);
+
+    iframe.onload = () => {
+      const doc = iframe.contentDocument!;
+      doc.write(`<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>${escapeHtml(fileName)}</title>
+  <style>${EMBEDDED_CSS}</style>
+  <style>
+    @media print {
+      @page { margin: 20mm; size: A4; }
+      body { margin: 0; }
+    }
+    @media screen {
+      body { max-width: 800px; margin: 40px auto; padding: 0 24px; }
+    }
+  </style>
+</head>
+<body>
+  <article class="markdown-body">
+    ${bodyHtml}
+  </article>
+</body>
+</html>`);
+      doc.close();
+
+      // Let browser render before printing
+      setTimeout(() => {
+        iframe.contentWindow!.focus();
+        iframe.contentWindow!.print();
+
+        // Clean up after print dialog (give user time to interact)
+        // print() is synchronous-blocking in most browsers, so the following
+        // runs after the dialog closes.
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+          resolve({ success: true, format: ExportFormat.PDF, fileName: `${fileName}.pdf` });
+        }, 500);
+      }, 400);
+    };
+
+    // Handle load errors (rare)
+    setTimeout(() => {
+      if (iframe.parentNode) {
+        // Iframe still attached = may have failed silently
+        // Don't remove; the load event should still fire
+      }
+    }, 5000);
+  });
+}
+
+// ============================================================================
+// DOCX — marked.lexer() → docx.js elements
+// ============================================================================
+
+/** Map markdown heading depth (1-6) to docx HeadingLevel */
+function mapHeadingLevel(depth: number): (typeof HeadingLevel)[keyof typeof HeadingLevel] {
+  const levels: Record<number, (typeof HeadingLevel)[keyof typeof HeadingLevel]> = {
+    1: HeadingLevel.HEADING_1,
+    2: HeadingLevel.HEADING_2,
+    3: HeadingLevel.HEADING_3,
+    4: HeadingLevel.HEADING_4,
+    5: HeadingLevel.HEADING_5,
+    6: HeadingLevel.HEADING_6,
+  };
+  return levels[depth] ?? HeadingLevel.HEADING_1;
+}
+
+// ── Inline formatting context (stacked by recursive descent) ──
+interface InlineFormat {
+  bold?: boolean;
+  italics?: boolean;
+  strike?: boolean;
+  font?: string;
+  size?: number;
+  color?: string;
+  underline?: { type: 'single' };
+}
+
+/** Build docx TextRun array from marked inline tokens, with cascading format context */
+function buildTextRuns(tokens: Token[] | undefined, fmt: InlineFormat = {}): TextRun[] {
+  if (!tokens || tokens.length === 0) {
+    return [new TextRun({ text: '', ...fmt })];
+  }
+
+  const runs: TextRun[] = [];
+
+  for (const token of tokens) {
+    switch (token.type) {
+      case 'text': {
+        const t = token as Tokens.Text;
+        if (t.text) runs.push(new TextRun({ text: t.text, ...fmt }));
+        break;
+      }
+      case 'strong': {
+        const t = token as Tokens.Strong;
+        runs.push(...buildTextRuns(t.tokens, { ...fmt, bold: true }));
+        break;
+      }
+      case 'em': {
+        const t = token as Tokens.Em;
+        runs.push(...buildTextRuns(t.tokens, { ...fmt, italics: true }));
+        break;
+      }
+      case 'codespan': {
+        const t = token as Tokens.Codespan;
+        runs.push(new TextRun({ text: t.text, font: 'Consolas', size: 20, ...fmt }));
+        break;
+      }
+      case 'del': {
+        const t = token as Tokens.Del;
+        runs.push(...buildTextRuns(t.tokens, { ...fmt, strike: true }));
+        break;
+      }
+      case 'link': {
+        const t = token as Tokens.Link;
+        // Word default style — no custom color, underline only
+        runs.push(
+          ...buildTextRuns(t.tokens, {
+            ...fmt,
+            underline: { type: 'single' as const },
+          }),
+        );
+        break;
+      }
+      case 'image': {
+        const t = token as Tokens.Image;
+        runs.push(
+          new TextRun({
+            text: `[Image${t.title ? ': ' + t.title : ''}]`,
+            italics: true,
+            color: '999999',
+          }),
+        );
+        break;
+      }
+      case 'html': {
+        const t = token as Tokens.HTML;
+        const stripped = t.text.replace(/<[^>]*>/g, '');
+        if (stripped) runs.push(new TextRun({ text: stripped, ...fmt }));
+        break;
+      }
+      case 'br': {
+        runs.push(new TextRun({ break: 1 }));
+        break;
+      }
+      case 'escape': {
+        const t = token as Tokens.Escape;
+        runs.push(new TextRun({ text: t.text, ...fmt }));
+        break;
+      }
+      // Custom MarkLuck inline token types — render as plain text
+      case 'wikiLink':
+      case 'tag': {
+        const t = token as { raw?: string; text?: string };
+        runs.push(new TextRun({ text: t.text || t.raw || '', ...fmt }));
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  return runs.length > 0 ? runs : [new TextRun({ text: '', ...fmt })];
+}
+
 /**
- * DOCX 导出 — 使用 docx.js
+ * Check if a list item's tokens are inline (tight list) or block (loose list).
+ * In tight lists, tokens[0] is text/strong/em/etc.
+ * In loose lists, tokens[0] is paragraph.
  */
-async function exportDocx(markdown: string, fileName: string): Promise<ExportResult> {
-  const paragraphs = markdownToDocxParagraphs(markdown);
+function isInlineToken(token: Token | undefined): boolean {
+  if (!token) return true;
+  const inlineTypes = new Set([
+    'text',
+    'strong',
+    'em',
+    'codespan',
+    'link',
+    'image',
+    'del',
+    'html',
+    'br',
+    'escape',
+    'wikiLink',
+    'tag',
+  ]);
+  return inlineTypes.has(token.type);
+}
+
+/** Build docx Paragraph / Table children from marked block tokens */
+function buildDocxChildren(blocks: Token[], _opts: InternalExportOptions): (Paragraph | Table)[] {
+  const children: (Paragraph | Table)[] = [];
+
+  for (const token of blocks) {
+    switch (token.type) {
+      // ── Heading ──
+      case 'heading': {
+        const t = token as Tokens.Heading;
+        children.push(
+          new Paragraph({
+            heading: mapHeadingLevel(t.depth),
+            spacing: { before: 240, after: 120 },
+            children: buildTextRuns(t.tokens),
+          }),
+        );
+        break;
+      }
+
+      // ── Paragraph ──
+      case 'paragraph': {
+        const t = token as Tokens.Paragraph;
+        children.push(
+          new Paragraph({
+            spacing: { after: 120 },
+            children: buildTextRuns(t.tokens),
+          }),
+        );
+        break;
+      }
+
+      // ── Code Block ──
+      case 'code': {
+        const t = token as Tokens.Code;
+        const lines = t.text.split('\n');
+        for (let li = 0; li < lines.length; li++) {
+          const lineText = _opts.codeLineNumbers
+            ? `${String(li + 1).padStart(3, ' ')} │ ${lines[li]}`
+            : lines[li]!;
+          children.push(
+            new Paragraph({
+              spacing: { before: 0, after: 0 },
+              indent: { left: 240 },
+              shading: { type: ShadingType.SOLID, color: 'F0F0F0', fill: 'F0F0F0' },
+              children: [
+                new TextRun({
+                  text: lineText,
+                  font: 'Consolas',
+                  size: 20, // 10pt = 20 half-points
+                }),
+              ],
+            }),
+          );
+        }
+        break;
+      }
+
+      // ── Blockquote ──
+      case 'blockquote': {
+        const t = token as Tokens.Blockquote;
+        const innerChildren = buildDocxChildren(t.tokens, _opts);
+        // Add left border indent to indicate blockquote
+        for (const child of innerChildren) {
+          if (child instanceof Paragraph) {
+            // Create a new paragraph with indent
+            const existingSpacing = (child as { spacing?: { before?: number; after?: number } })
+              .spacing;
+            children.push(
+              new Paragraph({
+                spacing: existingSpacing || { after: 120 },
+                indent: { left: 480 },
+                border: { left: { style: BorderStyle.SINGLE, size: 6, color: '999999' } },
+                children: (child as { children?: TextRun[] }).children || [
+                  new TextRun({ text: '' }),
+                ],
+              }),
+            );
+          } else {
+            children.push(child);
+          }
+        }
+        break;
+      }
+
+      // ── List ──
+      case 'list': {
+        const t = token as Tokens.List;
+        let itemIndex = 0;
+        for (const item of t.items) {
+          itemIndex++;
+          const useInline = item.tokens.length > 0 && isInlineToken(item.tokens[0]);
+
+          if (useInline) {
+            // Tight list — single paragraph with bullet/number
+            const prefix = t.ordered ? `${itemIndex}. ` : '';
+            const itemRuns: TextRun[] = [];
+
+            if (prefix) {
+              itemRuns.push(new TextRun({ text: prefix }));
+            }
+            itemRuns.push(...buildTextRuns(item.tokens));
+
+            children.push(
+              new Paragraph({
+                spacing: { before: 40, after: 40 },
+                indent: { left: 480, hanging: 240 },
+                bullet: t.ordered ? undefined : { level: 0 },
+                children: itemRuns,
+              }),
+            );
+          } else {
+            // Loose list — item contains block tokens
+            const innerBlocks = buildDocxChildren(item.tokens, _opts);
+            for (let bi = 0; bi < innerBlocks.length; bi++) {
+              const block = innerBlocks[bi]!;
+              if (block instanceof Paragraph) {
+                const prefix = bi === 0 && t.ordered ? `${itemIndex}. ` : '';
+                const existingChildren = (block as { children?: TextRun[] }).children;
+                const runs: TextRun[] = prefix
+                  ? [new TextRun({ text: prefix }), ...(existingChildren || [])]
+                  : existingChildren || [new TextRun({ text: '' })];
+
+                children.push(
+                  new Paragraph({
+                    spacing: { before: 40, after: 40 },
+                    indent: { left: 480, hanging: 240 },
+                    bullet: t.ordered ? undefined : { level: 0 },
+                    children: runs,
+                  }),
+                );
+              } else {
+                children.push(block);
+              }
+            }
+          }
+        }
+        break;
+      }
+
+      // ── Table ──
+      case 'table': {
+        const t = token as Tokens.Table;
+        const rows: TableRow[] = [];
+
+        // Header row
+        const headerCells: TableCell[] = [];
+        for (const cell of t.header) {
+          headerCells.push(
+            new TableCell({
+              shading: { type: ShadingType.SOLID, color: 'E8E8E8', fill: 'E8E8E8' },
+              children: [
+                new Paragraph({
+                  children: buildTextRuns(cell.tokens),
+                }),
+              ],
+            }),
+          );
+        }
+        rows.push(new TableRow({ children: headerCells }));
+
+        // Data rows
+        for (const row of t.rows) {
+          const dataCells: TableCell[] = [];
+          for (const cell of row) {
+            dataCells.push(
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: buildTextRuns(cell.tokens),
+                  }),
+                ],
+              }),
+            );
+          }
+          rows.push(new TableRow({ children: dataCells }));
+        }
+
+        children.push(
+          new Table({
+            rows,
+            width: { size: 100, type: 'pct' as const },
+          }),
+        );
+        // Add spacing after tables
+        children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+        break;
+      }
+
+      // ── Horizontal Rule ──
+      case 'hr': {
+        children.push(
+          new Paragraph({
+            spacing: { before: 240, after: 240 },
+            border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: 'CCCCCC' } },
+            children: [],
+          }),
+        );
+        break;
+      }
+
+      // ── Space / HTML / custom — skip ──
+      case 'space':
+      default:
+        break;
+    }
+  }
+
+  return children;
+}
+
+async function exportDocx(
+  md: string,
+  fileName: string,
+  options?: Partial<ExportOptions>,
+): Promise<ExportResult> {
+  const opts = buildInternalOpts(options);
+  const processed = preprocessMarkdown(md, opts);
+
+  // Use marked.lexer() to parse into block tokens
+  const tokens = marked.lexer(processed);
+  const children = buildDocxChildren(tokens, opts);
 
   const doc = new Document({
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: 'PingFang SC',
+            size: 24, // 12pt = 24 half-points
+          },
+        },
+      },
+    },
     sections: [
       {
-        properties: {},
-        children: paragraphs,
+        properties: {
+          page: {
+            margin: {
+              top: 1440, // 1 inch in twips
+              right: 1440,
+              bottom: 1440,
+              left: 1440,
+            },
+          },
+        },
+        children:
+          children.length > 0
+            ? children
+            : [new Paragraph({ children: [new TextRun({ text: '' })] })],
       },
     ],
   });
 
-  try {
-    const blob = await Packer.toBlob(doc);
-    downloadBlob(blob, `${fileName}.docx`);
-    return { success: true, format: ExportFormat.DOCX, fileName: `${fileName}.docx` };
-  } catch (e) {
-    return {
-      success: false,
-      format: ExportFormat.DOCX,
-      fileName: `${fileName}.docx`,
-      error: e instanceof Error ? e.message : 'DOCX 导出失败',
-    };
-  }
-}
-
-/**
- * XLSX 导出 — 使用 sheetjs（仅导出表格内容）
- */
-async function exportXlsx(markdown: string, fileName: string): Promise<ExportResult> {
-  try {
-    const tables = extractTables(markdown);
-    if (tables.length === 0) {
-      // 无表格时导出全文为单 sheet
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet([['内容'], [markdown]]);
-      XLSX.utils.book_append_sheet(wb, ws, '笔记内容');
-      XLSX.writeFile(wb, `${fileName}.xlsx`);
-    } else {
-      const wb = XLSX.utils.book_new();
-      tables.forEach((table, idx) => {
-        const ws = XLSX.utils.aoa_to_sheet(table);
-        XLSX.utils.book_append_sheet(wb, ws, `表格${idx + 1}`);
-      });
-      XLSX.writeFile(wb, `${fileName}.xlsx`);
-    }
-    return { success: true, format: ExportFormat.XLSX, fileName: `${fileName}.xlsx` };
-  } catch (e) {
-    return {
-      success: false,
-      format: ExportFormat.XLSX,
-      fileName: `${fileName}.xlsx`,
-      error: e instanceof Error ? e.message : 'XLSX 导出失败',
-    };
-  }
-}
-
-/**
- * CSV 导出 — 使用 sheetjs
- */
-async function exportCsv(markdown: string, fileName: string): Promise<ExportResult> {
-  try {
-    const tables = extractTables(markdown);
-    if (tables.length === 0) {
-      const ws = XLSX.utils.aoa_to_sheet([['内容'], [markdown]]);
-      const csv = XLSX.utils.sheet_to_csv(ws);
-      downloadText(csv, `${fileName}.csv`, 'text/csv');
-    } else {
-      const ws = XLSX.utils.aoa_to_sheet(tables[0] ?? [['无数据']]);
-      const csv = XLSX.utils.sheet_to_csv(ws);
-      downloadText(csv, `${fileName}.csv`, 'text/csv');
-    }
-    return { success: true, format: ExportFormat.CSV, fileName: `${fileName}.csv` };
-  } catch (e) {
-    return {
-      success: false,
-      format: ExportFormat.CSV,
-      fileName: `${fileName}.csv`,
-      error: e instanceof Error ? e.message : 'CSV 导出失败',
-    };
-  }
-}
-
-/**
- * TXT 导出 — 去除 Markdown 语法标记
- */
-async function exportTxt(markdown: string, fileName: string): Promise<ExportResult> {
-  const text = stripMarkdownSyntax(markdown);
-  downloadText(text, `${fileName}.txt`, 'text/plain');
-  return { success: true, format: ExportFormat.TXT, fileName: `${fileName}.txt` };
-}
-
-/**
- * HTML 导出 — 自包含 HTML（内嵌 CSS）
- */
-async function exportHtml(markdown: string, fileName: string): Promise<ExportResult> {
-  const html = buildHtmlWrapper(markdown, fileName);
-  downloadText(html, `${fileName}.html`, 'text/html');
-  return { success: true, format: ExportFormat.HTML, fileName: `${fileName}.html` };
-}
-
-// ---- Private Helpers ----
-
-/** 预处理 Markdown：根据选项处理 frontmatter 等 */
-/** 将 Markdown 中的本地图片路径转换为 base64 data URI */
-async function resolveImages(
-  md: string,
-  readBinary: (path: string) => Promise<string>,
-): Promise<string> {
-  const imgRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
-  const matches = [...md.matchAll(imgRegex)];
-  if (matches.length === 0) return md;
-
-  let result = md;
-  for (const m of matches.reverse()) {
-    // 从后往前替换，保持位置正确
-    const path = m[2] || '';
-    // 跳过已经是 data URI 或 http(s) 的路径
-    if (path.startsWith('data:') || path.startsWith('http')) continue;
-
-    try {
-      const base64 = await readBinary(path);
-      if (base64) {
-        const ext = path.split('.').pop()?.toLowerCase() ?? 'png';
-        const mime = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
-        const dataUri = base64.startsWith('data:') ? base64 : `data:${mime};base64,${base64}`;
-        result =
-          result.slice(0, m.index!) +
-          `![${m[1] || ''}](${dataUri})` +
-          result.slice(m.index! + m[0].length);
-      }
-    } catch {
-      // 图片不可用 — 保留原始语法
-    }
-  }
-  return result;
-}
-
-function preprocessMarkdown(md: string, opts: ExportOptions): string {
-  let content = md;
-  if (!opts.includeFrontmatter) {
-    content = content.replace(/^---[\s\S]*?---\s*\n/, '');
-  }
-  return content;
-}
-
-/** 渲染 Markdown 为 HTML */
-function markdownToHtml(md: string): string {
-  return renderMarkdown(md);
-}
-
-/** 构建自包含 HTML 包装器 */
-function buildHtmlWrapper(content: string, title: string): string {
-  const bodyHtml = markdownToHtml(content);
-  return `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtml(title)}</title>
-  <style>
-    body {
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 2rem;
-      font-family: system-ui, -apple-system, sans-serif;
-      font-size: 16px;
-      line-height: 1.8;
-      color: #333;
-    }
-    h1 { font-size: 2em; margin-top: 1em; }
-    h2 { font-size: 1.5em; margin-top: 1em; }
-    h3 { font-size: 1.25em; margin-top: 0.8em; }
-    h4, h5, h6 { font-size: 1.1em; margin-top: 0.6em; }
-    pre { background: #f5f5f5; padding: 1em; border-radius: 4px; overflow-x: auto; }
-    code { font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: 0.9em; }
-    blockquote { border-left: 3px solid #ddd; margin-left: 0; padding-left: 1em; color: #666; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    th { background: #f5f5f5; }
-    img { max-width: 100%; }
-    .wiki-link { color: oklch(0.5 0.13 255); }
-    .wiki-link--dead { color: oklch(0.5 0.15 25); text-decoration: line-through; }
-    .inline-tag { color: oklch(0.5 0.13 145); background: oklch(0.5 0.13 145 / 0.1); padding: 1px 6px; border-radius: 3px; }
-    @media print {
-      body { max-width: none; padding: 0; }
-      pre, blockquote { break-inside: avoid; }
-    }
-  </style>
-</head>
-<body>${bodyHtml}</body>
-</html>`;
-}
-
-// ---- Markdown → DOCX 转换 ----
-
-function markdownToDocxParagraphs(md: string): Paragraph[] {
-  const lines = md.split('\n');
-  const paragraphs: Paragraph[] = [];
-
-  for (const line of lines) {
-    if (!line.trim()) {
-      paragraphs.push(new Paragraph({ spacing: { after: 120 } }));
-      continue;
-    }
-
-    // 标题
-    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
-    if (headingMatch) {
-      const level = headingMatch[1]?.length ?? 1;
-      const headingMap: Record<number, (typeof HeadingLevel)[keyof typeof HeadingLevel]> = {
-        1: HeadingLevel.HEADING_1,
-        2: HeadingLevel.HEADING_2,
-        3: HeadingLevel.HEADING_3,
-        4: HeadingLevel.HEADING_4,
-        5: HeadingLevel.HEADING_5,
-        6: HeadingLevel.HEADING_6,
-      };
-      paragraphs.push(
-        new Paragraph({
-          heading: headingMap[level] ?? HeadingLevel.HEADING_1,
-          children: [new TextRun({ text: headingMatch[2] ?? '', bold: true, color: '000000' })],
-        }),
-      );
-      continue;
-    }
-
-    // 代码块
-    if (line.startsWith('```')) {
-      continue; // 代码块简化处理：跳过标记
-    }
-
-    // 无序列表
-    if (/^[\s]*[-*+]\s/.test(line)) {
-      const text = line.replace(/^[\s]*[-*+]\s/, '');
-      paragraphs.push(
-        new Paragraph({
-          bullet: { level: 0 },
-          children: [new TextRun({ text })],
-        }),
-      );
-      continue;
-    }
-
-    // 有序列表
-    const olMatch = line.match(/^[\s]*\d+\.\s(.+)$/);
-    if (olMatch) {
-      paragraphs.push(
-        new Paragraph({
-          numbering: { reference: 'default', level: 0 },
-          children: [new TextRun({ text: olMatch[1] ?? '' })],
-        }),
-      );
-      continue;
-    }
-
-    // 引用
-    if (line.startsWith('>')) {
-      const text = line.replace(/^>\s*/, '');
-      paragraphs.push(
-        new Paragraph({
-          indent: { left: 720 },
-          children: [new TextRun({ text, italics: true, color: '666666' })],
-        }),
-      );
-      continue;
-    }
-
-    // 分割线
-    if (/^[-*_]{3,}$/.test(line.trim())) {
-      paragraphs.push(
-        new Paragraph({
-          border: { bottom: { style: 'single', size: 1, color: 'CCCCCC' } },
-          spacing: { before: 240, after: 240 },
-          children: [],
-        }),
-      );
-      continue;
-    }
-
-    // 普通段落
-    paragraphs.push(
-      new Paragraph({
-        children: [new TextRun({ text: line })],
-      }),
-    );
-  }
-
-  return paragraphs;
-}
-
-// ---- Markdown → 纯文本 ----
-
-function stripMarkdownSyntax(md: string): string {
-  return (
-    md
-      // 去除 frontmatter
-      .replace(/^---[\s\S]*?---\s*\n/, '')
-      // 标题
-      .replace(/^#{1,6}\s+/gm, '')
-      // 粗体/斜体
-      .replace(/\*\*([^*]+)\*\*/g, '$1')
-      .replace(/\*([^*]+)\*/g, '$1')
-      .replace(/__([^_]+)__/g, '$1')
-      .replace(/_([^_]+)_/g, '$1')
-      // 删除线
-      .replace(/~~([^~]+)~~/g, '$1')
-      // 代码
-      .replace(/`([^`]+)`/g, '$1')
-      // 代码块标记
-      .replace(/```[\s\S]*?```/g, '')
-      // 链接 [text](url)
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-      // 图片 ![alt](url)
-      .replace(/!\[([^\]]*)\]\([^)]+\)/g, '[图片: $1]')
-      // Wiki-link
-      .replace(/\[\[([^\]|#]+)(?:#[^\]]*)?(?:\|[^\]]+)?\]\]/g, '$1')
-      // 标签
-      .replace(/#([\w一-鿿]+)/g, '$1')
-      // 引用
-      .replace(/^>\s?/gm, '')
-      // 列表标记
-      .replace(/^[\s]*[-*+]\s/gm, '• ')
-      .replace(/^[\s]*\d+\.\s/gm, '')
-      // 分割线
-      .replace(/^[-*_]{3,}\s*$/gm, '')
-      // 多余空行
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
+  const blob = await Packer.toBlob(doc);
+  triggerDownload(
+    blob,
+    `${fileName}.docx`,
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   );
+  return { success: true, format: ExportFormat.DOCX, fileName: `${fileName}.docx` };
 }
 
-// 提取 Markdown 中的表格为二维数组
-function extractTables(md: string): string[][][] {
-  const tables: string[][][] = [];
-  const tableRe = /\|(.+)\|\n\|[-| :]+\|\n((?:\|.+\|\n?)*)/g;
-  let match: RegExpExecArray | null;
+// ============================================================================
+// XLSX — sheetjs table extraction
+// ============================================================================
 
-  while ((match = tableRe.exec(md)) !== null) {
-    const headerRow =
-      match[1]
-        ?.split('|')
-        .map((c) => c.trim())
-        .filter(Boolean) ?? [];
-    const bodyRows = (match[2] ?? '')
-      .split('\n')
-      .filter(Boolean)
-      .map((row) =>
-        row
-          .split('|')
-          .map((c) => c.trim())
-          .filter(Boolean),
-      );
-    tables.push([headerRow, ...bodyRows]);
+interface ParsedTable {
+  headers: string[];
+  rows: string[][];
+}
+
+function extractMarkdownTables(md: string): ParsedTable[] {
+  const tables: ParsedTable[] = [];
+  const lines = md.split('\n');
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i]!;
+
+    // Detect table header: starts/ends with | and contains at least one |
+    if (line.includes('|') && line.trim().startsWith('|')) {
+      const headerCells = parseTableRow(line);
+      const nextLine = lines[i + 1];
+
+      // Must have separator line (|---|---|)
+      if (nextLine && /^\|[\s\-:|]+\|$/.test(nextLine.trim())) {
+        const headers = headerCells;
+        const rows: string[][] = [];
+        i += 2; // Skip header + separator
+
+        // Collect data rows
+        while (i < lines.length && lines[i]!.includes('|')) {
+          rows.push(parseTableRow(lines[i]!));
+          i++;
+        }
+
+        tables.push({ headers, rows });
+        continue;
+      }
+    }
+    i++;
   }
 
   return tables;
 }
 
-// 工具函数
-function downloadBlob(blob: Blob, fileName: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  a.click();
-  URL.revokeObjectURL(url);
+function parseTableRow(line: string): string[] {
+  return line
+    .split('|')
+    .slice(1, -1) // Remove leading/trailing empty from pipe-split
+    .map((cell) => cell.trim());
 }
 
-function downloadText(content: string, fileName: string, mimeType: string): void {
-  const blob = new Blob([content], { type: mimeType });
-  downloadBlob(blob, fileName);
+function exportXlsx(md: string, fileName: string, options?: Partial<ExportOptions>): ExportResult {
+  const opts = buildInternalOpts(options);
+  const processed = preprocessMarkdown(md, opts);
+  const tables = extractMarkdownTables(processed);
+
+  if (tables.length === 0) {
+    // No tables found — create an empty workbook or export as single-sheet CSV
+    triggerDownload(
+      '',
+      `${fileName}.xlsx`,
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    return { success: true, format: ExportFormat.XLSX, fileName: `${fileName}.xlsx` };
+  }
+
+  const wb = XLSX.utils.book_new();
+
+  tables.forEach((table, idx) => {
+    // Build 2D array: headers + rows
+    const aoa: string[][] = [table.headers, ...table.rows];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+    // Auto-size columns (approximate)
+    const colWidths: { wch: number }[] = [];
+    for (let ci = 0; ci < table.headers.length; ci++) {
+      let maxLen = table.headers[ci]!.length;
+      for (const row of table.rows) {
+        maxLen = Math.max(maxLen, (row[ci] || '').length);
+      }
+      colWidths.push({ wch: Math.min(maxLen + 4, 60) });
+    }
+    ws['!cols'] = colWidths;
+
+    const sheetName = tables.length === 1 ? 'Sheet1' : `Table_${idx + 1}`;
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  });
+
+  const data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  triggerDownload(
+    new Blob([new Uint8Array(data)], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }),
+    `${fileName}.xlsx`,
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  );
+  return { success: true, format: ExportFormat.XLSX, fileName: `${fileName}.xlsx` };
 }
+
+// ============================================================================
+// CSV — table extraction to CSV
+// ============================================================================
+
+function exportCsv(md: string, fileName: string, options?: Partial<ExportOptions>): ExportResult {
+  const opts = buildInternalOpts(options);
+  const processed = preprocessMarkdown(md, opts);
+  const tables = extractMarkdownTables(processed);
+
+  if (tables.length === 0) {
+    // No tables — export the whole content as a single-cell CSV
+    triggerDownload(processed, `${fileName}.csv`, 'text/csv;charset=UTF-8');
+    return { success: true, format: ExportFormat.CSV, fileName: `${fileName}.csv` };
+  }
+
+  const csvContent = tables
+    .map((table) => {
+      const headerRow = table.headers.map((c) => escapeCsvCell(c)).join(',');
+      const dataRows = table.rows.map((row) => row.map((c) => escapeCsvCell(c)).join(','));
+      return [headerRow, ...dataRows].join('\n');
+    })
+    .join('\n\n');
+
+  triggerDownload(csvContent, `${fileName}.csv`, 'text/csv;charset=UTF-8');
+  return { success: true, format: ExportFormat.CSV, fileName: `${fileName}.csv` };
+}
+
+function escapeCsvCell(cell: string): string {
+  if (cell.includes(',') || cell.includes('"') || cell.includes('\n')) {
+    return `"${cell.replace(/"/g, '""')}"`;
+  }
+  return cell;
+}
+
+// ============================================================================
+// TXT — strip Markdown syntax
+// ============================================================================
+
+function exportTxt(md: string, fileName: string, options?: Partial<ExportOptions>): ExportResult {
+  const opts = buildInternalOpts(options);
+  let processed = preprocessMarkdown(md, opts);
+
+  // Strip common Markdown syntax markers
+  processed = processed
+    // Headings: remove # markers, keep text
+    .replace(/^#{1,6}\s+/gm, '')
+    // Setext headings
+    .replace(/^[=\-]{3,}$/gm, '')
+    // Bold
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    // Italic
+    .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '$1')
+    // Inline code
+    .replace(/`(.+?)`/g, '$1')
+    // Links: [text](url) → text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Images: ![alt](url) → [Image: alt]
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, (_m, alt: string) => (alt ? `[图片: ${alt}]` : '[图片]'))
+    // Blockquote prefix
+    .replace(/^>\s?/gm, '')
+    // Unordered list markers
+    .replace(/^[-*+]\s/gm, '')
+    // Ordered list markers
+    .replace(/^\d+\.\s/gm, '')
+    // Task list markers
+    .replace(/^- \[[ x]\] /gm, '')
+    // Code fences (strip opening/closing, keep content)
+    .replace(/^```[\s\S]*?^```/gm, (_m: string) => {
+      return _m.replace(/^```.*\n?/gm, '').replace(/^```$/gm, '');
+    })
+    // Horizontal rules
+    .replace(/^[-*_]{3,}$/gm, '')
+    // Compress excessive blank lines
+    .replace(/\n{3,}/g, '\n\n')
+    // Trim leading/trailing whitespace
+    .trim();
+
+  triggerDownload(processed, `${fileName}.txt`, 'text/plain;charset=UTF-8');
+  return { success: true, format: ExportFormat.TXT, fileName: `${fileName}.txt` };
+}
+
+// ============================================================================
+// HTML — self-contained with embedded CSS
+// ============================================================================
+
+function exportHtml(md: string, fileName: string, options?: Partial<ExportOptions>): ExportResult {
+  const opts = buildInternalOpts(options);
+  const bodyHtml = renderToStyledHtml(md, opts);
+
+  const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(fileName)}</title>
+  <style>${EMBEDDED_CSS}</style>
+</head>
+<body>
+  <article class="markdown-body">
+    ${bodyHtml}
+  </article>
+</body>
+</html>`;
+
+  triggerDownload(html, `${fileName}.html`, 'text/html;charset=UTF-8');
+  return { success: true, format: ExportFormat.HTML, fileName: `${fileName}.html` };
+}
+
+// ============================================================================
+// Embedded CSS for HTML / PDF exports (Paper theme, light mode, self-contained)
+// ============================================================================
+
+const EMBEDDED_CSS = /* css */ `
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 40px 24px;
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif;
+  font-size: 16px;
+  line-height: 1.8;
+  color: #2c2c2c;
+  background: #faf8f5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.markdown-body {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* ── Headings ── */
+.markdown-body h1 { font-size: 1.8em; font-weight: 700; margin: 1.2em 0 0.4em; line-height: 1.3; color: #1a1a1a; border-bottom: 2px solid #e0ddd6; padding-bottom: 0.3em; }
+.markdown-body h2 { font-size: 1.45em; font-weight: 700; margin: 1em 0 0.3em; line-height: 1.3; color: #1a1a1a; }
+.markdown-body h3 { font-size: 1.2em; font-weight: 600; margin: 0.8em 0 0.2em; line-height: 1.35; color: #333; }
+.markdown-body h4 { font-size: 1.05em; font-weight: 600; margin: 0.7em 0 0.2em; line-height: 1.35; color: #444; }
+.markdown-body h5 { font-size: 0.95em; font-weight: 600; margin: 0.6em 0 0.2em; color: #555; }
+.markdown-body h6 { font-size: 0.85em; font-weight: 600; margin: 0.5em 0 0.2em; color: #666; }
+
+/* ── Paragraph ── */
+.markdown-body p { margin: 0 0 0.8em; }
+
+/* ── Links ── */
+.markdown-body a { color: #2563eb; text-decoration: none; }
+.markdown-body a:hover { text-decoration: underline; }
+.markdown-body a.wikilink { text-decoration: underline dotted; }
+.markdown-body a.wikilink--dead { color: #999; text-decoration: underline wavy; }
+.markdown-body a.md-tag { color: #2563eb; background: #eef2ff; padding: 0 0.35em; border-radius: 3px; font-size: 0.9em; text-decoration: none; }
+
+/* ── Code ── */
+.markdown-body code {
+  font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  font-size: 0.88em;
+  background: #f4f4f5;
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: #d9467c;
+}
+.markdown-body pre {
+  background: #f5f5f0;
+  border: 1px solid #e0ddd6;
+  border-radius: 4px;
+  padding: 16px;
+  overflow-x: auto;
+  margin: 1em 0;
+  line-height: 1.55;
+}
+.markdown-body pre code {
+  background: none;
+  padding: 0;
+  color: #333;
+  font-size: 0.88em;
+}
+
+/* ── Blockquote ── */
+.markdown-body blockquote {
+  border-left: 3px solid #4a90d9;
+  margin: 1em 0;
+  padding: 0.5em 1em;
+  color: #666;
+  background: #fafdfe;
+}
+.markdown-body blockquote p { margin: 0.4em 0; }
+
+/* ── Lists ── */
+.markdown-body ul, .markdown-body ol { margin: 0.6em 0; padding-left: 1.8em; }
+.markdown-body li { margin: 0.2em 0; }
+.markdown-body input[type="checkbox"] { margin-right: 0.4em; accent-color: #2563eb; pointer-events: none; }
+
+/* ── Tables ── */
+.markdown-body table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+.markdown-body th, .markdown-body td { border: 1px solid #d4d0c8; padding: 8px 12px; text-align: left; }
+.markdown-body th { background: #f0ede5; font-weight: 600; }
+.markdown-body tr:nth-child(even) { background: #faf8f5; }
+
+/* ── Horizontal Rule ── */
+.markdown-body hr { border: none; border-top: 2px solid #e0ddd6; margin: 2em 0; }
+
+/* ── Images ── */
+.markdown-body img { max-width: 100%; height: auto; border-radius: 4px; }
+
+/* ── Strong / Emphasis ── */
+.markdown-body strong { font-weight: 700; }
+.markdown-body em { font-style: italic; }
+.markdown-body del { text-decoration: line-through; color: #999; }
+
+/* ── Print Overrides ── */
+@media print {
+  body { background: #fff; padding: 0; }
+  .markdown-body { max-width: none; }
+  .markdown-body pre { background: #f9f9f9; border: 1px solid #ddd; }
+  .markdown-body blockquote { background: none; }
+}
+`;
+
+// ============================================================================
+// HTML Escape Helper
+// ============================================================================
 
 function escapeHtml(text: string): string {
-  const map: Record<string, string> = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;',
-  };
-  return text.replace(/[&<>"']/g, (ch) => map[ch] ?? ch);
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ============================================================================
+// Main Export Dispatcher
+// ============================================================================
+
+export async function exportNote(
+  markdown: string,
+  fileName: string,
+  options?: Partial<ExportOptions>,
+): Promise<ExportResult> {
+  if (!markdown && markdown !== '') {
+    return { success: false, format: options?.format ?? ExportFormat.PDF, error: '笔记内容为空' };
+  }
+
+  const fmt = options?.format ?? ExportFormat.PDF;
+
+  switch (fmt) {
+    case ExportFormat.PDF:
+      return exportPDF(markdown, fileName, options);
+    case ExportFormat.DOCX:
+      return exportDocx(markdown, fileName, options);
+    case ExportFormat.XLSX:
+      return exportXlsx(markdown, fileName, options);
+    case ExportFormat.CSV:
+      return exportCsv(markdown, fileName, options);
+    case ExportFormat.TXT:
+      return exportTxt(markdown, fileName, options);
+    case ExportFormat.HTML:
+      return exportHtml(markdown, fileName, options);
+    default:
+      return { success: false, format: fmt, error: `不支持的导出格式: ${fmt}` };
+  }
 }

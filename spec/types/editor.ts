@@ -99,6 +99,41 @@ export interface ToolbarItemConfig {
 /** 主题模式 */
 export type ThemeMode = 'light' | 'dark' | 'system';
 
+// ===== 文字补全 =====
+
+/** 补全候选条目（结构化补全菜单使用） */
+export interface CompletionItem {
+  /** 显示标签 */
+  label: string;
+  /** 补充说明（如文件路径） */
+  detail: string;
+  /** 实际插入的文本 */
+  apply: string;
+}
+
+/** 统计预测结果（Ghost Text 使用） */
+export interface PredictionResult {
+  /** 预测文本（1-20 字符） */
+  text: string;
+  /** 置信度 0-1，< 阈值时不显示 ghost text */
+  confidence: number;
+  /** 预测起点在文档中的位置 */
+  from: number;
+}
+
+/** 补全源类型 */
+export type CompletionSourceType = 'wiki-link' | 'tag' | 'file-path';
+
+/** 补全源接口 */
+export interface CompletionSource {
+  /** 补全源类型 */
+  type: CompletionSourceType;
+  /** 触发前缀字符 */
+  trigger: string;
+  /** 获取候选列表 */
+  getCompletions(query: string): CompletionItem[];
+}
+
 // ===== 应用设置 =====
 
 /** 应用全局设置（持久化到 localStorage） */
@@ -120,6 +155,8 @@ export interface AppSettings {
   editorShowBlockMarkers: boolean;
   /** 是否启用自动格式识别 */
   editorAutoFormat: boolean;
+  /** 是否启用文字补全（幽灵文本 + 结构化补全） */
+  editorAutoCompletion: boolean;
 
   // --- 主题 ---
   /** 主题模式 */

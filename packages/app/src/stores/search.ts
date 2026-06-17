@@ -1,15 +1,14 @@
 /**
  * useSearchStore — 搜索状态管理
  *
- * M2-10: 管理搜索查询、结果和过滤条件。
- * 由 SearchPanel 组件和 useSearch composable 共享状态。
- *
- * @module useSearchStore
+ * @see migration-map.md §3
  */
-
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { SearchResult } from '@/types';
+
+const HISTORY_KEY = 'markluck-search-history';
+const MAX_HISTORY = 10;
 
 export const useSearchStore = defineStore('search', () => {
   const query = ref('');
@@ -36,46 +35,43 @@ export const useSearchStore = defineStore('search', () => {
   function clearResults(): void {
     results.value = [];
     selectedIndex.value = -1;
+    error.value = null;
   }
 
   function addToHistory(q: string): void {
     if (!q.trim()) return;
-    searchHistory.value = [q, ...searchHistory.value.filter((h) => h !== q)].slice(0, 10);
+    const filtered = searchHistory.value.filter((h) => h !== q);
+    filtered.unshift(q);
+    searchHistory.value = filtered.slice(0, MAX_HISTORY);
     try {
-      localStorage.setItem('markluck-search-history', JSON.stringify(searchHistory.value));
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(searchHistory.value));
     } catch {
-      /* silent */
+      /* ok */
     }
   }
 
   function loadHistory(): void {
     try {
-      const raw = localStorage.getItem('markluck-search-history');
+      const raw = localStorage.getItem(HISTORY_KEY);
       if (raw) searchHistory.value = JSON.parse(raw) as string[];
     } catch {
-      searchHistory.value = [];
+      /* ok */
     }
   }
 
   function clearHistory(): void {
     searchHistory.value = [];
-    try {
-      localStorage.removeItem('markluck-search-history');
-    } catch {
-      /* silent */
-    }
+    localStorage.removeItem(HISTORY_KEY);
   }
 
-  function open(queryText = ''): void {
-    isVisible.value = true;
+  function open(queryText?: string): void {
     if (queryText) query.value = queryText;
+    isVisible.value = true;
+    loadHistory();
   }
 
   function close(): void {
     isVisible.value = false;
-    query.value = '';
-    results.value = [];
-    selectedIndex.value = -1;
   }
 
   function selectNext(): void {
@@ -85,8 +81,7 @@ export const useSearchStore = defineStore('search', () => {
 
   function selectPrev(): void {
     if (results.value.length === 0) return;
-    selectedIndex.value =
-      selectedIndex.value <= 0 ? results.value.length - 1 : selectedIndex.value - 1;
+    selectedIndex.value = (selectedIndex.value - 1 + results.value.length) % results.value.length;
   }
 
   function getSelected(): SearchResult | null {

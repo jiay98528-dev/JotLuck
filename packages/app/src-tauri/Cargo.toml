@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "MarkLuck — local-first Markdown note-taking tool"
 authors = ["MarkLuck"]
 license = "MIT"
-repository = "https://github.com/markluck/markluck"
+repository = "https://github.com/jiay98528-dev/MarkLuck"
 edition = "2021"
 rust-version = "1.77.2"
 
@@ -34,6 +34,9 @@ tantivy = "0.22"
 
 # M6-05: File watcher
 notify = "8"
+
+# M7: Recycle bin support
+trash = "5"
 
 # M6-06: Template rendering
 chrono = "0.4"

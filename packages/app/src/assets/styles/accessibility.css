@@ -1,88 +1,41 @@
-/* ===== MarkLuck Accessibility =====
- * Paper theme — WCAG 2.1 AA compliance
- * Focus rings, reduced motion, contrast, transparency, touch targets
- */
+/* ===== MarkLuck Accessibility ===== */
 
-/* === Focus Ring ===
- * 2px solid accent color + 2px offset.
- * Only visible on :focus-visible (keyboard navigation).
- */
-:root {
-  --focus-ring-width: 2px;
-  --focus-ring-offset: 2px;
+/* --- Focus Ring (keyboard only) --- */
+:focus {
+  outline: none;
 }
 
 :focus-visible {
-  outline: none;
-  box-shadow:
-    0 0 0 var(--focus-ring-offset) var(--paper-bg),
-    0 0 0 calc(var(--focus-ring-offset) + var(--focus-ring-width)) var(--accent);
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: var(--focus-ring-offset);
   border-radius: var(--radius);
 }
 
-:focus:not(:focus-visible) {
-  outline: none;
-  box-shadow: none;
-}
-
-/* === prefers-reduced-motion === */
+/* --- Reduced Motion --- */
 @media (prefers-reduced-motion: reduce) {
-  :root {
-    --dur-press: 0ms;
-    --dur-release: 0ms;
-    --dur-micro: 0ms;
-    --dur-expand: 0ms;
-    --dur-collapse: 0ms;
-    --dur-page-enter: 0ms;
-    --dur-page-exit: 0ms;
-    --dur-list-item: 0ms;
-    --dur-shimmer: 0ms;
-    --dur-breathe: 0ms;
-  }
-
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
   }
 }
 
-/* === prefers-contrast: high === */
+/* --- High Contrast --- */
 @media (prefers-contrast: high) {
   :root {
-    --ink-primary: #000;
-    --ink-secondary: #222;
-    --ink-muted: #444;
-    --rule: #666;
-    --rule-strong: #444;
-    --accent: #0055cc;
-    --link: #0055cc;
-    --link-visited: #551a8b;
-    --link-broken: #cc0000;
+    --ink-primary: oklch(0 0 0);
+    --ink-secondary: oklch(0.25 0 0);
+    --rule: oklch(0.45 0 0);
+    --accent: oklch(0.3 0.2 250);
   }
 }
 
-/* === prefers-reduced-transparency === */
-@media (prefers-reduced-transparency: reduce) {
-  :root {
-    --overlay: oklch(0.15 0.003 85 / 0.6);
-    --opacity-overlay: 0.8;
-    --paper-surface: oklch(0.985 0.002 85 / 0.95);
-    --paper-raised: oklch(1 0 0);
-  }
-}
-
-/* === WCAG 2.1 AA: minimum touch target size === */
+/* --- Touch Targets --- */
 @media (pointer: coarse) {
-  button,
-  [role='button'],
-  input[type='checkbox'],
-  input[type='radio'],
-  select {
-    min-height: 44px;
+  .wing-bookmark-dot {
     min-width: 44px;
+    min-height: 44px;
   }
 }

@@ -5,8 +5,8 @@
 
 /** 日期范围过滤条件 */
 export interface DateRange {
-  readonly start?: string;
-  readonly end?: string;
+  readonly from?: Date;
+  readonly to?: Date;
 }
 
 /** 一次搜索请求的完整参数 */
@@ -53,10 +53,8 @@ export interface DocumentEntry {
   readonly path: string;
   readonly title: string;
   readonly tags: readonly string[];
-  readonly createdAt: string;
-  readonly modifiedAt: string;
-  readonly wordCount: number;
-  readonly outgoingLinks: readonly string[];
+  readonly created?: number;
+  readonly folder?: string;
 }
 
 /** 完整的搜索倒排索引结构 */
@@ -65,4 +63,7 @@ export interface SearchIndex {
   readonly lastUpdated: string;
   readonly documents: Record<string, DocumentEntry>;
   readonly invertedIndex: Record<string, TermEntry>;
+  readonly termIndex?: Record<string, string[]>;
+  readonly wikiLinks?: Record<string, string[]>;
+  readonly tagIndex?: Record<string, string[]>;
 }

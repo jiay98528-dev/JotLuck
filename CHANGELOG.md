@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.0] — 2026-06-09
+
+### Added
+
+- 文字补全系统：幽灵文本预测 + 结构化补全（Wiki-link/标签/路径）
+- NGramEngine 纯算法 N-gram 统计预测引擎
+- GhostTextPlugin CM6 ViewPlugin，光标后灰色斜体幽灵文本
+- 基准 L2 预训练语料管道 (train-baseline.ts + corpus/)
+- SettingsDialog 文字补全开关
+
+### Changed
+
+- Tab 键行为：由 live preview 块固定改为 ghost text 接受优先消费
+- Live preview 块固定切换改为 `Ctrl+Click`
+
 ## [0.1.0] — 2026-06-04
 
 ### Added

@@ -5,7 +5,7 @@ import eslintConfigPrettier from 'eslint-config-prettier';
 export default tseslint.config(
   // Global ignores
   {
-    ignores: ['dist/', 'node_modules/', 'coverage/', '*.min.js'],
+    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', '**/*.min.js', 'e2e/**', '**/target/**', 'scripts/**'],
   },
 
   // Base config for all TS/Vue files

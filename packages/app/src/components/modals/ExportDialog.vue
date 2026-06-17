@@ -1,355 +1,441 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="dialog-overlay" @click.self="cancel">
-      <div class="export-dialog">
-        <div class="dialog-header">
+    <div v-if="visible" class="modal-overlay" @click.self="cancel">
+      <div class="modal-card">
+        <!-- Header -->
+        <div class="modal-header">
           <h2>导出笔记</h2>
-          <button class="dialog-close" @click="cancel">×</button>
+          <button class="modal-close" @click="cancel">&times;</button>
         </div>
 
-        <!-- Format Selection -->
-        <template v-if="step === 'format'">
-          <div class="dialog-body">
-            <p class="section-label">选择导出格式</p>
+        <!-- Body -->
+        <div class="modal-body">
+          <!-- Idle: format grid + options -->
+          <template v-if="exportState === 'idle' || exportState === 'error'">
             <div class="format-grid">
               <button
-                v-for="fmt in formats"
-                :key="fmt.value"
+                v-for="f in formats"
+                :key="f.fmt"
                 class="format-card"
-                :class="{ 'format-card--selected': selectedFormat === fmt.value }"
-                @click="selectedFormat = fmt.value"
+                :class="{ selected: selectedFormat === f.fmt }"
+                @click="selectFormat(f.fmt)"
               >
-                <span class="format-name">{{ fmt.label }}</span>
-                <span v-if="fmt.note" class="format-note">{{ fmt.note }}</span>
+                <span class="format-icon" v-html="f.icon"></span>
+                <span class="format-name">{{ f.name }}</span>
+                <span class="format-ext">{{ f.ext }}</span>
               </button>
             </div>
 
-            <div class="export-options">
-              <label class="option-item">
-                <input v-model="includeFrontmatter" type="checkbox" />
-                包含 YAML frontmatter
-              </label>
-              <p class="option-hint">
-                YAML frontmatter 是笔记顶部 <code>---</code> 之间的元数据（标题/标签/日期）。
-                关闭后导出内容将去除该块。<br />
-                <em
-                  >注：PDF
-                  打印时浏览器可能自动添加页眉（标题/日期），可在打印对话框的"更多设置"中关闭"页眉和页脚"。</em
+            <div class="options-section">
+              <label class="toggle-row">
+                <span class="toggle-label">包含 YAML Frontmatter</span>
+                <span
+                  class="toggle-track"
+                  :class="{ active: includeFrontmatter }"
+                  @click="includeFrontmatter = !includeFrontmatter"
                 >
-              </p>
+                  <span class="toggle-thumb"></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span class="toggle-label">代码行号</span>
+                <span
+                  class="toggle-track"
+                  :class="{ active: codeLineNumbers }"
+                  @click="codeLineNumbers = !codeLineNumbers"
+                >
+                  <span class="toggle-thumb"></span>
+                </span>
+              </label>
+              <label class="toggle-row">
+                <span class="toggle-label">保留 Wiki 链接 [[...]]</span>
+                <span
+                  class="toggle-track"
+                  :class="{ active: includeWikiLinks }"
+                  @click="includeWikiLinks = !includeWikiLinks"
+                >
+                  <span class="toggle-thumb"></span>
+                </span>
+              </label>
             </div>
+          </template>
+
+          <!-- Exporting: spinner -->
+          <div v-if="exportState === 'exporting'" class="export-status">
+            <span class="spinner"></span>
+            <span class="status-text">正在导出...</span>
           </div>
 
-          <div class="dialog-footer">
-            <button class="btn btn--secondary" @click="cancel">取消</button>
-            <button class="btn btn--primary" @click="doExport">导出</button>
+          <!-- Success -->
+          <div v-if="exportState === 'success'" class="export-status">
+            <svg
+              class="checkmark"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M8 12l3 3 5-5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span class="status-text success-text">已导出</span>
+            <span class="file-info">{{ exportMessage }}</span>
           </div>
-        </template>
 
-        <!-- Progress -->
-        <template v-if="step === 'converting'">
-          <div class="dialog-body dialog-body--progress">
-            <div class="progress-spinner" />
-            <p class="progress-text">正在生成 {{ selectedFormatLabel }} 文件...</p>
-            <div class="progress-bar">
-              <div class="progress-bar-fill" :style="{ width: progressPct + '%' }" />
-            </div>
+          <!-- Error -->
+          <div v-if="exportState === 'error'" class="export-status error-block">
+            <svg
+              class="error-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 8v4M12 16h.01" stroke-linecap="round" />
+            </svg>
+            <span class="status-text error-text">导出失败</span>
+            <span class="error-message">{{ exportError }}</span>
           </div>
-        </template>
+        </div>
 
-        <!-- Done / Error -->
-        <template v-if="step === 'done'">
-          <div class="dialog-body">
-            <div v-if="!errorMsg" class="export-success">{{ selectedFormatLabel }} 导出完成</div>
-            <div v-else class="export-error">{{ errorMsg }}</div>
-          </div>
-          <div class="dialog-footer">
-            <button class="btn btn--primary" @click="cancel">完成</button>
-          </div>
-        </template>
+        <!-- Footer -->
+        <div class="modal-footer">
+          <template v-if="exportState === 'idle' || exportState === 'error'">
+            <Button variant="secondary" @click="cancel">取消</Button>
+            <Button variant="default" :disabled="!hasContent" @click="doExport">导出</Button>
+          </template>
+          <template v-if="exportState === 'exporting'">
+            <Button variant="secondary" disabled>取消</Button>
+            <Button variant="default" loading disabled>导出中...</Button>
+          </template>
+          <template v-if="exportState === 'success'">
+            <Button variant="default" @click="cancel">关闭</Button>
+          </template>
+        </div>
       </div>
     </div>
   </Teleport>
 </template>
 
 <script setup lang="ts">
-/**
- * ExportDialog.vue — 导出对话框
- *
- * M3-06: 格式选择 + 选项配置 + 进度指示 + 执行导出。
- *
- * @see components.md §25
- */
-import { ref, watch, computed, onUnmounted } from 'vue';
+import { ref, computed } from 'vue';
 import { exportNote } from '@/services/Exporter';
 import { ExportFormat } from '@/types';
+import type { ExportResult } from '@/types';
+import Button from '@/components/common/Button.vue';
 
+// ── Props ──────────────────────────────────────────────
 const props = defineProps<{
   visible: boolean;
   notePath?: string;
   noteTitle?: string;
   markdownContent?: string;
-  /** P2-1: async image resolver for embed mode */
-  readBinary?: (path: string) => Promise<string>;
 }>();
 
+// ── Emits ──────────────────────────────────────────────
 const emit = defineEmits<{
-  'update:visible': [value: boolean];
+  'update:visible': [boolean];
   cancel: [];
 }>();
 
-const formats: Array<{ value: ExportFormat; label: string; note?: string }> = [
-  { value: ExportFormat.PDF, label: 'PDF', note: '浏览器打印' },
-  { value: ExportFormat.DOCX, label: 'DOCX', note: 'Word 文档' },
-  { value: ExportFormat.XLSX, label: 'XLSX', note: 'Excel 表格' },
-  { value: ExportFormat.CSV, label: 'CSV', note: '逗号分隔' },
-  { value: ExportFormat.TXT, label: 'TXT', note: '纯文本' },
-  { value: ExportFormat.HTML, label: 'HTML', note: '自包含网页' },
+// ── State ──────────────────────────────────────────────
+const selectedFormat = ref<ExportFormat>(ExportFormat.PDF);
+const includeFrontmatter = ref<boolean>(true);
+const includeWikiLinks = ref<boolean>(true);
+const codeLineNumbers = ref<boolean>(false);
+
+type ExportState = 'idle' | 'exporting' | 'success' | 'error';
+const exportState = ref<ExportState>('idle');
+const exportMessage = ref<string>('');
+const exportError = ref<string>('');
+
+const hasContent = computed(() => {
+  return !!(props.markdownContent && props.markdownContent.trim().length > 0);
+});
+
+// ── Format definitions ─────────────────────────────────
+interface FormatEntry {
+  fmt: ExportFormat;
+  name: string;
+  ext: string;
+  icon: string;
+}
+
+const formats: FormatEntry[] = [
+  {
+    fmt: ExportFormat.PDF,
+    name: 'PDF',
+    ext: '.pdf',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="2" width="16" height="8" rx="1"/><path d="M6 10v8a2 2 0 002 2h8a2 2 0 002-2v-8"/><circle cx="8" cy="5" r="1"/><rect x="10" y="14" width="4" height="6" rx="0.5"/><path d="M6 18h12"/></svg>',
+  },
+  {
+    fmt: ExportFormat.DOCX,
+    name: 'DOCX',
+    ext: '.docx',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg>',
+  },
+  {
+    fmt: ExportFormat.XLSX,
+    name: 'XLSX',
+    ext: '.xlsx',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>',
+  },
+  {
+    fmt: ExportFormat.CSV,
+    name: 'CSV',
+    ext: '.csv',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/><path d="M3 15h18"/></svg>',
+  },
+  {
+    fmt: ExportFormat.TXT,
+    name: 'TXT',
+    ext: '.txt',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h4M8 17h7"/></svg>',
+  },
+  {
+    fmt: ExportFormat.HTML,
+    name: 'HTML',
+    ext: '.html',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10M12 2a15.3 15.3 0 00-4 10 15.3 15.3 0 004 10"/></svg>',
+  },
 ];
 
-const step = ref<'format' | 'converting' | 'done'>('format');
-const selectedFormat = ref<ExportFormat>(ExportFormat.PDF);
-const includeFrontmatter = ref(true);
-const progressPct = ref(0);
-const errorMsg = ref('');
-
-let progressTimer: ReturnType<typeof setInterval> | null = null;
-
-const selectedFormatLabel = computed(
-  () => formats.find((f) => f.value === selectedFormat.value)?.label ?? '',
-);
-
-function clearProgressTimer(): void {
-  if (progressTimer) {
-    clearInterval(progressTimer);
-    progressTimer = null;
+// ── Methods ────────────────────────────────────────────
+function selectFormat(fmt: ExportFormat): void {
+  selectedFormat.value = fmt;
+  if (exportState.value === 'error') {
+    exportState.value = 'idle';
   }
 }
 
-// Reset all state when dialog opens
-watch(
-  () => props.visible,
-  (v) => {
-    if (v) {
-      clearProgressTimer();
-      step.value = 'format';
-      progressPct.value = 0;
-      errorMsg.value = '';
-    }
-  },
-);
-
-onUnmounted(() => clearProgressTimer());
-
 function cancel(): void {
-  clearProgressTimer();
-  emit('update:visible', false);
   emit('cancel');
+  emit('update:visible', false);
+}
+
+function resetState(): void {
+  selectedFormat.value = ExportFormat.PDF;
+  includeFrontmatter.value = true;
+  includeWikiLinks.value = true;
+  codeLineNumbers.value = false;
+  exportState.value = 'idle';
+  exportMessage.value = '';
+  exportError.value = '';
 }
 
 async function doExport(): Promise<void> {
-  if (!props.markdownContent) return;
+  if (!hasContent.value) return;
 
-  step.value = 'converting';
-  progressPct.value = 0;
-  errorMsg.value = '';
+  exportState.value = 'exporting';
+  exportError.value = '';
 
-  try {
-    const fileName =
-      props.noteTitle?.replace(/\.md$/, '') ||
-      props.notePath?.replace(/\.md$/, '').replace(/^\//, '') ||
-      'export';
+  const result: ExportResult = await exportNote(props.markdownContent!, props.noteTitle || '笔记', {
+    format: selectedFormat.value,
+    includeFrontmatter: includeFrontmatter.value,
+    includeWikiLinks: includeWikiLinks.value,
+    codeLineNumbers: codeLineNumbers.value,
+  });
 
-    // Animate progress (safe — cleared on close/unmount)
-    clearProgressTimer();
-    progressTimer = setInterval(() => {
-      if (progressPct.value < 85) progressPct.value += 12;
-    }, 80);
-
-    const result = await exportNote(props.markdownContent, fileName, {
-      format: selectedFormat.value,
-      includeFrontmatter: includeFrontmatter.value,
-      imageHandling: props.readBinary ? 'embed' : 'omit',
-      readBinary: props.readBinary,
-    });
-
-    clearProgressTimer();
-    progressPct.value = 100;
-    await new Promise((r) => setTimeout(r, 150));
-
-    if (!result.success) {
-      errorMsg.value = result.error ?? '导出失败';
-    }
-    step.value = 'done';
-  } catch (e) {
-    clearProgressTimer();
-    errorMsg.value = e instanceof Error ? e.message : '导出失败';
-    step.value = 'done';
+  if (result.success) {
+    exportState.value = 'success';
+    exportMessage.value = result.fileName ? `文件已保存：${result.fileName}` : '文件已导出';
+  } else {
+    exportState.value = 'error';
+    exportError.value = result.error || '导出过程中发生未知错误';
   }
 }
+
+// ── Watch visible to reset on open ─────────────────────
+import { watch } from 'vue';
+watch(
+  () => props.visible,
+  (val) => {
+    if (val) {
+      resetState();
+    }
+  },
+);
 </script>
 
 <style scoped>
-.dialog-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--overlay, var(--paper-bg, oklch(0.975 0.003 85)));
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.export-dialog {
+/* ===== Card (width override only — skeleton in dialog.css) ===== */
+.modal-card {
   width: 480px;
-  max-height: 80vh;
-  background: var(--paper-surface, oklch(0.985 0.002 85));
-  border-radius: var(--radius, 2px);
-  box-shadow: var(--shadow-float, 0 4px 16px oklch(0.15 0.003 85 / 0.08));
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid var(--rule, oklch(0.88 0.003 85));
 }
 
-.dialog-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--rule, oklch(0.88 0.003 85));
-  background: var(--paper-raised, oklch(1 0 0));
+/* ===== Body ===== */
+.modal-body {
+  padding: var(--space-20);
 }
 
-.dialog-header h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--ink-primary, oklch(0.15 0.003 85));
-}
-
-.dialog-close {
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: none;
-  font-size: 20px;
-  color: var(--ink-muted, oklch(0.6 0.002 85));
-  cursor: pointer;
-  border-radius: var(--radius, 2px);
-}
-
-.dialog-close:hover {
-  background: var(--accent-soft, oklch(0.92 0.03 250 / 0.55));
-  color: var(--ink-primary, oklch(0.15 0.003 85));
-}
-
-.dialog-body {
-  padding: 20px;
-  flex: 1;
-  overflow-y: auto;
-  background: var(--paper-surface, oklch(0.985 0.002 85));
-  color: var(--ink-primary, oklch(0.15 0.003 85));
-}
-
-.dialog-body--progress {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 40px 20px;
-  gap: 16px;
-}
-
-.section-label {
-  font-size: 13px;
-  color: var(--ink-secondary, oklch(0.42 0.003 85));
-  margin: 0 0 12px;
-}
-
+/* ===== Format Grid ===== */
 .format-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: var(--space-8);
+  margin-bottom: var(--space-20);
 }
 
 .format-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 12px 8px;
-  border: 2px solid var(--rule, oklch(0.88 0.003 85));
-  border-radius: var(--radius, 2px);
-  background: var(--paper-surface, oklch(0.985 0.002 85));
+  gap: var(--space-4);
+  padding: var(--space-12) var(--space-8);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-surface);
   cursor: pointer;
-  transition:
-    border-color 0.15s,
-    background 0.15s;
+  color: var(--ink-secondary);
+  transition: all var(--dur-micro) var(--ease-fade);
 }
 
 .format-card:hover {
-  border-color: var(--rule-strong, oklch(0.8 0.005 85));
-  background: var(--paper-raised, oklch(1 0 0));
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink-primary);
 }
 
-.format-card--selected {
-  border-color: var(--accent, oklch(0.52 0.12 250));
-  background: var(--accent-soft, oklch(0.92 0.03 250 / 0.55));
+.format-card.selected {
+  border-color: var(--accent);
+  border-width: var(--border-medium);
+  background: var(--accent-soft);
+  color: var(--ink-primary);
+}
+
+.format-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.format-icon :deep(svg) {
+  width: 24px;
+  height: 24px;
+  display: block;
 }
 
 .format-name {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-none);
 }
 
-.format-note {
-  font-size: 10px;
-  color: var(--ink-muted, oklch(0.6 0.002 85));
+.format-ext {
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  line-height: var(--lh-none);
 }
 
-.export-options {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--rule, oklch(0.88 0.003 85));
+/* ===== Options ===== */
+.options-section {
+  border-top: var(--border-thin) solid var(--rule);
+  padding-top: var(--space-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
 }
 
-.option-item {
+.toggle-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--ink-secondary, oklch(0.42 0.003 85));
+  justify-content: space-between;
+  padding: var(--space-4) 0;
   cursor: pointer;
+  user-select: none;
 }
 
-.option-hint {
-  margin: 6px 0 0 24px;
-  font-size: 11px;
-  color: var(--ink-muted, oklch(0.6 0.002 85));
-  line-height: 1.5;
+.toggle-label {
+  font-size: var(--text-sm);
+  color: var(--ink-secondary);
 }
 
-.option-hint code {
-  font-family: var(--ff-mono, monospace);
-  background: var(--code-bg, oklch(0.96 0.002 85));
-  color: var(--code-text, oklch(0.18 0.005 85));
-  padding: 1px 4px;
-  border-radius: var(--radius, 2px);
-  font-size: 10px;
+/* Toggle Switch */
+.toggle-track {
+  display: inline-flex;
+  align-items: center;
+  width: 38px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  background: var(--rule);
+  cursor: pointer;
+  position: relative;
+  transition: background var(--dur-micro) var(--ease-fade);
+  flex-shrink: 0;
 }
 
-.option-hint em {
-  color: var(--ink-muted, oklch(0.6 0.002 85));
+.toggle-track.active {
+  background: var(--accent);
 }
 
-/* Progress */
-.progress-spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid var(--rule, oklch(0.88 0.003 85));
-  border-top-color: var(--accent, oklch(0.52 0.12 250));
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+.toggle-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  background: var(--paper-raised);
+  box-shadow: var(--shadow-sheet);
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform var(--dur-micro) var(--ease-press);
+}
+
+.toggle-track.active .toggle-thumb {
+  transform: translateX(18px);
+}
+
+/* ===== Export Status ===== */
+.export-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-12);
+  padding: var(--space-32) var(--space-20);
+  min-height: 160px;
+}
+
+.status-text {
+  font-size: var(--text-base);
+  font-weight: var(--fw-medium);
+  color: var(--ink-primary);
+}
+
+.success-text {
+  color: var(--signal-success);
+}
+
+.error-text {
+  color: var(--signal-error);
+}
+
+.file-info {
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  text-align: center;
+  word-break: break-all;
+}
+
+/* Error block */
+.error-block .error-message {
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  text-align: center;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+
+/* ===== Spinner ===== */
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--rule);
+  border-top-color: var(--accent);
+  border-radius: var(--radius-full);
+  animation: spin 0.7s linear infinite;
 }
 
 @keyframes spin {
@@ -358,83 +444,17 @@ async function doExport(): Promise<void> {
   }
 }
 
-.progress-text {
-  font-size: 14px;
-  color: var(--ink-secondary, oklch(0.42 0.003 85));
-  margin: 0;
+/* ===== Checkmark ===== */
+.checkmark {
+  width: 40px;
+  height: 40px;
+  color: var(--signal-success);
 }
 
-.progress-bar {
-  width: 200px;
-  height: 4px;
-  background: var(--rule, oklch(0.88 0.003 85));
-  border-radius: var(--radius, 2px);
-  overflow: hidden;
-}
-
-.progress-bar-fill {
-  height: 100%;
-  background: var(--accent, oklch(0.52 0.12 250));
-  border-radius: var(--radius, 2px);
-  transition: width 0.3s ease;
-}
-
-.export-success {
-  padding: 12px 0;
-  text-align: center;
-  font-size: 15px;
-  color: var(--signal-success, oklch(0.56 0.14 158));
-  font-weight: 500;
-}
-
-.export-error {
-  padding: 12px;
-  border-radius: var(--radius, 2px);
-  text-align: center;
-  background: oklch(0.95 0.01 25 / 0.1);
-  color: var(--signal-error, oklch(0.48 0.17 25));
-  font-size: 14px;
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--rule, oklch(0.88 0.003 85));
-  background: var(--paper-surface, oklch(0.985 0.002 85));
-}
-
-.btn {
-  padding: 8px 20px;
-  border-radius: var(--radius, 2px);
-  font-size: 13px;
-  cursor: pointer;
-  border: 1px solid var(--rule, oklch(0.88 0.003 85));
-}
-
-.btn--secondary {
-  background: var(--paper-surface, oklch(0.985 0.002 85));
-  color: var(--ink-secondary, oklch(0.42 0.003 85));
-}
-
-.btn--secondary:hover {
-  background: var(--accent-soft, oklch(0.92 0.03 250 / 0.55));
-  color: var(--ink-primary, oklch(0.15 0.003 85));
-}
-
-.btn--primary {
-  background: var(--accent, oklch(0.52 0.12 250));
-  color: oklch(0.995 0 0);
-  border-color: var(--accent, oklch(0.52 0.12 250));
-}
-
-.btn--primary:hover {
-  background: oklch(0.5 0.14 255);
-}
-
-.btn--primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+/* ===== Error Icon ===== */
+.error-icon {
+  width: 40px;
+  height: 40px;
+  color: var(--signal-error);
 }
 </style>

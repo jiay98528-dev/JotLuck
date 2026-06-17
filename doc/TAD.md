@@ -1046,6 +1046,287 @@ function imeHandler(): Extension {
 
 ---
 
+### 3.10 自动补全系统
+
+**设计原则**：纯前端 TypeScript 实现，零新依赖（复用 `@codemirror/autocomplete` 传递依赖），Web PWA + Tauri Desktop 均可工作。无需 Rust 后端、SQLite 或网络服务。
+
+**分层架构**：
+
+```
+NGramEngine (纯算法)
+  │ scan(text) → 构建 N-gram 统计表
+  │ predict(ctx, maxLen) → 递归预测 n 个字符
+  │ learn(ctx, text) → 增量更新频次
+  │
+  ▼
+MarkdownPredictor (服务层)
+  │ L1 缓存: 当前文档统计表 (内存)
+  │ L2 缓存: 全局统计表 (localStorage 持久化)
+  │ getGhostText(cursor, doc) → PredictionResult | null
+  │ accept(text) → 强化学习更新
+  │
+  ▼
+GhostTextPlugin (CM6 ViewPlugin)
+  │ updateListener → 150ms 防抖 → 调用 predict
+  │ Decoration.widget → 光标后灰色斜体幽灵文本
+  │ keymap { Tab } → ghost text 可见时优先消费接受
+  │
+  ▼
+CompletionSources (结构化补全)
+  │ wiki-link.ts: [[ → 笔记名列表 (依赖 IndexStore)
+  │ tag.ts: # → 标签列表 (依赖 IndexStore)
+  │ file-path.ts: ![]([text]( → 路径列表 (依赖 FileTree)
+```
+
+**核心数据结构**：
+
+```typescript
+// N-gram 统计表
+type NGramTable = Map<string, Map<string, number>>;
+// "**" → {"b": 15, "x": 3} → 预测下一个字符最可能是 "b"
+
+interface PredictionResult {
+  /** 预测文本（1-20 字符） */
+  text: string;
+  /** 置信度 0-1 */
+  confidence: number;
+  /** 预测起点在文档中的位置 */
+  from: number;
+}
+
+interface CompletionItem {
+  label: string;
+  detail: string;
+  apply: string;
+}
+```
+
+**NGramEngine 核心算法**（纯函数，零依赖）：
+
+```typescript
+// ngram-engine.ts
+function scan(text: string, n: number): NGramTable {
+  const table: NGramTable = new Map();
+  for (let i = 0; i < text.length - n; i++) {
+    const ctx = text.slice(i, i + n);
+    const next = text[i + n];
+    if (!table.has(ctx)) table.set(ctx, new Map());
+    const counts = table.get(ctx)!;
+    counts.set(next, (counts.get(next) ?? 0) + 1);
+  }
+  return table;
+}
+
+function predict(
+  table: NGramTable, ctx: string, maxLen: number, minConfidence: number
+): string {
+  let result = '';
+  let currentCtx = ctx;
+  for (let i = 0; i < maxLen; i++) {
+    const counts = table.get(currentCtx);
+    if (!counts || counts.size === 0) break;
+    // 取最高频次的下一个字符
+    let best = '', bestCount = 0;
+    for (const [ch, c] of counts) {
+      if (c > bestCount) { best = ch; bestCount = c; }
+    }
+    // 置信度 = 最佳频次 / 总频次
+    const total = [...counts.values()].reduce((a, b) => a + b, 0);
+    if (bestCount / total < minConfidence) break;
+    result += best;
+    currentCtx = currentCtx.slice(1) + best;
+  }
+  return result;
+}
+```
+
+**GhostTextPlugin 与 live preview 的共存**：
+
+- Ghost text 仅在光标所在行渲染（Decoration.widget 在光标后插入虚空间）
+- Live preview 在光标所在行显示源码（不渲染 Widget），在其他行显示渲染 Widget
+- 两者作用范围互斥，无冲突
+
+**Tab 键优先级**：
+
+```
+Tab 按下 → ghostText 可见 → 接受 ghost text（消费 Tab）
+         → ghostText 不可见 → 插入制表符缩进（CM6 默认行为）
+```
+
+**融合决策算法**（`MarkdownPredictor.getGhostText()`）：
+
+```typescript
+// MarkdownPredictor.ts — 统一预测入口
+function getGhostText(
+  cursorPos: number,
+  doc: string,
+  indexStore: IndexStore
+): PredictionResult | null {
+  // 0. 语法上下文快速短路
+  if (isDisabledContext(cursorPos, doc)) return null; // 代码块/frontmatter
+
+  // 1. 检测当前是否在特殊语法结构内
+  const syntaxCtx = detectSyntaxContext(cursorPos, doc);
+  //    → wiki-link / tag / file-path / markdown-format / general
+
+  // 2. N-gram 基础预测
+  const ctx = extractContext(cursorPos, doc, 4);
+  const ngramResult = ngramEngine.predict(ctx, 20, 0.15);
+
+  // 3. 结构化候选（仅特定上下文触发）
+  let structured: PredictionResult | null = null;
+  switch (syntaxCtx.type) {
+    case 'wiki-link':
+      structured = predictWikiLink(syntaxCtx.prefix, indexStore); break;
+    case 'tag':
+      structured = predictTag(syntaxCtx.prefix, indexStore); break;
+    case 'file-path':
+      structured = predictFilePath(syntaxCtx.prefix, indexStore); break;
+    case 'markdown-format':
+      structured = predictFormatClosure(syntaxCtx, doc); break;
+  }
+
+  // 4. 融合：结构化高置信度时优先，否则信任 N-gram
+  if (structured && structured.confidence > 0.8) return structured;
+  return ngramResult;
+}
+```
+
+**语法上下文检测**：
+
+```typescript
+function detectSyntaxContext(cursorPos: number, doc: string): SyntaxContext {
+  const line = doc.lineAt(cursorPos);
+  const beforeCursor = line.text.slice(0, cursorPos - line.from);
+
+  // Wiki-link 内
+  const wikiMatch = beforeCursor.match(/\[\[([^\]]*)$/);
+  if (wikiMatch) return { type: 'wiki-link', prefix: wikiMatch[1] || '' };
+
+  // 行内标签
+  const tagMatch = beforeCursor.match(/(?:^|\s)#([^\s#]*)$/);
+  if (tagMatch && !isHeading(line.text)) return { type: 'tag', prefix: tagMatch[1] || '' };
+
+  // 链接/图片路径
+  const pathMatch = beforeCursor.match(/(?:!\[.*?\]|\[.*?\])\(([^)]*)$/);
+  if (pathMatch) return { type: 'file-path', prefix: pathMatch[1] || '' };
+
+  // 未闭合的格式标记
+  const formatCtx = detectOpenFormat(line.text, cursorPos);
+  if (formatCtx) return { type: 'markdown-format', ...formatCtx };
+
+  return { type: 'general' };
+}
+```
+
+**性能指标**：
+
+| 指标 | 目标 |
+|------|------|
+| N-gram 扫描 (100KB 文档) | < 50ms |
+| 单次预测查询（含融合） | < 1ms |
+| Ghost text 渲染 | < 5ms |
+| 结构化匹配查询 | < 1ms |
+| 内存占用 (1 文档) | < 5MB |
+| localStorage 持久化 (10 万条) | < 3MB |
+
+**与现有扩展的集成点**：
+
+MarkdownEditor.vue 新增 `autocompleteCompartment`：
+```typescript
+const autocompleteCompartment = new Compartment();
+// 在 createState 中：
+autocompleteCompartment.of(props.enableAutocomplete !== false
+  ? ghostTextPlugin(predictor)
+  : [])
+```
+
+**基准 L2 预训练**：
+
+训练工具 `scripts/train-baseline.ts`（语料驱动，非硬编码）：
+
+```
+架构:
+  scripts/
+  ├── train-baseline.ts              ← 训练工具：读语料 → 出基准
+  └── corpus/                        ← 可迭代语料目录
+      ├── corpus.config.json          ← 配置：源目录/权重/参数
+      ├── tech-writing-zh/            ← 中文技术写作 Markdown
+      ├── code-doc-en/                ← 英文编程文档 Markdown
+      ├── markdown-patterns/          ← Markdown 结构模式示例
+      └── training-report.json        ← 训练报告 (自动生成)
+
+训练流程:
+  1. 读取 corpus.config.json → 获取源目录列表和权重
+  2. 扫描每个源目录下的所有 .md 文件
+  3. 剥离代码块（```...```）和行内代码（`...`）
+  4. N-gram 扫描（4-gram），按 source.weight 加权合并
+  5. 注入 P0 硬编码格式闭合规则（~50 条，Markdown 语法规则）
+  6. 应用 min-count=3 过滤 + Top-3 per context 裁剪
+  7. 序列化为 compact.txt + 输出 training-report.json
+
+语料配置 (corpus.config.json):
+  {
+    "ngramN": 4, "minCount": 3, "maxPredsPerContext": 3,
+    "sources": [
+      { "path": "tech-writing-zh/", "weight": 2.0 },
+      { "path": "code-doc-en/", "weight": 1.5 },
+      { "path": "markdown-patterns/", "weight": 1.0 },
+      { "path": "../../doc/", "weight": 1.5 },
+      { "path": "../../spec/", "weight": 1.5 }
+    ],
+    "hardcodedFormatRules": { "enabled": true }
+  }
+
+迭代方式:
+  1. 准备语料: 往 corpus/ 目录添加 .md 文件 (纯 Markdown, 无需标注)
+  2. 运行训练: npx tsx scripts/train-baseline.ts
+  3. 查看报告: training-report.json 显示各来源条目数和覆盖度
+  4. 补充语料: 根据报告补充不足的类别
+  5. 重新训练: 覆盖度提升
+  6. 用户使用后 L1/L2 实时数据自然替代基准, 无需重新训练
+
+输出:
+  public/baseline-ngram.v1.compact.txt (~2500-3000条, ~300-500KB)
+  格式: ctx(hex)|pred1,cnt1|pred2,cnt2|pred3,cnt3|b\n
+```
+
+**持久化格式**：
+
+```typescript
+// localStorage key: "markluck:ngram:v2"
+// 紧凑文本格式，每行一个上下文
+// ctx 使用 hex 编码避免特殊字符冲突
+//
+// 示例:
+//   2a2a|体,15|心,8|粗,5|b    ← ** 后面最可能跟 "体"
+//   4e3a|解,42|实,18|提,9|u    ← 用户积累的高频搭配
+//
+// meta key: "markluck:ngram:meta"
+// {"v":2,"docs":52,"lastPrune":1717760000000,"totalEntries":48230}
+```
+
+**末位淘汰算法**：
+
+```typescript
+function eliminateBottom(table: NGramTable, maxSize: number): void {
+  const scored = [...table.entries()].map(([ctx, counts]) => ({
+    ctx,
+    score: calcScore(counts, getLastAccess(ctx), getFlag(ctx)),
+  }));
+  scored.sort((a, b) => a.score - b.score); // 升序，末位最低分
+  let removed = 0;
+  const maxRemove = Math.floor(table.size * 0.2); // 最多淘汰 20%
+  for (const { ctx } of scored) {
+    if (estimateSize(table) < maxSize || removed >= maxRemove) break;
+    table.delete(ctx);
+    removed++;
+  }
+}
+```
+
+---
+
 ## 4. Markdown 渲染管线
 
 ### 4.1 管线架构图

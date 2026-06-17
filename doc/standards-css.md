@@ -342,7 +342,57 @@
 
 ---
 
-## 十、禁止事项完整清单
+## 十、编辑器 Ghost Text 样式
+
+> 适用：文字补全功能的幽灵文本（ghost text）—— CM6 Decoration.widget 渲染在光标后的灰色斜体预测文本。
+
+### 10.1 基础样式
+
+```css
+/* ✅ 正确：使用 OKLCH Token + 低透明度 */
+.cm-ghost-text {
+  color: oklch(from var(--ink-muted) l c h / 0.4);
+  font-style: italic;
+  pointer-events: none;          /* 不阻碍光标和点击事件 */
+  user-select: none;             /* 不可选中 */
+}
+
+/* ✅ 暗色模式适配 */
+[data-color-scheme="dark"] .cm-ghost-text {
+  color: oklch(from var(--ink-muted) l c h / 0.35); /* 暗色下稍高透明度 */
+}
+```
+
+### 10.2 动效约束
+
+Ghost text 的出现和消失不需要动效——它是瞬时渲染的：
+
+```css
+/* ❌ 禁止：ghost text 使用 transition/animation */
+.cm-ghost-text {
+  transition: opacity 200ms; /* 错误——增加渲染延迟 */
+}
+
+/* ✅ 正确：build() 中直接替换 Decoration，零动效 */
+```
+
+Ghost text 不在"用户主动寻找"之前被感知到——零动效是最佳策略。用户停顿后它自然出现，继续输入后自然消失。任何透明度渐变动效都会引入可感知的延迟。
+
+### 10.3 间距
+
+Ghost text 紧贴光标后方，无额外间距：
+
+```css
+.cm-ghost-text {
+  padding: 0;
+  margin: 0;
+  /* 字符间距跟随编辑器正文 */
+}
+```
+
+---
+
+## 十一、禁止事项完整清单
 
 | 禁止                                        | 替代方案                             |
 | ------------------------------------------- | ------------------------------------ |

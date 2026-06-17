@@ -1,301 +1,204 @@
 /**
- * TemplateEngine — 模板引擎
+ * TemplateEngine — 模板渲染引擎
  *
- * M4-01~04: 占位符替换 + 内置模板 + 自定义模板。
+ * 支持 7 种占位符: {{date}} {{time}} {{year}} {{month}} {{day}} {{datetime}} {{week}}
+ * 3 套内置模板: 日记 / 会议纪要 / 周报
+ * 自定义模板: localStorage 持久化
  *
- * @module TemplateEngine
- * @see milestones.md M4-01~04
+ * @see migration-map.md §4
  */
-
 import type { TemplateItem } from '@/types';
 
-/** localStorage key for custom templates */
 const CUSTOM_TEMPLATES_KEY = 'markluck-custom-templates';
 
-/** Custom template storage shape */
-interface CustomTemplateEntry {
-  id: string;
-  name: string;
-  description: string;
-  content: string;
-  createdAt: string;
+// === Placeholder Replacement ===
+
+const PADDED = (n: number): string => String(n).padStart(2, '0');
+
+export function renderTemplate(template: string, date: Date = new Date()): string {
+  const dayNames = ['日', '一', '二', '三', '四', '五', '六'];
+  const weekStart = new Date(date);
+  weekStart.setDate(date.getDate() - date.getDay());
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+
+  return template
+    .replace(/\{\{date\}\}/g, date.toISOString().slice(0, 10))
+    .replace(/\{\{time\}\}/g, `${PADDED(date.getHours())}:${PADDED(date.getMinutes())}`)
+    .replace(/\{\{datetime\}\}/g, date.toISOString().replace('T', ' ').slice(0, 19))
+    .replace(/\{\{year\}\}/g, String(date.getFullYear()))
+    .replace(/\{\{month\}\}/g, PADDED(date.getMonth() + 1))
+    .replace(/\{\{day\}\}/g, PADDED(date.getDate()))
+    .replace(/\{\{week\}\}/g, `第${Math.ceil(date.getDate() / 7)}周`)
+    .replace(/\{\{weekday\}\}/g, `星期${dayNames[date.getDay()]}`)
+    .replace(
+      /\{\{weekRange\}\}/g,
+      `${weekStart.toISOString().slice(0, 10)} ~ ${weekEnd.toISOString().slice(0, 10)}`,
+    );
 }
 
-/** 占位符 → 替换值 */
-interface PlaceholderContext {
-  date: string;
-  time: string;
-  year: string;
-  month: string;
-  day: string;
-  week: string;
-  datetime: string;
-}
-
-/** 生成占位符上下文 */
-function buildContext(date = new Date()): PlaceholderContext {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const weekNames = ['日', '一', '二', '三', '四', '五', '六'];
-  const y = date.getFullYear();
-  const m = pad(date.getMonth() + 1);
-  const d = pad(date.getDate());
-  const h = pad(date.getHours());
-  const min = pad(date.getMinutes());
-  const s = pad(date.getSeconds());
-
-  return {
-    date: `${y}-${m}-${d}`,
-    time: `${h}:${min}:${s}`,
-    year: String(y),
-    month: m,
-    day: d,
-    week: `周${weekNames[date.getDay()] ?? '?'}`,
-    datetime: `${y}-${m}-${d} ${h}:${min}:${s}`,
-  };
-}
-
-/** 占位符映射表 */
-const PLACEHOLDERS: Array<{ key: string; field: keyof PlaceholderContext }> = [
-  { key: '{{datetime}}', field: 'datetime' },
-  { key: '{{date}}', field: 'date' },
-  { key: '{{time}}', field: 'time' },
-  { key: '{{year}}', field: 'year' },
-  { key: '{{month}}', field: 'month' },
-  { key: '{{day}}', field: 'day' },
-  { key: '{{week}}', field: 'week' },
-];
-
-/**
- * 渲染模板内容：替换所有占位符
- */
-export function renderTemplate(template: string, date?: Date): string {
-  const ctx = buildContext(date);
-  let result = template;
-  for (const { key, field } of PLACEHOLDERS) {
-    result = result.replace(new RegExp(key.replace(/[{}]/g, '\\$&'), 'g'), ctx[field]);
-  }
-  return result;
-}
-
-/**
- * 预览模板（占位符替换为当前值，但不创建笔记）
- */
 export function previewTemplate(template: string): string {
-  return renderTemplate(template);
+  return renderTemplate(template, new Date());
 }
 
-/**
- * 内置模板列表
- */
-export function getBuiltInTemplates(): TemplateItem[] {
-  return [
-    {
-      name: '日记',
-      path: '_builtin_/diary',
-      description: '每日日记模板',
-    },
-    {
-      name: '会议纪要',
-      path: '_builtin_/meeting',
-      description: '会议记录模板',
-    },
-    {
-      name: '周报',
-      path: '_builtin_/weekly',
-      description: '每周工作总结',
-    },
-  ];
-}
+// === Built-in Templates ===
 
-/** 获取内置模板内容 */
-export function getBuiltInTemplateContent(templatePath: string): string {
-  switch (templatePath) {
-    case '_builtin_/diary':
-      return `---
+const BUILTIN_TEMPLATES: TemplateItem[] = [
+  {
+    id: 'diary',
+    name: '日记',
+    description: '每日日记模板，包含日期和待办列表',
+    content: `---
 title: {{date}} 日记
-tags: [diary]
+tags: [日记]
 created: {{date}}
 ---
 
-# {{date}} {{week}}
+# {{date}} 日记
 
-## 今日待办
+## 今日概要
 
-- [ ] 任务一
-- [ ] 任务二
-- [ ] 任务三
+
+## 待办事项
+
+- [ ]
+- [ ]
+- [ ]
 
 ## 笔记
 
-开始记录今天的想法...
 
 ## 总结
 
-今天完成了什么？学到了什么？
-`;
-
-    case '_builtin_/meeting':
-      return `---
+`,
+    isBuiltin: true,
+  },
+  {
+    id: 'meeting',
+    name: '会议纪要',
+    description: '会议记录模板，包含参会人、议题和行动项',
+    content: `---
 title: 会议纪要 — {{date}}
-tags: [meeting]
+tags: [会议]
 created: {{date}}
 ---
 
 # 会议纪要
 
-- **日期**: {{date}} {{time}}
-- **参会人**:
-- **主题**:
+**日期**: {{date}}
+**时间**: {{time}}
+**参会人**:
 
-## 议程
+---
+
+## 议题
 
 1.
-2.
-3.
 
 ## 讨论要点
-
-### 议题一
-
-
-
-### 议题二
-
 
 
 ## 决议
 
-- [ ]
-- [ ]
 
-## 下一步行动
+## 行动项
 
-| 行动项 | 负责人 | 截止日期 |
-|--------|--------|----------|
-| | | |
-`;
+- [ ]  负责人:  截止日期:
+- [ ]  负责人:  截止日期:
 
-    case '_builtin_/weekly':
-      return `---
-title: 周报 — {{date}}
-tags: [weekly]
+## 下次会议
+
+`,
+    isBuiltin: true,
+  },
+  {
+    id: 'weekly',
+    name: '周报',
+    description: '每周工作总结模板',
+    content: `---
+title: 周报 — {{weekRange}}
+tags: [周报]
 created: {{date}}
 ---
 
-# 周报 {{date}}
-
-> 周期：本周
+# 周报 ({{weekRange}})
 
 ## 本周完成
 
--
--
--
 
 ## 进行中
 
--
--
 
 ## 遇到的问题
 
--
 
 ## 下周计划
 
--
--
--
 
-## 思考与收获
+## 需要协调
 
-`;
-    default:
-      return '';
-  }
+`,
+    isBuiltin: true,
+  },
+];
+
+export function getBuiltInTemplates(): TemplateItem[] {
+  return BUILTIN_TEMPLATES;
 }
 
-/**
- * 获取自定义模板列表
- */
-export function getCustomTemplates(): TemplateItem[] {
+export function getBuiltInTemplateContent(templatePath: string): string {
+  const tpl = BUILTIN_TEMPLATES.find((t) => t.id === templatePath);
+  return tpl?.content ?? '';
+}
+
+// === Custom Templates (localStorage) ===
+
+function loadCustomTemplates(): TemplateItem[] {
   try {
     const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
-    if (!raw) return [];
-    const entries: CustomTemplateEntry[] = JSON.parse(raw);
-    return entries.map((e) => ({
-      name: e.name,
-      path: `_custom_/${e.id}`,
-      description: e.description,
-    }));
+    return raw ? (JSON.parse(raw) as TemplateItem[]) : [];
   } catch {
     return [];
   }
 }
 
-/**
- * 获取自定义模板内容
- */
-export function getCustomTemplateContent(templatePath: string): string {
-  const id = templatePath.replace('_custom_/', '');
-  try {
-    const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
-    if (!raw) return '';
-    const entries: CustomTemplateEntry[] = JSON.parse(raw);
-    return entries.find((e) => e.id === id)?.content ?? '';
-  } catch {
-    return '';
-  }
+function saveCustomTemplates(templates: TemplateItem[]): void {
+  localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(templates));
 }
 
-/**
- * 保存自定义模板
- */
+export function getCustomTemplates(): TemplateItem[] {
+  return loadCustomTemplates();
+}
+
+export function getCustomTemplateContent(templatePath: string): string {
+  const templates = loadCustomTemplates();
+  const tpl = templates.find((t) => t.id === templatePath);
+  return tpl?.content ?? '';
+}
+
 export function saveCustomTemplate(
   name: string,
   description: string,
   content: string,
 ): TemplateItem {
-  const entries = loadCustomEntries();
-  const id = `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-
-  entries.push({
-    id,
+  const templates = loadCustomTemplates();
+  const item: TemplateItem = {
+    id: `custom-${Date.now()}`,
     name,
     description,
     content,
-    createdAt: new Date().toISOString(),
-  });
-
-  localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(entries));
-
-  return { name, path: `_custom_/${id}`, description };
+    isBuiltin: false,
+  };
+  templates.push(item);
+  saveCustomTemplates(templates);
+  return item;
 }
 
-/**
- * 删除自定义模板
- */
-export function deleteCustomTemplate(path: string): boolean {
-  const id = path.replace('_custom_/', '');
-  try {
-    const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
-    if (!raw) return false;
-    const entries: CustomTemplateEntry[] = JSON.parse(raw);
-    const filtered = entries.filter((e) => e.id !== id);
-    if (filtered.length === entries.length) return false;
-    localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(filtered));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** 加载原始条目 */
-function loadCustomEntries(): CustomTemplateEntry[] {
-  try {
-    const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+export function deleteCustomTemplate(id: string): boolean {
+  const templates = loadCustomTemplates();
+  const idx = templates.findIndex((t) => t.id === id);
+  if (idx === -1) return false;
+  templates.splice(idx, 1);
+  saveCustomTemplates(templates);
+  return true;
 }

@@ -68,6 +68,14 @@ const purifyConfig: Record<string, any> = {
   FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur'],
 };
 
+// Remove `disabled` from checkboxes so they are interactive in live preview.
+// Marked's GFM renderer adds disabled="" to all task list checkboxes.
+DOMPurify.addHook('beforeSanitizeElements', (node) => {
+  if (node.nodeName === 'INPUT' && (node as Element).getAttribute('type') === 'checkbox') {
+    (node as Element).removeAttribute('disabled');
+  }
+});
+
 /**
  * 清洗 HTML 字符串，移除所有恶意代码。
  * 必须在 marked 输出之后、DOM 插入之前执行。

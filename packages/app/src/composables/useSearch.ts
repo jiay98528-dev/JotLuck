@@ -1,111 +1,69 @@
 /**
- * useSearch — 搜索功能组合式函数
+ * useSearch — 搜索逻辑组合式函数
  *
- * M2-08~11: 封装搜索逻辑，连接 useSearchStore 和 SearchEngine。
- * 提供防抖搜索、高级查询解析、搜索结果导航。
+ * 封装 SearchEngine + useSearchStore + useIndexStore 的搜索交互。
  *
- * @module useSearch
+ * @see migration-map.md §5
  */
-
-import { ref } from 'vue';
 import { useSearchStore } from '@/stores/search';
 import { useIndexStore } from '@/stores/index';
-import type { SearchQuery } from '@/types';
+import type { SearchResult, SearchQuery, DateRange } from '@/types';
+
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+const DEBOUNCE_MS = 250;
 
 export function useSearch() {
   const searchStore = useSearchStore();
   const indexStore = useIndexStore();
 
-  const debounceTimer = ref<ReturnType<typeof setTimeout> | null>(null);
-  const DEBOUNCE_MS = 300;
-
-  /** 执行搜索（带防抖） */
   function searchWithDebounce(queryText: string): void {
+    if (debounceTimer) clearTimeout(debounceTimer);
     searchStore.setQuery(queryText);
-
-    if (debounceTimer.value) {
-      clearTimeout(debounceTimer.value);
-    }
 
     if (!queryText.trim()) {
       searchStore.clearResults();
       return;
     }
 
-    debounceTimer.value = setTimeout(() => {
-      executeSearch(queryText);
+    debounceTimer = setTimeout(() => {
+      searchImmediately(queryText);
     }, DEBOUNCE_MS);
   }
 
-  /** 立即搜索（Enter 触发） */
   function searchImmediately(queryText: string): void {
-    if (debounceTimer.value) {
-      clearTimeout(debounceTimer.value);
-    }
+    const engine = indexStore.getEngine();
+    if (!engine) return;
+
     searchStore.setQuery(queryText);
-    if (!queryText.trim()) {
-      searchStore.clearResults();
-      return;
+    const query = parseQuery(queryText);
+    const results = engine.search(query);
+    searchStore.setResults(results);
+    if (queryText.trim()) {
+      searchStore.addToHistory(queryText);
     }
-    executeSearch(queryText);
   }
 
-  /** 通过搜索词选择结果 */
   function selectResultByQuery(tagQuery: string): void {
-    searchStore.open(tagQuery);
+    openSearch(tagQuery);
     searchImmediately(tagQuery);
   }
 
-  /** 打开搜索面板 */
-  function openSearch(initialQuery = ''): void {
-    searchStore.loadHistory();
+  function openSearch(initialQuery?: string): void {
     searchStore.open(initialQuery);
   }
 
-  /** 关闭搜索面板 */
   function closeSearch(): void {
     searchStore.close();
-    searchStore.clearResults();
   }
 
-  /** 键盘导航 */
   function navigateUp(): void {
     searchStore.selectPrev();
   }
-
   function navigateDown(): void {
     searchStore.selectNext();
   }
-
-  function getSelected() {
+  function getSelected(): SearchResult | null {
     return searchStore.getSelected();
-  }
-
-  // ---- Private ----
-
-  function executeSearch(queryText: string): void {
-    const engine = indexStore.getEngine();
-    if (!engine) {
-      searchStore.setResults([]);
-      return;
-    }
-
-    searchStore.isSearching = true;
-
-    try {
-      const query: SearchQuery = { text: queryText, limit: 50 };
-      const results = engine.search(query);
-      searchStore.setResults(results);
-
-      if (queryText.trim()) {
-        searchStore.addToHistory(queryText);
-      }
-    } catch (e) {
-      searchStore.error = e instanceof Error ? e.message : '搜索出错';
-      searchStore.setResults([]);
-    } finally {
-      searchStore.isSearching = false;
-    }
   }
 
   return {
@@ -118,4 +76,38 @@ export function useSearch() {
     navigateDown,
     getSelected,
   };
+}
+
+function parseQuery(raw: string): SearchQuery {
+  const tags: string[] = [];
+  let folder: string | undefined;
+  let dateRange: DateRange | undefined;
+  const textParts: string[] = [];
+
+  const parts = raw.split(/\s+/);
+  for (const part of parts) {
+    if (part.startsWith('tag:')) {
+      tags.push(part.slice(4));
+    } else if (part.startsWith('date:')) {
+      const range = part.slice(5);
+      const [from, to] = range.split('..');
+      if (from || to) {
+        dateRange = {
+          from: from ? new Date(from) : undefined,
+          to: to ? new Date(to) : undefined,
+        };
+      }
+    } else if (part.startsWith('folder:')) {
+      folder = part.slice(7);
+    } else {
+      textParts.push(part);
+    }
+  }
+
+  return {
+    text: textParts.join(' '),
+    ...(tags.length > 0 ? { tags } : {}),
+    ...(folder ? { folder } : {}),
+    ...(dateRange ? { dateRange } : {}),
+  } as SearchQuery;
 }

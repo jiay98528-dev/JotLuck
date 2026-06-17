@@ -1,49 +1,58 @@
 <template>
-  <div class="status-bar" role="status" aria-live="polite">
-    <div class="status-left">
-      <span v-if="cursorLine !== null && cursorLine !== undefined" class="status-item">
-        行 {{ cursorLine }}:{{ cursorCol ?? '1' }}
-      </span>
-      <span class="status-item">{{ wordCount }} 字</span>
-      <span class="status-item">{{ lineCount }} 行</span>
-    </div>
-    <div class="status-right">
-      <!-- Saving: breathing dot -->
-      <span v-if="isSaving" class="status-item status-saving" aria-busy="true">保存中</span>
-      <!-- Error: solid square marker -->
-      <span v-else-if="saveError" class="status-item status-error" :title="saveError"
-        >保存失败</span
-      >
-      <!-- Dirty/unsaved: hollow circle pulse -->
-      <span v-else-if="isDirty" class="status-item status-dirty">未保存</span>
-      <!-- Saved: filled circle, static calm -->
-      <span v-else class="status-item status-saved">已保存</span>
-    </div>
-  </div>
+  <footer class="status-bar" role="status" aria-label="编辑器状态栏">
+    <!-- Left: cursor position -->
+    <span class="status-left">
+      <template v-if="cursorLine !== null">Ln {{ cursorLine }}, Col {{ cursorCol }}</template>
+      <template v-else>&mdash;</template>
+    </span>
+
+    <!-- Center: document statistics + format hint -->
+    <span class="status-center"
+      >{{ charCount }} 字 &middot; {{ wordCount }} 词 &middot;
+      <span class="status-hint">选中文字以格式化 &middot; Ctrl+点击固定区块</span></span
+    >
+
+    <!-- Right: save status -->
+    <span class="status-right">
+      <span v-if="saveError" class="status-error" :title="saveError">&#9888; {{ saveError }}</span>
+      <span v-else-if="isSaving" class="status-saving">&#9203; 保存中&hellip;</span>
+      <span v-else-if="isDirty" class="status-dirty">&#9679; 未保存</span>
+      <span v-else class="status-saved" :class="{ ripple: showRipple }">&#10003; 已保存</span>
+    </span>
+  </footer>
 </template>
 
 <script setup lang="ts">
 /**
- * StatusBar.vue — 编辑器底部状态栏（纸张主题）
+ * StatusBar.vue — 编辑器底部 28px 状态栏
  *
- * Geometric status indicators with motion:
- *   Saving: breathing accent dot (pulse animation)
- *   Error: solid square marker, static
- *   Dirty/unsaved: hollow circle, subtle pulse
- *   Saved: filled circle, static calm
+ * 三区布局：左（光标位置）/ 中（字词统计）/ 右（保存状态）。
+ * 保存成功后，对勾图标绿色脉冲一次，随后在 2s 内渐隐为 muted 色。
  *
- * Dual-channel encoding: shape (dot/circle/square) + color (accent/amber/red/green)
+ * @see migration-map.md §1.2
+ * @see spec/frontend/components.md
  */
-withDefaults(
+import { ref, watch } from 'vue';
+
+const props = withDefaults(
   defineProps<{
+    /** 字符总数 */
     charCount?: number;
+    /** 单词总数 */
     wordCount?: number;
+    /** 行总数 */
     lineCount?: number;
+    /** 光标所在行号 (1-based)，无光标时为 null */
     cursorLine?: number | null;
+    /** 光标所在列号 (1-based) */
     cursorCol?: number | null;
+    /** 是否有未保存的修改 */
     isDirty?: boolean;
+    /** 是否正在保存中 */
     isSaving?: boolean;
+    /** 保存错误信息，非 null 时优先显示 */
     saveError?: string | null;
+    /** 上次保存成功的时间戳 (ms) */
     lastSavedAt?: number | null;
   }>(),
   {
@@ -58,153 +67,168 @@ withDefaults(
     lastSavedAt: null,
   },
 );
-</script>
 
-<script lang="ts">
-export default { name: 'StatusBar' };
+// ---- Save Ripple ----
+// When isSaving transitions from true → false and the document is clean,
+// show a brief green pulse on the checkmark that fades to muted over 2s.
+const showRipple = ref(false);
+let rippleTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => props.isSaving,
+  (saving, wasSaving) => {
+    if (wasSaving && !saving && !props.isDirty && !props.saveError) {
+      showRipple.value = true;
+      if (rippleTimer) clearTimeout(rippleTimer);
+      rippleTimer = setTimeout(() => {
+        showRipple.value = false;
+      }, 2000);
+    }
+  },
+);
 </script>
 
 <style scoped>
+/* ============================================================
+ * Root — 28px Fixed Footer
+ * ============================================================ */
 .status-bar {
+  height: var(--statusbar-height);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 2px var(--space-12);
+  padding: 0 var(--space-12);
   border-top: var(--border-thin) solid var(--rule);
   background: var(--paper-surface);
   font-size: var(--text-xs);
   color: var(--ink-muted);
   user-select: none;
-  min-height: 24px;
-  font-family: var(--ff-mono);
-  letter-spacing: 0.01em;
+  flex-shrink: 0;
 }
 
+/* ============================================================
+ * Three Sections
+ * ============================================================ */
 .status-left,
+.status-center,
 .status-right {
-  display: flex;
-  gap: var(--space-16);
-  align-items: center;
-}
-
-.status-item {
   white-space: nowrap;
-  display: flex;
-  align-items: center;
-  gap: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* --- Dot separator between stats --- */
-.status-left .status-item + .status-item::before {
-  content: '·';
-  margin-right: var(--space-16);
+.status-left {
+  flex: 0 1 auto;
+  text-align: left;
+}
+
+.status-center {
+  flex: 0 0 auto;
+  text-align: center;
+}
+
+.status-right {
+  flex: 0 1 auto;
+  text-align: right;
+}
+
+.status-hint {
   color: var(--ink-muted);
-  opacity: 0.35;
+  opacity: 0.7;
+  font-style: italic;
+
+  /* BUG-013: 微妙的呼吸动画吸引注意力 */
+  animation: hint-breathe 4s ease-in-out infinite;
 }
 
-/* ===== Geometric Indicators ===== */
-
-/* Saving: breathing accent dot */
-.status-saving {
-  color: var(--accent);
-}
-
-.status-saving::before {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: status-breathe 1.2s ease-in-out infinite;
-}
-
-/* Error: solid square, static */
-.status-error {
-  color: var(--signal-error);
-  cursor: help;
-}
-
-.status-error::before {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  background: var(--signal-error);
-}
-
-/* Dirty/unsaved: hollow circle with subtle pulse */
-.status-dirty {
-  color: var(--signal-warning);
-}
-
-.status-dirty::before {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  border: 1.5px solid var(--signal-warning);
-  background: transparent;
-  animation: status-pulse-warn 2s ease-in-out infinite;
-}
-
-/* Saved: filled circle, calm */
-.status-saved {
-  color: var(--signal-success);
-}
-
-.status-saved::before {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--signal-success);
-
-  /* Draw animation: circle fills from center */
-  animation: status-fill-in 300ms var(--ease-fold) forwards;
-}
-
-/* ===== Keyframes ===== */
-
-@keyframes status-breathe {
-  0%,
-  100% {
-    opacity: 0.3;
-    transform: scale(0.8);
-  }
-
-  50% {
-    opacity: 1;
-    transform: scale(1.1);
-  }
-}
-
-@keyframes status-pulse-warn {
+@keyframes hint-breathe {
   0%,
   100% {
     opacity: 0.5;
   }
 
   50% {
-    opacity: 1;
+    opacity: 0.9;
   }
 }
 
-@keyframes status-fill-in {
-  0% {
-    transform: scale(0);
-    opacity: 0;
+/* ============================================================
+ * Save States
+ * ============================================================ */
+
+/* Dirty — amber dot */
+.status-dirty {
+  color: var(--signal-warning);
+}
+
+/* Saving — subtle pulse on the hourglass */
+.status-saving {
+  color: var(--ink-secondary);
+  animation: saving-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes saving-pulse {
+  0%,
+  100% {
+    opacity: 1;
   }
 
-  60% {
-    transform: scale(1.2);
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* Saved — green, with ripple on transition */
+.status-saved {
+  color: var(--signal-success);
+  transition: color var(--dur-ripple) var(--ease-fade);
+}
+
+.status-saved.ripple {
+  animation: saved-ripple var(--dur-ripple) var(--ease-fade) forwards;
+}
+
+/*
+ * Ripple: quick green pulse (scale up → settle),
+ * then color fades from green to muted over the remaining duration.
+ */
+@keyframes saved-ripple {
+  0% {
+    transform: scale(1.15);
+    color: var(--signal-success);
+    opacity: 1;
+  }
+
+  10% {
+    transform: scale(1);
+    color: var(--signal-success);
+    opacity: 1;
   }
 
   100% {
     transform: scale(1);
-    opacity: 1;
+    color: var(--ink-muted);
+    opacity: 0.65;
+  }
+}
+
+/* Error — red with full opacity for legibility */
+.status-error {
+  color: var(--signal-error);
+}
+
+/* ============================================================
+ * Accessibility — Reduced Motion
+ * ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .status-saving {
+    animation: none;
+  }
+
+  .status-saved.ripple {
+    animation: none;
+    color: var(--ink-muted);
+    opacity: 0.65;
   }
 }
 </style>

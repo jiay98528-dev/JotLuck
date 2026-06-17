@@ -1,268 +1,228 @@
 /**
- * IndexService — 笔记本索引服务
+ * IndexService — 索引构建与查询服务
  *
- * M2-01, M2-03: 管理 .markluck_index.json 的构建、持久化和增量更新。
- * 在 Web 阶段使用 localStorage 持久化，M6 切换为文件系统存储。
+ * 全量扫描笔记本 → 构建 SearchIndex → 提取标签/Wiki-link/最近笔记
  *
- * @module IndexService
- * @see milestones.md M2-01, M2-03
+ * @see migration-map.md §4
  */
-
-import type { IFileSystemService, DocumentEntry, SearchIndex } from '@/types';
-import { parseFrontmatter, extractTitle, type FrontmatterData } from './YAMLParser';
-
-/** 索引版本号 */
-const INDEX_VERSION = '1.0.0';
-
-/** localStorage key */
-const INDEX_STORAGE_KEY = 'markluck-index';
-
-/** Wiki-link 正则：[[name]], [[name|alias]], [[name#anchor|alias]] */
-const WIKI_LINK_RE = /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g;
-
-/** 内联 #tag 正则（不在代码块/链接内的标签） */
-const INLINE_TAG_RE = /(?:^|\s)#([a-zA-Z一-鿿㐀-䶿][\w一-鿿㐀-䶿-]*)/g;
+import type { IFileSystemService, SearchIndex, DocumentEntry, BacklinkEntry } from '@/types';
+import { SearchEngine } from './SearchEngine';
+import { parseFrontmatter, extractTitle } from './YAMLParser';
 
 export class IndexService {
   private fs: IFileSystemService;
-  private index: SearchIndex | null = null;
+  private engine: SearchEngine;
+  private wikiOutgoing: Map<string, string[]> = new Map();
+  private wikiIncoming: Map<string, string[]> = new Map();
+  private recentNotesList: Array<{ path: string; title: string; lastOpenedAt: number }> = [];
+  private tagIndex: Map<string, string[]> = new Map();
+  private allDocuments: Record<string, DocumentEntry> = {};
 
   constructor(fs: IFileSystemService) {
     this.fs = fs;
-    this.loadFromStorage();
+    this.engine = new SearchEngine();
   }
 
-  /** 获取当前索引 */
-  getIndex(): SearchIndex | null {
-    return this.index;
+  getEngine(): SearchEngine {
+    return this.engine;
   }
 
-  /** 构建全量索引 */
   async buildFullIndex(): Promise<SearchIndex> {
-    const entries = await this.fs.listDirectory('/');
+    this.allDocuments = {};
+    this.wikiOutgoing.clear();
+    this.wikiIncoming.clear();
+    this.tagIndex.clear();
+    this.recentNotesList = [];
+
     const documents: Record<string, DocumentEntry> = {};
-    const allTags = new Set<string>();
+    await this.scanDirectory('/');
 
-    for (const entry of entries) {
-      if (!entry.isFile || !entry.name.endsWith('.md')) continue;
+    // Build forward index
+    for (const [path, doc] of Object.entries(this.allDocuments)) {
+      documents[path] = doc;
+    }
 
-      try {
-        const content = await this.fs.readFile(entry.path);
-        const doc = this.indexDocument(entry.path, content, entry.mtime ?? Date.now());
-        documents[entry.path] = doc;
-        doc.tags.forEach((t) => allTags.add(t));
-      } catch {
-        // 跳过无法读取的文件
+    // Build incoming wiki-link map from already-extracted outgoing links (done in indexFile)
+    for (const [source, outgoing] of this.wikiOutgoing) {
+      for (const target of outgoing) {
+        if (!this.wikiIncoming.has(target)) this.wikiIncoming.set(target, []);
+        this.wikiIncoming.get(target)!.push(source);
       }
     }
 
-    this.index = {
-      version: INDEX_VERSION,
-      lastUpdated: new Date().toISOString(),
-      documents,
-      invertedIndex: {},
-    };
+    // Populate initial recentNotes from scanned documents
+    this.recentNotesList = Object.entries(this.allDocuments)
+      .map(([path, entry]) => ({
+        path,
+        title: entry.title,
+        lastOpenedAt: entry.created ?? Date.now(),
+      }))
+      .sort((a, b) => b.lastOpenedAt - a.lastOpenedAt);
 
-    this.saveToStorage();
-    return this.index;
+    this.engine.buildIndex(documents);
+    // Load full file content into the search engine for content-based matching
+    await this.engine.preloadContent(documents, (path) => this.fs.readFile(path));
+    return {
+      documents,
+      version: '1',
+      lastUpdated: new Date().toISOString(),
+      invertedIndex: {},
+      termIndex: {},
+      wikiLinks: { outgoing: {}, incoming: {} },
+      tagIndex: {},
+    } as unknown as SearchIndex;
   }
 
-  /** 增量更新：重新索引单个文件 */
-  async updateDocument(path: string): Promise<void> {
-    if (!this.index) return;
+  private async scanDirectory(dir: string): Promise<void> {
+    try {
+      const entries = await this.fs.listDirectory(dir);
+      for (const entry of entries) {
+        if (entry.isDirectory) {
+          await this.scanDirectory(entry.path);
+        } else if (entry.name.endsWith('.md')) {
+          await this.indexFile(entry.path);
+        }
+      }
+    } catch {
+      // skip unreadable directories
+    }
+  }
 
+  private async indexFile(path: string): Promise<void> {
     try {
       const content = await this.fs.readFile(path);
-      const stat = await this.fs.statFile(path);
-      this.index = {
-        ...this.index,
-        documents: {
-          ...this.index.documents,
-          [path]: this.indexDocument(path, content, stat.mtime),
-        },
-        lastUpdated: new Date().toISOString(),
-      };
-      this.saveToStorage();
+      const fm = parseFrontmatter(content);
+      const title =
+        fm.data.title || extractTitle(content) || path.split('/').pop()?.replace(/\.md$/, '') || '';
+
+      // Frontmatter tags
+      const fmTags: string[] = Array.isArray(fm.data.tags)
+        ? fm.data.tags
+        : typeof fm.data.tags === 'string'
+          ? fm.data.tags.split(/[,，]/).map((t) => t.trim())
+          : [];
+
+      // Inline #tag — strip code/headings first to avoid false positives
+      const body = content.replace(/^---[\s\S]*?^---/m, ''); // remove frontmatter block
+      const bodyClean = body
+        .replace(/^```[\s\S]*?^```/gm, '') // fenced code blocks
+        .replace(/`[^`]+`/g, '') // inline code
+        .replace(/^#{1,6}\s+/gm, ''); // ATX headings
+      const inlineTags = [...bodyClean.matchAll(/(?<!\w)#([^\s#]+)/g)].map((m) => m[1]!);
+
+      // Merge & deduplicate
+      const allTags = [...new Set([...fmTags, ...inlineTags])];
+
+      // Wiki-link extraction (reuse already-loaded content — avoids separate read in buildFullIndex)
+      this.wikiOutgoing.delete(path);
+      const wikiRegex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
+      const outgoing: string[] = [];
+      let wm: RegExpExecArray | null;
+      while ((wm = wikiRegex.exec(content)) !== null) {
+        const target = wm[1]?.trim() ?? '';
+        if (target) outgoing.push(target);
+      }
+      this.wikiOutgoing.set(path, outgoing);
+
+      const created = fm.data.created ? new Date(fm.data.created).getTime() : undefined;
+
+      const folder = path.substring(0, path.lastIndexOf('/') + 1) || '/';
+
+      const entry: DocumentEntry = { path, title, tags: allTags, created, folder };
+      this.allDocuments[path] = entry;
+
+      // Clear old tag associations for this path (idempotent re-index)
+      for (const [, paths] of this.tagIndex) {
+        const idx = paths.indexOf(path);
+        if (idx >= 0) paths.splice(idx, 1);
+      }
+
+      // Tag index
+      for (const tag of allTags) {
+        if (!this.tagIndex.has(tag)) this.tagIndex.set(tag, []);
+        this.tagIndex.get(tag)!.push(path);
+      }
     } catch {
-      // 文件可能已被删除，从索引中移除
-      const { [path]: _removed, ...restDocs } = this.index.documents;
-      this.index = { ...this.index, documents: restDocs, lastUpdated: new Date().toISOString() };
+      // skip unreadable files
     }
   }
 
-  /** 从索引中移除文档 */
-  removeDocument(path: string): void {
-    if (!this.index) return;
-    const { [path]: _removed, ...restDocs } = this.index.documents;
-    this.index = { ...this.index, documents: restDocs, lastUpdated: new Date().toISOString() };
-    this.saveToStorage();
-  }
-
-  /** 获取所有标签（按频率排序） */
-  getAllTags(): Array<{ name: string; count: number }> {
-    if (!this.index) return [];
-
-    const tagCounts = new Map<string, number>();
-    for (const doc of Object.values(this.index.documents)) {
-      for (const tag of doc.tags) {
-        tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+  async updateDocument(path: string): Promise<void> {
+    await this.indexFile(path);
+    // Sync updated content into the search engine
+    const entry = this.allDocuments[path];
+    if (entry) {
+      try {
+        const content = await this.fs.readFile(path);
+        this.engine.updateDocument(path, entry, content);
+      } catch {
+        this.engine.updateDocument(path, entry, '');
       }
     }
+  }
 
-    return [...tagCounts.entries()]
-      .map(([name, count]) => ({ name, count }))
+  removeDocument(path: string): void {
+    // Clean up tag index
+    for (const [tag, paths] of this.tagIndex) {
+      const idx = paths.indexOf(path);
+      if (idx >= 0) {
+        paths.splice(idx, 1);
+        if (paths.length === 0) this.tagIndex.delete(tag);
+      }
+    }
+    // Clean up wiki-link maps
+    this.wikiOutgoing.delete(path);
+    for (const [, paths] of this.wikiIncoming) {
+      const idx = paths.indexOf(path);
+      if (idx >= 0) paths.splice(idx, 1);
+    }
+
+    delete this.allDocuments[path];
+    this.engine.removeDocument(path);
+  }
+
+  /** 获取所有已索引文档的标题列表 (用于结构化补全) */
+  getAllNoteTitles(): string[] {
+    return Object.values(this.allDocuments)
+      .map((d) => d.title)
+      .filter((t): t is string => !!t && t.length > 0);
+  }
+
+  /** 获取所有已索引文档条目 (用于 excerpt 提取等) */
+  getAllDocuments(): Record<string, DocumentEntry> {
+    return { ...this.allDocuments };
+  }
+
+  getAllTags(): Array<{ name: string; count: number }> {
+    return [...this.tagIndex.entries()]
+      .map(([name, paths]) => ({ name, count: paths.length }))
       .sort((a, b) => b.count - a.count);
   }
 
-  /** 获取 Wiki-link 图（出链 + 入链） */
-  getWikiLinkGraph(): {
-    outgoing: Record<string, string[]>;
-    incoming: Record<string, string[]>;
-    deadLinks: Array<{ source: string; target: string }>;
-  } {
-    const outgoing: Record<string, string[]> = {};
-    const incoming: Record<string, string[]> = {};
-    const allPaths = new Set(Object.keys(this.index?.documents ?? {}));
-
-    for (const doc of Object.values(this.index?.documents ?? {})) {
-      outgoing[doc.path] = doc.outgoingLinks as string[];
-
-      for (const link of doc.outgoingLinks) {
-        if (!incoming[link]) {
-          incoming[link] = [];
-        }
-        incoming[link].push(doc.path);
-      }
-    }
-
-    // 死链检测
-    const deadLinks: Array<{ source: string; target: string }> = [];
-    for (const [source, links] of Object.entries(outgoing)) {
-      for (const link of links) {
-        // 构造可能的文件路径
-        const candidatePaths = [
-          `/${link}.md`,
-          `/${link}`,
-          link.startsWith('/') ? link : `/${link}`,
-        ];
-        const exists = candidatePaths.some((p) => allPaths.has(p) || allPaths.has(p + '.md'));
-        if (!exists) {
-          deadLinks.push({ source, target: link });
-        }
-      }
-    }
-
-    return { outgoing, incoming, deadLinks };
+  getWikiLinkGraph() {
+    return {
+      outgoing: Object.fromEntries(this.wikiOutgoing),
+      incoming: Object.fromEntries(this.wikiIncoming),
+      deadLinks: [] as Array<{ source: string; target: string }>,
+    };
   }
 
-  /** 获取反向链接 */
-  getBacklinks(
-    notePath: string,
-  ): Array<{ notePath: string; noteTitle: string; context: string; lineNumber: number }> {
-    const graph = this.getWikiLinkGraph();
-    const sources = graph.incoming[notePath] ?? [];
-    const noteName = notePath.replace(/\.md$/, '').replace(/^\//, '');
-
-    // 也检查不带 .md 后缀的引用
-    const altSources = graph.incoming[noteName] ?? [];
-    const allSources = [...new Set([...sources, ...altSources])];
+  getBacklinks(notePath: string): BacklinkEntry[] {
+    const noteName = notePath.split('/').pop()?.replace(/\.md$/, '') ?? '';
+    const incoming = this.wikiIncoming.get(noteName) ?? [];
+    const alsoByName = this.wikiIncoming.get(notePath.replace(/\.md$/, '')) ?? [];
+    const allSources = [...new Set([...incoming, ...alsoByName])];
 
     return allSources.map((source) => ({
       notePath: source,
-      noteTitle: this.index?.documents[source]?.title ?? source,
-      context: '', // 上下文由前端在打开时提取
+      noteTitle:
+        this.allDocuments[source]?.title ?? source.split('/').pop()?.replace(/\.md$/, '') ?? '',
+      context: '',
       lineNumber: 0,
     }));
   }
 
-  /** 获取最近笔记（按修改时间倒序） */
-  getRecentNotes(limit = 20): Array<{ path: string; title: string; lastOpenedAt: number }> {
-    if (!this.index) return [];
-
-    return Object.values(this.index.documents)
-      .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime())
-      .slice(0, limit)
-      .map((doc) => ({
-        path: doc.path,
-        title: doc.title,
-        lastOpenedAt: new Date(doc.modifiedAt).getTime(),
-      }));
-  }
-
-  /** 索引单个文档 */
-  private indexDocument(path: string, content: string, mtime: number): DocumentEntry {
-    const fm = parseFrontmatter(content);
-    const title = fm.data.title ?? extractTitle(content);
-    const tags = this.extractAllTags(content, fm.data);
-    const outgoingLinks = this.extractWikiLinks(content);
-
-    return {
-      path,
-      title,
-      tags,
-      createdAt: fm.data.created ?? new Date(mtime).toISOString(),
-      modifiedAt: fm.data.updated ?? new Date(mtime).toISOString(),
-      wordCount: content.length,
-      outgoingLinks,
-    };
-  }
-
-  /** 提取所有标签（frontmatter + 内联 #tag） */
-  private extractAllTags(content: string, fm: FrontmatterData): string[] {
-    const tags = new Set<string>();
-
-    // Frontmatter 中的 tags
-    if (fm.tags) {
-      for (const tag of fm.tags) {
-        tags.add(tag.toLowerCase());
-      }
-    }
-
-    // 内联 #tag
-    const body = content.replace(/^---[\s\S]*?---\s*\n/, ''); // 跳过 frontmatter
-    // 跳过代码块
-    const withoutCodeBlocks = body.replace(/```[\s\S]*?```/g, '');
-    let match: RegExpExecArray | null;
-    while ((match = INLINE_TAG_RE.exec(withoutCodeBlocks)) !== null) {
-      tags.add((match[1] ?? '').toLowerCase());
-    }
-
-    return [...tags];
-  }
-
-  /** 提取 Wiki-link */
-  private extractWikiLinks(content: string): string[] {
-    const links = new Set<string>();
-    const body = content.replace(/^---[\s\S]*?---\s*\n/, '');
-    // 跳过代码块
-    const withoutCodeBlocks = body.replace(/```[\s\S]*?```/g, '');
-
-    let match: RegExpExecArray | null;
-    while ((match = WIKI_LINK_RE.exec(withoutCodeBlocks)) !== null) {
-      links.add(match[1] ?? '');
-    }
-
-    return [...links];
-  }
-
-  /** 从 localStorage 加载索引 */
-  private loadFromStorage(): void {
-    try {
-      const raw = localStorage.getItem(INDEX_STORAGE_KEY);
-      if (raw) {
-        this.index = JSON.parse(raw) as SearchIndex;
-      }
-    } catch {
-      this.index = null;
-    }
-  }
-
-  /** 持久化索引到 localStorage */
-  private saveToStorage(): void {
-    try {
-      localStorage.setItem(INDEX_STORAGE_KEY, JSON.stringify(this.index));
-    } catch {
-      // Storage full — silent fail
-    }
+  getRecentNotes(limit = 20) {
+    return this.recentNotesList.slice(0, limit);
   }
 }

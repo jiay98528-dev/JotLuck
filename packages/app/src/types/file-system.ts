@@ -21,6 +21,7 @@ export interface FileStat {
   mtime: number;
   isDirectory: boolean;
   isFile: boolean;
+  path?: string;
 }
 
 /** 文件系统变更事件 */
@@ -33,6 +34,7 @@ export interface FileChangeEvent {
 /** 打开笔记本后返回的句柄 */
 export interface NotebookHandle {
   rootPath: string;
+  name?: string;
   rootHandle?: FileSystemDirectoryHandle;
 }
 
@@ -59,7 +61,10 @@ export interface IFileSystemService {
   createDirectory(path: string): Promise<void>;
   listDirectory(path: string): Promise<DirEntry[]>;
   statFile(path: string): Promise<FileStat>;
-  watch(rootPath: string, callback: (event: FileChangeEvent) => void): Promise<UnwatchFn>;
+  watch(
+    rootPath: string,
+    callback: (event: FileChangeEvent | FileChangeEvent[]) => void,
+  ): Promise<UnwatchFn>;
   unwatchAll(): Promise<void>;
   resolvePath(root: string, ...segments: string[]): string;
   isPathInNotebook(root: string, path: string): Promise<boolean>;

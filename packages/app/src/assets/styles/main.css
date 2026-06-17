@@ -1,15 +1,17 @@
 /* ===== MarkLuck Main Stylesheet =====
- * Paper theme — single theme system
+ * Winged Editor — Open Book Metaphor
  *
  * Import order:
- * 1. tokens — shared design tokens (typography, spacing, z-index, motion)
- * 2. paper — color theme (light warm paper + dark cardstock)
- * 3. accessibility — focus ring, WCAG, reduced motion
+ * 1. tokens    — shared design tokens
+ * 2. paper     — color theme (light warm + dark cardstock)
+ * 3. accessibility — focus ring, reduced motion
  */
 
 @import './tokens.css';
 @import './themes/paper.css';
 @import './accessibility.css';
+@import './dialog.css';
+@import './editor.css';
 
 /* ===== Global Reset ===== */
 *,
@@ -23,7 +25,7 @@
 html {
   font-family: var(--ff-body);
   font-size: var(--text-base);
-  line-height: var(--lh-reading);
+  line-height: var(--lh-body);
   color: var(--ink-primary);
   background: var(--paper-bg);
   -webkit-font-smoothing: antialiased;
@@ -35,9 +37,10 @@ body {
   min-height: 100vh;
   background: var(--paper-bg);
   color: var(--ink-primary);
+  overflow: hidden; /* AppShell manages scrolling */
 }
 
-/* ===== Scrollbar — Native, minimal styling ===== */
+/* ===== Scrollbar — Native, Minimal ===== */
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
@@ -62,218 +65,186 @@ body {
   color: inherit;
 }
 
-/* ===== Focus Ring — keyboard only ===== */
-:focus {
-  outline: none;
+/* ===== Wing Dividers ===== */
+.wing-divider {
+  width: var(--border-thin);
+  background: var(--rule-wing);
+  flex-shrink: 0;
 }
 
-:focus-visible {
-  outline: var(--focus-ring-width) solid var(--accent);
-  outline-offset: var(--focus-ring-offset);
-  border-radius: var(--radius);
-}
-
-/* ===== Paper Layout: Hairline Dividers =====
- * Three-panel layout separated by 1px hairlines.
- * No background color differences between zones.
- * Structure through spacing and type, not colored panels.
- */
-.app-layout__left {
-  border-right: 1px solid var(--rule);
-}
-
-.app-layout__right {
-  border-left: 1px solid var(--rule);
-}
-
-/* ===== Dark Mode: Dialog + Form Overrides ===== */
-[data-color-scheme='dark'] {
-  /* Secondary buttons */
-  .btn--secondary,
-  button.btn--secondary {
-    background: var(--paper-surface);
-    color: var(--ink-primary);
-    border-color: var(--rule);
-  }
-  .btn--secondary:hover {
-    background: var(--paper-raised);
-    color: var(--ink-primary);
-    border-color: var(--rule-strong);
-  }
-
-  /* Primary buttons */
-  .btn--primary,
-  button.btn--primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: oklch(0.995 0 0);
-  }
-  .btn--primary:hover {
-    background: var(--accent-hover);
-  }
-  .btn--primary:disabled {
-    opacity: 0.45;
-  }
-
-  /* Dialog chrome */
-  .dialog-header {
-    border-bottom-color: var(--rule);
-    background: var(--paper-raised);
-  }
-  .dialog-body {
-    background: var(--paper-surface);
-    color: var(--ink-primary);
-  }
-  .dialog-footer {
-    border-top-color: var(--rule);
-    background: var(--paper-surface);
-  }
-  .dialog-close {
-    color: var(--ink-muted);
-  }
-  .dialog-close:hover {
-    background: var(--surface-hover);
-    color: var(--ink-primary);
-  }
-
-  /* Section labels */
-  .section-label {
-    color: var(--ink-secondary);
-  }
-
-  /* Format / channel selection cards */
-  .format-card,
-  .format-option,
-  .channel-option,
-  .template-card {
-    background: var(--paper-surface);
-    border-color: var(--rule);
-    color: var(--ink-primary);
-  }
-  .format-card:hover,
-  .format-option:hover,
-  .channel-option:hover,
-  .template-card:hover {
-    border-color: var(--accent);
-    background: var(--accent-soft);
-  }
-
-  .format-card--selected,
-  .format-option--selected,
-  .template-card--selected {
-    border-color: var(--accent);
-    background: var(--accent-soft);
-    color: var(--ink-primary);
-  }
-
-  /* Checkboxes */
-  .option-item {
-    color: var(--ink-secondary);
-  }
-  .option-hint {
-    color: var(--ink-muted);
-  }
-  .option-hint code {
-    background: var(--code-bg);
-    color: var(--code-text);
-  }
-  .option-hint em {
-    color: var(--ink-muted);
-  }
-
-  /* Template preview */
-  .preview-box {
-    background: var(--code-block-bg);
-    border-color: var(--rule);
-    color: var(--ink-primary);
-  }
-
-  /* Progress bar */
-  .progress-bar {
-    background: var(--rule);
-  }
-
-  /* Status messages */
-  .export-success {
-    color: var(--signal-success);
-  }
-  .export-error {
-    background: var(--signal-error-soft);
-    color: var(--signal-error);
-  }
-  .share-result {
-    background: var(--signal-success-soft);
-    color: var(--signal-success);
-  }
-  .share-result--error {
-    background: var(--signal-error-soft);
-    color: var(--signal-error);
-  }
-  .share-status {
-    background: var(--accent-soft);
-    color: var(--accent);
-  }
-
-  /* Editor toolbar */
-  .editor-toolbar {
-    background: var(--paper-surface);
-    border-bottom-color: var(--rule);
-  }
-  .editor-file-name {
-    color: var(--ink-secondary);
-  }
-
-  /* Action buttons */
-  .btn-action {
-    background: var(--paper-surface);
-    color: var(--ink-secondary);
-    border-color: var(--rule);
-  }
-  .btn-action:hover {
-    background: var(--paper-raised);
-    color: var(--ink-primary);
-  }
-
-  /* New note button */
-  .btn-new-note {
-    background: var(--paper-surface);
-    color: var(--ink-secondary);
-    border-color: var(--rule);
-  }
-  .btn-new-note:hover {
-    background: var(--paper-raised);
-    color: var(--ink-primary);
-  }
-
-  /* Progress spinner */
-  .progress-spinner {
-    border-color: var(--rule);
-    border-top-color: var(--accent);
-  }
-  .progress-text {
-    color: var(--ink-secondary);
-  }
+/* ===== Utility: sr-only ===== */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
 
 /* ===== RTL / Special Character Support ===== */
-.markdown-editor :deep(.cm-content),
-.markdown-body {
+.markdown-body,
+.cm-editor .cm-content {
   unicode-bidi: plaintext;
 }
 
-/* ===== Markdown Content ===== */
+/* ===== Markdown Rendered Content ===== */
 .markdown-body {
-  word-break: break-word;
   overflow-wrap: break-word;
+  max-width: var(--editor-max-width);
+  margin: 0 auto;
+  padding-top: var(--editor-top-pad);
+  padding-bottom: var(--space-96);
+  font-size: var(--text-base);
+  line-height: var(--lh-body);
+  color: var(--ink-primary);
 }
 
-/* ===== Reduced Motion ===== */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  line-height: var(--lh-heading);
+  margin: 1.5em 0 0.5em;
+  font-weight: var(--fw-bold);
+  color: var(--ink-primary);
+}
+
+.markdown-body h1 {
+  font-size: 2em;
+  border-bottom: var(--border-thin) solid var(--rule);
+  padding-bottom: 0.3em;
+}
+.markdown-body h2 {
+  font-size: 1.5em;
+  border-bottom: var(--border-thin) solid var(--rule);
+  padding-bottom: 0.25em;
+}
+.markdown-body h3 {
+  font-size: 1.25em;
+}
+.markdown-body h4 {
+  font-size: 1.1em;
+}
+.markdown-body h5 {
+  font-size: 1em;
+}
+.markdown-body h6 {
+  font-size: 0.9em;
+  color: var(--ink-secondary);
+}
+
+.markdown-body p {
+  margin: 0.6em 0;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 2em;
+  margin: 0.5em 0;
+}
+.markdown-body li {
+  margin: 0.25em 0;
+}
+
+.markdown-body blockquote {
+  margin: 0.8em 0;
+  padding: 0.5em 1em;
+  border-left: 3px solid var(--accent);
+  color: var(--ink-secondary);
+}
+
+.markdown-body code {
+  background: var(--code-bg);
+  color: var(--code-text);
+  padding: 2px 6px;
+  border-radius: var(--radius);
+  font-family: var(--ff-mono);
+  font-size: 0.9em;
+}
+
+.markdown-body pre {
+  background: var(--code-block-bg);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  padding: var(--space-16);
+  overflow-x: auto;
+  margin: 0.8em 0;
+}
+
+.markdown-body pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.9em;
+  font-family: var(--ff-mono);
+  line-height: var(--lh-code);
+}
+
+.markdown-body table {
+  border-collapse: collapse;
+  margin: 0.8em 0;
+  width: 100%;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: var(--border-thin) solid var(--rule);
+  padding: var(--space-8) var(--space-12);
+  text-align: left;
+}
+
+.markdown-body th {
+  background: var(--table-stripe);
+  font-weight: var(--fw-bold);
+}
+
+.markdown-body tr:nth-child(even) {
+  background: var(--table-stripe);
+}
+
+.markdown-body hr {
+  border: none;
+  border-top: var(--border-medium) solid var(--rule);
+  margin: 1.5em 0;
+}
+
+.markdown-body a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+.markdown-body a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius);
+}
+
+/* NOTE: 类名 "wikilink" 与 marked-extensions.ts 渲染输出对齐 */
+.markdown-body .wikilink {
+  color: var(--link);
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+
+.markdown-body .wikilink--dead {
+  color: var(--link-broken);
+  text-decoration: underline wavy;
+}
+
+.markdown-body .inline-tag {
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 1px 6px;
+  border-radius: var(--radius);
+  font-size: 0.85em;
 }

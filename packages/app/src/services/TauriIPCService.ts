@@ -1,13 +1,15 @@
 /**
- * TauriIPCService — Tauri IPC 文件系统实现
+ * TauriIPCService — Tauri 桌面端文件系统实现
  *
- * M6-08: 实现 IFileSystemService，通过 Tauri IPC 桥接 Rust 后端。
- * 替代 MockFSService 用于桌面/移动端真实文件系统操作。
+ * 通过 Tauri IPC 调用 Rust 后端，访问真实文件系统。
+ * 实现 IFileSystemService 接口，与 MockFSService 可互换。
  *
- * @module TauriIPCService
- * @see milestones.md M6-08
+ * @see IFileSystemService — 接口定义
+ * @see MockFSService — Web/E2E 测试的虚拟实现
+ * @see fs_ops.rs — Rust 后端文件操作命令
  */
-
+import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
 import type {
   IFileSystemService,
   DirEntry,
@@ -15,217 +17,163 @@ import type {
   FileChangeEvent,
   NotebookHandle,
   UnwatchFn,
-  SearchResult,
 } from '@/types';
 
-/** IPC 返回的目录条目 */
-interface IpcDirEntry {
+// ── Rust DirEntry wire format ──
+
+interface RustDirEntry {
   name: string;
   path: string;
   is_dir: boolean;
   size: number;
-  modified_at: number;
+  modified_at: number; // Unix epoch seconds
 }
 
-/** IPC 文件变更事件 */
-interface IpcFileChangeEvent {
-  kind: string;
-  path: string;
-  old_path?: string;
-}
+// ── Recent notebooks cache key ──
 
-/** IPC 搜索结果 */
-interface IpcSearchResult {
-  note_path: string;
-  note_title: string;
-  snippet: string;
-  score: number;
-}
+const RECENT_KEY = 'markluck-recent-notebooks';
+
+// ── TauriIPCService ──
 
 export class TauriIPCService implements IFileSystemService {
-  private currentRoot: string | null = null;
-  private unlisteners: Array<() => void> = [];
+  // ====================================================================
+  // Notebook Management
+  // ====================================================================
 
-  // --- File Operations ---
+  async openNotebook(): Promise<NotebookHandle> {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: '选择笔记本文件夹',
+    });
+    if (!selected) throw new Error('用户取消了文件夹选择');
+    const root = await invoke<string>('open_notebook', { path: selected });
+    this.saveRecent(root);
+    return { rootPath: root };
+  }
+
+  async getRecentNotebooks(): Promise<string[]> {
+    try {
+      const raw = localStorage.getItem(RECENT_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private saveRecent(root: string): void {
+    try {
+      const raw = localStorage.getItem(RECENT_KEY);
+      const list: string[] = raw ? JSON.parse(raw) : [];
+      const filtered = list.filter((p) => p !== root);
+      filtered.unshift(root);
+      localStorage.setItem(RECENT_KEY, JSON.stringify(filtered.slice(0, 10)));
+    } catch {
+      /* non-critical */
+    }
+  }
+
+  // ====================================================================
+  // File Operations
+  // ====================================================================
 
   async readFile(path: string): Promise<string> {
-    const { invoke } = await import('@tauri-apps/api/core');
     return invoke<string>('read_file', { relativePath: path });
   }
 
   async writeFile(path: string, content: string): Promise<void> {
-    const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('write_file', { relativePath: path, content });
+    return invoke('write_file', { relativePath: path, content });
   }
 
-  // --- 二进制文件操作 (P2-1: 图片上传支持) ---
-
   async writeBinary(path: string, base64: string): Promise<void> {
-    // Tauri 端：将 base64 数据写入文件
-    const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('write_file', { relativePath: path, content: base64 });
+    return this.writeFile(path, base64);
   }
 
   async readBinary(path: string): Promise<string> {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<string>('read_file', { relativePath: path });
+    return this.readFile(path);
   }
 
   isBinaryPath(path: string): boolean {
-    return /\.(png|jpe?g|gif|svg|webp|ico|bmp|pdf)(\?.*)?$/i.test(path);
+    const ext = path.split('.').pop()?.toLowerCase();
+    return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'pdf', 'docx', 'xlsx'].includes(
+      ext ?? '',
+    );
   }
 
   async deleteFile(path: string): Promise<void> {
-    const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('delete_file', { relativePath: path });
+    return invoke('delete_file', { relativePath: path });
   }
 
   async renameFile(oldPath: string, newPath: string): Promise<void> {
-    const content = await this.readFile(oldPath);
-    await this.writeFile(newPath, content);
-    await this.deleteFile(oldPath);
+    return invoke('rename_file', {
+      oldRelativePath: oldPath,
+      newRelativePath: newPath,
+    });
   }
 
-  async createDirectory(_path: string): Promise<void> {
-    // Parent directories are auto-created by Rust write_file
+  async createDirectory(path: string): Promise<void> {
+    return invoke('create_directory', { relativePath: path });
   }
+
+  // ====================================================================
+  // Directory Listing
+  // ====================================================================
 
   async listDirectory(path: string): Promise<DirEntry[]> {
-    const { invoke } = await import('@tauri-apps/api/core');
-    const entries = await invoke<IpcDirEntry[]>('list_directory', { relativePath: path });
+    const entries = await invoke<RustDirEntry[]>('list_directory', { relativePath: path });
     return entries.map((e) => ({
       name: e.name,
       path: e.path,
       isDirectory: e.is_dir,
       isFile: !e.is_dir,
       size: e.size,
-      mtime: e.modified_at,
+      mtime: e.modified_at * 1000, // seconds → milliseconds
+      mimeType: this.detectMimeType(e.name),
     }));
   }
 
+  private detectMimeType(fileName: string): string | undefined {
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    if (ext === 'txt') return 'text/plain';
+    return undefined;
+  }
+
+  // ====================================================================
+  // Metadata
+  // ====================================================================
+
   async statFile(path: string): Promise<FileStat> {
-    const { invoke } = await import('@tauri-apps/api/core');
-    const meta = await invoke<IpcDirEntry>('get_file_meta', { relativePath: path });
+    const meta = await invoke<RustDirEntry>('get_file_meta', { relativePath: path });
     return {
       size: meta.size,
-      mtime: meta.modified_at,
-      isFile: !meta.is_dir,
+      mtime: meta.modified_at * 1000,
       isDirectory: meta.is_dir,
+      isFile: !meta.is_dir,
     };
   }
 
-  // --- File Watching (M6-05) ---
+  // ====================================================================
+  // File Watching (stub — Tauri event system adaptation needed)
+  // ====================================================================
 
-  async watch(_rootPath: string, callback: (event: FileChangeEvent) => void): Promise<UnwatchFn> {
-    const { invoke } = await import('@tauri-apps/api/core');
-    const { listen } = await import('@tauri-apps/api/event');
-
-    if (this.currentRoot) {
-      await invoke('start_file_watcher', { rootPath: this.currentRoot });
-    }
-
-    const unlisten = await listen<IpcFileChangeEvent>('file-change', (event) => {
-      const typeMap: Record<string, 'created' | 'modified' | 'deleted' | 'renamed'> = {
-        create: 'created',
-        modify: 'modified',
-        remove: 'deleted',
-        rename: 'renamed',
-      };
-      callback({
-        type: typeMap[event.payload.kind] ?? 'modified',
-        path: event.payload.path,
-        oldPath: event.payload.old_path ?? undefined,
-      });
-    });
-
-    this.unlisteners.push(unlisten);
-
-    return () => {
-      unlisten();
-      this.unlisteners = this.unlisteners.filter((u) => u !== unlisten);
-    };
+  watch(_rootPath: string, _callback: (event: FileChangeEvent) => void): Promise<UnwatchFn> {
+    return Promise.resolve(() => {});
   }
 
   async unwatchAll(): Promise<void> {
-    for (const unlisten of this.unlisteners) {
-      unlisten();
-    }
-    this.unlisteners = [];
+    /* no-op */
   }
 
-  // --- Path Utilities ---
+  // ====================================================================
+  // Path Utilities
+  // ====================================================================
 
   resolvePath(root: string, ...segments: string[]): string {
-    const joined = segments.join('/').replace(/\\/g, '/');
-    return root.replace(/\/$/, '') + '/' + joined.replace(/^\//, '');
+    const joined = segments.join('/').replace(/\/+/g, '/');
+    return root.endsWith('/') ? root + joined : root + '/' + joined;
   }
 
-  async isPathInNotebook(_root: string, path: string): Promise<boolean> {
-    if (!this.currentRoot) return false;
-    const normalized = path.replace(/\\/g, '/');
-    const rootNormalized = this.currentRoot.replace(/\\/g, '/');
-    return normalized.startsWith(rootNormalized);
-  }
-
-  // --- Notebook Management ---
-
-  async openNotebook(): Promise<NotebookHandle> {
-    const { open } = await import('@tauri-apps/plugin-dialog');
-    const selected = await open({ directory: true, multiple: false, title: '选择笔记本文件夹' });
-    if (!selected || typeof selected !== 'string') {
-      throw new Error('未选择文件夹');
-    }
-
-    const { invoke } = await import('@tauri-apps/api/core');
-    const rootPath = await invoke<string>('open_notebook', { path: selected });
-    this.currentRoot = rootPath;
-
-    return { rootPath };
-  }
-
-  async getRecentNotebooks(): Promise<string[]> {
-    try {
-      const stored = localStorage.getItem('markluck-recent-notebooks');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  }
-
-  // --- Search (M6-04) ---
-
-  async buildIndex(): Promise<number> {
-    if (!this.currentRoot) return 0;
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<number>('build_index', { rootPath: this.currentRoot });
-  }
-
-  async searchIndex(query: string): Promise<SearchResult[]> {
-    const { invoke } = await import('@tauri-apps/api/core');
-    const results = await invoke<IpcSearchResult[]>('search_index', { query });
-    return results.map((r) => ({
-      notePath: r.note_path,
-      noteTitle: r.note_title,
-      matches: [],
-      score: r.score,
-    }));
-  }
-
-  async updateIndexDocument(filePath: string): Promise<void> {
-    if (!this.currentRoot) return;
-    const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('update_index_document', { filePath, rootPath: this.currentRoot });
-  }
-
-  // --- Template (M6-06) ---
-
-  async renderTemplate(template: string): Promise<string> {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<string>('render_template', { template });
-  }
-
-  async getBuiltinTemplate(type: string): Promise<string> {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<string>('get_builtin_template', { templateType: type });
+  async isPathInNotebook(root: string, path: string): Promise<boolean> {
+    return path.startsWith(root);
   }
 }

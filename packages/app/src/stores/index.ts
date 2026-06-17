@@ -1,83 +1,63 @@
 /**
- * useIndexStore — 索引状态管理
+ * useIndexStore — 索引与元数据状态管理
  *
- * M2: 管理笔记本索引数据、标签聚合、Wiki-link 图、最近笔记。
+ * 管理全文索引、标签聚合、最近笔记、反向链接图。
  *
- * @module useIndexStore
- * @see milestones.md M2-01~07, M2-12~16
+ * @see migration-map.md §3
  */
-
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
+import type { IFileSystemService } from '@/types';
 import { IndexService } from '@/services/IndexService';
-import { SearchEngine } from '@/services/SearchEngine';
-import type { IFileSystemService, SearchIndex } from '@/types';
+import type { SearchEngine } from '@/services/SearchEngine';
+
+export type IndexStatus = 'idle' | 'building' | 'ready' | 'error';
 
 export const useIndexStore = defineStore('index', () => {
-  const status = ref<'idle' | 'building' | 'ready' | 'error'>('idle');
+  const status = ref<IndexStatus>('idle');
   const error = ref<string | null>(null);
-  const index = ref<SearchIndex | null>(null);
-  const tags = ref<Array<{ name: string; count: number }>>([]);
-  const recentNotes = ref<Array<{ path: string; title: string; lastOpenedAt: number }>>([]);
+  const documentCount = ref(0);
 
   let indexService: IndexService | null = null;
-  let searchEngine: SearchEngine | null = null;
 
-  const documentCount = computed(() => Object.keys(index.value?.documents ?? {}).length);
+  const tags = ref<Array<{ name: string; count: number }>>([]);
+  const recentNotes = ref<Array<{ path: string; title: string; lastOpenedAt: number }>>([]);
   const isReady = computed(() => status.value === 'ready');
 
   async function initialize(fs: IFileSystemService): Promise<void> {
-    if (status.value === 'building') return;
+    if (status.value === 'building' || status.value === 'ready') return;
     status.value = 'building';
     error.value = null;
 
     try {
       indexService = new IndexService(fs);
-      searchEngine = new SearchEngine();
-
-      const built = await indexService.buildFullIndex();
-      index.value = built;
+      const idx = await indexService.buildFullIndex();
+      documentCount.value = Object.keys(idx.documents).length;
       tags.value = indexService.getAllTags();
       recentNotes.value = indexService.getRecentNotes(20);
-
-      searchEngine.buildIndex(built.documents);
-      await searchEngine.preloadContent(built.documents, (path) => fs.readFile(path));
-
       status.value = 'ready';
     } catch (e) {
-      status.value = 'error';
       error.value = e instanceof Error ? e.message : '索引构建失败';
+      status.value = 'error';
     }
   }
 
-  async function refreshDocument(fs: IFileSystemService, path: string): Promise<void> {
-    if (!indexService || !searchEngine) return;
+  async function refreshDocument(_fs: IFileSystemService, path: string): Promise<void> {
+    if (!indexService) return;
     try {
       await indexService.updateDocument(path);
-      const updated = indexService.getIndex();
-      if (updated) {
-        index.value = updated;
-        tags.value = indexService.getAllTags();
-        recentNotes.value = indexService.getRecentNotes(20);
-        const content = await fs.readFile(path);
-        const doc = updated.documents[path];
-        if (doc) searchEngine.updateDocument(path, doc, content);
-      }
+      tags.value = indexService.getAllTags();
+      recentNotes.value = indexService.getRecentNotes(20);
     } catch {
-      /* silent */
+      // non-fatal
     }
   }
 
   function removeDocument(path: string): void {
-    if (!indexService || !searchEngine) return;
+    if (!indexService) return;
     indexService.removeDocument(path);
-    searchEngine.removeDocument(path);
-    const current = indexService.getIndex();
-    if (current) {
-      index.value = current;
-      tags.value = indexService.getAllTags();
-      recentNotes.value = indexService.getRecentNotes(20);
-    }
+    tags.value = indexService.getAllTags();
+    recentNotes.value = indexService.getRecentNotes(20);
   }
 
   function getBacklinks(notePath: string) {
@@ -89,20 +69,25 @@ export const useIndexStore = defineStore('index', () => {
   }
 
   function getEngine(): SearchEngine | null {
-    return searchEngine;
+    return indexService?.getEngine() ?? null;
+  }
+
+  /** 暴露 indexService 引用供外部使用 (如 MarkdownPredictor 结构化补全) */
+  function getIndexService(): IndexService | null {
+    return indexService;
   }
 
   return {
     status,
     error,
-    index,
+    documentCount,
     tags,
     recentNotes,
-    documentCount,
     isReady,
     initialize,
     refreshDocument,
     removeDocument,
+    getIndexService,
     getBacklinks,
     getDeadLinks,
     getEngine,

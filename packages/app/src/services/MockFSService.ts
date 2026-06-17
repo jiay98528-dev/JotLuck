@@ -1,13 +1,12 @@
 /**
- * MockFSService — 内存虚拟文件系统
+ * MockFSService — 内存虚拟文件系统实现
  *
- * M1-16: 模拟文件系统操作，用于前端先行开发阶段。
- * 在 Tauri 接入前（M6），所有文件操作通过此 Mock 实现。
+ * 模拟文件读写延迟 (50ms) 以暴露竞态条件。
+ * 数据持久化到 localStorage。
+ * 内置示例笔记本数据。
  *
- * @module MockFSService
- * @see TAD.md §9.4
+ * @see migration-map.md §4 — implements IFileSystemService
  */
-
 import type {
   IFileSystemService,
   DirEntry,
@@ -17,397 +16,348 @@ import type {
   UnwatchFn,
 } from '@/types';
 
-/** 虚拟文件节点 */
-interface VirtualNode {
-  type: 'file' | 'directory';
-  content?: string;
-  /** base64-encoded binary data (images, etc.) */
-  base64?: string;
-  /** MIME type for binary files */
-  mimeType?: string;
+const STORAGE_KEY = 'markluck-mockfs';
+const STORAGE_VERSION = 2;
+const DEFAULT_DELAY = 50;
+
+interface StoredFile {
+  content: string;
   mtime: number;
   size: number;
 }
 
-export class MockFSService implements IFileSystemService {
-  /** 内存文件树：路径 → 节点 */
-  private tree = new Map<string, VirtualNode>();
-  /** 模拟延迟（ms），暴露竞态条件 */
-  private delay: number;
+interface MockFSData {
+  version: number;
+  files: Record<string, StoredFile>;
+  dirs: Record<string, string[]>;
+}
 
-  private storageKey = 'markluck-mock-fs';
-  /** 数据版本 — 递增以触发旧缓存迁移 */
-  private static readonly DATA_VERSION = 2;
+function delay(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
-  constructor(delay = 50) {
-    this.delay = delay;
-    // 尝试从 localStorage 恢复（带版本检查）
-    if (!this.loadFromStorage()) {
-      this.initSampleNotebook();
-      this.saveToStorage();
-    }
-  }
-
-  /** 从 localStorage 恢复文件树（带版本检查） */
-  private loadFromStorage(): boolean {
-    try {
-      const raw = localStorage.getItem(this.storageKey);
-      if (!raw) return false;
-      const data = JSON.parse(raw) as Record<
-        string,
-        | {
-            type: 'file' | 'directory';
-            content?: string;
-            base64?: string;
-            mimeType?: string;
-            mtime: number;
-            size: number;
-          }
-        | number
-      >;
-
-      // 版本检查：旧版本数据清空，重新初始化
-      if (data['__version__'] !== MockFSService.DATA_VERSION) {
-        localStorage.removeItem(this.storageKey);
-        return false;
-      }
-      delete data['__version__'];
-
-      for (const [path, node] of Object.entries(data)) {
-        if (typeof node === 'object' && node.type) {
-          this.tree.set(path, { ...node } as VirtualNode);
-        }
-      }
-      // Only count .md files, not directories
-      const fileCount = [...this.tree.values()].filter((n) => n.type === 'file').length;
-      return fileCount > 0;
-    } catch {
-      return false;
-    }
-  }
-
-  /** 持久化文件树到 localStorage */
-  private saveToStorage(): void {
-    try {
-      const data: Record<string, unknown> = {};
-      for (const [path, node] of this.tree) {
-        data[path] = {
-          type: node.type,
-          content: node.content,
-          base64: node.base64,
-          mimeType: node.mimeType,
-          mtime: node.mtime,
-          size: node.size,
-        };
-      }
-      data['__version__'] = MockFSService.DATA_VERSION;
-      localStorage.setItem(this.storageKey, JSON.stringify(data));
-    } catch {
-      // Storage full or unavailable — silent fail
-    }
-  }
-
-  private async wait(): Promise<void> {
-    if (this.delay > 0) {
-      await new Promise((resolve) => setTimeout(resolve, this.delay));
-    }
-  }
-
-  /** 初始化示例笔记本结构（多级目录 + 多种文件类型） */
-  private initSampleNotebook(): void {
-    const now = Date.now();
-
-    // --- 根目录 ---
-    this.tree.set('/', { type: 'directory', mtime: now, size: 0 });
-
-    // --- 欢迎笔记 ---
-    const welcome = `---
-title: 欢迎使用 MarkLuck
-tags: [markluck, welcome]
-created: 2026-06-03
+function createSampleNotebook(): MockFSData {
+  const now = Date.now();
+  // Use a non-constant expression to prevent esbuild constant-folding the backtick
+  // (which would inline it into the template literal and terminate it early)
+  const bt = String.fromCharCode(93 + 3); // backtick = char code 96
+  const bt3 = bt + bt + bt; // triple backtick for code fences
+  return {
+    version: STORAGE_VERSION,
+    files: {
+      '/快速入门.md': {
+        content: `---
+title: 快速入门
+tags:
+  - 入门
+  - markdown
+created: 2026-06-01
 ---
 
 # 欢迎使用 MarkLuck
 
-这是一条示例笔记。你可以自由编辑或删除它。
+MarkLuck 是一个轻量化的 Markdown 笔记工具。
 
-## 特性
+## 基本语法
 
-- **纯文本** — 每条笔记就是一个 \`.md\` 文件
-- **Wiki-link** — 试试 [[快速入门]]
-- **标签** — 使用 #tag 组织你的笔记
-- **链接** — 访问 [MarkLuck 官网](https://markluck.dev) 了解更多
+- **粗体文字** 使用 ${bt}**文字**${bt}
+- *斜体文字* 使用 ${bt}*文字*${bt}
+- ${bt}行内代码${bt} 使用反引号
 
-## 快速开始
+## 代码块
 
-1. 在左侧文件树浏览笔记
-2. 点击笔记开始编辑
-3. 按 \`Ctrl+S\` 保存
-`;
-    this.tree.set('/欢迎.md', { type: 'file', content: welcome, mtime: now, size: welcome.length });
+${bt3}typescript
+function hello(): string {
+  return "Hello, MarkLuck!";
+}
+${bt3}
 
-    // --- 快速入门 ---
-    const quickstart = `# 快速入门
+## 链接
 
-这是一个 #tutorial 笔记。
+- Wiki-link: [[项目规划]]
+- 外部链接: [MarkLuck GitHub](https://github.com)
 
-## 第一步
+## 标签
 
-打开文件夹开始记笔记。
+在笔记中使用 #标签 来分类，例如 #前端 #设计。
 
-## 第二步
+> 这是一段引用文字。MarkLuck 让你的笔记管理变得简单。
+`,
+        mtime: now,
+        size: 0,
+      },
+      '/项目规划.md': {
+        content: `---
+title: 项目规划
+tags:
+  - 规划
+  - 项目管理
+created: 2026-06-02
+---
 
-使用 [[Wiki-link]] 连接笔记。
+# 项目规划
 
-## 参考链接
+## 里程碑
 
-- Markdown 语法: https://www.markdownguide.org
-- 项目仓库: https://github.com/markluck/markluck
-`;
-    this.tree.set('/快速入门.md', {
-      type: 'file',
-      content: quickstart,
-      mtime: now,
-      size: quickstart.length,
-    });
+- [x] M0: 项目脚手架
+- [x] M1: 核心渲染与编辑
+- [ ] M2: 索引与搜索
+- [ ] M3: 导出与分享
 
-    // --- 子目录: work/ ---
-    this.tree.set('/work', { type: 'directory', mtime: now, size: 0 });
+## 设计方向
 
-    const meeting = `# 会议纪要
+参考 [[设计笔记]] 了解更多。
 
-**日期**: {{date}}
-**参与者**: 张三, 李四
+## 技术栈
 
-## 议题
+| 层级 | 技术 |
+|------|------|
+| 前端 | Vue 3 + Vite |
+| 桌面 | Tauri v2 |
+| 渲染 | marked + DOMPurify |
+`,
+        mtime: now - 3600000,
+        size: 0,
+      },
+      '/设计笔记.md': {
+        content: `---
+title: 设计笔记
+tags:
+  - 设计
+  - UI
+  - UX
+created: 2026-06-03
+---
 
-1. 项目进度回顾
-2. 下一阶段计划
-3. ~~旧方案讨论~~ 新方案确定
+# 设计笔记
 
-## 决议
+## 设计哲学
 
-- [x] 完成 M1 核心渲染
-- [ ] 完成 M2 索引搜索
-- [ ] 发布 v0.1.0
-`;
-    this.tree.set('/work/会议纪要.md', {
-      type: 'file',
-      content: meeting,
-      mtime: now,
-      size: meeting.length,
-    });
+**功能即装饰 (Function as Ornament)**
 
-    const report = `# 周报 — {{date}}
+拒绝"为了让界面好看而加装饰"。
 
-## 本周完成
+## 纸张隐喻
 
-- 实现了 **Live Preview** 块级渲染
-- 修复了 #bug 搜索正则表达式的 BUG
-- 优化了文件树 [[快速入门|导航体验]]
+新的设计系统采用纸张隐喻：
+- 暖纸背景
+- 墨色文字
+- 单一冷蓝强调色
 
-## 下周计划
+## 参考
 
-1. 实现图片上传功能
-2. 完善文件管理器
-3. 主题切换增强
+- [[快速入门]] — 基础使用
+- [[项目规划]] — 开发计划
 
-> 注：本周代码提交 12 次，测试覆盖率 85%
-`;
-    this.tree.set('/work/周报.md', {
-      type: 'file',
-      content: report,
-      mtime: now,
-      size: report.length,
-    });
+## 标签索引
 
-    // --- 子目录: assets/ ---
-    this.tree.set('/assets', { type: 'directory', mtime: now, size: 0 });
+#设计 #前端 #UI #UX #笔记工具
+`,
+        mtime: now - 7200000,
+        size: 0,
+      },
+      '/子文件夹/笔记A.md': {
+        content: `# 子文件夹笔记\n\n这是一条放在子文件夹里的笔记。\n\n链接回 [[快速入门]]。\n`,
+        mtime: now - 10800000,
+        size: 0,
+      },
+    },
+    dirs: {
+      '/': ['快速入门.md', '项目规划.md', '设计笔记.md', '子文件夹'],
+      '/子文件夹': ['笔记A.md'],
+    },
+  };
+}
 
-    // --- 文本文件示例 ---
-    this.tree.set('/README.txt', {
-      type: 'file',
-      content: 'This is a sample README file.\n\nMarkLuck stores all notes as plain text files.',
-      mtime: now,
-      size: 80,
-    });
+export class MockFSService implements IFileSystemService {
+  private data: MockFSData;
+  private latency: number;
+
+  constructor(latencyMs = DEFAULT_DELAY) {
+    this.latency = latencyMs;
+    this.data = this.load();
   }
 
-  // --- 基础文件操作 ---
+  private load(): MockFSData {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as MockFSData;
+        if (parsed.version === STORAGE_VERSION) return parsed;
+      }
+    } catch {
+      // corrupted, fall through
+    }
+    const sample = createSampleNotebook();
+    // recalculate sizes
+    for (const [, file] of Object.entries(sample.files)) {
+      file.size = new TextEncoder().encode(file.content).length;
+    }
+    this.persist(sample);
+    return sample;
+  }
+
+  private persist(data?: MockFSData): void {
+    if (data) this.data = data;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
+  }
+
+  private parentDir(path: string): string {
+    const segs = path.split('/').filter(Boolean);
+    segs.pop();
+    return '/' + segs.join('/');
+  }
+
+  // === IFileSystemService Implementation ===
 
   async readFile(path: string): Promise<string> {
-    await this.wait();
-    const node = this.tree.get(path);
-    if (!node || node.type !== 'file') {
-      throw new Error(`文件不存在: ${path}`);
-    }
-    return node.content ?? '';
+    await delay(this.latency);
+    const file = this.data.files[path];
+    if (!file) throw new Error(`文件不存在: ${path}`);
+    return file.content;
   }
 
   async writeFile(path: string, content: string): Promise<void> {
-    await this.wait();
-    this.tree.set(path, {
-      type: 'file',
-      content,
-      mtime: Date.now(),
-      size: content.length,
-    });
-    this.saveToStorage();
+    await delay(this.latency);
+    const now = Date.now();
+    const size = new TextEncoder().encode(content).length;
+    this.data.files[path] = { content, mtime: now, size };
+
+    // Ensure directory entry exists
+    const parent = this.parentDir(path);
+    if (!this.data.dirs[parent]) {
+      this.data.dirs[parent] = [];
+    }
+    const name = path.split('/').pop()!;
+    if (!this.data.dirs[parent].includes(name)) {
+      this.data.dirs[parent].push(name);
+    }
+    this.persist();
   }
 
-  // --- 二进制文件操作 (P2-1: 图片上传支持) ---
-
   async writeBinary(path: string, base64: string): Promise<void> {
-    await this.wait();
-    const mimeType = this.detectMimeType(path, base64);
-    this.tree.set(path, {
-      type: 'file',
-      content: '__BINARY__', // 标记为二进制，防止 readFile 误读
-      base64,
-      mimeType,
-      mtime: Date.now(),
-      size: base64.length,
-    });
-    // 确保父目录存在
-    const parentDir = path.substring(0, path.lastIndexOf('/'));
-    if (parentDir && !this.tree.has(parentDir)) {
-      this.tree.set(parentDir, { type: 'directory', mtime: Date.now(), size: 0 });
-    }
-    this.saveToStorage();
+    await this.writeFile(path, base64);
   }
 
   async readBinary(path: string): Promise<string> {
-    await this.wait();
-    const node = this.tree.get(path);
-    if (!node || node.type !== 'file') {
-      throw new Error(`文件不存在: ${path}`);
-    }
-    if (!node.base64) {
-      throw new Error(`不是二进制文件: ${path}`);
-    }
-    return node.base64;
+    return this.readFile(path);
   }
 
-  isBinaryPath(path: string): boolean {
-    return /\.(png|jpe?g|gif|svg|webp|ico|bmp|pdf)(\?.*)?$/i.test(path);
-  }
-
-  /** 从路径或 base64 头检测 MIME 类型 */
-  private detectMimeType(path: string, base64: string): string {
-    // 优先从 base64 data URI 头检测
-    const headerMatch = base64.match(/^data:(image\/\w+);base64,/);
-    if (headerMatch) return headerMatch[1]!;
-    // 从文件扩展名推断
-    const ext = path.split('.').pop()?.toLowerCase();
-    const mimeMap: Record<string, string> = {
-      png: 'image/png',
-      jpg: 'image/jpeg',
-      jpeg: 'image/jpeg',
-      gif: 'image/gif',
-      svg: 'image/svg+xml',
-      webp: 'image/webp',
-      ico: 'image/x-icon',
-      bmp: 'image/bmp',
-      pdf: 'application/pdf',
-    };
-    return mimeMap[ext ?? ''] ?? 'application/octet-stream';
+  isBinaryPath(_path: string): boolean {
+    const ext = _path.split('.').pop()?.toLowerCase();
+    return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'pdf'].includes(ext ?? '');
   }
 
   async deleteFile(path: string): Promise<void> {
-    await this.wait();
-    if (!this.tree.has(path)) {
-      throw new Error(`文件不存在: ${path}`);
+    await delay(this.latency);
+    delete this.data.files[path];
+    const parent = this.parentDir(path);
+    const name = path.split('/').pop()!;
+    if (this.data.dirs[parent]) {
+      this.data.dirs[parent] = this.data.dirs[parent].filter((n) => n !== name);
     }
-    this.tree.delete(path);
-    this.saveToStorage();
+    this.persist();
   }
 
   async renameFile(oldPath: string, newPath: string): Promise<void> {
-    await this.wait();
-    const node = this.tree.get(oldPath);
-    if (!node) throw new Error(`文件不存在: ${oldPath}`);
-    this.tree.delete(oldPath);
-    this.tree.set(newPath, node);
+    await delay(this.latency);
+    const file = this.data.files[oldPath];
+    if (!file) throw new Error(`文件不存在: ${oldPath}`);
+    delete this.data.files[oldPath];
+    this.data.files[newPath] = file;
+
+    const oldParent = this.parentDir(oldPath);
+    const oldName = oldPath.split('/').pop()!;
+    if (this.data.dirs[oldParent]) {
+      this.data.dirs[oldParent] = this.data.dirs[oldParent].filter((n) => n !== oldName);
+    }
+
+    const newParent = this.parentDir(newPath);
+    const newName = newPath.split('/').pop()!;
+    if (!this.data.dirs[newParent]) this.data.dirs[newParent] = [];
+    if (!this.data.dirs[newParent].includes(newName)) {
+      this.data.dirs[newParent].push(newName);
+    }
+
+    this.persist();
   }
 
-  // --- 目录操作 ---
-
   async createDirectory(path: string): Promise<void> {
-    await this.wait();
-    this.tree.set(path, { type: 'directory', mtime: Date.now(), size: 0 });
+    await delay(this.latency);
+    if (!this.data.dirs[path]) this.data.dirs[path] = [];
+    const parent = this.parentDir(path);
+    const name = path.split('/').pop()!;
+    if (!this.data.dirs[parent]) this.data.dirs[parent] = [];
+    if (!this.data.dirs[parent].includes(name)) {
+      this.data.dirs[parent].push(name);
+    }
+    this.persist();
   }
 
   async listDirectory(path: string): Promise<DirEntry[]> {
-    await this.wait();
-    const entries: DirEntry[] = [];
-    const prefix = path === '/' ? '/' : path + '/';
-
-    for (const [p, node] of this.tree) {
-      if (p === path) continue;
-      if (!p.startsWith(prefix)) continue;
-
-      const relative = p.slice(prefix.length);
-      // Only immediate children
-      if (relative.includes('/')) continue;
-
-      entries.push({
-        name: relative,
-        path: p,
-        isDirectory: node.type === 'directory',
-        isFile: node.type === 'file',
-        size: node.size,
-        mtime: node.mtime,
-        mimeType: node.mimeType,
+    await delay(this.latency);
+    const entries = this.data.dirs[path] ?? [];
+    return entries
+      .filter((name) => !name.startsWith('.'))
+      .map((name) => {
+        const fullPath = path === '/' ? `/${name}` : `${path}/${name}`;
+        const isDir = fullPath in this.data.dirs;
+        const file = this.data.files[fullPath];
+        return {
+          name,
+          path: fullPath,
+          isDirectory: isDir,
+          isFile: !isDir,
+          size: file?.size ?? 0,
+          mtime: file?.mtime ?? 0,
+          mimeType: name.endsWith('.txt') ? 'text/plain' : undefined,
+        } satisfies DirEntry;
+      })
+      .sort((a, b) => {
+        if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+        return a.name.localeCompare(b.name, 'zh-CN');
       });
-    }
-
-    return entries;
   }
-
-  // --- 元数据 ---
 
   async statFile(path: string): Promise<FileStat> {
-    await this.wait();
-    const node = this.tree.get(path);
-    if (!node) throw new Error(`文件不存在: ${path}`);
+    await delay(this.latency);
+    const file = this.data.files[path];
+    const isDir = path in this.data.dirs;
+    if (!file && !isDir) throw new Error(`路径不存在: ${path}`);
     return {
-      size: node.size,
-      mtime: node.mtime,
-      isDirectory: node.type === 'directory',
-      isFile: node.type === 'file',
+      path,
+      size: file?.size ?? 0,
+      isFile: !isDir,
+      mtime: file?.mtime ?? 0,
+      isDirectory: isDir,
     };
   }
 
-  // --- 文件监控（Mock 不支持实时监控） ---
-
-  async watch(_rootPath: string, _callback: (event: FileChangeEvent) => void): Promise<UnwatchFn> {
-    return () => {
-      // no-op unwatch
-    };
+  async watch(
+    _rootPath: string,
+    _callback: (events: FileChangeEvent[]) => void,
+  ): Promise<UnwatchFn> {
+    // Mock: no real file watching
+    return () => {};
   }
 
   async unwatchAll(): Promise<void> {
     // no-op
   }
 
-  // --- 路径工具 ---
-
-  resolvePath(root: string, ...segments: string[]): string {
-    return [root, ...segments].join('/').replace(/\/+/g, '/');
+  resolvePath(_root: string, ...segments: string[]): string {
+    return '/' + segments.filter(Boolean).join('/');
   }
 
   async isPathInNotebook(_root: string, _path: string): Promise<boolean> {
     return true;
   }
 
-  // --- 笔记本管理 ---
-
   async openNotebook(): Promise<NotebookHandle> {
-    await this.wait();
-    return { rootPath: '/mock-notebook' };
+    return { rootPath: '/', name: '示例笔记本' };
   }
 
   async getRecentNotebooks(): Promise<string[]> {
-    return ['/mock-notebook'];
+    return ['示例笔记本'];
   }
 }

@@ -79,9 +79,10 @@ pub fn list_directory(relative_path: String, root: State<NotebookRoot>) -> Resul
         let file_type = entry.file_type().map_err(|e| format!("读取文件类型失败: {}", e))?;
         let metadata = entry.metadata().ok();
 
-        // Only show .md files and directories
+        // Show .md, .txt files and directories
         let name = entry.file_name().to_string_lossy().to_string();
-        if !file_type.is_dir() && !name.ends_with(".md") {
+        let is_supported = name.ends_with(".md") || name.ends_with(".txt");
+        if !file_type.is_dir() && !is_supported {
             continue;
         }
 
@@ -143,7 +144,7 @@ pub fn write_file(
     Ok(())
 }
 
-/// Delete a file (relative to notebook root).
+/// Delete a file — moves to system recycle bin (Windows/macOS/Linux).
 #[tauri::command]
 pub fn delete_file(relative_path: String, root: State<NotebookRoot>) -> Result<(), String> {
     let root_path = root.get().ok_or("未打开笔记本")?;
@@ -153,7 +154,37 @@ pub fn delete_file(relative_path: String, root: State<NotebookRoot>) -> Result<(
         return Err(format!("文件不存在: {}", relative_path));
     }
 
-    fs::remove_file(&target).map_err(|e| format!("删除文件失败: {}", e))
+    trash::delete(&target).map_err(|e| format!("删除失败: {}", e))
+}
+
+/// Create a new directory (relative to notebook root).
+#[tauri::command]
+pub fn create_directory(relative_path: String, root: State<NotebookRoot>) -> Result<(), String> {
+    let root_path = root.get().ok_or("未打开笔记本")?;
+    let target = resolve_safe_path(&root_path, &relative_path).map_err(|e| e.to_string())?;
+    fs::create_dir_all(&target).map_err(|e| format!("创建文件夹失败: {}", e))
+}
+
+/// Rename / move a file within the notebook.
+#[tauri::command]
+pub fn rename_file(
+    old_relative_path: String,
+    new_relative_path: String,
+    root: State<NotebookRoot>,
+) -> Result<(), String> {
+    let root_path = root.get().ok_or("未打开笔记本")?;
+    let old_target =
+        resolve_safe_path(&root_path, &old_relative_path).map_err(|e| e.to_string())?;
+    let new_target =
+        resolve_safe_path(&root_path, &new_relative_path).map_err(|e| e.to_string())?;
+
+    if !old_target.exists() {
+        return Err(format!("文件不存在: {}", old_relative_path));
+    }
+    if let Some(parent) = new_target.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("创建目标目录失败: {}", e))?;
+    }
+    fs::rename(&old_target, &new_target).map_err(|e| format!("重命名失败: {}", e))
 }
 
 /// Get file metadata (mtime, size) for conflict detection.

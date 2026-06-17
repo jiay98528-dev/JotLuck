@@ -1,87 +1,71 @@
 /**
- * useHeadings — 标题提取组合式函数
+ * useHeadings — Markdown 标题解析 composable
  *
- * M2-14: 从 Markdown 内容中提取标题层级结构 (H1-H6)
- * 用于 NavTree 组件渲染。
+ * 解析 # H1 ~ ###### H6 → 递归树结构
  *
- * @module useHeadings
+ * @see migration-map.md §5
  */
-
 import { ref } from 'vue';
 import type { HeadingItem } from '@/types';
 
-/** 标题正则：匹配 # H1 到 ###### H6 */
-const HEADING_RE = /^(#{1,6})\s+(.+)$/gm;
+let idCounter = 0;
 
 export function useHeadings() {
   const headings = ref<HeadingItem[]>([]);
 
-  /** 从 Markdown 内容解析标题树 */
   function parseHeadings(content: string): HeadingItem[] {
-    const result: HeadingItem[] = [];
+    const lines = content.split('\n');
+    const root: HeadingItem[] = [];
     const stack: HeadingItem[] = [];
-    let lineNumber = 0;
 
-    let match: RegExpExecArray | null;
-    HEADING_RE.lastIndex = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i] ?? '';
+      const match = line.match(/^(#{1,6})\s+(.+)$/);
+      if (!match) continue;
 
-    while ((match = HEADING_RE.exec(content)) !== null) {
-      const level = match[1]?.length ?? 1;
-      const text = match[2]?.trim() ?? '';
-      lineNumber = content.slice(0, match.index).split('\n').length;
-
+      const level = match[1]!.length;
+      const text = match[2]!.trim();
       const item: HeadingItem = {
-        id: `h-${lineNumber}`,
+        id: `h-${idCounter++}`,
         level,
         text,
-        lineNumber,
+        lineNumber: i + 1,
         children: [],
       };
 
-      // 出栈：所有 level >= 当前 level 的节点
-      while (stack.length > 0 && (stack[stack.length - 1]?.level ?? 0) >= level) {
+      // Pop stack until we find a parent with lower level
+      while (stack.length > 0 && (stack[stack.length - 1]?.level ?? 7) >= level) {
         stack.pop();
       }
 
       if (stack.length === 0) {
-        result.push(item);
+        root.push(item);
       } else {
-        const parent = stack[stack.length - 1];
-        if (parent) {
-          parent.children.push(item);
-        }
+        stack[stack.length - 1]!.children.push(item);
       }
 
       stack.push(item);
     }
 
-    return result;
+    return root;
   }
 
-  /** 更新内容时重新解析 */
   function update(content: string): void {
     headings.value = parseHeadings(content);
   }
 
-  /** 获取当前光标行对应的标题 ID */
   function getActiveHeadingId(cursorLine: number): string | null {
-    let active: string | null = null;
-    const walk = (items: HeadingItem[]): void => {
+    function findClosest(items: HeadingItem[], best: HeadingItem | null): HeadingItem | null {
       for (const item of items) {
         if (item.lineNumber <= cursorLine) {
-          active = item.id;
+          if (!best || item.lineNumber > best.lineNumber) best = item;
         }
-        walk(item.children);
+        best = findClosest(item.children, best);
       }
-    };
-    walk(headings.value);
-    return active;
+      return best;
+    }
+    return findClosest(headings.value, null)?.id ?? null;
   }
 
-  return {
-    headings,
-    parseHeadings,
-    update,
-    getActiveHeadingId,
-  };
+  return { headings, parseHeadings, update, getActiveHeadingId };
 }

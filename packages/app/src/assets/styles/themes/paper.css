@@ -1,58 +1,50 @@
-/* ===== Paper Theme =====
- * MarkLuck 纸张主题 — 单一主题体系
+/* ===== Paper Theme — Winged Editor =====
  *
- * Metaphor: Japanese washi paper + iA Writer focus.
- * Warm-tinted off-white base. Ink-dark text. One cool accent.
- * UI recedes. Content emerges.
+ * Light: warm washi paper (morning study)
+ * Dark:  dark gray cardstock (late-night reading)
  *
- * Light: warm paper (morning study)
- * Dark: dark gray cardstock (late-night reading)
- *
- * @see design brief §3 Design Direction
+ * Three-zone paper temperature:
+ *   Left wing (bookmarks) → 3° warmer
+ *   Center (editor)        → neutral paper
+ *   Right wing (reference) → 3° cooler toward green
  */
 
 /* ============================================================
  * Light — Warm Paper
- * 场景: 清晨书房，晨光斜照在木桌上，屏幕像一张温暖的纸
  * ============================================================ */
 :root,
 [data-color-scheme='light'] {
-  /* --- Paper Surface Layers --- */
+  /* --- Paper Surfaces (three-zone temperature) --- */
   --paper-bg: oklch(0.975 0.003 85);
+  --paper-left: oklch(0.972 0.004 88);
   --paper-surface: oklch(0.985 0.002 85);
+  --paper-right: oklch(0.978 0.002 82);
   --paper-raised: oklch(1 0 0);
 
-  /* --- Ink (Text Hierarchy) --- */
+  /* --- Ink Hierarchy --- */
   --ink-primary: oklch(0.15 0.003 85);
   --ink-secondary: oklch(0.42 0.003 85);
   --ink-muted: oklch(0.6 0.002 85);
 
-  /* --- Accent — Cool blue, single accent on warm paper --- */
+  /* --- Accent — Cool Blue (single, ≤10% surface) --- */
   --accent: oklch(0.52 0.12 250);
   --accent-hover: oklch(0.47 0.13 250);
   --accent-soft: oklch(0.92 0.03 250 / 0.55);
   --accent-ring: oklch(0.52 0.12 250 / 0.35);
 
-  /* --- Rules (Dividing Lines) --- */
+  /* --- Rules --- */
   --rule: oklch(0.88 0.003 85);
-  --rule-strong: oklch(0.8 0.005 85);
+  --rule-strong: oklch(0.78 0.005 85);
+  --rule-wing: oklch(0.86 0.004 85);
 
-  /* --- Signal Colors --- */
+  /* --- Signals --- */
   --signal-success: oklch(0.56 0.14 158);
   --signal-success-soft: oklch(0.92 0.04 158 / 0.4);
   --signal-warning: oklch(0.63 0.15 82);
   --signal-warning-soft: oklch(0.94 0.06 82 / 0.4);
   --signal-error: oklch(0.48 0.17 25);
+  --signal-error-hover: oklch(0.42 0.17 25);
   --signal-error-soft: oklch(0.94 0.04 25 / 0.3);
-
-  /* --- Surface States --- */
-  --surface-hover: oklch(0 0 0 / 0.03);
-  --surface-active: oklch(0 0 0 / 0.05);
-  --surface-selected: oklch(0 0 0 / 0.06);
-
-  /* --- Selection Indicator --- */
-  --selection-indicator-width: 2px;
-  --selection-indicator: oklch(0.52 0.12 250);
 
   /* --- Code --- */
   --code-bg: oklch(0.96 0.002 85);
@@ -73,24 +65,17 @@
   /* --- Table --- */
   --table-stripe: oklch(0.97 0.002 85);
 
-  /* --- Scrollbar --- */
+  /* --- Scrollbar (native, minimal) --- */
   --scrollbar-thumb: oklch(0.82 0.003 85);
   --scrollbar-thumb-hover: oklch(0.65 0.003 85);
 
   /* --- Overlay --- */
   --overlay: oklch(0.15 0.003 85 / 0.25);
 
-  /* --- Shadow Elevation --- */
-  --shadow-raised: 0 1px 3px oklch(0.15 0.003 85 / 0.04);
-  --shadow-overlay: 0 2px 8px oklch(0.15 0.003 85 / 0.06);
-  --shadow-float: 0 4px 16px oklch(0.15 0.003 85 / 0.08);
-
-  /* --- Icon Colors (geometric SVG) --- */
-  --icon-folder: oklch(0.58 0.02 240);
-  --icon-md: oklch(0.52 0.12 250);
-  --icon-image: oklch(0.56 0.12 158);
-  --icon-generic: oklch(0.5 0.03 260);
-  --icon-action: oklch(0.45 0.02 85);
+  /* --- Shadow (paper stack) --- */
+  --shadow-sheet: 0 1px 3px oklch(0.15 0.003 85 / 0.04);
+  --shadow-stack: 0 2px 8px oklch(0.15 0.003 85 / 0.06);
+  --shadow-float: 0 4px 16px oklch(0.15 0.003 85 / 0.1);
 
   /* --- Editor --- */
   --editor-bg: oklch(0.985 0.001 85);
@@ -98,54 +83,43 @@
   --editor-selection: oklch(0.52 0.12 250 / 0.18);
   --editor-gutter: oklch(0.6 0.002 85);
   --editor-line-highlight: oklch(0.975 0.002 85);
-
-  /* --- Shell (panel chrome) --- */
-  --panel-header-height: 32px;
-  --panel-header-bg: oklch(0.97 0.002 85);
-  --panel-header-fg: oklch(0.38 0.004 85);
 }
 
 /* ============================================================
  * Dark — Dark Gray Cardstock
- * 场景: 深夜台灯下，深灰卡纸笔记本，暖调光线
  * ============================================================ */
 [data-color-scheme='dark'] {
-  /* --- Paper Surface Layers --- */
+  /* --- Paper Surfaces --- */
   --paper-bg: oklch(0.15 0.003 85);
+  --paper-left: oklch(0.145 0.004 88);
   --paper-surface: oklch(0.18 0.003 85);
+  --paper-right: oklch(0.155 0.002 82);
   --paper-raised: oklch(0.22 0.003 85);
 
-  /* --- Ink (Text Hierarchy) --- */
+  /* --- Ink --- */
   --ink-primary: oklch(0.9 0.002 85);
   --ink-secondary: oklch(0.65 0.002 85);
   --ink-muted: oklch(0.45 0.002 85);
 
-  /* --- Accent — Brighter for dark surface contrast --- */
+  /* --- Accent (brighter for dark contrast) --- */
   --accent: oklch(0.68 0.12 250);
   --accent-hover: oklch(0.72 0.11 250);
   --accent-soft: oklch(0.25 0.04 250);
   --accent-ring: oklch(0.68 0.12 250 / 0.4);
 
-  /* --- Rules (Dividing Lines) --- */
+  /* --- Rules --- */
   --rule: oklch(0.25 0.003 85);
   --rule-strong: oklch(0.32 0.005 85);
+  --rule-wing: oklch(0.24 0.004 85);
 
-  /* --- Signal Colors --- */
+  /* --- Signals --- */
   --signal-success: oklch(0.65 0.12 158);
   --signal-success-soft: oklch(0.2 0.04 158 / 0.3);
   --signal-warning: oklch(0.7 0.14 82);
   --signal-warning-soft: oklch(0.22 0.06 82 / 0.3);
   --signal-error: oklch(0.58 0.17 25);
+  --signal-error-hover: oklch(0.65 0.17 25);
   --signal-error-soft: oklch(0.22 0.04 25 / 0.25);
-
-  /* --- Surface States --- */
-  --surface-hover: oklch(1 0 0 / 0.04);
-  --surface-active: oklch(1 0 0 / 0.06);
-  --surface-selected: oklch(1 0 0 / 0.08);
-
-  /* --- Selection Indicator --- */
-  --selection-indicator-width: 2px;
-  --selection-indicator: oklch(0.68 0.12 250);
 
   /* --- Code --- */
   --code-bg: oklch(0.2 0.003 85);
@@ -173,17 +147,19 @@
   /* --- Overlay --- */
   --overlay: oklch(0.05 0.003 85 / 0.5);
 
-  /* --- Shadow Elevation (subtle in dark) --- */
-  --shadow-raised: 0 1px 3px oklch(0 0 0 / 0.2);
-  --shadow-overlay: 0 2px 12px oklch(0 0 0 / 0.3);
+  /* --- Shadow (deeper in dark) --- */
+  --shadow-sheet: 0 1px 3px oklch(0 0 0 / 0.2);
+  --shadow-stack: 0 2px 12px oklch(0 0 0 / 0.3);
   --shadow-float: 0 4px 24px oklch(0 0 0 / 0.4);
 
-  /* --- Icon Colors (brighter for dark) --- */
-  --icon-folder: oklch(0.7 0.03 240);
-  --icon-md: oklch(0.68 0.12 250);
-  --icon-image: oklch(0.65 0.12 158);
-  --icon-generic: oklch(0.6 0.03 260);
-  --icon-action: oklch(0.65 0.01 85);
+  /* --- Shadow — Winged (deeper in dark) --- */
+  --shadow-wing-sheet:
+    0 0 0 1px oklch(1 0 0 / 0.04), 0 1px 2px oklch(0 0 0 / 0.3), 0 2px 4px oklch(0 0 0 / 0.2);
+  --shadow-wing-stack:
+    0 0 0 1px oklch(1 0 0 / 0.05), 0 2px 4px oklch(0 0 0 / 0.35), 0 4px 12px oklch(0 0 0 / 0.25);
+  --shadow-wing-float:
+    0 0 0 1px oklch(1 0 0 / 0.06), 0 4px 8px oklch(0 0 0 / 0.4), 0 8px 24px oklch(0 0 0 / 0.3),
+    0 16px 32px oklch(0 0 0 / 0.2);
 
   /* --- Editor --- */
   --editor-bg: oklch(0.17 0.002 85);
@@ -191,9 +167,29 @@
   --editor-selection: oklch(0.68 0.12 250 / 0.22);
   --editor-gutter: oklch(0.4 0.002 85);
   --editor-line-highlight: oklch(0.19 0.002 85);
+}
 
-  /* --- Shell (panel chrome) --- */
-  --panel-header-height: 32px;
-  --panel-header-bg: oklch(0.17 0.002 85);
-  --panel-header-fg: oklch(0.6 0.002 85);
+/* ============================================================
+ * Bookmark Dot Palette — 8 rainbow hues: 红橙黄绿青蓝紫+粉
+ * ============================================================ */
+:root {
+  --dot-0: oklch(0.55 0.18 25); /* 红 Red */
+  --dot-1: oklch(0.58 0.17 55); /* 橙 Orange */
+  --dot-2: oklch(0.6 0.16 95); /* 黄 Yellow */
+  --dot-3: oklch(0.55 0.16 140); /* 绿 Green */
+  --dot-4: oklch(0.52 0.12 190); /* 青 Cyan */
+  --dot-5: oklch(0.48 0.18 255); /* 蓝 Blue */
+  --dot-6: oklch(0.5 0.15 300); /* 紫 Purple */
+  --dot-7: oklch(0.55 0.15 340); /* 粉 Pink */
+}
+
+[data-color-scheme='dark'] {
+  --dot-0: oklch(0.68 0.16 25);
+  --dot-1: oklch(0.7 0.15 55);
+  --dot-2: oklch(0.72 0.14 95);
+  --dot-3: oklch(0.65 0.14 140);
+  --dot-4: oklch(0.62 0.1 190);
+  --dot-5: oklch(0.6 0.16 255);
+  --dot-6: oklch(0.62 0.13 300);
+  --dot-7: oklch(0.68 0.13 340);
 }

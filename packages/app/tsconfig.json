@@ -6,7 +6,7 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "types": ["vitest/globals"]
+    "types": []
   },
   "include": ["src/**/*.ts", "src/**/*.vue", "env.d.ts"],
   "references": [{ "path": "../renderer" }]

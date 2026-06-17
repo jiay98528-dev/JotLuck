@@ -110,9 +110,11 @@ export interface TagEntry {
 
 /** 模板条目 */
 export interface TemplateItem {
+  id: string;
   name: string;
-  path: string;
   description?: string;
+  content: string;
+  isBuiltin: boolean;
 }
 
 /** 右键菜单项 */
@@ -120,7 +122,10 @@ export interface ContextMenuItem {
   id: string;
   label: string;
   icon?: string;
-  action: string;
+  shortcut?: string;
+  action?: string | (() => void);
   disabled?: boolean;
+  danger?: boolean;
   divider?: boolean;
+  children?: ContextMenuItem[];
 }

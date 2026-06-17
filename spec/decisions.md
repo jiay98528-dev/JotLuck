@@ -20,6 +20,8 @@
 | ADR-006 | YAML frontmatter + #tag 双重标签语法     | 已采纳 |
 | ADR-007 | Wiki-link `[[...]]` 语法                 | 已采纳 |
 | ADR-008 | Tauri v2 统一全端（桌面 + 移动）         | 已采纳 |
+| ADR-009 | docx.js + sheetjs 导出管线              | 已采纳 |
+| ADR-010 | CM6 updateListener 替代 DOM 事件同步     | 已采纳 |
 
 ---
 
@@ -485,13 +487,173 @@ MarkLuck 的 PRD 定义了四级部署目标：
 
 ---
 
+## ADR-009: DOCX/XLSX 导出库选型 — docx.js + sheetjs
+
+- **状态**: 已采纳
+- **日期**: 2026-06-05
+
+### 背景
+
+M3 导出管线最初为 stub 实现——DOCX 保存为 HTML 包装的 `.doc` 文件、XLSX 保存为 CSV、PDF/HTML 直接输出原始 markdown 文本。需要引入真实的 DOCX/XLSX 生成库来实现 PRD F-09 要求的完整导出功能。
+
+### 决策
+
+**DOCX 使用 `docx` (v9.x)，XLSX 使用 `xlsx` (sheetjs v0.18.x)**。均为纯 JS 实现，无需原生依赖。
+
+- **DOCX 管线**: `marked.lexer()` 将 Markdown 解析为 Token 流 → 逐 Token 映射为 `Document/Paragraph/TextRun/HeadingLevel/Table` → `Packer.toBlob()` 生成 `.docx`
+- **XLSX 管线**: `extractMarkdownTables()` 提取表格数据 → `XLSX.utils.aoa_to_sheet()` → `XLSX.write()` 生成 `.xlsx`
+- **PDF 管线**: `renderMarkdown()` 渲染完整 HTML → 隐藏 iframe 注入 + print.css → `window.print()`
+- **HTML 管线**: `renderMarkdown()` + 内嵌 Paper 主题 CSS → 自包含 `.html`
+- **选项接入**: `includeFrontmatter`、`includeWikiLinks`、`codeLineNumbers` 三个开关在 `preprocessMarkdown()` 中统一处理
+
+### 后果
+
+**正面**：
+- 6 种导出格式全部真实可用，符合 PRD F-09 规格
+- `marked.lexer()` 复用已有的 Markdown 解析器，格式映射准确
+- 无原生依赖，Web/Desktop 端共享同一导出代码
+
+**负面**：
+- `docx` + `xlsx` 合计约 +300KB gzip，主 bundle 从 ~100KB 膨胀到 ~450KB
+- 需后续做动态 import() 代码分割
+
+### 替代方案
+
+| 方案 | 评估 |
+|------|------|
+| HTML→DOCX 转换器 | 格式保真度差，Word 兼容性不可控 |
+| Pandoc WASM | WASM 体积 +50MB，加载时间不可接受 |
+| Tauri 端调用 Pandoc CLI | 仅 Desktop 可用，Web 端无降级路径 |
+
+---
+
+## ADR-010: CM6 编辑器内容同步 — updateListener 替代 DOM 事件
+
+- **状态**: 已采纳
+- **日期**: 2026-06-05
+
+### 背景
+
+MarkdownEditor.vue 原先通过 `view.dom.addEventListener('keyup', syncContent)` 监听用户输入并将内容同步回 Vue（emit update:modelValue）。发现两个严重问题：
+
+1. 中文 IME 输入使用 `insertText` 合成事件，不触发 `keyup`，导致中文内容不保存
+2. 外部 `modelValue` 变更通过 `watch` → `view.dispatch()` 注入 CM6 后，`syncContent` 再次 emit 回 Vue，形成反馈环（误标 dirty + 无效保存）
+
+### 决策
+
+**使用 CodeMirror 6 原生的 `EditorView.updateListener` Facet 替代 DOM 事件监听。**
+
+```typescript
+EditorView.updateListener.of((update) => {
+  if (update.docChanged && !suppressSync) {
+    emit('update:modelValue', update.state.doc.toString());
+  }
+});
+```
+
+- `updateListener` 在 CM6 的**每一次状态更新**后触发，覆盖所有输入方式：键盘、IME、粘贴、拖放、撤销/重做、程序化 dispatch
+- 引入 `suppressSync` 布尔标志：在 `watch` → `view.dispatch()` 前设为 true，dispatch 完成后恢复 false，切断反馈环
+- 保留 `keyup`/`mouseup`/`paste` DOM 监听器作为容错备份（均受 `suppressSync` 保护）
+
+### 后果
+
+**正面**：
+- 中文 IME 输入完整保存，切换笔记后不丢失
+- 所有输入路径（含撤销/重做/粘贴）统一同步
+- 反馈环彻底消除，不再误标 dirty
+
+**负面**：
+- `updateListener` 在每个 view update 周期触发，需确保 `syncContent` 轻量（仅读 `doc.toString()` + emit）
+- 新增 `suppressSync` 状态变量，需在 `onUnmounted` 中不处理
+
+### 替代方案
+
+| 方案 | 评估 |
+|------|------|
+| 全部走 `input` DOM 事件 | IME composition 期间的 input 事件数据不完整 |
+| 用 `requestAnimationFrame` 轮询 CM6 state | 不必要的 CPU 开销 + 延迟 |
+
+---
+
+## ADR-011: 文字补全系统架构 — 统一幽灵文本管道
+
+- **状态**: 已采纳 ✅ 已实现 (2026-06-09)
+- **日期**: 2026-06-07
+
+### 背景
+
+MarkLuck 编辑器需要提供轻量、完全离线、毫秒级响应的文字补全功能。核心设计原则是"无感"——不弹出任何菜单、不下拉任何选择框、不打断用户写作心流。所有补全（文字内容、Markdown 格式语法、Wiki-link、标签、文件路径）必须通过同一条灰色幽灵文本自动预判，用户只需按 Tab 一键接受或继续输入自然覆盖。
+
+### 决策
+
+**采用纯前端 TypeScript 统一幽灵文本管道，零新依赖。**
+
+1. **融合预测架构** — 三个预测源融合输出唯一最佳结果：
+   - N-gram 统计表（用户写作习惯）
+   - 结构化知识库（IndexStore：笔记名/标签/文件树）
+   - 语法上下文感知（代码块/frontmatter 快速短路 + 格式标记未闭合检测）
+   
+2. **分层架构**：
+   - `NGramEngine`（纯算法，零依赖）→ `scan()` / `predict()` / `learn()` / `mergeTables()`
+   - `MarkdownPredictor`（服务层）→ `getGhostText()` 融合决策入口 + L1 内存缓存 + L2 localStorage 持久化
+   - `GhostTextPlugin`（CM6 ViewPlugin）→ 150ms 防抖 + Decoration.widget 幽灵文本渲染 + Tab keymap
+   - **不使用** `@codemirror/autocomplete`（该包专为弹出菜单设计，不符合幽灵文本范式）
+
+3. **融合决策算法**：
+   ```
+   getGhostText(cursor, doc, indexStore):
+     1. isDisabledContext? → return null (代码块/frontmatter)
+     2. detectSyntaxContext → wiki-link/tag/file-path/format/general
+     3. ngramResult = NGramEngine.predict(ctx, 20, 0.15)
+     4. structuredResult = matchStructured(syntaxCtx, indexStore)  // 仅特定上下文触发
+     5. return merge(ngramResult, structuredResult)
+        → 结构化候选置信度 > 0.8 时优先，否则信任 N-gram
+   ```
+
+4. **Tab 键方案**：废除 live preview 的 `toggleBlockRender` Tab 绑定。Ghost text 可见时 Tab 接受补全；无 ghost text 时 Tab 回退到 CM6 默认行为（插入制表符）。Live preview 块固定改为 `Ctrl+Click`。
+
+5. **数据持久化与基准预训练**：
+   - L1（当前文档）：内存中完整 4-gram，scanDocument() 瞬时构建，< 50ms
+   - L2（全局）：localStorage 紧凑文本格式持久化，< 5MB
+   - 基准 L2：构建时生成 `baseline-ngram.v1.compact.txt`（~2500 条预训练 N-gram），首次启动 fetch → localStorage
+   - 持久化格式：`ctx(hex)|pred1,cnt1|pred2,cnt2|pred3,cnt3|flag`（flag=b 基准 / u 用户）
+   - 末位淘汰：`score = freq × recencyDecay × sourceWeight`，4.5MB 触发淘汰至 3.5MB，每轮最多淘汰 20%
+   - 基准条目 sourceWeight=0.5（优先被淘汰），用户条目 sourceWeight=1.0
+   - 禁止后台扫描未打开的文件（AV 误报风险）
+
+6. **基准语料来源**：通过 `scripts/train-baseline.ts` 从可迭代语料目录 `scripts/corpus/` 自动训练。仅 P0 格式闭合规则硬编码（Markdown 语法不变）；其他全部语料驱动——用户可随时往 corpus/ 添加 .md 文件并重新训练，无需改代码。构建脚本自动注入项目文档（doc/ + spec/）作为语料源之一。
+
+### 后果
+
+**正面**：
+- 完全符合 MarkLuck "无感·真诚·精确"的设计哲学——没有弹窗打断心流
+- 代码更简单：少了 `@codemirror/autocomplete` 集成层、少了 3 个 completion-source 文件、少了菜单 UI 状态管理
+- 用户体验更流畅：只有一个操作（Tab 接受），零认知负荷
+- Web PWA + Tauri Desktop 零差异共享同一套代码
+- Bundle 增量 < 5KB gzip
+
+**负面**：
+- 无法一次看到多个候选（设计选择：不需要）
+- 结构化候选只在特定语法上下文中激活，普通段落中纯依赖 N-gram（冷启动时无预测）
+- `Ctrl+Click` 块固定的发现性不如原 Tab 键
+
+### 替代方案
+
+| 方案 | 评估 |
+|------|------|
+| 弹出菜单（`@codemirror/autocomplete`） | 打断写作心流，违背"无感"设计哲学，已被否决 |
+| Rust 马尔可夫链 + Tauri IPC | Web PWA 不可用，IPC 开销抵消 Rust 性能优势，过度设计 |
+| AI 大模型 | 违反离线/轻量约束 |
+
+---
+
 ## 附录 B：未来可能的 ADR 候选项
 
 以下议题尚未成为正式决策，预计在后续里程碑中讨论：
 
 | 候选 ADR                                      | 涉及模块       | 预计里程碑 |
 | --------------------------------------------- | -------------- | :--------: |
-| CodeMirror 6 vs Monaco Editor vs Tiptap       | 块级混合编辑器 |  Phase 1   |
+| ~~CodeMirror 6 vs Monaco Editor vs Tiptap~~       | ~~块级混合编辑器~~ |  ✅ 已选 CM6 |
 | minisearch vs fuse.js vs lunr.js (Web 搜索)   | 全文搜索       |  Phase 2   |
 | tantivy vs meilisearch (Tauri 端搜索)         | 全文搜索       |  Phase 4   |
 | KaTeX vs MathJax (LaTeX 渲染)                 | Markdown 渲染  |  Phase 1   |

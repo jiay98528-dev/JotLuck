@@ -1,103 +1,122 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="dialog-overlay" @click.self="cancel">
-      <div class="template-dialog">
-        <div class="dialog-header">
-          <h2>选择模板</h2>
-          <button class="dialog-close" @click="cancel">×</button>
+    <div v-if="visible" class="modal-overlay" @click.self="cancel" @keydown.escape="cancel">
+      <div class="modal-card" role="dialog" aria-labelledby="template-dialog-title">
+        <!-- Header -->
+        <div class="modal-header">
+          <h2 id="template-dialog-title">新建笔记</h2>
+          <button class="modal-close" aria-label="关闭" @click="cancel">&times;</button>
         </div>
 
-        <div class="dialog-body">
-          <!-- Built-in templates -->
-          <p class="section-label">内置模板</p>
-          <div class="template-list">
+        <!-- Body: Two-column layout -->
+        <div class="modal-body">
+          <!-- Left: Template list -->
+          <div class="tpl-list">
+            <!-- Blank note option -->
+            <button class="tpl-card blank-card" @click="emitCreateBlank">
+              <span class="tpl-card-icon">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="12" y1="18" x2="12" y2="12" />
+                  <line x1="9" y1="15" x2="15" y2="15" />
+                </svg>
+              </span>
+              <span class="tpl-card-title">空白笔记</span>
+              <span class="tpl-card-desc">从空白页面开始</span>
+            </button>
+
+            <!-- Built-in templates -->
             <button
-              v-for="tpl in builtInTemplates"
-              :key="tpl.path"
-              class="template-card"
-              :class="{ 'template-card--selected': selectedPath === tpl.path }"
+              v-for="tpl in templates"
+              :key="tpl.id"
+              class="tpl-card"
+              :class="{ active: selectedId === tpl.id }"
               @click="selectTemplate(tpl)"
             >
-              <div class="template-info">
-                <span class="template-name">{{ tpl.name }}</span>
-                <span class="template-desc">{{ tpl.description }}</span>
-              </div>
+              <span class="tpl-card-title">{{ tpl.name }}</span>
+              <span class="tpl-card-desc">{{ tpl.description }}</span>
             </button>
-          </div>
 
-          <!-- Custom templates (M4-04) -->
-          <template v-if="customTemplates.length > 0">
-            <p class="section-label">自定义模板</p>
-            <div class="template-list">
-              <button
-                v-for="tpl in customTemplates"
-                :key="tpl.path"
-                class="template-card"
-                :class="{ 'template-card--selected': selectedPath === tpl.path }"
-                @click="selectTemplate(tpl)"
-              >
-                <div class="template-info">
-                  <span class="template-name">{{ tpl.name }}</span>
-                  <span class="template-desc">{{ tpl.description }}</span>
-                </div>
-                <button class="template-delete" title="删除模板" @click.stop="deleteTemplate(tpl)">
-                  ×
-                </button>
+            <!-- Custom templates -->
+            <button
+              v-for="tpl in customTemplates"
+              :key="tpl.id"
+              class="tpl-card custom-tpl"
+              :class="{ active: selectedId === tpl.id }"
+              @click="selectTemplate(tpl)"
+            >
+              <span class="tpl-card-title">{{ tpl.name }}</span>
+              <span class="tpl-card-desc">{{ tpl.description }}</span>
+              <button class="template-delete" title="删除模板" @click.stop="deleteTemplate(tpl.id)">
+                &times;
               </button>
-            </div>
-          </template>
+            </button>
 
-          <!-- Save current note as template (M4-04) -->
-          <div v-if="currentContent !== undefined" class="save-as-template">
-            <p class="section-label">保存当前笔记为模板</p>
-            <template v-if="!showSaveForm">
-              <button class="btn btn--secondary btn--small" @click="showSaveForm = true">
+            <!-- Save as template -->
+            <div v-if="currentContent" class="save-as-template">
+              <button class="save-toggle" @click="showSaveForm = !showSaveForm">
                 + 保存为自定义模板
               </button>
-            </template>
-            <template v-else>
-              <div class="save-form">
-                <input
-                  v-model="saveName"
-                  class="save-form-input"
-                  placeholder="模板名称"
-                  maxlength="30"
-                />
-                <input
-                  v-model="saveDesc"
-                  class="save-form-input"
-                  placeholder="模板描述（可选）"
-                  maxlength="60"
-                />
+              <div v-if="showSaveForm" class="save-form">
+                <input v-model="tplName" class="save-form-input" placeholder="模板名称" />
+                <input v-model="tplDesc" class="save-form-input" placeholder="模板描述（可选）" />
                 <div class="save-form-actions">
-                  <button class="btn btn--secondary btn--small" @click="showSaveForm = false">
+                  <Button variant="secondary" size="sm" @click="showSaveForm = false">
                     取消
-                  </button>
-                  <button
-                    class="btn btn--primary btn--small"
-                    :disabled="!saveName.trim()"
-                    @click="doSaveAsTemplate"
-                  >
+                  </Button>
+                  <Button variant="default" size="sm" :disabled="!tplName" @click="doSaveTemplate">
                     保存
-                  </button>
+                  </Button>
                 </div>
               </div>
-            </template>
+            </div>
           </div>
 
-          <!-- Preview -->
-          <div v-if="previewContent" class="template-preview">
-            <p class="section-label">预览（占位符已替换）</p>
-            <pre class="preview-box"><code>{{ previewContent }}</code></pre>
+          <!-- Right: Preview pane -->
+          <div class="tpl-preview">
+            <template v-if="selectedTpl">
+              <div class="preview-header">
+                <span class="preview-label">预览</span>
+                <span class="preview-name">{{ selectedTpl.name }}</span>
+              </div>
+              <div class="preview-content">
+                <pre class="preview-text">{{ renderedPreview }}</pre>
+              </div>
+              <Button variant="default" style="width: 100%" @click="emitSelect">使用此模板</Button>
+            </template>
+            <template v-else>
+              <div class="preview-empty">
+                <svg
+                  class="preview-empty-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                </svg>
+                <span class="preview-empty-text">选择一个模板以预览</span>
+              </div>
+            </template>
           </div>
         </div>
 
-        <div class="dialog-footer">
-          <button class="btn btn--secondary" @click="createBlank">空白笔记</button>
-          <button class="btn btn--secondary" @click="cancel">取消</button>
-          <button class="btn btn--primary" :disabled="!selectedPath" @click="confirmTemplate">
-            使用模板
-          </button>
+        <!-- Footer -->
+        <div class="modal-footer">
+          <Button variant="secondary" @click="cancel">取消</Button>
         </div>
       </div>
     </div>
@@ -105,339 +124,376 @@
 </template>
 
 <script setup lang="ts">
-/**
- * TemplateDialog.vue — 模板选择对话框
- *
- * M4-03: 选择模板 + 预览 + 创建。
- *
- * @see components.md §27
- */
-import { ref, watch } from 'vue';
+import { ref, computed, watch } from 'vue';
 import {
   getBuiltInTemplates,
-  getBuiltInTemplateContent,
   getCustomTemplates,
-  getCustomTemplateContent,
   saveCustomTemplate,
   deleteCustomTemplate,
   previewTemplate,
 } from '@/services/TemplateEngine';
 import type { TemplateItem } from '@/types';
+import Button from '@/components/common/Button.vue';
 
+// ── Internal: rich template shape as returned by the engine ─
+interface RichTemplateItem extends TemplateItem {
+  id: string;
+  content: string;
+  isBuiltin: boolean;
+}
+
+// ── Props ──────────────────────────────────────────────
 const props = defineProps<{
   visible: boolean;
   currentContent?: string;
 }>();
 
+// ── Emits ──────────────────────────────────────────────
 const emit = defineEmits<{
-  'update:visible': [value: boolean];
-  select: [template: TemplateItem, content: string];
+  'update:visible': [boolean];
+  select: [template: RichTemplateItem, content: string];
   'create-blank': [];
   cancel: [];
 }>();
 
-const builtInTemplates = getBuiltInTemplates();
-const customTemplates = ref<TemplateItem[]>([]);
-const selectedPath = ref('');
-const previewContent = ref('');
+// ── State ──────────────────────────────────────────────
+const templates = getBuiltInTemplates() as RichTemplateItem[];
+const customTemplates = ref<RichTemplateItem[]>(getCustomTemplates() as RichTemplateItem[]);
+const selectedId = ref<string | null>(null);
+const selectedTpl = ref<RichTemplateItem | null>(null);
+
+// Save form state
 const showSaveForm = ref(false);
-const saveName = ref('');
-const saveDesc = ref('');
+const tplName = ref('');
+const tplDesc = ref('');
 
-watch(
-  () => props.visible,
-  (v) => {
-    if (v) {
-      selectedPath.value = '';
-      previewContent.value = '';
-      showSaveForm.value = false;
-      saveName.value = '';
-      saveDesc.value = '';
-      customTemplates.value = getCustomTemplates();
-    }
-  },
-);
+// ── Computed ───────────────────────────────────────────
+const renderedPreview = computed<string>(() => {
+  if (!selectedTpl.value) return '';
+  const content = selectedTpl.value.content;
+  if (!content) return '';
+  const rendered = previewTemplate(content);
+  // Show first 6 lines for preview
+  return rendered.split('\n').slice(0, 6).join('\n');
+});
 
-function selectTemplate(tpl: TemplateItem): void {
-  selectedPath.value = tpl.path;
-  const raw = tpl.path.startsWith('_custom_/')
-    ? getCustomTemplateContent(tpl.path)
-    : getBuiltInTemplateContent(tpl.path);
-  previewContent.value = previewTemplate(raw);
-}
-
-function confirmTemplate(): void {
-  const allTemplates = [...builtInTemplates, ...customTemplates.value];
-  const tpl = allTemplates.find((t) => t.path === selectedPath.value);
-  if (!tpl) return;
-  const raw = tpl.path.startsWith('_custom_/')
-    ? getCustomTemplateContent(tpl.path)
-    : getBuiltInTemplateContent(tpl.path);
-  const rendered = previewTemplate(raw);
+// ── Methods ────────────────────────────────────────────
+function cancel(): void {
+  emit('cancel');
   emit('update:visible', false);
-  emit('select', tpl, rendered);
 }
 
-function deleteTemplate(tpl: TemplateItem): void {
-  deleteCustomTemplate(tpl.path);
-  if (selectedPath.value === tpl.path) {
-    selectedPath.value = '';
-    previewContent.value = '';
-  }
-  customTemplates.value = getCustomTemplates();
-}
-
-function doSaveAsTemplate(): void {
-  if (!saveName.value.trim() || props.currentContent === undefined) return;
-  saveCustomTemplate(saveName.value.trim(), saveDesc.value.trim(), props.currentContent);
-  customTemplates.value = getCustomTemplates();
-  showSaveForm.value = false;
-  saveName.value = '';
-  saveDesc.value = '';
-}
-
-function createBlank(): void {
-  emit('update:visible', false);
+function emitCreateBlank(): void {
   emit('create-blank');
 }
 
-function cancel(): void {
-  emit('update:visible', false);
-  emit('cancel');
+function selectTemplate(tpl: RichTemplateItem): void {
+  selectedId.value = tpl.id;
+  selectedTpl.value = tpl;
 }
+
+function emitSelect(): void {
+  if (!selectedTpl.value) return;
+  const content = previewTemplate(selectedTpl.value.content);
+  emit('select', selectedTpl.value, content);
+}
+
+function doSaveTemplate(): void {
+  const name = tplName.value.trim();
+  if (!name) return;
+  const desc = tplDesc.value.trim();
+  const content = props.currentContent || '';
+  const tpl = saveCustomTemplate(name, desc, content) as RichTemplateItem;
+  customTemplates.value.push(tpl);
+  showSaveForm.value = false;
+  tplName.value = '';
+  tplDesc.value = '';
+}
+
+function deleteTemplate(id: string): void {
+  deleteCustomTemplate(id);
+  customTemplates.value = customTemplates.value.filter((t) => t.id !== id);
+  if (selectedId.value === id) {
+    selectedId.value = null;
+    selectedTpl.value = null;
+  }
+}
+
+function resetState(): void {
+  selectedId.value = null;
+  selectedTpl.value = null;
+  showSaveForm.value = false;
+  tplName.value = '';
+  tplDesc.value = '';
+  // Reload custom templates on each open
+  customTemplates.value = getCustomTemplates() as RichTemplateItem[];
+}
+
+// ── Watch visible to reset on open ─────────────────────
+watch(
+  () => props.visible,
+  (val) => {
+    if (val) resetState();
+  },
+);
 </script>
 
 <style scoped>
-.dialog-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--overlay, var(--paper-bg, oklch(0.975 0.003 85)));
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* ===== Card (width override only — skeleton in dialog.css) ===== */
+.modal-card {
+  width: 520px;
 }
 
-.template-dialog {
-  width: 520px;
-  max-height: 80vh;
-  background: var(--paper-surface, oklch(0.985 0.002 85));
-  border-radius: var(--radius, 2px);
-  box-shadow: var(--shadow-float, 0 4px 16px oklch(0.15 0.003 85 / 0.08));
+/* ===== Body: Two-column ===== */
+.modal-body {
   display: flex;
-  flex-direction: column;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
-.dialog-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--rule, oklch(0.88 0.003 85));
-  background: var(--paper-raised, oklch(1 0 0));
-}
-
-.dialog-header h2 {
-  margin: 0;
-  font-size: var(--text-lg, 16px);
-  font-weight: 600;
-  color: var(--ink-primary, oklch(0.15 0.003 85));
-}
-
-.dialog-close {
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: none;
-  font-size: 20px;
-  color: var(--ink-muted, oklch(0.6 0.002 85));
-  cursor: pointer;
-  border-radius: var(--radius, 2px);
-}
-
-.dialog-close:hover {
-  background: var(--accent-soft, oklch(0.92 0.03 250 / 0.55));
-  color: var(--ink-primary, oklch(0.15 0.003 85));
-}
-
-.dialog-body {
-  padding: 20px;
-  flex: 1;
+/* ===== Left: Template List (200px) ===== */
+.tpl-list {
+  width: 200px;
+  flex-shrink: 0;
+  padding: var(--space-12);
   overflow-y: auto;
-  background: var(--paper-surface, oklch(0.985 0.002 85));
-  color: var(--ink-primary, oklch(0.15 0.003 85));
-}
-
-.section-label {
-  font-size: var(--text-xs, 12px);
-  font-weight: 600;
-  color: var(--ink-muted, oklch(0.6 0.002 85));
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin: 0 0 8px;
-}
-
-.template-list {
+  border-right: var(--border-thin) solid var(--rule);
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 16px;
+  gap: var(--space-6);
 }
 
-.template-card {
+/* ===== Template Card ===== */
+.tpl-card {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border: 2px solid var(--rule, oklch(0.88 0.003 85));
-  border-radius: var(--radius, 2px);
-  background: var(--paper-surface, oklch(0.985 0.002 85));
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-10) var(--space-12);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-surface);
   cursor: pointer;
   text-align: left;
-  transition: border-color 150ms var(--ease-fade, cubic-bezier(0.4, 0, 0.2, 1));
-  color: var(--ink-primary, oklch(0.15 0.003 85));
+  transition: all var(--dur-micro) var(--ease-fade);
+  user-select: none;
 }
 
-.template-card:hover {
-  border-color: var(--rule-strong, oklch(0.8 0.005 85));
+.tpl-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
-.template-card--selected {
-  border-color: var(--accent, oklch(0.52 0.12 250));
-  background: oklch(0.55 0.13 255 / 0.05);
+.tpl-card.active {
+  border-color: var(--accent);
+  border-width: var(--border-medium);
+  background: var(--accent-soft);
 }
 
-.template-info {
+.tpl-card:active {
+  transform: scale(0.98);
+}
+
+.tpl-card-icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-muted);
+  margin-bottom: var(--space-2);
+}
+
+.tpl-card-icon :deep(svg) {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.tpl-card-title {
+  font-size: var(--text-base);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-primary);
+  line-height: var(--lh-none);
+}
+
+.tpl-card-desc {
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  line-height: var(--lh-compact);
+}
+
+/* Blank card variant */
+.blank-card {
+  border-style: dashed;
+  border-color: var(--rule-strong);
+}
+
+.blank-card:hover {
+  border-style: solid;
+  border-color: var(--accent);
+}
+
+/* ===== Right: Preview Pane ===== */
+.tpl-preview {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  padding: var(--space-16);
+  overflow: hidden;
 }
 
-.template-name {
-  font-size: var(--text-sm, 14px);
-  font-weight: 600;
-  color: var(--ink-primary, oklch(0.15 0.003 85));
-}
-
-.template-desc {
-  font-size: var(--text-xs, 11px);
-  color: var(--ink-muted, oklch(0.6 0.002 85));
-}
-
-.template-preview {
-  margin-top: 16px;
-}
-
-.preview-box {
-  padding: 12px;
-  background: var(--code-block-bg, oklch(0.97 0.002 85));
-  border: 1px solid var(--rule, oklch(0.88 0.003 85));
-  border-radius: var(--radius, 2px);
-  font-size: var(--text-xs, 12px);
-  line-height: 1.6;
-  max-height: 200px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  font-family: var(--ff-mono, monospace);
-  color: var(--ink-secondary, oklch(0.42 0.003 85));
-}
-
-.dialog-footer {
+.preview-header {
   display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--rule, oklch(0.88 0.003 85));
-  background: var(--paper-surface, oklch(0.985 0.002 85));
+  align-items: center;
+  gap: var(--space-8);
+  margin-bottom: var(--space-12);
+  padding-bottom: var(--space-8);
+  border-bottom: var(--border-thin) solid var(--rule);
 }
 
-.btn {
-  padding: 8px 20px;
-  border-radius: var(--radius, 2px);
-  font-size: var(--text-sm, 13px);
-  cursor: pointer;
-  border: 1px solid var(--rule, oklch(0.88 0.003 85));
+.preview-label {
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: var(--fw-semibold);
 }
 
-.btn--secondary {
-  background: var(--paper-surface, oklch(0.985 0.002 85));
-  color: var(--ink-secondary, oklch(0.42 0.003 85));
+.preview-name {
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+  color: var(--ink-primary);
 }
 
-.btn--secondary:hover {
-  background: var(--surface-hover, oklch(0 0 0 / 0.03));
+.preview-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin-bottom: var(--space-12);
 }
 
-.btn--primary {
-  background: var(--accent, oklch(0.52 0.12 250));
-  color: oklch(0.995 0 0);
-  border-color: var(--accent, oklch(0.52 0.12 250));
+.preview-text {
+  font-family: var(--ff-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-secondary);
+  background: var(--code-bg);
+  padding: var(--space-12);
+  border-radius: var(--radius);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  line-height: var(--lh-compact);
+  margin: 0;
 }
 
-.btn--primary:hover {
-  background: var(--accent-hover, oklch(0.47 0.13 250));
+/* ===== Empty preview state ===== */
+.preview-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  color: var(--ink-muted);
 }
 
-.btn--primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.preview-empty-icon {
+  width: 36px;
+  height: 36px;
+  opacity: 0.5;
 }
 
-.btn--small {
-  padding: 4px 12px;
-  font-size: var(--text-xs, 12px);
+.preview-empty-text {
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
 }
 
-.template-delete {
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: none;
-  font-size: 16px;
-  color: var(--ink-muted, oklch(0.6 0.002 85));
-  cursor: pointer;
-  border-radius: var(--radius, 2px);
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
-.template-delete:hover {
-  background: oklch(0.5 0.15 25 / 0.1);
-  color: var(--signal-error, oklch(0.48 0.17 25));
-}
-
+/* ===== Save-as-Template ===== */
 .save-as-template {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--rule, oklch(0.88 0.003 85));
+  margin-top: var(--space-8);
+  padding-top: var(--space-8);
+  border-top: var(--border-thin) solid var(--rule);
+}
+
+.save-toggle {
+  width: 100%;
+  padding: var(--space-8) var(--space-12);
+  border: var(--border-thin) dashed var(--rule);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--dur-micro) var(--ease-fade);
+}
+
+.save-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .save-form {
+  margin-top: var(--space-8);
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 8px;
+  gap: var(--space-8);
 }
 
 .save-form-input {
-  padding: 6px 10px;
-  border: 1px solid var(--rule, oklch(0.88 0.003 85));
-  border-radius: var(--radius, 2px);
-  font-size: var(--text-sm, 13px);
-  font-family: inherit;
-  background: var(--paper-surface, oklch(0.985 0.002 85));
-  color: var(--ink-primary, oklch(0.15 0.003 85));
+  padding: var(--space-6) var(--space-8);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-surface);
+  color: var(--ink-primary);
+  font-size: var(--text-sm);
+  font-family: var(--ff-body);
+  outline: none;
+  transition: border-color var(--dur-micro) var(--ease-fade);
+}
+
+.save-form-input:focus {
+  border-color: var(--accent);
 }
 
 .save-form-input::placeholder {
-  color: var(--ink-muted, oklch(0.6 0.002 85));
+  color: var(--ink-muted);
 }
 
 .save-form-actions {
   display: flex;
+  gap: var(--space-8);
   justify-content: flex-end;
-  gap: 6px;
-  margin-top: 2px;
+}
+
+/* Custom template delete button */
+.custom-tpl {
+  position: relative;
+}
+
+.template-delete {
+  position: absolute;
+  top: 50%;
+  right: var(--space-8);
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--dur-micro) var(--ease-fade);
+}
+
+.template-delete:hover {
+  color: var(--signal-error);
+  background: var(--signal-error-soft);
 }
 </style>
