@@ -473,6 +473,7 @@ function buildDocxChildren(blocks: Token[], _opts: InternalExportOptions): (Para
         for (const cell of t.header) {
           headerCells.push(
             new TableCell({
+              // OKLCH equivalent: oklch(0.93 0.002 85) — ~ --table-stripe in paper.css
               shading: { type: ShadingType.SOLID, color: 'E8E8E8', fill: 'E8E8E8' },
               children: [
                 new Paragraph({
@@ -517,6 +518,7 @@ function buildDocxChildren(blocks: Token[], _opts: InternalExportOptions): (Para
         children.push(
           new Paragraph({
             spacing: { before: 240, after: 240 },
+            // OKLCH equivalent: oklch(0.80 0.003 85) — ~ --rule-mid in paper.css
             border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: 'CCCCCC' } },
             children: [],
           }),
@@ -797,7 +799,33 @@ function exportHtml(md: string, fileName: string, options?: Partial<ExportOption
 // Embedded CSS for HTML / PDF exports (Paper theme, light mode, self-contained)
 // ============================================================================
 
+/**
+ * EMBEDDED_CSS — 导出 HTML/PDF 的自包含样式表。
+ *
+ * 所有色值引用 Paper 主题 OKLCH Token（权威来源：paper.css Light 模式）。
+ * 由于导出 HTML 无外部依赖，Token 值在 :root 中内联定义。
+ * 修改 paper.css 时需同步更新此处的 :root 值。
+ *
+ * @see packages/app/src/assets/styles/themes/paper.css — OKLCH Token 权威定义
+ */
 const EMBEDDED_CSS = /* css */ `
+/* ── Paper Token (self-contained, synced with paper.css light) ── */
+:root {
+  --ink-primary: oklch(0.15 0.003 85);
+  --ink-secondary: oklch(0.42 0.003 85);
+  --ink-muted: oklch(0.6 0.002 85);
+  --paper-bg: oklch(0.975 0.003 85);
+  --paper-surface: oklch(0.985 0.002 85);
+  --paper-raised: oklch(1 0 0);
+  --accent: oklch(0.52 0.12 250);
+  --accent-soft: oklch(0.92 0.03 250 / 0.55);
+  --rule: oklch(0.88 0.003 85);
+  --code-bg: oklch(0.96 0.002 85);
+  --code-block-bg: oklch(0.97 0.002 85);
+  --code-text: oklch(0.18 0.005 85);
+  --table-stripe: oklch(0.97 0.002 85);
+}
+
 /* ── Reset & Base ── */
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -807,8 +835,8 @@ body {
   font-family: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif;
   font-size: 16px;
   line-height: 1.8;
-  color: #2c2c2c;
-  background: #faf8f5;
+  color: var(--ink-primary);
+  background: var(--paper-bg);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -818,35 +846,35 @@ body {
 }
 
 /* ── Headings ── */
-.markdown-body h1 { font-size: 1.8em; font-weight: 700; margin: 1.2em 0 0.4em; line-height: 1.3; color: #1a1a1a; border-bottom: 2px solid #e0ddd6; padding-bottom: 0.3em; }
-.markdown-body h2 { font-size: 1.45em; font-weight: 700; margin: 1em 0 0.3em; line-height: 1.3; color: #1a1a1a; }
-.markdown-body h3 { font-size: 1.2em; font-weight: 600; margin: 0.8em 0 0.2em; line-height: 1.35; color: #333; }
-.markdown-body h4 { font-size: 1.05em; font-weight: 600; margin: 0.7em 0 0.2em; line-height: 1.35; color: #444; }
-.markdown-body h5 { font-size: 0.95em; font-weight: 600; margin: 0.6em 0 0.2em; color: #555; }
-.markdown-body h6 { font-size: 0.85em; font-weight: 600; margin: 0.5em 0 0.2em; color: #666; }
+.markdown-body h1 { font-size: 1.8em; font-weight: 700; margin: 1.2em 0 0.4em; line-height: 1.3; color: var(--ink-primary); border-bottom: 2px solid var(--rule); padding-bottom: 0.3em; }
+.markdown-body h2 { font-size: 1.45em; font-weight: 700; margin: 1em 0 0.3em; line-height: 1.3; color: var(--ink-primary); }
+.markdown-body h3 { font-size: 1.2em; font-weight: 600; margin: 0.8em 0 0.2em; line-height: 1.35; color: var(--ink-primary); }
+.markdown-body h4 { font-size: 1.05em; font-weight: 600; margin: 0.7em 0 0.2em; line-height: 1.35; color: var(--ink-primary); }
+.markdown-body h5 { font-size: 0.95em; font-weight: 600; margin: 0.6em 0 0.2em; color: var(--ink-secondary); }
+.markdown-body h6 { font-size: 0.85em; font-weight: 600; margin: 0.5em 0 0.2em; color: var(--ink-muted); }
 
 /* ── Paragraph ── */
 .markdown-body p { margin: 0 0 0.8em; }
 
 /* ── Links ── */
-.markdown-body a { color: #2563eb; text-decoration: none; }
+.markdown-body a { color: var(--accent); text-decoration: none; }
 .markdown-body a:hover { text-decoration: underline; }
 .markdown-body a.wikilink { text-decoration: underline dotted; }
-.markdown-body a.wikilink--dead { color: #999; text-decoration: underline wavy; }
-.markdown-body a.md-tag { color: #2563eb; background: #eef2ff; padding: 0 0.35em; border-radius: 3px; font-size: 0.9em; text-decoration: none; }
+.markdown-body a.wikilink--dead { color: var(--ink-muted); text-decoration: underline wavy; }
+.markdown-body a.md-tag { color: var(--accent); background: var(--accent-soft); padding: 0 0.35em; border-radius: 3px; font-size: 0.9em; text-decoration: none; }
 
 /* ── Code ── */
 .markdown-body code {
   font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
   font-size: 0.88em;
-  background: #f4f4f5;
+  background: var(--code-bg);
   padding: 2px 6px;
   border-radius: 3px;
-  color: #d9467c;
+  color: var(--code-text);
 }
 .markdown-body pre {
-  background: #f5f5f0;
-  border: 1px solid #e0ddd6;
+  background: var(--code-block-bg);
+  border: 1px solid var(--rule);
   border-radius: 4px;
   padding: 16px;
   overflow-x: auto;
@@ -856,33 +884,33 @@ body {
 .markdown-body pre code {
   background: none;
   padding: 0;
-  color: #333;
+  color: var(--ink-primary);
   font-size: 0.88em;
 }
 
 /* ── Blockquote ── */
 .markdown-body blockquote {
-  border-left: 3px solid #4a90d9;
+  border-left: 3px solid var(--accent);
   margin: 1em 0;
   padding: 0.5em 1em;
-  color: #666;
-  background: #fafdfe;
+  color: var(--ink-muted);
+  background: var(--paper-surface);
 }
 .markdown-body blockquote p { margin: 0.4em 0; }
 
 /* ── Lists ── */
 .markdown-body ul, .markdown-body ol { margin: 0.6em 0; padding-left: 1.8em; }
 .markdown-body li { margin: 0.2em 0; }
-.markdown-body input[type="checkbox"] { margin-right: 0.4em; accent-color: #2563eb; pointer-events: none; }
+.markdown-body input[type="checkbox"] { margin-right: 0.4em; accent-color: var(--accent); pointer-events: none; }
 
 /* ── Tables ── */
 .markdown-body table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-.markdown-body th, .markdown-body td { border: 1px solid #d4d0c8; padding: 8px 12px; text-align: left; }
-.markdown-body th { background: #f0ede5; font-weight: 600; }
-.markdown-body tr:nth-child(even) { background: #faf8f5; }
+.markdown-body th, .markdown-body td { border: 1px solid var(--rule); padding: 8px 12px; text-align: left; }
+.markdown-body th { background: var(--table-stripe); font-weight: 600; }
+.markdown-body tr:nth-child(even) { background: var(--paper-bg); }
 
 /* ── Horizontal Rule ── */
-.markdown-body hr { border: none; border-top: 2px solid #e0ddd6; margin: 2em 0; }
+.markdown-body hr { border: none; border-top: 2px solid var(--rule); margin: 2em 0; }
 
 /* ── Images ── */
 .markdown-body img { max-width: 100%; height: auto; border-radius: 4px; }
@@ -890,13 +918,13 @@ body {
 /* ── Strong / Emphasis ── */
 .markdown-body strong { font-weight: 700; }
 .markdown-body em { font-style: italic; }
-.markdown-body del { text-decoration: line-through; color: #999; }
+.markdown-body del { text-decoration: line-through; color: var(--ink-muted); }
 
 /* ── Print Overrides ── */
 @media print {
-  body { background: #fff; padding: 0; }
+  body { background: var(--paper-raised); padding: 0; }
   .markdown-body { max-width: none; }
-  .markdown-body pre { background: #f9f9f9; border: 1px solid #ddd; }
+  .markdown-body pre { background: var(--code-block-bg); border: 1px solid var(--rule); }
   .markdown-body blockquote { background: none; }
 }
 `;
