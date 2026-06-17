@@ -208,7 +208,7 @@ test.describe('右侧翼面板内容', () => {
 
   test('14-右侧面板包含反向链接 (backlinks) 区段', async ({ page }) => {
     // backlinks 区段存在，默认折叠所以 body 不可见，但 header 应可见
-    const backlinksHeader = page.locator('.section-header').filter({ hasText: '反向链接' });
+    const backlinksHeader = page.locator('.section-header').filter({ hasText: '反链' });
     await expect(backlinksHeader).toBeVisible({ timeout: 3000 });
   });
 
@@ -243,7 +243,7 @@ test.describe('右侧翼面板折叠展开', () => {
 
   test('18-点击区段标题可折叠该区段', async ({ page }) => {
     // 目录区段默认打开，找到其 header 并点击折叠
-    const outlineHeader = page.locator('.section-header').filter({ hasText: '目录' });
+    const outlineHeader = page.locator('.section-header').filter({ hasText: '大纲' });
     await expect(outlineHeader).toBeVisible();
 
     // 确认打开
@@ -261,7 +261,7 @@ test.describe('右侧翼面板折叠展开', () => {
 
   test('19-点击区段标题可展开该区段', async ({ page }) => {
     // 反向链接默认折叠，找到其 header 并点击展开
-    const backlinksHeader = page.locator('.section-header').filter({ hasText: '反向链接' });
+    const backlinksHeader = page.locator('.section-header').filter({ hasText: '反链' });
     await expect(backlinksHeader).toBeVisible();
 
     // 确认折叠
@@ -278,7 +278,7 @@ test.describe('右侧翼面板折叠展开', () => {
   });
 
   test('20-再次点击已展开的区段将其折叠', async ({ page }) => {
-    const backlinksHeader = page.locator('.section-header').filter({ hasText: '反向链接' });
+    const backlinksHeader = page.locator('.section-header').filter({ hasText: '反链' });
 
     // 展开
     await backlinksHeader.click();

@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="modal-overlay" @click.self="cancel">
+    <div v-if="visible" class="modal-overlay" @click.self="cancel" @keydown.escape="cancel">
       <div class="modal-card">
         <!-- Header -->
         <div class="modal-header">

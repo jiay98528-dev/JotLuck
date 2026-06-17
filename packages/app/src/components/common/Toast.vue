@@ -184,6 +184,8 @@ onBeforeUnmount(() => {
   position: fixed;
   z-index: var(--z-toast);
   pointer-events: none;
+  min-height: 1px;   /* 确保空容器有非零尺寸，通过 Playwright toBeVisible() 检查 */
+  min-width: 1px;
 }
 
 .toast-stack {

@@ -25,9 +25,18 @@ export const useThemeStore = defineStore('theme', () => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
-        const parsed = JSON.parse(saved) as { c?: string };
-        if (parsed.c === 'light' || parsed.c === 'dark') {
-          colorScheme.value = parsed.c;
+        // 优先匹配新格式（纯字符串），兼容旧格式 JSON {"c":"dark"}
+        if (saved === 'light' || saved === 'dark') {
+          colorScheme.value = saved;
+        } else {
+          try {
+            const parsed = JSON.parse(saved) as { c?: string };
+            if (parsed.c === 'light' || parsed.c === 'dark') {
+              colorScheme.value = parsed.c;
+            }
+          } catch {
+            // 忽略解析错误，回退到系统偏好
+          }
         }
       }
     } catch (e) {
@@ -46,7 +55,7 @@ export const useThemeStore = defineStore('theme', () => {
 
   function apply(): void {
     document.documentElement.setAttribute('data-color-scheme', colorScheme.value);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ c: colorScheme.value }));
+    localStorage.setItem(STORAGE_KEY, colorScheme.value);
   }
 
   function setColorScheme(c: ColorScheme): void {

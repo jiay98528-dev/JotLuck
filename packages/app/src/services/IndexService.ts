@@ -163,6 +163,17 @@ export class IndexService {
         this.engine.updateDocument(path, entry, '');
       }
     }
+    // 更新 recentNotesList（新建/编辑笔记后书签圆点需要显示）
+    this.recentNotesList = this.recentNotesList.filter((n) => n.path !== path);
+    this.recentNotesList.unshift({
+      path,
+      title: entry?.title ?? path.split('/').pop()?.replace(/\.md$/, '') ?? '',
+      lastOpenedAt: Date.now(),
+    });
+    this.recentNotesList.sort((a, b) => b.lastOpenedAt - a.lastOpenedAt);
+    if (this.recentNotesList.length > 20) {
+      this.recentNotesList = this.recentNotesList.slice(0, 20);
+    }
   }
 
   removeDocument(path: string): void {
@@ -182,6 +193,8 @@ export class IndexService {
     }
 
     delete this.allDocuments[path];
+    // 从 recentNotesList 中移除已删除的笔记
+    this.recentNotesList = this.recentNotesList.filter((n) => n.path !== path);
     this.engine.removeDocument(path);
   }
 
