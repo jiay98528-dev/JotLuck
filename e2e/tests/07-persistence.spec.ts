@@ -69,19 +69,27 @@ test.describe('持久化与跨会话', () => {
     await firstDot.click();
     await page.waitForTimeout(500);
 
-    // Step 2: Type content in editor
-    const testMarker = '### V3刷新持久化测试内容';
+    // Step 2: Type content in editor — use H1 to preserve a stable title
+    // (extractTitle() only matches # H1; H2/H3 cause title to fall back to filename,
+    //  making post-reload bookmark lookup fail)
+    const testMarker = '# V3刷新持久化测试内容';
     await typeInEditor(page, testMarker);
 
     // Step 3: Wait for auto-save
     await waitForAutoSave(page);
 
+    // Read the post-save label — title may have changed due to content replacement
+    const postSaveLabel = await page.locator('.wing-bookmark-dot.active').getAttribute('aria-label');
+
     // Step 4-5: Reload page and verify content persisted
     await page.reload();
     await waitForAppReady(page);
 
-    // Step 6: Navigate back to the same note and verify
-    if (firstLabel) {
+    // Step 6: Navigate back to the same note using post-save label
+    if (postSaveLabel) {
+      await switchToNote(page, postSaveLabel);
+    } else if (firstLabel) {
+      // Fallback: try original label (works if title was preserved)
       await switchToNote(page, firstLabel);
     }
     const content = await getEditorContent(page);
@@ -107,15 +115,16 @@ test.describe('持久化与跨会话', () => {
     const dotsA = page.locator('.wing-bookmark-dot');
     const dotA = dotsA.nth(0);
     const dotB = dotsA.nth(1);
-    const labelA = await dotA.getAttribute('aria-label');
     const labelB = await dotB.getAttribute('aria-label');
 
-    // Step 2: Edit note A
+    // Step 2: Edit note A — use H1 so title stays stable for switch-back
     await dotA.click();
     await page.waitForTimeout(400);
-    const markerA = '## 笔记A切换持久化测试';
-    await typeInEditor(page, markerA);
+    await typeInEditor(page, '# 笔记A切换持久化测试');
     await waitForAutoSave(page);
+
+    // Read post-save label (title may have changed)
+    const labelA = await page.locator('.wing-bookmark-dot.active').getAttribute('aria-label');
 
     // Step 3: Switch to note B
     if (labelB) {
@@ -274,6 +283,14 @@ test.describe('持久化与跨会话', () => {
     // Step 4: Verify note is gone from bookmark dots
     await expect(page.locator(`.wing-bookmark-dot[aria-label="${noteTitle}"]`)).toHaveCount(0);
 
+    // Close FileDrawer — its overlay covers the viewport and blocks clicks on main UI.
+    // Click at center-right of the overlay (outside the drawer panel) to trigger @click.self="close".
+    // The drawer panel slides out from the left (~300px wide); clicking to the right of it
+    // hits the overlay itself (no child elements), satisfying Vue's .self modifier.
+    // @see BUG-022: 改变全局 UI 状态的交互完成后必须关闭 overlay
+    await page.locator('.drawer-overlay').click({ position: { x: 600, y: 300 } });
+    await page.waitForTimeout(300);
+
     // Step 5: Recreate a note with the same procedure (same date = same name)
     await page.locator('.wing-new-btn').click();
     await expect(page.locator('.tpl-card.blank-card')).toBeVisible({ timeout: 5000 });
@@ -291,21 +308,24 @@ test.describe('持久化与跨会话', () => {
   test('V6: 多次刷新 — 两次刷新后内容不丢失', async ({ page }) => {
     // Step 1: Open initial note and type content
     const firstDot = page.locator('.wing-bookmark-dot').first();
-    const firstLabel = await firstDot.getAttribute('aria-label');
     await firstDot.click();
     await page.waitForTimeout(400);
 
-    const persistentText = '## 多次刷新持久化 ' + Date.now();
+    // Use H1 so title is preserved for post-reload lookup
+    const persistentText = '# 多次刷新持久化 ' + Date.now();
     await typeInEditor(page, persistentText);
     await waitForAutoSave(page);
+
+    // Read post-save label — title may have changed due to content replacement
+    const postSaveLabel = await page.locator('.wing-bookmark-dot.active').getAttribute('aria-label');
 
     // Step 2: First reload
     await page.reload();
     await waitForAppReady(page);
 
     // Verify content after first reload
-    if (firstLabel) {
-      await switchToNote(page, firstLabel);
+    if (postSaveLabel) {
+      await switchToNote(page, postSaveLabel);
     }
     let content = await getEditorContent(page);
     expect(content).toContain('多次刷新持久化');
@@ -315,8 +335,8 @@ test.describe('持久化与跨会话', () => {
     await waitForAppReady(page);
 
     // Verify content after second reload
-    if (firstLabel) {
-      await switchToNote(page, firstLabel);
+    if (postSaveLabel) {
+      await switchToNote(page, postSaveLabel);
     }
     content = await getEditorContent(page);
     expect(content).toContain('多次刷新持久化');
