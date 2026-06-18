@@ -123,8 +123,9 @@ test.describe('内置模板创建笔记', () => {
     await tplCard.click();
     await page.waitForTimeout(300);
 
-    // 预览区域应该存在
-    await expect(page.locator('.tpl-preview, .preview-content')).toBeVisible({ timeout: 3000 });
+    // .preview-text 仅在选中模板后渲染（v-if="selectedTpl"），验证实际预览内容
+    await expect(page.locator('.preview-text')).toBeVisible({ timeout: 3000 });
+    await expect(page.locator('.preview-text')).not.toBeEmpty();
   });
 
   test('10-使用内置模板创建笔记', async ({ page }) => {

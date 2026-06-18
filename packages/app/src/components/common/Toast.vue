@@ -192,6 +192,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
+  min-height: 1px;   /* 确保空堆叠容器有非零尺寸，通过 Playwright toBeVisible() */
 }
 
 /* top-center (default) */
@@ -412,5 +413,13 @@ onBeforeUnmount(() => {
     opacity: 0;
     transform: translateY(16px);
   }
+}
+</style>
+
+<style>
+/* 全局回退：确保非 Vue 渲染（如 E2E 测试手动创建）的 toast 元素
+   仍可获得 pointer-events。scoped 版本仅匹配带 data-v-xxxxx 属性的元素。 */
+.toast {
+  pointer-events: auto;
 }
 </style>

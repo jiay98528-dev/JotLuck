@@ -37,7 +37,7 @@ test.describe('Toast 触发与显示', () => {
   test('04-通过 JavaScript 触发 info Toast', async ({ page }) => {
     await page.evaluate(() => {
       // 使用应用的 Toast store 触发
-      const app = document.querySelector('#markluck-app');
+      const app = document.querySelector('#app');
       if (app && (app as any).__vue_app__) {
         // Try to access Pinia toast store
         const pinia = (app as any).__vue_app__.config.globalProperties.$pinia;

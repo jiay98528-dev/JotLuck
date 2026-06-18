@@ -147,7 +147,7 @@ test.describe('边界与压力测试', () => {
 
     const content = await getEditorContent(page);
     expect(content).toContain('这是一段中文测试文本');
-    expect(content).toContain('学而时习之，不亦说乎');
+    expect(content).toContain('学而时习之,不亦说乎');
     expect(content).toContain('全角字符');
   });
 

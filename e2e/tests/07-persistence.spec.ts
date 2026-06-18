@@ -256,8 +256,10 @@ test.describe('持久化与跨会话', () => {
     await hamburger.click();
     await page.waitForTimeout(400);
 
-    // Find the note in the file tree
-    const treeItem = page.locator('.tree-item').filter({ hasText: noteTitle! }).first();
+    // Find the note in the file tree by filename (tree displays filenames, not note titles)
+    const today = new Date().toISOString().slice(0, 10);
+    const expectedFilename = `笔记-${today}`;
+    const treeItem = page.locator('.tree-item').filter({ hasText: expectedFilename }).first();
     await expect(treeItem).toBeVisible({ timeout: 5000 });
 
     // Right-click to open context menu
