@@ -279,7 +279,7 @@ import { ref, watch, nextTick } from 'vue';
 import { useThemeStore } from '@/stores/theme';
 
 // ── Props / Emits ────────────────────────────────────────
-defineProps<{ visible: boolean }>();
+const props = defineProps<{ visible: boolean }>();
 const emit = defineEmits<{ 'update:visible': [boolean] }>();
 
 const overlayRef = ref<HTMLDivElement | null>(null);
