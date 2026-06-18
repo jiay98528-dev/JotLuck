@@ -23,30 +23,15 @@ export async function getEditorContent(page: Page): Promise<string> {
   });
 }
 
-/** 在编辑器中输入文本 (使用 CM6 dispatch API 原子替换内容，避免竞态条件) */
+/** 在编辑器中输入文本 (聚焦 .cm-content 后逐字键入) */
 export async function typeInEditor(page: Page, text: string): Promise<void> {
-  // 使用 CM6 的 dispatch API 原子替换内容，确保同步触发 updateListener
-  const dispatched = await page.evaluate((content: string) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const getView = (window as any).__markluck_getEditorView as (() => any) | undefined;
-    const view = getView?.();
-    if (!view) return false;
-    view.dispatch({
-      changes: { from: 0, to: view.state.doc.length, insert: content },
-    });
-    view.focus();
-    return true;
-  }, text);
-
-  if (!dispatched) {
-    // 回退：view 不可用时使用键盘操作（经 CM6 key handler，不受 fill 竞态影响）
-    const editor = page.locator('.cm-content');
-    await editor.click();
-    await page.keyboard.press('Control+a');
-    await page.keyboard.press('Backspace');
-    await page.waitForTimeout(200);
-    await page.keyboard.type(text, { delay: 10 });
-  }
+  const editor = page.locator('.cm-content');
+  await editor.click();
+  // 使用 Ctrl+A+Backspace 清除内容（经 CM6 key handler，避免 fill() 的 MutationObserver 竞态）
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Backspace');
+  await page.waitForTimeout(200); // 等待 CM6 调和状态
+  await page.keyboard.type(text, { delay: 10 });
 }
 
 /** 在编辑器中追加文本 */
@@ -68,8 +53,7 @@ export async function clearEditor(page: Page): Promise<void> {
 
 /** 等待自动保存完成 (状态栏显示"已保存") */
 export async function waitForAutoSave(page: Page): Promise<void> {
-  // 使用 .first() 避免分屏模式下多个 .status-saved 元素的严格模式冲突
-  await expect(page.locator('.status-saved').first()).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('.status-saved')).toBeVisible({ timeout: 10000 });
 }
 
 // ============================================================
