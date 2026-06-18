@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="modal-overlay" @click.self="cancel" @keydown.escape="cancel">
+    <div v-if="visible" ref="overlayRef" tabindex="-1" class="modal-overlay" @click.self="cancel" @keydown.escape="cancel">
       <div class="modal-card" role="dialog" aria-labelledby="share-dialog-title">
         <!-- Header -->
         <div class="modal-header">
@@ -78,7 +78,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import { ExportFormat, ShareChannel } from '@/types';
 import Button from '@/components/common/Button.vue';
 import { exportNote } from '@/services/Exporter';
@@ -96,6 +96,8 @@ const emit = defineEmits<{
   'update:visible': [boolean];
   cancel: [];
 }>();
+
+const overlayRef = ref<HTMLDivElement | null>(null);
 
 // ============================================================
 // State
@@ -382,7 +384,10 @@ async function shareViaLocalExport(title: string, content: string): Promise<void
 watch(
   () => props.visible,
   (val) => {
-    if (val) resetState();
+    if (val) {
+      resetState();
+      nextTick().then(() => overlayRef.value?.focus());
+    }
   },
 );
 </script>

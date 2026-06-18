@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="modal-overlay" @click.self="cancel" @keydown.escape="cancel">
+    <div v-if="visible" ref="overlayRef" tabindex="-1" class="modal-overlay" @click.self="cancel" @keydown.escape="cancel">
       <div class="modal-card">
         <!-- Header -->
         <div class="modal-header">
@@ -139,6 +139,8 @@ const emit = defineEmits<{
   cancel: [];
 }>();
 
+const overlayRef = ref<HTMLDivElement | null>(null);
+
 // ── State ──────────────────────────────────────────────
 const selectedFormat = ref<ExportFormat>(ExportFormat.PDF);
 const includeFrontmatter = ref<boolean>(true);
@@ -247,12 +249,13 @@ async function doExport(): Promise<void> {
 }
 
 // ── Watch visible to reset on open ─────────────────────
-import { watch } from 'vue';
+import { watch, nextTick } from 'vue';
 watch(
   () => props.visible,
   (val) => {
     if (val) {
       resetState();
+      nextTick().then(() => overlayRef.value?.focus());
     }
   },
 );

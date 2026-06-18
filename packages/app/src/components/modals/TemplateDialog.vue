@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="modal-overlay" @click.self="cancel" @keydown.escape="cancel">
+    <div v-if="visible" ref="overlayRef" tabindex="-1" class="modal-overlay" @click.self="cancel" @keydown.escape="cancel">
       <div class="modal-card" role="dialog" aria-labelledby="template-dialog-title">
         <!-- Header -->
         <div class="modal-header">
@@ -124,7 +124,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import {
   getBuiltInTemplates,
   getCustomTemplates,
@@ -155,6 +155,8 @@ const emit = defineEmits<{
   'create-blank': [];
   cancel: [];
 }>();
+
+const overlayRef = ref<HTMLDivElement | null>(null);
 
 // ── State ──────────────────────────────────────────────
 const templates = getBuiltInTemplates() as RichTemplateItem[];
@@ -233,7 +235,10 @@ function resetState(): void {
 watch(
   () => props.visible,
   (val) => {
-    if (val) resetState();
+    if (val) {
+      resetState();
+      nextTick().then(() => overlayRef.value?.focus());
+    }
   },
 );
 </script>

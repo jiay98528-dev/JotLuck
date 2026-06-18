@@ -68,7 +68,8 @@ export async function clearEditor(page: Page): Promise<void> {
 
 /** 等待自动保存完成 (状态栏显示"已保存") */
 export async function waitForAutoSave(page: Page): Promise<void> {
-  await expect(page.locator('.status-saved')).toBeVisible({ timeout: 10000 });
+  // 使用 .first() 避免分屏模式下多个 .status-saved 元素的严格模式冲突
+  await expect(page.locator('.status-saved').first()).toBeVisible({ timeout: 10000 });
 }
 
 // ============================================================

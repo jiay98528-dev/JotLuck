@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="modal-overlay" @click.self="close" @keydown.escape="close">
+    <div v-if="visible" ref="overlayRef" tabindex="-1" class="modal-overlay" @click.self="close" @keydown.escape="close">
       <div class="modal-card">
         <!-- Header -->
         <div class="modal-header">
@@ -275,12 +275,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, nextTick } from 'vue';
 import { useThemeStore } from '@/stores/theme';
 
 // ── Props / Emits ────────────────────────────────────────
 defineProps<{ visible: boolean }>();
 const emit = defineEmits<{ 'update:visible': [boolean] }>();
+
+const overlayRef = ref<HTMLDivElement | null>(null);
 
 // ── Theme ────────────────────────────────────────────────
 const theme = useThemeStore();
@@ -440,6 +442,14 @@ function formatDelay(ms: number): string {
 function close(): void {
   emit('update:visible', false);
 }
+
+// 对话框打开时自动聚焦 overlay，确保 Escape 键能触发 @keydown.escape
+watch(() => props.visible, async (isVisible) => {
+  if (isVisible) {
+    await nextTick();
+    overlayRef.value?.focus();
+  }
+});
 </script>
 
 <style scoped>
