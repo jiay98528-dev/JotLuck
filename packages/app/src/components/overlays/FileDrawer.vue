@@ -3,6 +3,8 @@
     <Transition name="drawer" @after-leave="onAfterLeave">
       <div
         v-if="visible"
+        ref="overlayRef"
+        tabindex="-1"
         class="drawer-overlay"
         role="presentation"
         @click.self="close"
@@ -524,6 +526,7 @@ const expandedDirs = ref<Set<string>>(new Set());
 const renamingPath = ref<string | null>(null);
 const renameValue = ref('');
 const renameInputEl = ref<HTMLInputElement | null>(null);
+const overlayRef = ref<HTMLDivElement | null>(null);
 const treeContainerRef = ref<HTMLElement | null>(null);
 
 const contextMenu = ref<{
@@ -777,6 +780,8 @@ function commitRename(): void {
 function cancelRename(): void {
   renamingPath.value = null;
   renameValue.value = '';
+  // 取消重命名后 input DOM 移除 → 焦点丢失 → 重新聚焦 overlay 恢复键盘关闭能力
+  nextTick().then(() => overlayRef.value?.focus());
 }
 
 // ============================================================
@@ -807,6 +812,8 @@ function closeContextMenu(): void {
 function handleContextMenuRename(): void {
   const node = contextMenu.value.node;
   closeContextMenu();
+  // 关闭右键菜单后 DOM 移除 → 焦点丢失 → 重新聚焦 overlay 恢复键盘事件可达性
+  nextTick().then(() => overlayRef.value?.focus());
   if (node) {
     startRename(node.entry.path, node.entry.name);
   }
@@ -815,6 +822,8 @@ function handleContextMenuRename(): void {
 function handleContextMenuDelete(): void {
   const node = contextMenu.value.node;
   closeContextMenu();
+  // 关闭右键菜单后 DOM 移除 → 焦点丢失 → 重新聚焦 overlay 恢复键盘事件可达性
+  nextTick().then(() => overlayRef.value?.focus());
   if (node) {
     emit('delete-file', node.entry.path);
   }
@@ -865,6 +874,9 @@ watch(
         }
         expandedDirs.value = next;
       }
+      // 聚焦 overlay 确保 Escape 键可靠关闭（tabindex="-1" 使 div 可编程聚焦但不进入 Tab 顺序）
+      // @see BUG-041, BUG-047 — 参考 SettingsDialog/ExportDialog 等 modals 模式
+      nextTick().then(() => overlayRef.value?.focus());
     }
   },
 );
