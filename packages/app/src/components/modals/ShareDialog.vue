@@ -1,6 +1,13 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" ref="overlayRef" tabindex="-1" class="modal-overlay" @click.self="cancel" @keydown.escape="cancel">
+    <div
+      v-if="visible"
+      ref="overlayRef"
+      tabindex="-1"
+      class="modal-overlay"
+      @click.self="cancel"
+      @keydown.escape="cancel"
+    >
       <div class="modal-card" role="dialog" aria-labelledby="share-dialog-title">
         <!-- Header -->
         <div class="modal-header">

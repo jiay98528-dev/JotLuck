@@ -9,6 +9,7 @@
  *   5. Ctrl+Click 钉住源码模式
  *   6. 即时模式下持续编辑无内容损坏
  *   7. 多步骤用户旅程
+ *   8. 标题换行后中文 IME 输入不回跳、不吞标点
  *
  * 基于 V1-V6 测试规则：
  *   V1 交互正确性 — 验证交互后的结果
@@ -582,5 +583,38 @@ test.describe('即时模式 (Live Preview)', () => {
     expect(persistedContent).toContain('- [ ] 检查点 A');
     expect(persistedContent).toContain('- [x] 检查点 B');
     expect(persistedContent).toContain('[[快速入门]]');
+  });
+
+  // ==========================================================
+  // Test 11: IME 回归 — 标题换行后首字符与中文标点不被吞
+  // ==========================================================
+  test('11-标题换行后中文 IME 输入保持在新行且标点不被吞', async ({ page }) => {
+    await typeInEditor(page, '# 中文标题');
+
+    const editor = page.locator('.cm-content');
+    await editor.click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.press('Enter');
+
+    // Enter 后不能立即替换上一行，否则 Chrome 会在 IME compositionstart
+    // 前失去新空行的 DOM 输入锚点。
+    await expect(page.locator('.cm-live-block[data-block-type="heading"]')).toHaveCount(0);
+
+    await editor.dispatchEvent('compositionstart', { data: '' });
+    await page.keyboard.insertText('中');
+    await editor.dispatchEvent('compositionend', { data: '中' });
+
+    // compositionend 后的冷却窗口内继续输入中文标点，必须留在同一行。
+    await page.keyboard.insertText('。');
+    await page.waitForTimeout(250);
+
+    const content = await getEditorContent(page);
+    expect(content).toBe('# 中文标题\n中。');
+    expect(content).not.toContain('# 中文标题中');
+
+    // 稳定后标题仍会恢复即时渲染，Markdown 符号不会残留。
+    const renderedHeading = page.locator('.cm-live-block[data-block-type="heading"]');
+    await expect(renderedHeading).toHaveCount(1);
+    await expect(renderedHeading).toContainText('中文标题');
   });
 });

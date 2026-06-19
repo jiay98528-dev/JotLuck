@@ -107,11 +107,10 @@ function createGhostTextPlugin(predictor: MarkdownPredictor) {
           return;
         }
         if (update.docChanged || update.selectionSet) {
-          // 清除上次预测的定时器
-          if (debounce.timer) {
-            clearTimeout(debounce.timer);
-            debounce.timer = null;
-          }
+          // Backspace immediately after compositionend must cancel both the
+          // normal debounce and the delayed composition prediction. Otherwise
+          // two predictions race and reinsert/flicker a stale widget.
+          this.clearPendingTimers();
 
           // 如果文档或选区变化 → 清除当前 ghost text
           if (this.currentGhostText) {

@@ -184,7 +184,7 @@ onBeforeUnmount(() => {
   position: fixed;
   z-index: var(--z-toast);
   pointer-events: none;
-  min-height: 1px;   /* 确保空容器有非零尺寸，通过 Playwright toBeVisible() 检查 */
+  min-height: 1px; /* 确保空容器有非零尺寸，通过 Playwright toBeVisible() 检查 */
   min-width: 1px;
 }
 
@@ -192,7 +192,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
-  min-height: 1px;   /* 确保空堆叠容器有非零尺寸，通过 Playwright toBeVisible() */
+  min-height: 1px; /* 确保空堆叠容器有非零尺寸，通过 Playwright toBeVisible() */
 }
 
 /* top-center (default) */

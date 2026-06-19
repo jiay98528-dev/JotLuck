@@ -1,6 +1,13 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" ref="overlayRef" tabindex="-1" class="modal-overlay" @click.self="close" @keydown.escape="close">
+    <div
+      v-if="visible"
+      ref="overlayRef"
+      tabindex="-1"
+      class="modal-overlay"
+      @click.self="close"
+      @keydown.escape="close"
+    >
       <div class="modal-card">
         <!-- Header -->
         <div class="modal-header">
@@ -444,12 +451,15 @@ function close(): void {
 }
 
 // 对话框打开时自动聚焦 overlay，确保 Escape 键能触发 @keydown.escape
-watch(() => props.visible, async (isVisible) => {
-  if (isVisible) {
-    await nextTick();
-    overlayRef.value?.focus();
-  }
-});
+watch(
+  () => props.visible,
+  async (isVisible) => {
+    if (isVisible) {
+      await nextTick();
+      overlayRef.value?.focus();
+    }
+  },
+);
 </script>
 
 <style scoped>

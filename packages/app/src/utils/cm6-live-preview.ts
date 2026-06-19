@@ -819,9 +819,27 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         // IME guard: pause rebuilds during composition, but keep existing
         // decorations — clearing them removes all rendered blocks (BUG-036).
         if (this.isImeActive(update.view, update)) {
+          // Keep existing widgets aligned with the changing document while IME
+          // owns the DOM. Leaving an old DecorationSet unmapped makes replace
+          // widgets reappear on unrelated lower lines after Backspace/commit.
+          if (update.docChanged) {
+            this.decorations = this.decorations.map(update.changes);
+          }
           this.clearPendingCompositionRebuild();
           return;
         }
+
+        // compositionend schedules a delayed rebuild. Any edits arriving in
+        // that settling window (notably Backspace) must map the existing set and
+        // push the rebuild back, rather than rebuilding twice around one input.
+        if (this.compositionRebuildTimer) {
+          if (update.docChanged) {
+            this.decorations = this.decorations.map(update.changes);
+          }
+          this.scheduleCompositionRebuild(update.view);
+          return;
+        }
+
         if (update.docChanged || update.selectionSet || update.viewportChanged) {
           this.decorations = this.build(update.view);
         }
@@ -858,13 +876,14 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           if (this.destroyed || this.isImeActive(view)) return;
           this.decorations = this.build(view);
           view.dispatch({});
-        }, 80);
+        }, 120);
       }
 
       build(view: EditorView): DecorationSet {
         const text = view.state.doc.toString();
         const blocks = parseLiveBlocks(text);
         const cursor = view.state.selection.main.head;
+        const cursorLine = view.state.doc.lineAt(cursor);
         const pinned = view.state.field(pinnedSourceField, false) ?? new Set<string>();
         const decos: Range<Decoration>[] = [];
 
@@ -873,13 +892,15 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
 
           const isFocused = cursor >= block.from && cursor <= block.to;
           const isPinned = pinned.has(block.key);
-          // Only show source for the exact focused block or pinned blocks.
-          // Removed touchesEmptyCursorLine — it forced users to press Enter
-          // twice before format symbols disappeared after line breaks.
-          // The cursor-on-empty-line-below-block case is already handled by
-          // isFocused (cursor is NOT on the block, so it renders normally).
+          // Keep the block immediately above a new empty cursor line as source.
+          // Replacing that line before Windows IME establishes composition on
+          // the empty line makes Chrome move the preedit anchor back into the
+          // previous block. This is state-based rather than timer-based: once
+          // the user commits text or moves away, the block renders normally.
+          const touchesEmptyCursorLine =
+            cursorLine.length === 0 && block.to === cursorLine.from - 1;
 
-          if (isFocused || isPinned) continue; // show source
+          if (isFocused || isPinned || touchesEmptyCursorLine) continue; // show source
 
           // Only decorate if the range is within a single line (no newline chars)
           if (block.raw.includes('\n')) continue; // safety: never decorate multi-line ranges
