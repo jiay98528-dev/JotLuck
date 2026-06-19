@@ -561,10 +561,20 @@ class RenderedBlockWidget extends WidgetType {
     // If sanitization produced a fragment, wrap it; otherwise return the existing span
     if (frag.childNodes.length === 1) {
       const child = frag.firstChild as HTMLElement;
-      if (child.classList?.contains('cm-live-block')) return child;
+      if (child.classList?.contains('cm-live-block')) {
+        // IME isolation boundary: contentEditable=false creates a non-editable
+        // island inside CM6's contenteditable=true region. This prevents IME
+        // composition from spilling across widget boundaries without degrading
+        // normal editing UX (unlike the removed static touchesEmptyCursorLine guard).
+        // @see BUG-049, memory/bug_log.md
+        child.contentEditable = 'false';
+        return child;
+      }
     }
     const span = document.createElement('span');
     span.className = 'cm-live-block';
+    // IME isolation boundary — @see BUG-049
+    span.contentEditable = 'false';
     span.setAttribute('data-block-key', this.key);
     // Get attributes from the HTML string (parse them)
     const m = /<span class="cm-live-block"([^>]*)>/.exec(this.html);
@@ -883,7 +893,6 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         const text = view.state.doc.toString();
         const blocks = parseLiveBlocks(text);
         const cursor = view.state.selection.main.head;
-        const cursorLine = view.state.doc.lineAt(cursor);
         const pinned = view.state.field(pinnedSourceField, false) ?? new Set<string>();
         const decos: Range<Decoration>[] = [];
 
@@ -892,15 +901,8 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
 
           const isFocused = cursor >= block.from && cursor <= block.to;
           const isPinned = pinned.has(block.key);
-          // Keep the block immediately above a new empty cursor line as source.
-          // Replacing that line before Windows IME establishes composition on
-          // the empty line makes Chrome move the preedit anchor back into the
-          // previous block. This is state-based rather than timer-based: once
-          // the user commits text or moves away, the block renders normally.
-          const touchesEmptyCursorLine =
-            cursorLine.length === 0 && block.to === cursorLine.from - 1;
 
-          if (isFocused || isPinned || touchesEmptyCursorLine) continue; // show source
+          if (isFocused || isPinned) continue; // show source
 
           // Only decorate if the range is within a single line (no newline chars)
           if (block.raw.includes('\n')) continue; // safety: never decorate multi-line ranges

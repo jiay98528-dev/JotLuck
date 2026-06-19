@@ -596,9 +596,12 @@ test.describe('即时模式 (Live Preview)', () => {
     await page.keyboard.press('Control+End');
     await page.keyboard.press('Enter');
 
-    // Enter 后不能立即替换上一行，否则 Chrome 会在 IME compositionstart
-    // 前失去新空行的 DOM 输入锚点。
-    await expect(page.locator('.cm-live-block[data-block-type="heading"]')).toHaveCount(0);
+    // Enter 后上一行应立即渲染。IME 安全由三层防御保证：
+    //   L1: EDIT_CONTEXT=false (MarkdownEditor.vue:183)
+    //   L2: contentEditable="false" widget 隔离 (RenderedBlockWidget.toDOM)
+    //   L3: isImeActive() 跳过 rebuild + compositionRebuildTimer
+    // @see BUG-049, memory/bug_log.md
+    await expect(page.locator('.cm-live-block[data-block-type="heading"]')).toHaveCount(1);
 
     await editor.dispatchEvent('compositionstart', { data: '' });
     await page.keyboard.insertText('中');
