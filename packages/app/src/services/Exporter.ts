@@ -220,6 +220,16 @@ interface InlineFormat {
   underline?: { type: 'single' };
 }
 
+/** Heading format by depth: size in half-points, universal black, bold */
+const HEADING_FMT: Record<number, InlineFormat> = {
+  1: { size: 36, bold: true, color: '000000', font: 'PingFang SC' },
+  2: { size: 32, bold: true, color: '000000', font: 'PingFang SC' },
+  3: { size: 28, bold: true, color: '000000', font: 'PingFang SC' },
+  4: { size: 24, bold: true, color: '000000', font: 'PingFang SC' },
+  5: { size: 24, bold: true, color: '000000', font: 'PingFang SC' },
+  6: { size: 24, bold: true, color: '000000', font: 'PingFang SC' },
+};
+
 /** Build docx TextRun array from marked inline tokens, with cascading format context */
 function buildTextRuns(tokens: Token[] | undefined, fmt: InlineFormat = {}): TextRun[] {
   if (!tokens || tokens.length === 0) {
@@ -340,11 +350,12 @@ function buildDocxChildren(blocks: Token[], _opts: InternalExportOptions): (Para
       // ── Heading ──
       case 'heading': {
         const t = token as Tokens.Heading;
+        const fmt = HEADING_FMT[t.depth] ?? HEADING_FMT[1];
         children.push(
           new Paragraph({
             heading: mapHeadingLevel(t.depth),
             spacing: { before: 240, after: 120 },
-            children: buildTextRuns(t.tokens),
+            children: buildTextRuns(t.tokens, { ...fmt }),
           }),
         );
         break;
