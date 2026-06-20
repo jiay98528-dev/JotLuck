@@ -83,6 +83,7 @@ let suppressSync = false; // guard against feedback loop: watch → dispatch →
 const internallyEmittedValues = new Set<string>();
 let activePendingAction: FormatAction | null = null;
 let pendingInlineMarkers: readonly [string, string] | null = null;
+let deferredPendingAction: FormatAction | null = null;
 
 // E2E content reader — registered in onMounted (NOT setup!) because Vue 3 :key patching
 // runs setup before old component's onUnmounted, causing old unmount to delete new registration.
@@ -165,6 +166,16 @@ function finishPendingInline(): void {
 
 function applyPendingFormat(action: FormatAction | null): void {
   if (!view) return;
+
+  // BUG-052: @mousedown.prevent on toolbar buttons keeps the editor focused
+  // while IME is composing.  Dispatching document changes during active
+  // composition corrupts the IME transaction → first character after format
+  // is swallowed.  Defer until compositionend.
+  if (view.composing || view.compositionStarted) {
+    deferredPendingAction = action;
+    return;
+  }
+
   if (activePendingAction && pendingInlineMarkers) finishPendingInline();
 
   activePendingAction = action === 'clear' ? null : action;
@@ -316,6 +327,11 @@ onMounted(() => {
 
   // Selection tracking
   document.addEventListener('selectionchange', onSelectionChange);
+
+  // BUG-052: when format is clicked during IME composition, defer
+  // marker insertion until after compositionend so the dispatch
+  // doesn't corrupt CM6's composition transaction.
+  view.contentDOM.addEventListener('compositionend', onCompositionEndApplyDeferred);
 });
 
 onUnmounted(() => {
@@ -332,6 +348,7 @@ onUnmounted(() => {
   delete window.__markluck_modelOverwrites;
   document.removeEventListener('selectionchange', onSelectionChange);
   if (view) {
+    view.contentDOM.removeEventListener('compositionend', onCompositionEndApplyDeferred);
     suppressSync = true;
     view.destroy();
     view = null;
@@ -377,6 +394,20 @@ function onSelectionChange(): void {
   if (!view || !view.hasFocus) return;
   const sel = view.state.selection.main;
   emit('selection-change', { from: sel.from, to: sel.to });
+}
+
+function onCompositionEndApplyDeferred(): void {
+  if (deferredPendingAction === null || !view) return;
+  // CM6 may not have cleared view.composing yet when compositionend fires.
+  // Defer by one macrotask so the composition transaction fully settles
+  // before we insert format markers.
+  setTimeout(() => {
+    if (!view || deferredPendingAction === null) return;
+    if (view.composing || view.compositionStarted) return;
+    const action = deferredPendingAction;
+    deferredPendingAction = null;
+    applyPendingFormat(action);
+  }, 0);
 }
 
 function getEditorView(): EditorView | null {
