@@ -703,6 +703,9 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
       compositionRebuildTimer: ReturnType<typeof setTimeout> | null = null;
       // rAF handle for deferred initialization
       __initRAF: number | null = null;
+      // Guarantees decorations are built on the first update() call, even
+      // if the rAF callback's empty dispatch was optimised away by CM6.
+      decorationsBuilt = false;
 
       constructor(view: EditorView) {
         this.editorView = view;
@@ -711,6 +714,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         const rAFId = requestAnimationFrame(() => {
           if (this.destroyed || this.isImeActive(view)) return;
           this.decorations = this.build(view);
+          this.decorationsBuilt = true;
           view.dispatch({});
         });
         this.__initRAF = rAFId;
@@ -857,8 +861,14 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           return;
         }
 
-        if (update.docChanged || update.selectionSet || update.viewportChanged) {
+        if (
+          update.docChanged ||
+          update.selectionSet ||
+          update.viewportChanged ||
+          !this.decorationsBuilt
+        ) {
           this.decorations = this.build(update.view);
+          this.decorationsBuilt = true;
         }
       }
 
