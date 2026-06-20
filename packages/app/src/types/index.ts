@@ -16,6 +16,8 @@ export type {
   TagEntry,
   TemplateItem,
   ContextMenuItem,
+  ParagraphPreset,
+  FormatAction,
 } from './editor';
 
 export type { ColorScheme } from './editor';

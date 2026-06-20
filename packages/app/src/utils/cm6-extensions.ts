@@ -43,7 +43,15 @@ const markluckHighlightStyle = HighlightStyle.define([
   // Other tags: fall through to browser defaults
 ]);
 
-export function markluckExtensions(ph = '开始书写…'): Extension[] {
+const sourceOnlyHighlightStyle = HighlightStyle.define([
+  { tag: tags.heading, fontWeight: 'normal', fontSize: '1em', textDecoration: 'none' },
+  { tag: tags.strong, fontWeight: 'normal' },
+  { tag: tags.emphasis, fontStyle: 'normal' },
+  { tag: tags.monospace, fontFamily: 'var(--ff-mono)' },
+  { tag: tags.link, color: 'var(--link)', textDecoration: 'none' },
+]);
+
+export function markluckExtensions(ph = '开始书写…', sourceOnly = false): Extension[] {
   return [
     markdown(),
     history(),
@@ -51,7 +59,7 @@ export function markluckExtensions(ph = '开始书写…'): Extension[] {
     keymap.of([...defaultKeymap, ...historyKeymap]),
     EditorView.lineWrapping,
     cmPlaceholder(ph),
-    syntaxHighlighting(markluckHighlightStyle),
+    syntaxHighlighting(sourceOnly ? sourceOnlyHighlightStyle : markluckHighlightStyle),
     EditorView.theme(
       {
         '&': {

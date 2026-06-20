@@ -287,6 +287,14 @@
   font-style: italic;
 }
 
+/* ---- IME-safe adjacent-line preview ----
+   Keep Markdown source text in the DOM for Windows IME context, while
+   collapsing syntax delimiters so the line still reads like live preview. */
+.cm-live-source-marker {
+  color: transparent;
+  font-size: 0;
+}
+
 /* ===== Ghost Text (文字补全幽灵文本) =====
  *
  * 光标后灰色斜体预测文本，不阻碍交互，不可选中。

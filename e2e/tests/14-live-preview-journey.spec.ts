@@ -596,12 +596,17 @@ test.describe('即时模式 (Live Preview)', () => {
     await page.keyboard.press('Control+End');
     await page.keyboard.press('Enter');
 
-    // Enter 后上一行应立即渲染。IME 安全由三层防御保证：
-    //   L1: EDIT_CONTEXT=false (MarkdownEditor.vue:183)
-    //   L2: contentEditable="false" widget 隔离 (RenderedBlockWidget.toDOM)
-    //   L3: isImeActive() 跳过 rebuild + compositionRebuildTimer
-    // @see BUG-049, memory/bug_log.md
-    await expect(page.locator('.cm-live-block[data-block-type="heading"]')).toHaveCount(1);
+    // Enter 后保留源码 DOM 供 Windows IME 建立文本上下文，但视觉上隐藏 #。
+    await expect(page.locator('.cm-live-block[data-block-type="heading"]')).toHaveCount(0);
+    const sourcePreservingHeading = page.locator(
+      '.cm-line.cm-live-source-preserving[data-live-source-type="heading"]',
+    );
+    await expect(sourcePreservingHeading).toHaveCount(1);
+    await expect(sourcePreservingHeading).toContainText('# 中文标题');
+
+    const hiddenHeadingMarker = sourcePreservingHeading.locator('.cm-live-source-marker');
+    await expect(hiddenHeadingMarker).toHaveCount(1);
+    await expect(hiddenHeadingMarker).toHaveCSS('font-size', '0px');
 
     await editor.dispatchEvent('compositionstart', { data: '' });
     await page.keyboard.insertText('中');
@@ -619,5 +624,24 @@ test.describe('即时模式 (Live Preview)', () => {
     const renderedHeading = page.locator('.cm-live-block[data-block-type="heading"]');
     await expect(renderedHeading).toHaveCount(1);
     await expect(renderedHeading).toContainText('中文标题');
+  });
+
+  test('12-相邻空行保留粗体源码上下文但视觉隐藏定界符', async ({ page }) => {
+    await typeInEditor(page, '**粗体内容**');
+
+    const editor = page.locator('.cm-content');
+    await editor.click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.press('Enter');
+
+    const sourcePreservingParagraph = page.locator(
+      '.cm-line.cm-live-source-preserving[data-live-source-type="paragraph"]',
+    );
+    await expect(sourcePreservingParagraph).toHaveCount(1);
+    await expect(sourcePreservingParagraph).toContainText('**粗体内容**');
+
+    const hiddenMarkers = sourcePreservingParagraph.locator('.cm-live-source-marker');
+    await expect(hiddenMarkers).toHaveCount(2);
+    await expect(hiddenMarkers.first()).toHaveCSS('font-size', '0px');
   });
 });

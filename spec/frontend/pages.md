@@ -7,10 +7,10 @@
 
 ## 1. 路由表
 
-| 路径               | 名称         | 组件             | 懒加载 | 说明         |
-| ------------------ | ------------ | ---------------- | :----: | ------------ |
-| `/`                | `home`       | `NotebookHome`   |  是    | 主编辑器页面 |
-| `/:pathMatch(.*)*` | `not-found`  | `NotebookHome`   |  是    | 通配符兜底   |
+| 路径               | 名称        | 组件           | 懒加载 | 说明         |
+| ------------------ | ----------- | -------------- | :----: | ------------ |
+| `/`                | `home`      | `NotebookHome` |   是   | 主编辑器页面 |
+| `/:pathMatch(.*)*` | `not-found` | `NotebookHome` |   是   | 通配符兜底   |
 
 **路由实现**：`packages/app/src/router/index.ts` — 使用 `createWebHistory()`，无 hash 模式。通配符路由将所有未匹配路径也导向 NotebookHome，由应用内部自行处理"无此笔记"场景。
 
@@ -92,12 +92,12 @@ Clean ──(用户编辑)──► Dirty ──(600ms debounce)──► Saving
                          (继续编辑触发新保存)
 ```
 
-| 状态    | 标志位                                     | StatusBar 显示                          |
-| ------- | ------------------------------------------ | --------------------------------------- |
-| Clean   | `isDirty = false`, `isSaving = false`     | "已保存" + `lastSavedAt` 时间戳         |
-| Dirty   | `isDirty = true`, `isSaving = false`      | "未保存"（dot 指示器）                  |
-| Saving  | `isSaving = true`                         | "保存中..."（spinner）                  |
-| Error   | `saveError != null`                       | 错误信息（红色）+ 自动重试（下次编辑）  |
+| 状态   | 标志位                                | StatusBar 显示                         |
+| ------ | ------------------------------------- | -------------------------------------- |
+| Clean  | `isDirty = false`, `isSaving = false` | "已保存" + `lastSavedAt` 时间戳        |
+| Dirty  | `isDirty = true`, `isSaving = false`  | "未保存"（dot 指示器）                 |
+| Saving | `isSaving = true`                     | "保存中..."（spinner）                 |
+| Error  | `saveError != null`                   | 错误信息（红色）+ 自动重试（下次编辑） |
 
 **并发控制**：`saveGeneration` 计数器 — 每次新保存递增，回调中检查 `gen !== saveGeneration` 则丢弃过期结果。
 
@@ -107,45 +107,48 @@ Clean ──(用户编辑)──► Dirty ──(600ms debounce)──► Saving
 
 #### 2.2.2 视图模式
 
-| 模式    | `viewMode` 值 | 编辑器渲染                                          | 切换方式                      |
-| ------- | :-----------: | --------------------------------------------------- | ----------------------------- |
-| Live    | `live`        | 单个 `MarkdownEditor`，`live-preview = true`       | 点击右上角视图切换按钮        |
-| Split   | `split`       | 左：`MarkdownEditor`（`live-preview = false`）+ 右：`splitPreviewHtml` 渲染预览 | 点击右上角视图切换按钮        |
+| 模式  | `viewMode` 值 | 编辑器渲染                                                                      | 切换方式               |
+| ----- | :-----------: | ------------------------------------------------------------------------------- | ---------------------- |
+| Live  |    `live`     | 单个 `MarkdownEditor`，`live-preview = true`                                    | 点击右上角视图切换按钮 |
+| Split |    `split`    | 左：`MarkdownEditor`（`live-preview = false`）+ 右：`splitPreviewHtml` 渲染预览 | 点击右上角视图切换按钮 |
 
 **视图切换按钮**：位于编辑器右上角，显示当前模式标签（"即时"/"分栏"），hover 提示下一个模式。点击循环切换 `['split', 'live']`。
 
 **分栏拖拽**：`splitRatio`（默认 50），范围 [30, 70]。拖拽分栏线 (`split-divider`) 调整左右比例，`mousedown` → `mousemove` → `mouseup` 清理。
 
-**分栏预览渲染**：`updateSplitPreview()` — 50ms debounce 后调用 `renderLineByLine()`（逐行 marked 渲染，代码围栏整体渲染），再通过 `highlightCodeBlocks()` 应用语法高亮。
+**分栏预览渲染**：`updateSplitPreview()` — 50ms debounce 后对完整文档调用一次 `renderMarkdown()`，再通过 `highlightCodeBlocks()` 应用语法高亮。禁止逐行包装独立段落。
+
+**分栏视觉约束**：左侧使用纯 Markdown 源码排版，不应用标题字号、粗体等渲染态视觉样式；右侧第一行必须位于固定格式栏下方，不得被遮挡。
 
 **Live 模式交互**：
+
 - Wiki-link 点击 → `onLivePreviewWikiLinkClick()` → 查找目标笔记 → `onSelectNote()`
 - Tag 点击 → `onLivePreviewTagClick()` → `searchStore.open()` + 打开命令面板
 - 外部链接点击 → `onLivePreviewExternalLinkClick()` → `window.open()` 新标签页
 
 #### 2.2.3 抽屉与面板状态
 
-| 组件              | 状态变量           | 初始值  | 触发打开                                | 触发关闭                                  |
-| ----------------- | ------------------ | :-----: | --------------------------------------- | ----------------------------------------- |
-| 文件抽屉 (左滑)   | `showLeftDrawer`   | `false` | 左翼按钮 / TopBar 汉堡菜单              | 选择文件后自动关闭 / 点击遮罩 / 再次点击按钮 |
-| 命令面板          | `searchVisible`    | `false` | Ctrl+K / Ctrl+Shift+P / TopBar 搜索按钮 | 选择结果 / Esc / 点击遮罩                 |
-| 导出对话框        | `showExport`       | `false` | TopBar 导出按钮 / 命令面板快捷操作      | 对话框内关闭 / 点击遮罩                   |
-| 模板对话框        | `showTemplate`     | `false` | 左翼新建按钮 / 命令面板快捷操作         | 选择模板后自动关闭 / 点击遮罩             |
-| 设置对话框        | `showSettings`     | `false` | 左翼设置按钮 / 命令面板快捷操作         | 对话框内关闭 / 点击遮罩                   |
-| 分享对话框        | `showShare`        | `false` | TopBar 分享按钮                         | 对话框内关闭 / 点击遮罩                   |
-| 新建文件对话框    | `showNewFileDialog`| `false` | 文件抽屉内"新建文件"按钮                | 确认/取消 / 点击遮罩                      |
-| 右翼面板          | `showRightWing`    | `true`  | 默认显示 / 右翼折叠按钮                 | 右翼折叠按钮                              |
-| 更新通知          | `showUpdateNotification` | 见下表 | 挂载 15s 后检查到新版本                | 关闭 / 忽略此版本                         |
+| 组件            | 状态变量                 | 初始值  | 触发打开                                | 触发关闭                                     |
+| --------------- | ------------------------ | :-----: | --------------------------------------- | -------------------------------------------- |
+| 文件抽屉 (左滑) | `showLeftDrawer`         | `false` | 左翼按钮 / TopBar 汉堡菜单              | 选择文件后自动关闭 / 点击遮罩 / 再次点击按钮 |
+| 命令面板        | `searchVisible`          | `false` | Ctrl+K / Ctrl+Shift+P / TopBar 搜索按钮 | 选择结果 / Esc / 点击遮罩                    |
+| 导出对话框      | `showExport`             | `false` | TopBar 导出按钮 / 命令面板快捷操作      | 对话框内关闭 / 点击遮罩                      |
+| 模板对话框      | `showTemplate`           | `false` | 左翼新建按钮 / 命令面板快捷操作         | 选择模板后自动关闭 / 点击遮罩                |
+| 设置对话框      | `showSettings`           | `false` | 左翼设置按钮 / 命令面板快捷操作         | 对话框内关闭 / 点击遮罩                      |
+| 分享对话框      | `showShare`              | `false` | TopBar 分享按钮                         | 对话框内关闭 / 点击遮罩                      |
+| 新建文件对话框  | `showNewFileDialog`      | `false` | 文件抽屉内"新建文件"按钮                | 确认/取消 / 点击遮罩                         |
+| 右翼面板        | `showRightWing`          | `true`  | 默认显示 / 右翼折叠按钮                 | 右翼折叠按钮                                 |
+| 更新通知        | `showUpdateNotification` | 见下表  | 挂载 15s 后检查到新版本                 | 关闭 / 忽略此版本                            |
 
 **文件抽屉自动关闭（Overlay 遮挡防护）**：选择笔记后 `showLeftDrawer = false`，模板选择后 `showTemplate = false`。遵循 tool.md §5.9 规则 — 改变全局 UI 状态的交互完成后必须关闭 overlay。
 
 #### 2.2.4 格式气泡
 
-| 触发条件                     | 状态               |
-| ---------------------------- | ------------------ |
-| 编辑器内选中文字（非空选区） | `bubbleVisible = true`，定位到选区中心上方 |
-| 选区清空 / 无选区            | `bubbleVisible = false` |
-| 点击格式按钮（B/I/S/Code/Link） | 应用格式 → `bubbleVisible = false` |
+| 触发条件                        | 状态                                       |
+| ------------------------------- | ------------------------------------------ |
+| 编辑器内选中文字（非空选区）    | `bubbleVisible = true`，定位到选区中心上方 |
+| 选区清空 / 无选区               | `bubbleVisible = false`                    |
+| 点击格式按钮（B/I/S/Code/Link） | 应用格式 → `bubbleVisible = false`         |
 
 **首次使用提示**：`localStorage` 键 `markluck:formatBubble:hintShown`，首次选中文字时显示一次性 toast 提示。
 
@@ -191,23 +194,23 @@ WelcomePage 是 Teleport 到 `<body>` 的首次引导向导，通过 `localStora
 
 ### 3.2 Props & Events
 
-| 成员       | 类型                          | 说明                     |
-| ---------- | ----------------------------- | ------------------------ |
-| `visible`  | `boolean` (prop)              | 父组件控制显隐           |
-| `update:visible` | `(boolean) => void` (emit) | v-model 双向绑定         |
-| `complete` | `() => void` (emit)           | 引导完成时通知父组件     |
+| 成员             | 类型                       | 说明                 |
+| ---------------- | -------------------------- | -------------------- |
+| `visible`        | `boolean` (prop)           | 父组件控制显隐       |
+| `update:visible` | `(boolean) => void` (emit) | v-model 双向绑定     |
+| `complete`       | `() => void` (emit)        | 引导完成时通知父组件 |
 
 ### 3.3 步骤子状态
 
 引导共 5 步，`currentStep` 从 1 到 5。
 
-| 步骤 | 标题                                   | 内容                                                                 | 交互                        |
-| :--: | -------------------------------------- | -------------------------------------------------------------------- | --------------------------- |
-|  1   | 不绑定工具，你的笔记永远属于你         | .md 纯文本 + 文件夹即笔记本 + 任意工具打开                           | 点击"下一步"                |
-|  2   | 你的隐私永远是底线                     | 完全离线 + 基于算法的文字补全 + 本地学习习惯                         | 点击"下一步"                |
-|  3   | MarkLuck 能为你做什么？                | 即时渲染 / Wiki-link / 模板 / 全文搜索 / 多格式导出                  | 点击"下一步"                |
-|  4   | 把我设为默认编辑器？                   | 双击 .md 即刻编辑。按钮调用 Tauri API（Web 端 no-op）                | "设为默认编辑器" / "暂不设置" |
-|  5   | 需要我保持最新版本么？                 | 自动检查更新设置（toggle + radio）+ 自动安装（暂不可用，代码签名待完成） | toggle 切换 + 选择 radio + "完成设置" |
+| 步骤 | 标题                           | 内容                                                                     | 交互                                  |
+| :--: | ------------------------------ | ------------------------------------------------------------------------ | ------------------------------------- |
+|  1   | 不绑定工具，你的笔记永远属于你 | .md 纯文本 + 文件夹即笔记本 + 任意工具打开                               | 点击"下一步"                          |
+|  2   | 你的隐私永远是底线             | 完全离线 + 基于算法的文字补全 + 本地学习习惯                             | 点击"下一步"                          |
+|  3   | MarkLuck 能为你做什么？        | 即时渲染 / Wiki-link / 模板 / 全文搜索 / 多格式导出                      | 点击"下一步"                          |
+|  4   | 把我设为默认编辑器？           | 双击 .md 即刻编辑。按钮调用 Tauri API（Web 端 no-op）                    | "设为默认编辑器" / "暂不设置"         |
+|  5   | 需要我保持最新版本么？         | 自动检查更新设置（toggle + radio）+ 自动安装（暂不可用，代码签名待完成） | toggle 切换 + 选择 radio + "完成设置" |
 
 **步骤指示器**：5 个圆点 + 4 条连线，已完成步骤高亮（accent 色），当前步骤圆点放大 (scale 1.25)。
 
@@ -215,11 +218,11 @@ WelcomePage 是 Teleport 到 `<body>` 的首次引导向导，通过 `localStora
 
 ### 3.4 localStorage 持久化键
 
-| 键                                | 值        | 说明                     |
-| --------------------------------- | --------- | ------------------------ |
-| `markluck:welcome:completed`      | `'1'`     | 引导是否已完成           |
-| `markluck:version:autoCheck`      | `'true'`  | 自动检查更新开关         |
-| `markluck:version:autoInstall`    | `'true'`  | 自动安装更新开关（暂不可用） |
+| 键                             | 值       | 说明                         |
+| ------------------------------ | -------- | ---------------------------- |
+| `markluck:welcome:completed`   | `'1'`    | 引导是否已完成               |
+| `markluck:version:autoCheck`   | `'true'` | 自动检查更新开关             |
+| `markluck:version:autoInstall` | `'true'` | 自动安装更新开关（暂不可用） |
 
 ---
 

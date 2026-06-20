@@ -29,6 +29,19 @@ export type BlockType =
 /** 语法块显示模式 */
 export type BlockMode = 'source' | 'render';
 
+/** 固定格式栏的段落样式预设 */
+export type ParagraphPreset = 'paragraph' | 'heading1' | 'heading2' | 'heading3' | 'blockquote';
+
+/** 编辑器格式命令 */
+export type FormatAction =
+  | ParagraphPreset
+  | 'bold'
+  | 'italic'
+  | 'strikethrough'
+  | 'inlineCode'
+  | 'link'
+  | 'clear';
+
 /** 解析后的单个语法块 — M1 统一类型（合并 MarkdownBlock + NoteBlock） */
 export interface MarkdownBlock {
   /** 块唯一标识符（格式: ${notePath}::${startOffset}） */

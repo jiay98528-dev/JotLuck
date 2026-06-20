@@ -16,6 +16,22 @@ import { sanitize } from './sanitize';
 import { highlightCodeBlocks } from './highlight';
 import type { RendererOptions } from './types';
 
+/** 将中文输入法常见全角 Markdown 定界符规范化为等长半角字符。 */
+export function normalizeFullwidthMarkdownSyntax(source: string): string {
+  return source
+    .replace(
+      /^(\s*)(＃+)[ \u3000]+/gm,
+      (_match, indent: string, marks: string) => `${indent}${marks.replaceAll('＃', '#')} `,
+    )
+    .replace(/^(\s*)＞[ \u3000]?/gm, '$1> ')
+    .replace(/^(\s*)－[ \u3000]+/gm, '$1- ')
+    .replace(/＊＊([^＊\n]+)＊＊/g, '**$1**')
+    .replace(/＊([^＊\n]+)＊/g, '*$1*')
+    .replace(/～～([^～\n]+)～～/g, '~~$1~~')
+    .replace(/｀([^｀\n]+)｀/g, '`$1`')
+    .replace(/［([^］\n]+)］（([^）\n]+)）/g, '[$1]($2)');
+}
+
 // 配置 marked 使用 MarkLuck 自定义扩展
 marked.use({ extensions: markluckExtensions });
 
@@ -37,7 +53,9 @@ marked.setOptions({ gfm: true, breaks: false });
  */
 export function renderMarkdown(source: string, _options?: RendererOptions): string {
   // Step 1: Parse Markdown with custom extensions
-  const rawHtml = marked.parse(source, { async: false }) as string;
+  const rawHtml = marked.parse(normalizeFullwidthMarkdownSyntax(source), {
+    async: false,
+  }) as string;
 
   // Step 2: Sanitize against XSS
   const cleanHtml = sanitize(rawHtml);

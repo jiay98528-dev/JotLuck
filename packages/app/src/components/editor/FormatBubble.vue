@@ -17,6 +17,7 @@
           class="bubble-btn bubble-btn--bold"
           title="加粗 (Ctrl+B)"
           aria-label="加粗"
+          @mousedown.prevent
           @click="emitFormat('bold')"
           >B</Button
         >
@@ -26,6 +27,7 @@
           class="bubble-btn bubble-btn--italic"
           title="斜体 (Ctrl+I)"
           aria-label="斜体"
+          @mousedown.prevent
           @click="emitFormat('italic')"
           >I</Button
         >
@@ -35,6 +37,7 @@
           class="bubble-btn"
           title="删除线"
           aria-label="删除线"
+          @mousedown.prevent
           @click="emitFormat('strikethrough')"
           >S</Button
         >
@@ -44,6 +47,7 @@
           class="bubble-btn bubble-btn--mono"
           title="行内代码 (Ctrl+`)"
           aria-label="行内代码"
+          @mousedown.prevent
           @click="emitFormat('inlineCode')"
           >&lt;/&gt;</Button
         >
@@ -53,6 +57,7 @@
           class="bubble-btn"
           title="链接 (Ctrl+K)"
           aria-label="链接"
+          @mousedown.prevent
           @click="emitFormat('link')"
         >
           <svg
@@ -69,6 +74,18 @@
             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
             <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
           </svg>
+        </Button>
+        <span class="bubble-divider" aria-hidden="true" />
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          class="bubble-btn bubble-btn--clear"
+          title="清除格式"
+          aria-label="清除格式"
+          @mousedown.prevent
+          @click="emitFormat('clear')"
+        >
+          Tx
         </Button>
       </div>
     </Transition>
@@ -101,6 +118,7 @@
  */
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import Button from '@/components/common/Button.vue';
+import type { FormatAction } from '@/types';
 
 // ============================================================
 // Constants
@@ -114,8 +132,8 @@ const BUBBLE_OFFSET_Y = 48;
 // ============================================================
 const props = withDefaults(
   defineProps<{
-    visible: boolean;
-    position: { x: number; y: number };
+    visible?: boolean;
+    position?: { x: number; y: number };
   }>(),
   {
     visible: false,
@@ -124,7 +142,7 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  format: [type: string];
+  format: [type: FormatAction];
 }>();
 
 // ============================================================
@@ -183,7 +201,7 @@ function clearInactivityTimer(): void {
 // ============================================================
 // Event Handlers
 // ============================================================
-function emitFormat(type: string): void {
+function emitFormat(type: FormatAction): void {
   emit('format', type);
   resetInactivityTimer();
 }
@@ -247,6 +265,18 @@ onUnmounted(() => {
   transform: translateX(-50%);
   will-change: transform, opacity;
   user-select: none;
+}
+
+.bubble-divider {
+  width: var(--border-thin);
+  height: 20px;
+  background: var(--rule);
+}
+
+.bubble-btn--clear {
+  font-family: var(--ff-body);
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
 }
 
 /* ============================================================

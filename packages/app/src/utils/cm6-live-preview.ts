@@ -20,7 +20,8 @@ import {
   type ViewUpdate,
 } from '@codemirror/view';
 import { StateField, StateEffect, type Range } from '@codemirror/state';
-import { renderMarkdown } from '@markluck/renderer';
+import { syntaxTree } from '@codemirror/language';
+import { normalizeFullwidthMarkdownSyntax, renderMarkdown } from '@markluck/renderer';
 import DOMPurify from 'dompurify';
 import { normalizeUrl } from '@/utils/urlUtils';
 
@@ -99,6 +100,16 @@ interface LivePreviewOptions {
   onWikiLinkClick?: (note: string, anchor: null | string) => void;
 }
 
+const SOURCE_PRESERVING_BLOCK_TYPES = new Set<BlockType>(['heading', 'paragraph']);
+const SOURCE_MARK_NODE_NAMES = new Set([
+  'HeaderMark',
+  'EmphasisMark',
+  'CodeMark',
+  'LinkMark',
+  'URL',
+  'LinkLabel',
+]);
+
 /** 生成稳定 block ID：行号 + 内容 hash，编辑上方内容不会改变 key */
 function blockKey(lineNumber: number, raw: string): string {
   let h = 0;
@@ -114,7 +125,7 @@ function groupKey(lineNumber: number): string {
 // ---- Block Parser ----
 
 function parseLiveBlocks(text: string): LiveBlock[] {
-  const lines = text.split('\n');
+  const lines = normalizeFullwidthMarkdownSyntax(text).split('\n');
   const blocks: LiveBlock[] = [];
   let pos = 0;
   let i = 0;
@@ -561,20 +572,10 @@ class RenderedBlockWidget extends WidgetType {
     // If sanitization produced a fragment, wrap it; otherwise return the existing span
     if (frag.childNodes.length === 1) {
       const child = frag.firstChild as HTMLElement;
-      if (child.classList?.contains('cm-live-block')) {
-        // IME isolation boundary: contentEditable=false creates a non-editable
-        // island inside CM6's contenteditable=true region. This prevents IME
-        // composition from spilling across widget boundaries without degrading
-        // normal editing UX (unlike the removed static touchesEmptyCursorLine guard).
-        // @see BUG-049, memory/bug_log.md
-        child.contentEditable = 'false';
-        return child;
-      }
+      if (child.classList?.contains('cm-live-block')) return child;
     }
     const span = document.createElement('span');
     span.className = 'cm-live-block';
-    // IME isolation boundary — @see BUG-049
-    span.contentEditable = 'false';
     span.setAttribute('data-block-key', this.key);
     // Get attributes from the HTML string (parse them)
     const m = /<span class="cm-live-block"([^>]*)>/.exec(this.html);
@@ -893,6 +894,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         const text = view.state.doc.toString();
         const blocks = parseLiveBlocks(text);
         const cursor = view.state.selection.main.head;
+        const cursorLine = view.state.doc.lineAt(cursor);
         const pinned = view.state.field(pinnedSourceField, false) ?? new Set<string>();
         const decos: Range<Decoration>[] = [];
 
@@ -901,8 +903,22 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
 
           const isFocused = cursor >= block.from && cursor <= block.to;
           const isPinned = pinned.has(block.key);
+          // Keep the block immediately above a new empty cursor line as source.
+          // Replacing that line before Windows IME establishes composition on
+          // the empty line makes Chrome move the preedit anchor back into the
+          // previous block. This is state-based rather than timer-based: once
+          // the user commits text or moves away, the block renders normally.
+          const touchesEmptyCursorLine =
+            cursorLine.length === 0 && block.to === cursorLine.from - 1;
 
           if (isFocused || isPinned) continue; // show source
+
+          if (touchesEmptyCursorLine) {
+            if (SOURCE_PRESERVING_BLOCK_TYPES.has(block.type)) {
+              decos.push(...this.buildSourcePreservingDecorations(view, block));
+            }
+            continue;
+          }
 
           // Only decorate if the range is within a single line (no newline chars)
           if (block.raw.includes('\n')) continue; // safety: never decorate multi-line ranges
@@ -921,6 +937,41 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         }
 
         return Decoration.set(decos, true);
+      }
+
+      buildSourcePreservingDecorations(view: EditorView, block: LiveBlock): Range<Decoration>[] {
+        const sourceDecos: Range<Decoration>[] = [
+          Decoration.line({
+            attributes: {
+              class: 'cm-live-source-preserving',
+              'data-live-source-type': block.type,
+            },
+          }).range(block.from),
+        ];
+
+        syntaxTree(view.state).iterate({
+          from: block.from,
+          to: block.to,
+          enter: (node) => {
+            if (!SOURCE_MARK_NODE_NAMES.has(node.name)) return;
+
+            let markerTo = node.to;
+            if (node.name === 'HeaderMark') {
+              while (
+                markerTo < block.to &&
+                view.state.doc.sliceString(markerTo, markerTo + 1) === ' '
+              ) {
+                markerTo++;
+              }
+            }
+
+            sourceDecos.push(
+              Decoration.mark({ class: 'cm-live-source-marker' }).range(node.from, markerTo),
+            );
+          },
+        });
+
+        return sourceDecos;
       }
 
       destroy() {

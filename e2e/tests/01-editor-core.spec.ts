@@ -155,6 +155,40 @@ test.describe('编辑器核心', () => {
     await expect(page.locator('.cm-editor')).toBeVisible();
   });
 
+  test('分栏模式显示完整标准预览且左侧保持纯源码', async ({ page }) => {
+    await typeInEditor(page, '# 第一行\n第二行\n第三行');
+    await page.locator('.view-mode-toggle').click();
+
+    const sourcePane = page.locator('.split-left');
+    const previewPane = page.locator('.split-preview');
+    await expect(sourcePane.locator('.cm-content')).toContainText('# 第一行');
+    await expect(sourcePane.locator('.cm-live-block')).toHaveCount(0);
+
+    const firstHeading = previewPane.locator('h1');
+    await expect(firstHeading).toHaveText('第一行');
+    await expect(previewPane.locator('p')).toHaveCount(1);
+    await expect(previewPane.locator('p')).toContainText('第二行\n第三行');
+    await expect(previewPane.locator('p:empty')).toHaveCount(0);
+
+    const layout = await page.evaluate(() => {
+      const toolbar = document.querySelector('.editor-control-bar')?.getBoundingClientRect();
+      const heading = document.querySelector('.split-preview h1')?.getBoundingClientRect();
+      const sourceLine = document.querySelector('.split-left .cm-line');
+      const sourceNodes = sourceLine ? [sourceLine, ...sourceLine.querySelectorAll('*')] : [];
+      const maxSourceFontSize = Math.max(
+        0,
+        ...sourceNodes.map((node) => Number.parseFloat(getComputedStyle(node).fontSize)),
+      );
+      return {
+        toolbarBottom: toolbar?.bottom ?? 0,
+        headingTop: heading?.top ?? 0,
+        maxSourceFontSize,
+      };
+    });
+    expect(layout.headingTop).toBeGreaterThanOrEqual(layout.toolbarBottom);
+    expect(layout.maxSourceFontSize).toBeLessThanOrEqual(16);
+  });
+
   // ==========================================================
   // Test 7: 文本选中时显示格式气泡
   // ==========================================================
@@ -189,6 +223,33 @@ test.describe('编辑器核心', () => {
     // 验证气泡内的格式按钮存在
     await expect(page.locator('.bubble-btn--bold')).toBeVisible();
     await expect(page.locator('.bubble-btn--italic')).toBeVisible();
+  });
+
+  test('固定格式栏支持先选格式、输入内容并在 Enter 后结束', async ({ page }) => {
+    const toolbar = page.getByRole('toolbar', { name: '固定格式工具栏' });
+    await expect(toolbar).toBeVisible();
+
+    const preset = toolbar.getByLabel('段落样式');
+    await expect(preset).toHaveValue('paragraph');
+    await typeInEditor(page, '');
+    const editor = page.locator('.cm-content');
+
+    const bold = toolbar.getByRole('button', { name: '加粗' });
+    await expect(bold).toBeEnabled();
+    await bold.click();
+    await expect(bold).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.type('中文');
+    await page.keyboard.press('Enter');
+    await expect(bold).toHaveAttribute('aria-pressed', 'false');
+    await page.keyboard.type('普通正文');
+    expect(await getEditorContent(page)).toBe('**中文**\n普通正文');
+
+    await page.keyboard.press('Enter');
+    await preset.selectOption('heading2');
+    await page.keyboard.type('预选标题');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('恢复正文');
+    expect(await getEditorContent(page)).toBe('**中文**\n普通正文\n## 预选标题\n恢复正文');
   });
 
   // ==========================================================

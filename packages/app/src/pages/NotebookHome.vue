@@ -33,14 +33,20 @@
     @toggle-right-wing="showRightWing = !showRightWing"
   >
     <template #editor>
-      <!-- View Mode Toggle Button -->
-      <button
-        class="view-mode-toggle"
-        :title="`点击切换到 ${nextModeLabels[viewMode]} 模式`"
-        @click="cycleViewMode"
-      >
-        {{ viewModeLabel }}
-      </button>
+      <div class="editor-control-bar">
+        <FormatToolbar
+          :preset="activeParagraphPreset"
+          :active-action="pendingFormatAction"
+          @format="onToolbarFormat"
+        />
+        <button
+          class="view-mode-toggle"
+          :title="`点击切换到 ${nextModeLabels[viewMode]} 模式`"
+          @click="cycleViewMode"
+        >
+          {{ viewModeLabel }}
+        </button>
+      </div>
       <!-- Format Bubble (floating, on text selection) -->
       <FormatBubble :visible="bubbleVisible" :position="bubblePosition" @format="onBubbleFormat" />
       <!-- Split Mode: left editor + right preview -->
@@ -52,8 +58,11 @@
             :model-value="currentContent"
             :show-line-numbers="true"
             :live-preview="false"
+            :source-only="true"
+            :pending-format="pendingFormatAction"
             @update:model-value="onSplitContentUpdate"
             @selection-change="onSelectionChange"
+            @pending-format-ended="pendingFormatAction = null"
           />
         </div>
         <div
@@ -74,11 +83,13 @@
         :model-value="currentContent"
         :show-line-numbers="false"
         :live-preview="true"
+        :pending-format="pendingFormatAction"
         :on-live-preview-external-link-click="onLivePreviewExternalLinkClick"
         :on-live-preview-tag-click="onLivePreviewTagClick"
         :on-live-preview-wiki-link-click="onLivePreviewWikiLinkClick"
         @update:model-value="onContentUpdate"
         @selection-change="onSelectionChange"
+        @pending-format-ended="pendingFormatAction = null"
       />
     </template>
   </AppShell>
@@ -193,6 +204,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from
 import AppShell from '@/components/layout/AppShell.vue';
 import MarkdownEditor from '@/components/editor/MarkdownEditor.vue';
 import FormatBubble from '@/components/editor/FormatBubble.vue';
+import FormatToolbar from '@/components/editor/FormatToolbar.vue';
 import CommandPalette from '@/components/overlays/CommandPalette.vue';
 import FileDrawer from '@/components/overlays/FileDrawer.vue';
 import ExportDialog from '@/components/modals/ExportDialog.vue';
@@ -207,11 +219,24 @@ import { useSearchStore } from '@/stores/search';
 import { useThemeStore } from '@/stores/theme';
 import { useHeadings } from '@/composables/useHeadings';
 import { renderMarkdown, highlightCodeBlocks } from '@markluck/renderer';
-import type { DirEntry, BacklinkEntry, SearchResult, IFileSystemService } from '@/types';
+import type {
+  DirEntry,
+  BacklinkEntry,
+  SearchResult,
+  IFileSystemService,
+  FormatAction,
+  ParagraphPreset,
+} from '@/types';
 import UpdateNotification from '@/components/overlays/UpdateNotification.vue';
 import MarkdownCheatSheet from '@/components/overlays/MarkdownCheatSheet.vue';
 import { useVersionCheck } from '@/composables/useVersionCheck';
 import { normalizeUrl } from '@/utils/urlUtils';
+import {
+  applyParagraphPreset,
+  clearMarkdownFormatting,
+  detectParagraphPreset,
+  toggleInlineFormat,
+} from '@/utils/markdown-formatting';
 
 // --- File System ---
 // Tauri 桌面端使用真实文件系统，Web/E2E 使用虚拟 MockFS
@@ -256,6 +281,8 @@ const notebookName = ref('示例笔记本');
 // --- Format Bubble ---
 const bubbleVisible = ref(false);
 const bubblePosition = ref({ x: 0, y: 0 });
+const activeParagraphPreset = ref<ParagraphPreset>('paragraph');
+const pendingFormatAction = ref<FormatAction | null>(null);
 const editorRef = ref<InstanceType<typeof MarkdownEditor> | null>(null);
 
 // --- View Mode ---
@@ -264,6 +291,7 @@ const viewModeLabel = computed(() => viewModeLabels[viewMode.value]);
 const nextModeLabels: Record<ViewMode, string> = { split: '即时', live: '分栏' };
 
 function cycleViewMode(): void {
+  pendingFormatAction.value = null;
   const modes: ViewMode[] = ['split', 'live'];
   const idx = modes.indexOf(viewMode.value);
   viewMode.value = modes[(idx + 1) % 2]!;
@@ -518,47 +546,11 @@ let previewRenderTimer: ReturnType<typeof setTimeout> | null = null;
  * 避免 marked 将无空行分隔的相邻内联行合并为同一段落。
  * 代码围栏内部作为整体渲染，保留语法高亮。
  */
-function renderLineByLine(source: string): string {
-  const lines = source.split('\n');
-  const result: string[] = [];
-  let i = 0;
-
-  while (i < lines.length) {
-    const line = lines[i] ?? '';
-
-    // Code fence: collect all lines between ``` markers
-    if (line.trimStart().startsWith('```')) {
-      const fenceLines: string[] = [line];
-      i++;
-      while (i < lines.length) {
-        const fl = lines[i] ?? '';
-        fenceLines.push(fl);
-        i++;
-        if (fl.trimStart().startsWith('```')) break;
-      }
-      // Render the entire fence block as one unit
-      const fenceSrc = fenceLines.join('\n');
-      result.push(renderMarkdown(fenceSrc));
-      continue;
-    }
-
-    // Regular line — render independently
-    if (line.trim() === '') {
-      result.push(''); // empty line → blank row in preview
-    } else {
-      result.push(renderMarkdown(line));
-    }
-    i++;
-  }
-
-  return result.join('\n');
-}
-
 function updateSplitPreview(): void {
   if (previewRenderTimer) clearTimeout(previewRenderTimer);
   previewRenderTimer = setTimeout(() => {
     try {
-      splitPreviewHtml.value = renderLineByLine(currentContent.value);
+      splitPreviewHtml.value = renderMarkdown(currentContent.value);
       void nextTick(() => {
         const previewEl = document.querySelector<HTMLElement>(
           '.split-preview, .markdown-body--full',
@@ -619,6 +611,10 @@ const FORMAT_HINT_KEY = 'markluck:formatBubble:hintShown';
 const toast = useToast();
 
 function onSelectionChange(sel: { from: number; to: number } | null): void {
+  const view = editorRef.value?.getEditorView();
+  if (view && sel) {
+    activeParagraphPreset.value = detectParagraphPreset(view.state.doc.toString(), sel.from);
+  }
   if (!sel || sel.from === sel.to) {
     bubbleVisible.value = false;
     return;
@@ -631,7 +627,6 @@ function onSelectionChange(sel: { from: number; to: number } | null): void {
   }
 
   // Use CodeMirror 6 API to get pixel coordinates — window.getSelection() is unreliable inside CM6
-  const view = editorRef.value?.getEditorView();
   if (view) {
     const headCoords = view.coordsAtPos(sel.from);
     if (headCoords) {
@@ -653,22 +648,45 @@ function onSelectionChange(sel: { from: number; to: number } | null): void {
   }
 }
 
-function onBubbleFormat(type: string): void {
+const PARAGRAPH_PRESETS: readonly ParagraphPreset[] = [
+  'paragraph',
+  'heading1',
+  'heading2',
+  'heading3',
+  'blockquote',
+];
+
+function isParagraphPreset(action: FormatAction): action is ParagraphPreset {
+  return PARAGRAPH_PRESETS.includes(action as ParagraphPreset);
+}
+
+function onToolbarFormat(action: FormatAction): void {
+  pendingFormatAction.value =
+    action === 'clear' || pendingFormatAction.value === action ? null : action;
+  bubbleVisible.value = false;
+}
+
+function onBubbleFormat(action: FormatAction): void {
   const view = editorRef.value?.getEditorView();
   if (!view) return;
   const { from, to } = view.state.selection.main;
-  const selected = view.state.sliceDoc(from, to) || '';
-  const wrappers: Record<string, [string, string]> = {
-    bold: ['**', '**'],
-    italic: ['*', '*'],
-    strikethrough: ['~~', '~~'],
-    inlineCode: ['`', '`'],
-    link: ['[', '](url)'],
-  };
-  const w = wrappers[type];
-  if (w) {
-    view.dispatch({ changes: { from, to, insert: `${w[0]}${selected}${w[1]}` } });
-  }
+  const doc = view.state.doc.toString();
+  const edit = isParagraphPreset(action)
+    ? applyParagraphPreset(doc, from, to, action)
+    : action === 'clear'
+      ? clearMarkdownFormatting(doc, from, to)
+      : toggleInlineFormat(doc, from, to, action);
+
+  view.dispatch({
+    changes: edit.changes,
+    selection: edit.selection,
+    scrollIntoView: true,
+  });
+  view.focus();
+  activeParagraphPreset.value = detectParagraphPreset(
+    view.state.doc.toString(),
+    edit.selection.anchor,
+  );
   bubbleVisible.value = false;
 }
 
@@ -857,11 +875,28 @@ function onDismissVersion(version: string) {
 
 <style scoped>
 /* ===== View Mode Toggle ===== */
-.view-mode-toggle {
+.editor-control-bar {
   position: absolute;
   top: calc(var(--topbar-height) + var(--space-8));
-  right: var(--space-12);
+  left: var(--space-16);
+  right: var(--space-16);
   z-index: calc(var(--z-overlay) + 1);
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  background: var(--paper-raised);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sheet);
+}
+
+.editor-control-bar :deep(.format-toolbar) {
+  flex: 1 1 auto;
+}
+
+.view-mode-toggle {
+  flex: 0 0 auto;
+  margin-right: var(--space-4);
   padding: var(--space-4) var(--space-10);
   border: var(--border-thin) solid var(--rule);
   border-radius: var(--radius);
@@ -889,6 +924,8 @@ function onDismissVersion(version: string) {
 .split-pane {
   display: flex;
   height: 100%;
+  box-sizing: border-box;
+  padding-top: var(--space-48);
   overflow: hidden;
   position: relative;
 }
