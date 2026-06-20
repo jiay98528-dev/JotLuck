@@ -188,7 +188,10 @@ function parseLiveBlocks(text: string): LiveBlock[] {
     }
 
     // Code fence block ``` ... ```
-    if (line.startsWith('```')) {
+    // Spec allows ≤3 spaces indent; also match ````` etc.
+    const fenceMatch = /^(\s{0,3})(`{3,})(.*)$/.exec(line);
+    if (fenceMatch) {
+      const ticks = fenceMatch[2] ?? '```';
       const group = groupKey(i);
       blocks.push({
         key: blockKey(i, line),
@@ -205,7 +208,7 @@ function parseLiveBlocks(text: string): LiveBlock[] {
       while (i < lines.length) {
         const cl = lines[i] ?? '';
         const clLen = cl.length;
-        const isLast = cl.startsWith('```');
+        const isLast = new RegExp(`^\\s{0,3}${ticks}\\s*$`).test(cl);
         blocks.push({
           key: blockKey(i, cl),
           from: pos,
@@ -471,14 +474,17 @@ function renderBlockHtml(block: LiveBlock, refDefs: Map<string, string>): string
         return wrapBlockHtml('<hr>', block);
 
       case 'codeFenceLine': {
-        const isFence = block.raw.trim().startsWith('```');
-        if (isFence && block.position !== 'first') {
+        const fenceTest = /^\s{0,3}`{3,}/.test(block.raw);
+        if (fenceTest && block.position !== 'first') {
           // Closing fence — show it styled as empty
           return wrapBlockHtml('', block);
         }
-        if (isFence) {
+        if (fenceTest) {
           // Opening fence — show language label if present
-          const lang = block.raw.trim().replace(/^```/, '').trim();
+          const lang = block.raw
+            .trim()
+            .replace(/^`{3,}/, '')
+            .trim();
           return wrapBlockHtml(
             lang ? `<span class="cm-code-lang">${escapeAttr(lang)}</span>` : '',
             block,

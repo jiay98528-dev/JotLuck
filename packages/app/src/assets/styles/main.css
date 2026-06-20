@@ -175,6 +175,8 @@ body {
   padding: var(--space-16);
   overflow-x: auto;
   margin: 0.8em 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 .markdown-body pre code {
