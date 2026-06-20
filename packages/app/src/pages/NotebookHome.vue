@@ -428,8 +428,10 @@ async function initNotebook(): Promise<void> {
 }
 
 async function loadDirectory(dir: string): Promise<void> {
-  currentDir.value = dir;
-  files.value = await fs.listDirectory(dir);
+  // 统一去除尾斜杠，后续所有路径拼接由调用方显式加 /
+  const normalized = dir.endsWith('/') && dir !== '/' ? dir.slice(0, -1) : dir;
+  currentDir.value = normalized;
+  files.value = await fs.listDirectory(normalized);
 }
 
 // --- File Operations ---
@@ -506,9 +508,14 @@ async function onDeleteFile(path: string): Promise<void> {
 }
 
 async function onRenameFile(oldPath: string, newName: string): Promise<void> {
-  const newPath = currentDir.value + newName;
+  // 从旧路径提取父目录，避免 currentDir 尾斜杠不一致导致路径错误
+  const parentDir = oldPath.substring(0, oldPath.lastIndexOf('/') + 1) || '/';
+  const newPath = parentDir + newName;
   await fs.renameFile(oldPath, newPath);
   if (activePath.value === oldPath) activePath.value = newPath;
+  // 更新索引：移除旧路径，索引新路径
+  indexStore.removeDocument(oldPath);
+  await indexStore.refreshDocument(fs, newPath);
   await loadDirectory(currentDir.value);
 }
 

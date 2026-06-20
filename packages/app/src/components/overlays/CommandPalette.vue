@@ -323,7 +323,14 @@ watch(
   () => props.visible,
   async (isVisible) => {
     if (isVisible) {
-      query.value = '';
+      // 如果有外部预设查询（如标签点击 → tag:xxx），
+      // 同步到输入框并立即执行搜索；否则正常打开空白面板。
+      if (searchStore.query) {
+        query.value = searchStore.query;
+        searchWithDebounce(query.value);
+      } else {
+        query.value = '';
+      }
       selectedIndex.value = 0;
       await nextTick();
       searchInputRef.value?.focus();
