@@ -204,9 +204,34 @@
   cursor: pointer;
 }
 
-/* ---- Table ---- */
+/* ---- Table ----
+   Uses CSS anonymous table layout: browser auto-creates anonymous
+   table / table-row-group ancestors when it sees table-row children.
+   Each .cm-line becomes a row; .ml-td spans become cells with
+   matching column widths. */
+.cm-line:has(.cm-live-block[data-block-type='tableRow']) {
+  line-height: var(--lh-body) !important;
+}
+
 .cm-live-block[data-block-type='tableRow'] {
   display: table-row;
+  border: none;
+}
+
+.ml-td {
+  display: table-cell;
+  padding: var(--space-4) var(--space-10);
+  border: var(--border-thin) solid var(--rule);
+  vertical-align: top;
+  font-size: var(--text-sm);
+  word-break: break-word;
+}
+
+/* Separator row — collapse to a thin line */
+.cm-line:has(.cm-live-block[data-block-type='tableRow']:not(:has(.ml-td))) {
+  line-height: 0 !important;
+  height: 0;
+  overflow: hidden;
 }
 
 /* ---- Frontmatter ---- */

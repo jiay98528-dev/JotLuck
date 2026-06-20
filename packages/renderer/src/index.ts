@@ -30,7 +30,8 @@ export function normalizeFullwidthMarkdownSyntax(source: string): string {
     .replace(/～～([^～\n]+)～～/g, '~~$1~~')
     .replace(/｀｀｀([^｀\n]*)｀｀｀/g, '```$1```')
     .replace(/｀([^｀\n]+)｀/g, '`$1`')
-    .replace(/［([^］\n]+)］（([^）\n]+)）/g, '[$1]($2)');
+    .replace(/［([^］\n]+)］（([^）\n]+)）/g, '[$1]($2)')
+    .replace(/｜/g, '|');
 }
 
 // 配置 marked 使用 MarkLuck 自定义扩展

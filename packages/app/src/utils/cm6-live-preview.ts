@@ -89,7 +89,7 @@ interface LiveBlock {
   /** 多行 block 共享的分组键，CSS 用 [data-block-group] 连接 */
   groupKey?: string;
   /** 在多行 block 中的位置 */
-  position?: 'first' | 'middle' | 'last' | 'single';
+  position?: 'first' | 'middle' | 'last' | 'single' | 'separator';
   /** 有序列表项在组内的序号 (1-based)，用于内联编号 */
   itemIndex?: number;
   /** 多行闭合块未找到闭合定界符（如代码围栏缺少 ```） */
@@ -102,7 +102,7 @@ interface LivePreviewOptions {
   onWikiLinkClick?: (note: string, anchor: null | string) => void;
 }
 
-const SOURCE_PRESERVING_BLOCK_TYPES = new Set<BlockType>(['heading', 'paragraph']);
+const SOURCE_PRESERVING_BLOCK_TYPES = new Set<BlockType>(['heading', 'paragraph', 'tableRow']);
 const SOURCE_MARK_NODE_NAMES = new Set([
   'HeaderMark',
   'EmphasisMark',
@@ -425,15 +425,23 @@ function parseLiveBlocks(text: string): LiveBlock[] {
         i++;
       }
       const tblBlocks = blocks.filter((b) => b.groupKey === group);
+      const hasSeparator = tblBlocks.length > 1 && /^\|[\s\-:|]+\|$/.test(tblBlocks[1]?.raw ?? '');
       if (tblBlocks.length === 1) tblBlocks[0]!.position = 'single';
       else {
         tblBlocks[0]!.position = 'first';
-        // Mark separator row
-        if (tblBlocks.length > 1 && /^\|[\s\-:|]+\|$/.test(tblBlocks[1]?.raw ?? '')) {
-          tblBlocks[1]!.type = 'tableRow'; // keep as tableRow, CSS handles styling
+        if (hasSeparator) {
+          tblBlocks[1]!.position = 'separator';
         }
         tblBlocks[tblBlocks.length - 1]!.position = 'last';
-        for (let gi = 1; gi < tblBlocks.length - 1; gi++) tblBlocks[gi]!.position = 'middle';
+        for (let gi = 1; gi < tblBlocks.length - 1; gi++) {
+          if (!tblBlocks[gi]!.position) tblBlocks[gi]!.position = 'middle';
+        }
+      }
+      // Flag as unclosed if the table is missing its separator row
+      if (!hasSeparator) {
+        for (let k = tblBlocks.length - 1; k >= 0; k--) {
+          tblBlocks[k]!.unclosed = true;
+        }
       }
       continue;
     }
@@ -540,9 +548,30 @@ function renderBlockHtml(block: LiveBlock, refDefs: Map<string, string>): string
         // Empty widget — hidden by CSS
         return '';
 
-      case 'tableRow':
-        // Render each cell separately for proper table styling
-        return wrapBlockHtml(renderBlock(block.raw, 'paragraph', refDefs), block);
+      case 'tableRow': {
+        // Manually split cells instead of calling renderMarkdown(line),
+        // which produces a standalone <table> per line that cannot connect
+        // across rows.  Each cell is rendered individually for inline
+        // formatting, then wrapped in a <span> styled as table-cell.
+        const isSeparator = /^\|[\s\-:|]+\|$/.test(block.raw);
+        if (isSeparator) {
+          return wrapBlockHtml('', block);
+        }
+        const cells = block.raw.split('|');
+        // first and last elements are empty (before first | and after last |)
+        const inner = cells.slice(1, -1);
+        const cellHtml = inner
+          .map((cell) => {
+            const trimmed = cell.trim();
+            if (/^[\s\-:]+$/.test(trimmed)) return '<span class="ml-td"></span>';
+            const rendered = renderBlock(trimmed, 'paragraph', refDefs)
+              .replace(/^<p>/, '')
+              .replace(/<\/p>\n?$/, '');
+            return `<span class="ml-td">${rendered || '&nbsp;'}</span>`;
+          })
+          .join('');
+        return wrapBlockHtml(cellHtml, block);
+      }
 
       case 'frontmatterLine':
         // Dim the frontmatter lines
@@ -1017,7 +1046,9 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
               ? ' 代码块缺少结束标记，在行首输入 ``` 闭合'
               : warn.type === 'frontmatterLine'
                 ? ' 开头信息缺少结束标记，在行首输入 --- 闭合'
-                : '';
+                : warn.type === 'tableRow'
+                  ? ' 表格缺少分隔行，请在第二行输入 |---| 定义列'
+                  : '';
           if (!label) continue;
           decos.push(
             Decoration.widget({
