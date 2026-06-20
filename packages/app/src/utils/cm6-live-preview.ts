@@ -1014,9 +1014,9 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         for (const [, warn] of unclosedWarnings) {
           const label =
             warn.type === 'codeFenceLine'
-              ? ' ⚠ 未闭合的代码块'
+              ? ' 代码块缺少结束标记，在行首输入 ``` 闭合'
               : warn.type === 'frontmatterLine'
-                ? ' ⚠ 未闭合的 YAML 头'
+                ? ' 开头信息缺少结束标记，在行首输入 --- 闭合'
                 : '';
           if (!label) continue;
           decos.push(

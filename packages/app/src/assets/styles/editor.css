@@ -295,19 +295,18 @@
   font-size: 0;
 }
 
-/* ---- Unclosed multi-line block hint — persistent warning until block is closed ---- */
+/* ---- 未闭合格式提醒 — 持续显示直到补齐闭合标记 ---- */
 .cm-live-unclosed-hint {
   display: inline-block;
   margin-left: var(--space-8);
-  padding: 0 var(--space-8);
+  padding: 0 var(--space-10);
   border-radius: var(--radius);
-  background: var(--signal-warning);
-  color: oklch(0.3 0.01 85);
+  background: var(--signal-warning-soft);
+  color: var(--ink-secondary);
   font-size: var(--text-xs);
-  line-height: 1.6;
+  line-height: 1.8;
   white-space: nowrap;
   user-select: none;
-  pointer-events: none;
 }
 
 /* ===== Ghost Text (文字补全幽灵文本) =====
