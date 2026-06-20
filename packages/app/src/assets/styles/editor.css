@@ -295,6 +295,21 @@
   font-size: 0;
 }
 
+/* ---- Unclosed multi-line block hint — persistent warning until block is closed ---- */
+.cm-live-unclosed-hint {
+  display: inline-block;
+  margin-left: var(--space-8);
+  padding: 0 var(--space-8);
+  border-radius: var(--radius);
+  background: var(--signal-warning);
+  color: oklch(0.3 0.01 85);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: none;
+}
+
 /* ===== Ghost Text (文字补全幽灵文本) =====
  *
  * 光标后灰色斜体预测文本，不阻碍交互，不可选中。

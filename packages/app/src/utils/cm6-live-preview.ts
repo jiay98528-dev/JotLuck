@@ -92,6 +92,8 @@ interface LiveBlock {
   position?: 'first' | 'middle' | 'last' | 'single';
   /** 有序列表项在组内的序号 (1-based)，用于内联编号 */
   itemIndex?: number;
+  /** 多行闭合块未找到闭合定界符（如代码围栏缺少 ```） */
+  unclosed?: boolean;
 }
 
 interface LivePreviewOptions {
@@ -151,6 +153,7 @@ function parseLiveBlocks(text: string): LiveBlock[] {
       pos = startPos + lineLen + 1;
       i++;
       let _j = 0;
+      let closed = false;
       while (i < lines.length) {
         const fl = lines[i] ?? '';
         const flLen = fl.length;
@@ -168,7 +171,16 @@ function parseLiveBlocks(text: string): LiveBlock[] {
         pos = pos + flLen + 1;
         i++;
         _j++;
-        if (isLast) break;
+        if (isLast) {
+          closed = true;
+          break;
+        }
+      }
+      if (!closed) {
+        for (let k = blocks.length - 1; k >= 0; k--) {
+          if (blocks[k]!.groupKey === group) blocks[k]!.unclosed = true;
+          else break;
+        }
       }
       continue;
     }
@@ -205,6 +217,7 @@ function parseLiveBlocks(text: string): LiveBlock[] {
       });
       pos = startPos + lineLen + 1;
       i++;
+      let closed = false;
       while (i < lines.length) {
         const cl = lines[i] ?? '';
         const clLen = cl.length;
@@ -222,7 +235,14 @@ function parseLiveBlocks(text: string): LiveBlock[] {
         pos = pos + clLen + 1;
         i++;
         if (isLast) {
+          closed = true;
           break;
+        }
+      }
+      if (!closed) {
+        for (let k = blocks.length - 1; k >= 0; k--) {
+          if (blocks[k]!.groupKey === group) blocks[k]!.unclosed = true;
+          else break;
         }
       }
       continue;
@@ -620,6 +640,35 @@ class EmptyWidget extends WidgetType {
   }
 }
 
+/**
+ * 未闭合多行格式提醒 Widget：当代码围栏或 frontmatter 缺少闭合定界符时
+ * 在 block 末尾显示持久提示，避免用户困惑"为什么没有渲染"。
+ */
+class UnclosedBlockWidget extends WidgetType {
+  private label: string;
+
+  constructor(label: string) {
+    super();
+    this.label = label;
+  }
+
+  override eq(other: UnclosedBlockWidget): boolean {
+    return this.label === other.label;
+  }
+
+  toDOM(): HTMLElement {
+    const span = document.createElement('span');
+    span.className = 'cm-live-unclosed-hint';
+    span.setAttribute('aria-label', this.label);
+    span.textContent = this.label;
+    return span;
+  }
+
+  override ignoreEvent(): boolean {
+    return true;
+  }
+}
+
 // ---- Pin State (block-key based, survives edits) ----
 
 const pinSourceEffect = StateEffect.define<{ key: string }>();
@@ -913,8 +962,17 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         const cursorLine = view.state.doc.lineAt(cursor);
         const pinned = view.state.field(pinnedSourceField, false) ?? new Set<string>();
         const decos: Range<Decoration>[] = [];
+        const unclosedWarnings = new Map<string, { end: number; type: BlockType }>();
 
         for (const block of blocks) {
+          // Track unclosed groups for warning decoration
+          if (block.unclosed && block.groupKey) {
+            const existing = unclosedWarnings.get(block.groupKey);
+            if (!existing || block.to > existing.end) {
+              unclosedWarnings.set(block.groupKey, { end: block.to, type: block.type });
+            }
+          }
+
           if (!block.html) continue; // skip blocks with no visible HTML
 
           const isFocused = cursor >= block.from && cursor <= block.to;
@@ -950,6 +1008,23 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
               }).range(block.from, block.to),
             );
           }
+        }
+
+        // Unclosed multi-line block warnings
+        for (const [, warn] of unclosedWarnings) {
+          const label =
+            warn.type === 'codeFenceLine'
+              ? ' ⚠ 未闭合的代码块'
+              : warn.type === 'frontmatterLine'
+                ? ' ⚠ 未闭合的 YAML 头'
+                : '';
+          if (!label) continue;
+          decos.push(
+            Decoration.widget({
+              widget: new UnclosedBlockWidget(label),
+              side: 1,
+            }).range(warn.end),
+          );
         }
 
         return Decoration.set(decos, true);
