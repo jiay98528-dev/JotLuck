@@ -319,8 +319,8 @@ onMounted(() => {
     editorHost.value.addEventListener('dragover', props.onEditorDragOver);
   }
   if (props.onEditorPaste) {
-    editorHost.value.addEventListener('paste', (e) => {
-      const result = props.onEditorPaste!(e);
+    editorHost.value.addEventListener('paste', async (e) => {
+      const result = await props.onEditorPaste!(e);
       if (result === true) e.preventDefault();
     });
   }

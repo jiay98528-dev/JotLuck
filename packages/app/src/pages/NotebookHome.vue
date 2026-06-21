@@ -60,6 +60,9 @@
             :live-preview="false"
             :source-only="true"
             :pending-format="pendingFormatAction"
+            :on-editor-drop="imageUpload.handleDrop"
+            :on-editor-drag-over="imageUpload.handleDragOver"
+            :on-editor-paste="imageUpload.handlePaste"
             @update:model-value="onSplitContentUpdate"
             @selection-change="onSelectionChange"
             @pending-format-ended="pendingFormatAction = null"
@@ -87,6 +90,9 @@
         :on-live-preview-external-link-click="onLivePreviewExternalLinkClick"
         :on-live-preview-tag-click="onLivePreviewTagClick"
         :on-live-preview-wiki-link-click="onLivePreviewWikiLinkClick"
+        :on-editor-drop="imageUpload.handleDrop"
+        :on-editor-drag-over="imageUpload.handleDragOver"
+        :on-editor-paste="imageUpload.handlePaste"
         @update:model-value="onContentUpdate"
         @selection-change="onSelectionChange"
         @pending-format-ended="pendingFormatAction = null"
@@ -230,6 +236,7 @@ import type {
 import UpdateNotification from '@/components/overlays/UpdateNotification.vue';
 import MarkdownCheatSheet from '@/components/overlays/MarkdownCheatSheet.vue';
 import { useVersionCheck } from '@/composables/useVersionCheck';
+import { useImageUpload } from '@/composables/useImageUpload';
 import { normalizeUrl } from '@/utils/urlUtils';
 import {
   applyParagraphPreset,
@@ -259,6 +266,7 @@ const theme = useThemeStore();
 const indexStore = useIndexStore();
 const searchStore = useSearchStore();
 const { headings, update: updateHeadings, getActiveHeadingId } = useHeadings();
+const imageUpload = useImageUpload(fs, () => editorRef.value?.getEditorView() ?? null);
 
 // --- UI State ---
 type ViewMode = 'split' | 'live';
