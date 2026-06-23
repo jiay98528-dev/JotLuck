@@ -8,11 +8,16 @@
       @click.self="close"
       @keydown.escape="close"
     >
-      <div class="modal-card">
+      <div
+        class="modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-dialog-title"
+      >
         <!-- Header -->
         <div class="modal-header">
-          <h2>设置</h2>
-          <button class="modal-close" @click="close">&times;</button>
+          <h2 id="settings-dialog-title">设置</h2>
+          <button class="modal-close" aria-label="关闭" @click="close">&times;</button>
         </div>
 
         <!-- Body: left nav + right content -->
@@ -25,6 +30,7 @@
               :class="{ active: activeTab === tab.id }"
               @click="activeTab = tab.id"
             >
+              <!-- eslint-disable-next-line vue/no-v-html -->
               <span class="nav-icon" v-html="tab.icon"></span>
               <span class="nav-label">{{ tab.label }}</span>
             </button>
@@ -163,10 +169,40 @@
                 <span
                   class="toggle-track"
                   :class="{ active: autoCompleteEnabled }"
+                  role="switch"
+                  :aria-checked="autoCompleteEnabled"
                   @click="autoCompleteEnabled = !autoCompleteEnabled"
                 >
                   <span class="toggle-thumb"></span>
                 </span>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-label">后台训练当前笔记本</span>
+                  <span class="setting-value">{{ trainingStatusLabel }}</span>
+                </div>
+                <span
+                  class="toggle-track"
+                  :class="{ active: backgroundTraining }"
+                  role="switch"
+                  :aria-checked="backgroundTraining"
+                  @click="backgroundTraining = !backgroundTraining"
+                >
+                  <span class="toggle-thumb"></span>
+                </span>
+              </div>
+
+              <div class="autocomplete-meta">
+                <div class="meta-row">
+                  <span>已训练文件</span>
+                  <strong>{{ props.completionTrainingMeta?.fileCount ?? 0 }}</strong>
+                </div>
+                <div class="meta-row">
+                  <span>上次训练</span>
+                  <strong>{{ formatTrainingTime(props.completionTrainingMeta?.updatedAt) }}</strong>
+                </div>
+                <p class="local-note">仅处理当前笔记本的本地 Markdown / 文本文件，不上传内容。</p>
               </div>
 
               <div class="setting-info" style="margin-top: var(--space-12)">
@@ -269,6 +305,7 @@
                   rel="noopener noreferrer"
                   class="about-link"
                 >
+                  <!-- eslint-disable-next-line vue/no-v-html -->
                   <span class="link-icon" v-html="link.icon"></span>
                   <span>{{ link.label }}</span>
                 </a>
@@ -282,12 +319,30 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue';
+import { computed, ref, watch, nextTick } from 'vue';
 import { useThemeStore } from '@/stores/theme';
+import {
+  DEFAULT_COMPLETION_SETTINGS,
+  type CompletionSettings,
+} from '@/services/CompletionSettings';
+import type { CompletionTrainingMeta } from '@/services/CompletionTrainingService';
 
 // ── Props / Emits ────────────────────────────────────────
-const props = defineProps<{ visible: boolean }>();
-const emit = defineEmits<{ 'update:visible': [boolean] }>();
+const props = withDefaults(
+  defineProps<{
+    visible: boolean;
+    completionSettings?: CompletionSettings;
+    completionTrainingMeta?: CompletionTrainingMeta;
+  }>(),
+  {
+    completionSettings: () => ({ ...DEFAULT_COMPLETION_SETTINGS }),
+    completionTrainingMeta: undefined,
+  },
+);
+const emit = defineEmits<{
+  'update:visible': [boolean];
+  'update-completion-settings': [CompletionSettings];
+}>();
 
 const overlayRef = ref<HTMLDivElement | null>(null);
 
@@ -347,12 +402,37 @@ const autoSaveEnabled = ref(true);
 const autoSaveDelay = ref(3000);
 
 // ── Autocomplete settings ─────────────────────────────────
-const AUTOCOMPLETE_KEY = 'markluck:autocomplete:enabled';
-const autoCompleteEnabled = ref(localStorage.getItem(AUTOCOMPLETE_KEY) !== 'false');
-
-watch(autoCompleteEnabled, (v: boolean) => {
-  localStorage.setItem(AUTOCOMPLETE_KEY, String(v));
+const autoCompleteEnabled = ref(props.completionSettings.enabled);
+const backgroundTraining = ref(props.completionSettings.backgroundTraining);
+const trainingStatusLabel = computed(() => {
+  const status = props.completionTrainingMeta?.status ?? 'idle';
+  if (status === 'training') return '训练中';
+  if (status === 'error') return '失败';
+  if (status === 'done') return '已完成';
+  return '待训练';
 });
+
+watch(
+  () => props.completionSettings,
+  (settings) => {
+    autoCompleteEnabled.value = settings.enabled;
+    backgroundTraining.value = settings.backgroundTraining;
+  },
+  { deep: true },
+);
+
+watch([autoCompleteEnabled, backgroundTraining], ([enabled, training]) => {
+  emit('update-completion-settings', {
+    ...props.completionSettings,
+    enabled,
+    backgroundTraining: training,
+  });
+});
+
+function formatTrainingTime(value?: number): string {
+  if (!value) return '尚未训练';
+  return new Date(value).toLocaleString();
+}
 
 // ── Update settings ──────────────────────────────────────
 const AUTO_CHECK_KEY = 'markluck:version:autoCheck';
@@ -587,6 +667,39 @@ watch(
   font-variant-numeric: tabular-nums;
   min-width: 36px;
   text-align: right;
+}
+
+.autocomplete-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-12);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-surface);
+}
+
+.meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+  color: var(--ink-secondary);
+  font-size: var(--text-xs);
+}
+
+.meta-row strong {
+  color: var(--ink-primary);
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.local-note {
+  margin: var(--space-4) 0 0;
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+  line-height: var(--lh-ui);
 }
 
 /* ===== Slider ===== */
