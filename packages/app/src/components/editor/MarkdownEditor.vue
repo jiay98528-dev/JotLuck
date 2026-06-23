@@ -18,6 +18,7 @@ import { markluckExtensions } from '@/utils/cm6-extensions';
 import { livePreviewExtension, unpinFocusedBlock } from '@/utils/cm6-live-preview';
 import { ghostTextPlugin } from '@/utils/cm6-ghost-text';
 import { MarkdownPredictor } from '@/services/MarkdownPredictor';
+import { getCompletionSettings, type CompletionSettings } from '@/services/CompletionSettings';
 import type { FormatAction, MarkdownBlock, ParagraphPreset } from '@/types';
 import {
   applyParagraphPreset,
@@ -35,9 +36,12 @@ const props = withDefaults(
     sourceOnly?: boolean;
     pendingFormat?: FormatAction | null;
     enableAutocomplete?: boolean;
+    completionSettings?: CompletionSettings;
     onLivePreviewExternalLinkClick?: (href: string) => void;
     onLivePreviewTagClick?: (tag: string) => void;
     onLivePreviewWikiLinkClick?: (note: string, anchor: null | string) => void;
+    wikiLinkExists?: (note: string) => boolean;
+    wikiLinkRevision?: number;
     onEditorDrop?: (event: DragEvent) => void;
     onEditorDragOver?: (event: DragEvent) => void;
     onEditorPaste?: (event: ClipboardEvent) => boolean | void | Promise<boolean>;
@@ -50,9 +54,12 @@ const props = withDefaults(
     sourceOnly: false,
     pendingFormat: null,
     enableAutocomplete: true,
+    completionSettings: undefined,
     onLivePreviewExternalLinkClick: undefined,
     onLivePreviewTagClick: undefined,
     onLivePreviewWikiLinkClick: undefined,
+    wikiLinkExists: undefined,
+    wikiLinkRevision: 0,
     onEditorDrop: undefined,
     onEditorDragOver: undefined,
     onEditorPaste: undefined,
@@ -62,10 +69,6 @@ const props = withDefaults(
 const lineNumberCompartment = new Compartment();
 const livePreviewCompartment = new Compartment();
 const autocompleteCompartment = new Compartment();
-
-// Respect user's autocomplete preference from localStorage
-const AUTOCOMPLETE_ENABLED_KEY = 'markluck:autocomplete:enabled';
-const isAutocompleteEnabled = () => localStorage.getItem(AUTOCOMPLETE_ENABLED_KEY) !== 'false';
 
 // Shared predictor instance for ghost text + structured knowledge
 const predictor = new MarkdownPredictor(4);
@@ -84,6 +87,18 @@ const internallyEmittedValues = new Set<string>();
 let activePendingAction: FormatAction | null = null;
 let pendingInlineMarkers: readonly [string, string] | null = null;
 let deferredPendingAction: FormatAction | null = null;
+
+function currentCompletionSettings(): CompletionSettings {
+  return props.completionSettings ?? getCompletionSettings();
+}
+
+function autocompleteExtensions() {
+  const settings = currentCompletionSettings();
+  predictor.configure(settings);
+  return props.enableAutocomplete !== false && settings.enabled
+    ? ghostTextPlugin(predictor, settings)
+    : [];
+}
 
 // E2E content reader — registered in onMounted (NOT setup!) because Vue 3 :key patching
 // runs setup before old component's onUnmounted, causing old unmount to delete new registration.
@@ -106,9 +121,7 @@ function createState(doc: string) {
     extensions: [
       // Ghost text keymap must precede defaultKeymap (indentWithTab) so Tab
       // is intercepted for ghost text acceptance before indentation logic.
-      autocompleteCompartment.of(
-        props.enableAutocomplete !== false ? ghostTextPlugin(predictor) : [],
-      ),
+      autocompleteCompartment.of(autocompleteExtensions()),
       keymap.of([{ key: 'Enter', run: handlePendingFormatEnter }]),
       ...markluckExtensions('开始书写…', props.sourceOnly),
       lineNumberCompartment.of(props.showLineNumbers ? lineNumbers() : []),
@@ -118,6 +131,7 @@ function createState(doc: string) {
               onExternalLinkClick: props.onLivePreviewExternalLinkClick,
               onTagClick: props.onLivePreviewTagClick,
               onWikiLinkClick: props.onLivePreviewWikiLinkClick,
+              wikiLinkExists: props.wikiLinkExists,
             })
           : [],
       ),
@@ -206,9 +220,21 @@ function handlePendingFormatEnter(editorView: EditorView): boolean {
   if (editorView.composing || editorView.compositionStarted) return false;
 
   const cursor = editorView.state.selection.main.head;
-  const close = pendingInlineMarkers?.[1] ?? '';
+  const [open, close] = pendingInlineMarkers ?? ['', ''];
   const hasClose =
-    close && editorView.state.doc.sliceString(cursor, cursor + close.length) === close;
+    close.length > 0 && editorView.state.doc.sliceString(cursor, cursor + close.length) === close;
+  const hasOpen =
+    open.length > 0 && editorView.state.doc.sliceString(cursor - open.length, cursor) === open;
+  if (hasOpen && hasClose) {
+    editorView.dispatch({
+      changes: { from: cursor - open.length, to: cursor + close.length, insert: '\n' },
+      selection: { anchor: cursor - open.length + 1 },
+    });
+    activePendingAction = null;
+    pendingInlineMarkers = null;
+    emit('pending-format-ended');
+    return true;
+  }
   editorView.dispatch({
     changes: hasClose
       ? { from: cursor, to: cursor + close.length, insert: `${close}\n` }
@@ -234,8 +260,8 @@ watch(
 
 // Dynamic live preview toggle
 watch(
-  () => props.livePreview,
-  (active) => {
+  () => [props.livePreview, props.wikiLinkRevision] as const,
+  ([active]) => {
     if (!view) return;
     view.dispatch({
       effects: livePreviewCompartment.reconfigure(
@@ -244,6 +270,7 @@ watch(
               onExternalLinkClick: props.onLivePreviewExternalLinkClick,
               onTagClick: props.onLivePreviewTagClick,
               onWikiLinkClick: props.onLivePreviewWikiLinkClick,
+              wikiLinkExists: props.wikiLinkExists,
             })
           : [],
       ),
@@ -253,15 +280,12 @@ watch(
 
 // Dynamic autocomplete toggle
 watch(
-  () => props.enableAutocomplete,
-  (enabled) => {
+  () => [props.enableAutocomplete, props.completionSettings] as const,
+  () => {
     if (!view) return;
-    view.dispatch({
-      effects: autocompleteCompartment.reconfigure(
-        enabled !== false ? ghostTextPlugin(predictor) : [],
-      ),
-    });
+    view.dispatch({ effects: autocompleteCompartment.reconfigure(autocompleteExtensions()) });
   },
+  { deep: true },
 );
 
 watch(
@@ -305,7 +329,9 @@ onMounted(() => {
   // Fire-and-forget predictor init (BUG-027 fix: 消除 async onMounted 导致的 view=null 窗口期).
   // predict.initialize() 下载 429KB baseline 文件可能耗时 200-500ms，
   // 这段延迟不能阻塞 EditorView 创建，否则 E2E waitForEditorReady 轮询时 view 为 null。
-  if (props.enableAutocomplete !== false && isAutocompleteEnabled()) {
+  const settings = currentCompletionSettings();
+  predictor.configure(settings);
+  if (props.enableAutocomplete !== false && settings.enabled) {
     predictor.initialize().then(() => {
       predictor.scanOpenedDocument(props.modelValue);
     });

@@ -60,6 +60,9 @@
             :live-preview="false"
             :source-only="true"
             :pending-format="pendingFormatAction"
+            :wiki-link-exists="wikiLinkExists"
+            :wiki-link-revision="wikiLinkRevision"
+            :completion-settings="completionSettings"
             :on-editor-drop="imageUpload.handleDrop"
             :on-editor-drag-over="imageUpload.handleDragOver"
             :on-editor-paste="imageUpload.handlePaste"
@@ -90,6 +93,9 @@
         :on-live-preview-external-link-click="onLivePreviewExternalLinkClick"
         :on-live-preview-tag-click="onLivePreviewTagClick"
         :on-live-preview-wiki-link-click="onLivePreviewWikiLinkClick"
+        :wiki-link-exists="wikiLinkExists"
+        :wiki-link-revision="wikiLinkRevision"
+        :completion-settings="completionSettings"
         :on-editor-drop="imageUpload.handleDrop"
         :on-editor-drag-over="imageUpload.handleDragOver"
         :on-editor-paste="imageUpload.handlePaste"
@@ -112,15 +118,15 @@
   <FileDrawer
     :visible="showLeftDrawer"
     :files="files"
-    :root-dir="currentDir"
+    root-dir="/"
     :active-path="activePath"
     :loading="loading"
     :error="errorMessage"
     @update:visible="showLeftDrawer = $event"
     @select-file="onSelectNote"
-    @navigate-dir="loadDirectory"
+    @navigate-dir="onDrawerNavigateDir"
     @create-file="onCreateFile"
-    @delete-file="onDeleteFile"
+    @delete-file="requestDeleteFile"
     @rename-file="onRenameFile"
     @retry="initNotebook"
   />
@@ -144,7 +150,13 @@
   />
 
   <!-- Settings Dialog -->
-  <SettingsDialog :visible="showSettings" @update:visible="showSettings = $event" />
+  <SettingsDialog
+    :visible="showSettings"
+    :completion-settings="completionSettings"
+    :completion-training-meta="completionTrainingMeta"
+    @update:visible="showSettings = $event"
+    @update-completion-settings="onUpdateCompletionSettings"
+  />
 
   <!-- Share Dialog -->
   <ShareDialog
@@ -173,9 +185,15 @@
   <!-- New File Dialog -->
   <Teleport to="body">
     <div v-if="showNewFileDialog" class="modal-overlay" @click.self="cancelNewFile">
-      <div class="modal-card" style="width: 360px">
+      <div
+        class="modal-card"
+        style="width: 360px"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-file-title"
+      >
         <div class="modal-header">
-          <h2>新建文件</h2>
+          <h2 id="new-file-title">新建文件</h2>
         </div>
         <div class="modal-body">
           <input
@@ -192,6 +210,32 @@
           <button class="btn btn--primary" :disabled="!newFileName.trim()" @click="confirmNewFile">
             确定
           </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Delete Confirm Dialog -->
+  <Teleport to="body">
+    <div v-if="pendingDeletePath" class="modal-overlay" @click.self="cancelDeleteFile">
+      <div
+        class="modal-card"
+        style="width: 380px"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-file-title"
+      >
+        <div class="modal-header">
+          <h2 id="delete-file-title">删除笔记</h2>
+        </div>
+        <div class="modal-body">
+          <p class="delete-confirm-text">
+            确定删除「{{ pendingDeleteName }}」？此操作会移动到系统回收站或从当前笔记本移除。
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn--secondary" @click="cancelDeleteFile">取消</button>
+          <button class="btn btn--danger" @click="confirmDeleteFile">删除</button>
         </div>
       </div>
     </div>
@@ -239,6 +283,18 @@ import { useVersionCheck } from '@/composables/useVersionCheck';
 import { useImageUpload } from '@/composables/useImageUpload';
 import { normalizeUrl } from '@/utils/urlUtils';
 import {
+  getCompletionSettings,
+  saveCompletionSettings,
+  subscribeCompletionSettings,
+  type CompletionSettings,
+} from '@/services/CompletionSettings';
+import {
+  CompletionTrainingService,
+  loadTrainingMeta,
+  subscribeTrainingMeta,
+  type CompletionTrainingMeta,
+} from '@/services/CompletionTrainingService';
+import {
   applyParagraphPreset,
   clearMarkdownFormatting,
   detectParagraphPreset,
@@ -266,13 +322,19 @@ const theme = useThemeStore();
 const indexStore = useIndexStore();
 const searchStore = useSearchStore();
 const { headings, update: updateHeadings, getActiveHeadingId } = useHeadings();
-const imageUpload = useImageUpload(fs, () => editorRef.value?.getEditorView() ?? null);
+const imageUpload = useImageUpload(
+  fs,
+  () => editorRef.value?.getEditorView() ?? null,
+  () => activePath.value,
+  () => refreshFileTree(),
+);
 
 // --- UI State ---
 type ViewMode = 'split' | 'live';
 const viewMode = ref<ViewMode>('live');
 const splitRatio = ref(50); // 50:50 default for split pane
 const splitPreviewHtml = ref('');
+const wikiLinkRevision = ref(0);
 let splitDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 const showRightWing = ref(true);
@@ -284,7 +346,13 @@ const showNewFileDialog = ref(false);
 const newFileName = ref('新笔记.md');
 const showSettings = ref(false);
 const showShare = ref(false);
+const pendingDeletePath = ref<string | null>(null);
 const notebookName = ref('示例笔记本');
+const completionSettings = ref<CompletionSettings>(getCompletionSettings());
+const completionTrainingMeta = ref<CompletionTrainingMeta>(loadTrainingMeta());
+let unsubscribeCompletionSettings: (() => void) | null = null;
+let unsubscribeTrainingMeta: (() => void) | null = null;
+let completionTrainer: CompletionTrainingService | null = null;
 
 // --- Format Bubble ---
 const bubbleVisible = ref(false);
@@ -377,6 +445,11 @@ const noteTitle = computed(() => {
   if (!activePath.value) return '';
   return activePath.value.split('/').pop()?.replace(/\.md$/, '') ?? '';
 });
+const pendingDeleteName = computed(() =>
+  pendingDeletePath.value
+    ? (pendingDeletePath.value.split('/').pop() ?? pendingDeletePath.value)
+    : '',
+);
 
 const allTags = computed(() => indexStore.tags);
 const activeHeadingId = computed(() => getActiveHeadingId(editorStats.cursorLine ?? 0));
@@ -429,17 +502,49 @@ async function initNotebook(): Promise<void> {
   }
   try {
     await indexStore.initialize(fs);
+    wikiLinkRevision.value++;
+    updateSplitPreview();
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[NotebookHome] indexStore.initialize 失败', e);
   }
 }
 
+function normalizeDir(dir: string): string {
+  const normalized = (dir || '/').replace(/\\/g, '/');
+  if (normalized === '/') return '/';
+  return normalized.endsWith('/') ? normalized.slice(0, -1) : normalized;
+}
+
+function joinPath(dir: string, name: string): string {
+  const base = normalizeDir(dir);
+  return base === '/' ? `/${name}` : `${base}/${name}`;
+}
+
+async function listDirectoryRecursive(dir: string): Promise<DirEntry[]> {
+  const normalized = normalizeDir(dir);
+  const entries = await fs.listDirectory(normalized);
+  const result = [...entries];
+  for (const entry of entries) {
+    if (entry.isDirectory) {
+      result.push(...(await listDirectoryRecursive(entry.path)));
+    }
+  }
+  return result;
+}
+
+async function refreshFileTree(): Promise<void> {
+  files.value = await listDirectoryRecursive('/');
+  wikiLinkRevision.value++;
+}
+
 async function loadDirectory(dir: string): Promise<void> {
-  // 统一去除尾斜杠，后续所有路径拼接由调用方显式加 /
-  const normalized = dir.endsWith('/') && dir !== '/' ? dir.slice(0, -1) : dir;
-  currentDir.value = normalized;
-  files.value = await fs.listDirectory(normalized);
+  currentDir.value = normalizeDir(dir);
+  await refreshFileTree();
+}
+
+function onDrawerNavigateDir(path: string): void {
+  currentDir.value = normalizeDir(path);
 }
 
 // --- File Operations ---
@@ -453,6 +558,18 @@ async function onSelectNote(path: string): Promise<void> {
   // 只要 isDirty 为 true 就执行保存，确保内容不丢失
   if (isDirty.value && activePath.value) {
     await debouncedSave(activePath.value, currentContent.value);
+  }
+
+  if (!path) {
+    activePath.value = '';
+    currentContent.value = '';
+    isDirty.value = false;
+    isSaving.value = false;
+    saveError.value = null;
+    updateHeadings('');
+    updateEditorStats('');
+    updateSplitPreview();
+    return;
   }
 
   try {
@@ -487,10 +604,8 @@ async function onSelectNote(path: string): Promise<void> {
   currentContent.value = content;
 
   const dir = path.substring(0, path.lastIndexOf('/') + 1) || '/';
-  if (dir !== currentDir.value) {
-    currentDir.value = dir;
-    loadDirectory(dir);
-  }
+  currentDir.value = normalizeDir(dir);
+  void refreshFileTree();
 
   updateHeadings(content);
   updateEditorStats(content);
@@ -510,21 +625,47 @@ async function onDeleteFile(path: string): Promise<void> {
   if (activePath.value === path) {
     activePath.value = '';
     currentContent.value = '';
+    updateHeadings('');
+    updateEditorStats('');
+    updateSplitPreview();
   }
   indexStore.removeDocument(path);
-  files.value = await fs.listDirectory(currentDir.value);
+  completionTrainer?.removePath(path);
+  await refreshFileTree();
+  toast.show('笔记已删除', 'success', 2500);
+}
+
+function requestDeleteFile(path: string): void {
+  pendingDeletePath.value = path;
+}
+
+function cancelDeleteFile(): void {
+  pendingDeletePath.value = null;
+}
+
+async function confirmDeleteFile(): Promise<void> {
+  const path = pendingDeletePath.value;
+  if (!path) return;
+  pendingDeletePath.value = null;
+  try {
+    await onDeleteFile(path);
+  } catch (e) {
+    toast.show(`删除失败：${e instanceof Error ? e.message : String(e)}`, 'error', 4000);
+  }
 }
 
 async function onRenameFile(oldPath: string, newName: string): Promise<void> {
   // 从旧路径提取父目录，避免 currentDir 尾斜杠不一致导致路径错误
   const parentDir = oldPath.substring(0, oldPath.lastIndexOf('/') + 1) || '/';
-  const newPath = parentDir + newName;
+  const newPath = joinPath(parentDir, newName);
   await fs.renameFile(oldPath, newPath);
+  completionTrainer?.removePath(oldPath);
   if (activePath.value === oldPath) activePath.value = newPath;
   // 更新索引：移除旧路径，索引新路径
   indexStore.removeDocument(oldPath);
   await indexStore.refreshDocument(fs, newPath);
-  await loadDirectory(currentDir.value);
+  if (activePath.value === newPath) void trainCurrentFile(newPath, currentContent.value);
+  await refreshFileTree();
 }
 
 async function onCreateFile(): Promise<void> {
@@ -536,11 +677,12 @@ async function confirmNewFile(): Promise<void> {
   const name = newFileName.value.trim();
   if (!name) return;
   showNewFileDialog.value = false;
-  const path = currentDir.value === '/' ? `/${name}` : `${currentDir.value}${name}`;
+  const path = joinPath(currentDir.value, name);
   const content = name.endsWith('.md') ? `# ${name.replace(/\.md$/, '')}\n\n` : '';
   await fs.writeFile(path, content);
-  files.value = await fs.listDirectory(currentDir.value);
+  await refreshFileTree();
   await indexStore.refreshDocument(fs, path);
+  void trainCurrentFile(path, content);
   if (name.endsWith('.md')) {
     activePath.value = path;
     currentContent.value = content;
@@ -555,6 +697,26 @@ function cancelNewFile(): void {
 // --- Preview Render ---
 let previewRenderTimer: ReturnType<typeof setTimeout> | null = null;
 
+function wikiLinkExists(noteTitle: string): boolean {
+  const target = noteTitle.trim();
+  if (!target) return false;
+  const existsInTree = files.value.some((entry) => {
+    if (!entry.isFile) return false;
+    const filename = entry.name.replace(/\.(md|markdown)$/i, '');
+    return filename === target;
+  });
+  if (existsInTree) return true;
+  const docs = Object.values(indexStore.getIndexService()?.getAllDocuments() ?? {});
+  return docs.some((doc) => {
+    const filename =
+      doc.path
+        .split('/')
+        .pop()
+        ?.replace(/\.(md|markdown)$/i, '') ?? '';
+    return doc.title === target || filename === target;
+  });
+}
+
 /**
  * 逐行渲染源码为 HTML，保持源码行号与渲染行 1:1 对应。
  * 与即时模式（parseLiveBlocks）相同的策略：每行独立调用 renderMarkdown()，
@@ -565,7 +727,7 @@ function updateSplitPreview(): void {
   if (previewRenderTimer) clearTimeout(previewRenderTimer);
   previewRenderTimer = setTimeout(() => {
     try {
-      splitPreviewHtml.value = renderMarkdown(currentContent.value);
+      splitPreviewHtml.value = renderMarkdown(currentContent.value, { wikiLinkExists });
       void nextTick(() => {
         const previewEl = document.querySelector<HTMLElement>(
           '.split-preview, .markdown-body--full',
@@ -608,7 +770,9 @@ async function debouncedSave(path: string, content: string): Promise<void> {
     await fs.writeFile(path, content);
     if (gen !== saveGeneration) return; // 新保存已启动，放弃本次后续操作
     await indexStore.refreshDocument(fs, path);
+    void trainCurrentFile(path, content);
     if (gen !== saveGeneration) return;
+    wikiLinkRevision.value++;
     lastSavedAt.value = Date.now();
     const elapsed = Date.now() - start;
     if (elapsed < 500) await new Promise((r) => setTimeout(r, 500 - elapsed));
@@ -624,6 +788,10 @@ async function debouncedSave(path: string, content: string): Promise<void> {
 // --- Format Bubble ---
 const FORMAT_HINT_KEY = 'markluck:formatBubble:hintShown';
 const toast = useToast();
+
+watch(imageUpload.uploadError, (message) => {
+  if (message) toast.show(message, 'error', 4000);
+});
 
 function onSelectionChange(sel: { from: number; to: number } | null): void {
   const view = editorRef.value?.getEditorView();
@@ -773,8 +941,9 @@ async function onTemplateSelect(_tpl: unknown, content: string): Promise<void> {
   activePath.value = path;
   currentContent.value = content;
   await fs.writeFile(path, content);
-  files.value = await fs.listDirectory('/');
+  await refreshFileTree();
   await indexStore.refreshDocument(fs, path);
+  void trainCurrentFile(path, content);
   updateHeadings(content);
   updateEditorStats(content);
   updateSplitPreview();
@@ -789,8 +958,9 @@ async function onCreateBlank(): Promise<void> {
   activePath.value = path;
   currentContent.value = content;
   await fs.writeFile(path, content);
-  files.value = await fs.listDirectory('/');
+  await refreshFileTree();
   await indexStore.refreshDocument(fs, path);
+  void trainCurrentFile(path, content);
   updateHeadings(content);
   updateEditorStats(content);
   updateSplitPreview();
@@ -824,6 +994,44 @@ function connectPredictor(): void {
   });
   const titles = svc?.getAllNoteTitles() ?? [];
   pred.ingestExcerpts(titles);
+  ensureCompletionTrainer(pred);
+  void maybeTrainNotebook();
+}
+
+function ensureCompletionTrainer(
+  pred = editorRef.value?.predictor,
+): CompletionTrainingService | null {
+  if (!pred) return null;
+  if (!completionTrainer) completionTrainer = new CompletionTrainingService(fs, pred);
+  return completionTrainer;
+}
+
+async function maybeTrainNotebook(): Promise<void> {
+  if (!completionSettings.value.backgroundTraining) return;
+  const trainer = ensureCompletionTrainer();
+  if (!trainer) return;
+  await trainer.trainNotebook(files.value);
+}
+
+async function trainCurrentFile(path: string, content: string): Promise<void> {
+  if (!completionSettings.value.backgroundTraining) return;
+  const trainer = ensureCompletionTrainer();
+  if (!trainer) return;
+  let stat: { mtime: number; size: number };
+  try {
+    const fileStat = await fs.statFile(path);
+    stat = { mtime: fileStat.mtime, size: fileStat.size };
+  } catch {
+    stat = { mtime: Date.now(), size: content.length };
+  }
+  await trainer.trainFile(path, content, stat);
+}
+
+function onUpdateCompletionSettings(settings: CompletionSettings): void {
+  completionSettings.value = settings;
+  saveCompletionSettings(settings);
+  editorRef.value?.predictor.configure(settings);
+  if (settings.backgroundTraining) void maybeTrainNotebook();
 }
 
 // Reconnect predictor when editor remounts due to :key changes (view-mode / note switch).
@@ -863,6 +1071,14 @@ onMounted(async () => {
 
   await nextTick();
   connectPredictor();
+  unsubscribeCompletionSettings = subscribeCompletionSettings((settings) => {
+    completionSettings.value = settings;
+    editorRef.value?.predictor.configure(settings);
+    if (settings.backgroundTraining) void maybeTrainNotebook();
+  });
+  unsubscribeTrainingMeta = subscribeTrainingMeta((meta) => {
+    completionTrainingMeta.value = meta;
+  });
 
   // Check for updates after a delay
   updateTimer = setTimeout(async () => {
@@ -880,6 +1096,8 @@ onUnmounted(() => {
   if (previewRenderTimer) clearTimeout(previewRenderTimer);
   if (updateTimer) clearTimeout(updateTimer);
   if (splitDragCleanup) splitDragCleanup();
+  unsubscribeCompletionSettings?.();
+  unsubscribeTrainingMeta?.();
 });
 
 function onDismissVersion(version: string) {
@@ -986,5 +1204,67 @@ function onDismissVersion(version: string) {
   padding: var(--editor-top-pad) var(--space-32) var(--space-96);
   max-width: var(--editor-max-width);
   margin: 0 auto;
+}
+
+.file-name-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--space-8) var(--space-10);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-surface);
+  color: var(--ink-primary);
+  font: inherit;
+}
+
+.file-name-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.delete-confirm-text {
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--lh-body);
+}
+
+.btn {
+  min-width: 72px;
+  height: 32px;
+  padding: 0 var(--space-12);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-surface);
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--paper-bg);
+}
+
+.btn--secondary:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--ink-primary);
+}
+
+.btn--danger {
+  background: var(--signal-error);
+  border-color: var(--signal-error);
+  color: var(--paper-bg);
+}
+
+.btn--danger:hover {
+  background: var(--signal-error-strong, var(--signal-error));
 }
 </style>
