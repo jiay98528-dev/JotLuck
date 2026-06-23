@@ -3,7 +3,7 @@
 // Monitors the notebook directory for changes (create, modify, delete, rename)
 // and emits events to the frontend via Tauri's event system.
 
-use notify::event::{CreateKind, ModifyKind, RemoveKind, RenameMode};
+use notify::event::{CreateKind, ModifyKind, RenameMode};
 use notify::{Event, EventKind, RecursiveMode, Watcher};
 use std::path::PathBuf;
 use std::sync::mpsc;
@@ -13,8 +13,8 @@ use tauri::{AppHandle, Emitter};
 /// File change event emitted to the frontend.
 #[derive(Clone, serde::Serialize)]
 pub struct FileChangeEvent {
-    pub kind: String,       // "create" | "modify" | "remove" | "rename"
-    pub path: String,       // relative path within notebook
+    pub kind: String,             // "create" | "modify" | "remove" | "rename"
+    pub path: String,             // relative path within notebook
     pub old_path: Option<String>, // for rename events
 }
 
@@ -40,13 +40,9 @@ pub fn start_watching(app_handle: AppHandle, root_path: PathBuf) -> Result<(), S
                 Err(_) => continue,
             };
 
-            // Only watch .md files
-            let is_md = event.paths.iter().any(|p| {
-                p.extension()
-                    .map(|e| e == "md")
-                    .unwrap_or(false)
-            });
-            if !is_md {
+            // Watch notes and supported image assets.
+            let is_supported = event.paths.iter().any(is_supported_path);
+            if !is_supported {
                 continue;
             }
 
@@ -66,13 +62,34 @@ pub fn start_watching(app_handle: AppHandle, root_path: PathBuf) -> Result<(), S
 
 /// Convert a notify Event to our simplified FileChangeEvent.
 fn event_to_change_event(event: &Event, root: &PathBuf) -> Option<FileChangeEvent> {
-    let path = event
-        .paths
-        .first()?
-        .strip_prefix(root)
-        .ok()?
-        .to_string_lossy()
-        .replace('\\', "/");
+    let path_for = |path: &PathBuf| -> Option<String> {
+        path.strip_prefix(root)
+            .ok()
+            .map(|p| p.to_string_lossy().replace('\\', "/"))
+    };
+
+    if let EventKind::Modify(ModifyKind::Name(ref mode)) = event.kind {
+        let (old_path, new_path) = match mode {
+            RenameMode::Both => (
+                event.paths.first().and_then(path_for),
+                event.paths.get(1).and_then(path_for),
+            ),
+            RenameMode::To => (None, event.paths.first().and_then(path_for)),
+            RenameMode::From => return None,
+            _ => (
+                event.paths.first().and_then(path_for),
+                event.paths.last().and_then(path_for),
+            ),
+        };
+
+        return Some(FileChangeEvent {
+            kind: "rename".to_string(),
+            path: new_path?,
+            old_path,
+        });
+    }
+
+    let path = event.paths.first().and_then(path_for)?;
 
     let kind = match event.kind {
         EventKind::Create(ref c) => match c {
@@ -85,20 +102,6 @@ fn event_to_change_event(event: &Event, root: &PathBuf) -> Option<FileChangeEven
             _ => return None,
         },
         EventKind::Remove(_) => "remove",
-        EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
-            // Rename: path is the new name
-            let old_path = event.paths.get(1).map(|p| {
-                p.strip_prefix(root)
-                    .ok()
-                    .map(|r| r.to_string_lossy().replace('\\', "/"))
-                    .unwrap_or_default()
-            });
-            return Some(FileChangeEvent {
-                kind: "rename".to_string(),
-                path,
-                old_path,
-            });
-        }
         _ => return None,
     };
 
@@ -109,6 +112,19 @@ fn event_to_change_event(event: &Event, root: &PathBuf) -> Option<FileChangeEven
     })
 }
 
+fn is_supported_path(path: &PathBuf) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.to_ascii_lowercase()),
+        Some(ext)
+            if matches!(
+                ext.as_str(),
+                "md" | "markdown" | "txt" | "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp"
+            )
+    )
+}
+
 /// Stop watching. Called when the app closes.
 pub fn stop_watching() {
     // Watcher is dropped when the app exits.
@@ -116,10 +132,7 @@ pub fn stop_watching() {
 }
 
 #[tauri::command]
-pub fn start_file_watcher(
-    app_handle: AppHandle,
-    root_path: String,
-) -> Result<(), String> {
+pub fn start_file_watcher(app_handle: AppHandle, root_path: String) -> Result<(), String> {
     let path = PathBuf::from(&root_path);
     if !path.exists() || !path.is_dir() {
         return Err(format!("无效的监控路径: {}", root_path));
