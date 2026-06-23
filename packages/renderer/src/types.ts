@@ -4,6 +4,8 @@ export interface RendererOptions {
   gfm?: boolean;
   /** Enable Wiki-link [[...]] parsing */
   wikiLinks?: boolean;
+  /** Return true when a Wiki-link target already exists in the notebook. */
+  wikiLinkExists?: (note: string) => boolean;
   /** Enable inline #tag parsing */
   tags?: boolean;
   /** Enable code syntax highlighting */

@@ -7,6 +7,12 @@
 
 import type { TokenizerAndRendererExtension } from 'marked';
 
+let wikiLinkExistsResolver: ((note: string) => boolean) | null = null;
+
+export function setWikiLinkExistsResolver(resolver: ((note: string) => boolean) | null): void {
+  wikiLinkExistsResolver = resolver;
+}
+
 // --- Wiki-link Token 类型 ---
 
 interface WikiLinkToken {
@@ -70,7 +76,8 @@ export const wikiLinkExtension: TokenizerAndRendererExtension = {
   },
   renderer(token) {
     const t = token as unknown as WikiLinkToken;
-    const cls = t.exists ? 'wikilink' : 'wikilink wikilink--dead';
+    const exists = wikiLinkExistsResolver?.(t.note) ?? t.exists;
+    const cls = exists ? 'wikilink' : 'wikilink wikilink--dead';
     return `<a class="${cls}" data-note="${escapeAttr(t.note)}" data-anchor="${escapeAttr(t.anchor || '')}">${escapeHtml(t.text)}</a>`;
   },
 };

@@ -11,7 +11,7 @@
  */
 
 import { marked } from 'marked';
-import { markluckExtensions } from './marked-extensions';
+import { markluckExtensions, setWikiLinkExistsResolver } from './marked-extensions';
 import { sanitize } from './sanitize';
 import { highlightCodeBlocks } from './highlight';
 import type { RendererOptions } from './types';
@@ -53,11 +53,17 @@ marked.setOptions({ gfm: true, breaks: false });
  * @param _options - Renderer options (reserved for future use)
  * @returns Rendered safe HTML string
  */
-export function renderMarkdown(source: string, _options?: RendererOptions): string {
+export function renderMarkdown(source: string, options?: RendererOptions): string {
   // Step 1: Parse Markdown with custom extensions
-  const rawHtml = marked.parse(normalizeFullwidthMarkdownSyntax(source), {
-    async: false,
-  }) as string;
+  setWikiLinkExistsResolver(options?.wikiLinkExists ?? null);
+  let rawHtml: string;
+  try {
+    rawHtml = marked.parse(normalizeFullwidthMarkdownSyntax(source), {
+      async: false,
+    }) as string;
+  } finally {
+    setWikiLinkExistsResolver(null);
+  }
 
   // Step 2: Sanitize against XSS
   const cleanHtml = sanitize(rawHtml);
