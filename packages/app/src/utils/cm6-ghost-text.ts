@@ -16,10 +16,24 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view';
-import { type Extension } from '@codemirror/state';
+import { StateEffect, StateField, type Extension } from '@codemirror/state';
 import type { MarkdownPredictor } from '@/services/MarkdownPredictor';
+import type { CompletionSettings } from '@/services/CompletionSettings';
 
 // ---- Ghost Text Widget ----
+
+const setGhostDecorations = StateEffect.define<DecorationSet>();
+
+const ghostDecorationField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(value, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setGhostDecorations)) return effect.value;
+    }
+    return tr.docChanged ? value.map(tr.changes) : value;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
 
 class GhostTextWidget extends WidgetType {
   readonly text: string;
@@ -60,15 +74,16 @@ interface DebounceState {
 
 // ---- ViewPlugin ----
 
-function createGhostTextPlugin(predictor: MarkdownPredictor) {
+function createGhostTextPlugin(predictor: MarkdownPredictor, settings: CompletionSettings) {
   const debounce: DebounceState = { timer: null, lastPrediction: null };
 
   return ViewPlugin.fromClass(
     class {
-      decorations: DecorationSet;
       /** 当前 ghost text 内容，用于 Tab 接受时获取 */
       currentGhostText: string = '';
       private currentPredictionSource: 'ngram' | 'structured' | null = null;
+      private currentContext = '';
+      private acceptingGhost = false;
       /** True during IME composition — skip prediction scheduling */
       private isComposing = false;
       private editorView: EditorView | null = null;
@@ -79,7 +94,6 @@ function createGhostTextPlugin(predictor: MarkdownPredictor) {
 
       constructor(view: EditorView) {
         this.editorView = view;
-        this.decorations = Decoration.none;
 
         // ── IME composition guard ────────────────────────────
         const onCompStart = () => {
@@ -113,10 +127,12 @@ function createGhostTextPlugin(predictor: MarkdownPredictor) {
           this.clearPendingTimers();
 
           // 如果文档或选区变化 → 清除当前 ghost text
+          this.recordMismatch(update);
           if (this.currentGhostText) {
             this.currentGhostText = '';
             this.currentPredictionSource = null;
-            this.decorations = Decoration.none;
+            this.currentContext = '';
+            update.view.dispatch({ effects: setGhostDecorations.of(Decoration.none) });
           }
 
           // 150ms 防抖后重新预测
@@ -126,10 +142,13 @@ function createGhostTextPlugin(predictor: MarkdownPredictor) {
 
       schedulePredict(view: EditorView) {
         if (this.isImeActive(view)) return;
-        debounce.timer = setTimeout(() => {
-          debounce.timer = null;
-          this.doPredict(view);
-        }, 150);
+        debounce.timer = setTimeout(
+          () => {
+            debounce.timer = null;
+            this.doPredict(view);
+          },
+          settings.aggressiveness === 'balanced' ? 120 : 150,
+        );
       }
 
       doPredict(view: EditorView) {
@@ -163,16 +182,18 @@ function createGhostTextPlugin(predictor: MarkdownPredictor) {
 
           this.currentGhostText = result.text;
           this.currentPredictionSource = result.source ?? 'ngram';
-          this.decorations = Decoration.set([
-            Decoration.widget({
-              widget: new GhostTextWidget(result.text),
-              side: 1, // render after the cursor, never before composition text
-            }).range(cursor),
-          ]);
+          this.currentContext = doc.slice(Math.max(0, cursor - 4), cursor);
           debounce.lastPrediction = result.text;
-          // Trigger a view update so CM6 re-reads this.decorations.
-          // Decorations set inside setTimeout() are invisible until the next update cycle.
-          view.dispatch({});
+          view.dispatch({
+            effects: setGhostDecorations.of(
+              Decoration.set([
+                Decoration.widget({
+                  widget: new GhostTextWidget(result.text),
+                  side: 1,
+                }).range(cursor),
+              ]),
+            ),
+          });
         } else {
           this.clearGhost(view);
         }
@@ -182,19 +203,16 @@ function createGhostTextPlugin(predictor: MarkdownPredictor) {
         if (this.currentGhostText) {
           this.currentGhostText = '';
           this.currentPredictionSource = null;
-          this.decorations = Decoration.none;
+          this.currentContext = '';
           debounce.lastPrediction = null;
-          if (shouldDispatch) view.dispatch({});
+          if (shouldDispatch) view.dispatch({ effects: setGhostDecorations.of(Decoration.none) });
         }
       }
 
       private isImeActive(view: EditorView, update?: ViewUpdate): boolean {
-        return (
-          this.isComposing ||
-          view.composing ||
-          view.compositionStarted ||
-          !!update?.transactions.some((tr) => tr.isUserEvent('input.type.compose'))
-        );
+        void view;
+        void update;
+        return this.isComposing;
       }
 
       private clearPendingTimers(): void {
@@ -225,14 +243,15 @@ function createGhostTextPlugin(predictor: MarkdownPredictor) {
         const text = this.currentGhostText;
         const predictionSource = this.currentPredictionSource;
         const doc = view.state.doc.toString();
-        const ctx = doc.slice(Math.max(0, cursor - 4), cursor);
+        const ctx = this.currentContext || doc.slice(Math.max(0, cursor - 4), cursor);
 
         // Clear plugin state before dispatch: dispatch synchronously triggers
         // update(), and stale ghost state can otherwise re-enter prediction.
         this.clearPendingTimers();
+        this.acceptingGhost = true;
         this.currentGhostText = '';
         this.currentPredictionSource = null;
-        this.decorations = Decoration.none;
+        this.currentContext = '';
         debounce.lastPrediction = null;
 
         // 插入 ghost text
@@ -240,6 +259,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor) {
           changes: { from: cursor, insert: text },
           selection: { anchor: cursor + text.length },
         });
+        this.acceptingGhost = false;
 
         // Structured completions are deterministic editor assistance, not user prose.
         // Feeding them into N-gram creates loops such as `**` -> `********`.
@@ -256,11 +276,32 @@ function createGhostTextPlugin(predictor: MarkdownPredictor) {
 
         const cursor = view.state.selection.main.head;
         const doc = view.state.doc.toString();
-        const ctx = doc.slice(Math.max(0, cursor - 4), cursor);
+        const ctx = this.currentContext || doc.slice(Math.max(0, cursor - 4), cursor);
 
         predictor.rejectCompletion(ctx, this.currentGhostText);
         this.clearGhost(view);
         return true;
+      }
+
+      private recordMismatch(update: ViewUpdate): void {
+        if (
+          this.acceptingGhost ||
+          !update.docChanged ||
+          !this.currentGhostText ||
+          this.currentPredictionSource === 'structured'
+        ) {
+          return;
+        }
+        const inserted: string[] = [];
+        for (const tr of update.transactions) {
+          tr.changes.iterChanges((_fromA, _toA, _fromB, _toB, text) => {
+            inserted.push(text.toString());
+          });
+        }
+        const typed = inserted.join('');
+        if (typed && !this.currentGhostText.startsWith(typed)) {
+          predictor.rejectCompletion(this.currentContext, this.currentGhostText);
+        }
       }
 
       destroy() {
@@ -273,7 +314,6 @@ function createGhostTextPlugin(predictor: MarkdownPredictor) {
         }
       }
     },
-    { decorations: (v) => v.decorations },
   );
 }
 
@@ -312,9 +352,13 @@ function ghostTextKeymap(pluginSpec: ReturnType<typeof createGhostTextPlugin>) {
 
 // ---- 导出 ----
 
-export function ghostTextPlugin(predictor: MarkdownPredictor): Extension[] {
-  const plugin = createGhostTextPlugin(predictor);
+export function ghostTextPlugin(
+  predictor: MarkdownPredictor,
+  settings: CompletionSettings,
+): Extension[] {
+  const plugin = createGhostTextPlugin(predictor, settings);
   return [
+    ghostDecorationField,
     plugin,
     ghostTextKeymap(plugin),
     // DOM-level Tab/Escape intercept as belt-and-suspenders:
