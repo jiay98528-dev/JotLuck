@@ -42,7 +42,7 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function escapeAttr(text: string): string {
+export function escapeAttr(text: string): string {
   return text.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 

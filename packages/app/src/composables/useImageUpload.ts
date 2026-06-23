@@ -154,13 +154,6 @@ export function useImageUpload(
     }
   }
 
-  /** 文件选择器回调 */
-  function createFilePickerHandler() {
-    return async (file: File): Promise<void> => {
-      await handleImageFile(file);
-    };
-  }
-
   /** 拖放进入时阻止默认行为 */
   function handleDragOver(event: DragEvent): void {
     if (event.dataTransfer?.types.includes('Files')) {
@@ -208,7 +201,6 @@ export function useImageUpload(
   return {
     isUploading,
     uploadError,
-    createFilePickerHandler,
     handleDragOver,
     handleDrop,
     handleFileTreeDrop,

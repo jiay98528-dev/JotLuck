@@ -31,10 +31,10 @@ export const DEFAULT_TRAINING_META: CompletionTrainingMeta = {
 export function loadTrainingMeta(): CompletionTrainingMeta {
   try {
     const raw = localStorage.getItem(TRAINING_META_KEY);
-    if (!raw) return { ...DEFAULT_TRAINING_META, trainedPaths: {} };
+    if (!raw) return { ...DEFAULT_TRAINING_META };
     const parsed = JSON.parse(raw) as Partial<CompletionTrainingMeta>;
     if (parsed.version !== TRAINING_META_VERSION) {
-      return { ...DEFAULT_TRAINING_META, trainedPaths: {} };
+      return { ...DEFAULT_TRAINING_META };
     }
     return {
       ...DEFAULT_TRAINING_META,
@@ -43,7 +43,7 @@ export function loadTrainingMeta(): CompletionTrainingMeta {
       fileCount: Object.keys(parsed.trainedPaths ?? {}).length,
     };
   } catch {
-    return { ...DEFAULT_TRAINING_META, trainedPaths: {} };
+    return { ...DEFAULT_TRAINING_META };
   }
 }
 

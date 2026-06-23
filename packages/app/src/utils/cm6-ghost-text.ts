@@ -69,13 +69,12 @@ class GhostTextWidget extends WidgetType {
 
 interface DebounceState {
   timer: ReturnType<typeof setTimeout> | null;
-  lastPrediction: string | null;
 }
 
 // ---- ViewPlugin ----
 
 function createGhostTextPlugin(predictor: MarkdownPredictor, settings: CompletionSettings) {
-  const debounce: DebounceState = { timer: null, lastPrediction: null };
+  const debounce: DebounceState = { timer: null };
 
   return ViewPlugin.fromClass(
     class {
@@ -183,7 +182,6 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           this.currentGhostText = result.text;
           this.currentPredictionSource = result.source ?? 'ngram';
           this.currentContext = doc.slice(Math.max(0, cursor - 4), cursor);
-          debounce.lastPrediction = result.text;
           view.dispatch({
             effects: setGhostDecorations.of(
               Decoration.set([
@@ -204,7 +202,6 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           this.currentGhostText = '';
           this.currentPredictionSource = null;
           this.currentContext = '';
-          debounce.lastPrediction = null;
           if (shouldDispatch) view.dispatch({ effects: setGhostDecorations.of(Decoration.none) });
         }
       }
@@ -252,7 +249,6 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         this.currentGhostText = '';
         this.currentPredictionSource = null;
         this.currentContext = '';
-        debounce.lastPrediction = null;
 
         // 插入 ghost text
         view.dispatch({

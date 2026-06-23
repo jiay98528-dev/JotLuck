@@ -81,18 +81,14 @@ function normalizeSettings(settings: CompletionSettings): CompletionSettings {
     enabled: settings.enabled !== false,
     aggressiveness: 'balanced',
     backgroundTraining: settings.backgroundTraining !== false,
-    maxSuggestionLength: clampInt(settings.maxSuggestionLength, 4, 24, 12),
-    minConfidence: clampNumber(settings.minConfidence, 0.05, 0.8, 0.18),
+    maxSuggestionLength: clamp(settings.maxSuggestionLength, 4, 24, 12, true),
+    minConfidence: clamp(settings.minConfidence, 0.05, 0.8, 0.18),
     showDebugStats: import.meta.env.DEV && settings.showDebugStats === true,
   };
 }
 
-function clampInt(value: number, min: number, max: number, fallback: number): number {
+function clamp(value: number, min: number, max: number, fallback: number, round = false): number {
   if (!Number.isFinite(value)) return fallback;
-  return Math.max(min, Math.min(max, Math.round(value)));
-}
-
-function clampNumber(value: number, min: number, max: number, fallback: number): number {
-  if (!Number.isFinite(value)) return fallback;
-  return Math.max(min, Math.min(max, value));
+  const bounded = Math.max(min, Math.min(max, value));
+  return round ? Math.round(bounded) : bounded;
 }
