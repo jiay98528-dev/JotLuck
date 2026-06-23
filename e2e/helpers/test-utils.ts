@@ -114,3 +114,38 @@ export async function waitForAppReady(page: Page): Promise<void> {
   await expect(page.locator('.cm-content')).toBeVisible({ timeout: 10000 });
   await page.waitForTimeout(500);
 }
+
+/**
+ * 重置应用状态为初始基线（用于需要干净隔离的测试）。
+ *
+ * 清除所有 MarkLuck 相关的 localStorage 键，重新加载页面，
+ * 并重新应用欢迎页跳过标记，确保 MockFS 数据和设置回到默认值。
+ *
+ * 注意：此操作会清除用户设置/训练数据/笔记内容，
+ * 仅应在需要完全隔离的测试文件的 beforeEach 中调用。
+ */
+export async function resetAppState(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('markluck')) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+    sessionStorage.clear();
+  });
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  // Re-apply welcome skip after reload (addInitScript is persistent across navigations
+  // but not across reload() — the init script is re-injected on the next goto(),
+  // so we need to set it manually here)
+  await page.evaluate(() => {
+    localStorage.setItem('markluck:welcome:completed', '1');
+  });
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await expect(page.locator('.cm-content')).toBeVisible({ timeout: 10000 });
+  await page.waitForTimeout(500);
+}
