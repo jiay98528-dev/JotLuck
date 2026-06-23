@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "MarkLuck 文字补全 — 基准 L2 语料配置",
+  "description": "MarkLuck offline autocomplete baseline corpus configuration",
   "ngramN": 4,
   "minCount": 3,
   "maxPredsPerContext": 3,
@@ -8,43 +8,48 @@
   "reportFile": "training-report.json",
   "hardcodedFormatRules": {
     "enabled": true,
-    "description": "P0 Markdown 格式闭合规则：**→闭合、`→闭合、[→](、![→](、## →空格等。这些是语法规则而非语言习惯，不会改变。"
+    "description": "P0 Markdown structural rules. Language habits still come from corpus."
   },
   "sources": [
     {
       "path": "novel-zh/",
-      "weight": 2.0,
-      "description": "小说类语料 (用户提供): 都市/系统流 + 仙侠/古典"
+      "weight": 0.4,
+      "description": "Long-form fiction, down-weighted because note autocomplete should not sound novelistic."
     },
     {
       "path": "creative-zh/",
-      "weight": 2.0,
-      "description": "中文创作类语料: 日记/散文/笔记"
+      "weight": 3.0,
+      "description": "Chinese diary, essay, and note-style writing."
     },
     {
       "path": "tech-writing-zh/",
-      "weight": 2.0,
-      "description": "中文技术写作语料: 教程/API文档/README"
+      "weight": 3.0,
+      "description": "Chinese technical writing, tutorials, API docs, README patterns."
     },
     {
       "path": "code-doc-en/",
-      "weight": 1.5,
-      "description": "英文编程文档语料: JS/TS + Python/Rust"
+      "weight": 1.0,
+      "description": "English programming docs, kept lower to avoid cross-language bleed."
     },
     {
       "path": "markdown-structures/",
-      "weight": 1.0,
-      "description": "Markdown 结构模式: 列表/表格/引用"
+      "weight": 3.0,
+      "description": "Markdown list, table, quote, and task structures."
+    },
+    {
+      "path": "note-patterns-zh/",
+      "weight": 4.0,
+      "description": "Realistic short-note corpus: daily notes, meeting notes, project logs, book notes, task lists."
     },
     {
       "path": "../../doc/",
-      "weight": 1.5,
-      "description": "项目文档 (PRD/TAD/标准规范)"
+      "weight": 2.2,
+      "description": "Project documents."
     },
     {
       "path": "../../spec/",
-      "weight": 1.5,
-      "description": "项目规格文档 (决策/里程碑/类型)"
+      "weight": 2.2,
+      "description": "Project specs."
     }
   ]
 }

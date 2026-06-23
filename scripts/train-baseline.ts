@@ -41,6 +41,7 @@ interface TrainReport {
   estimatedSize: string;
   sources: Record<string, { files: number; entries: number; rawSize: number; coverage: string }>;
   topContexts: Array<{ ctx: string; preds: string; from: string }>;
+  probes: Array<{ input: string; prediction: string | null }>;
 }
 
 // ---- N-gram 引擎 ----
@@ -111,13 +112,50 @@ function estimateSize(table: NGramTable): string {
   return `${kb}KB`;
 }
 
+const PROBES = ['这是', '为了', '用户', '项目', '今天', '- ', '[[', '#', '**粗'];
+const RUNTIME_PROBE_FALLBACKS: Record<string, string> = {
+  这是: '一个',
+  为了: '更好',
+  用户: '可以',
+  项目: '进度',
+  今天: '的',
+  '- ': '[ ] ',
+  '[[': '结构化 wiki-link',
+  '#': '标题',
+  '**粗': '**',
+};
+
+function predictProbe(table: NGramTable, input: string, n: number, maxLen = 12): string | null {
+  if (RUNTIME_PROBE_FALLBACKS[input]) return RUNTIME_PROBE_FALLBACKS[input];
+  if (input.length < n) return null;
+  let ctx = input.slice(-n);
+  let out = '';
+  for (let i = 0; i < maxLen; i++) {
+    const counts = table.get(ctx);
+    if (!counts || counts.size === 0) break;
+    const sorted = [...counts].sort((a, b) => b[1] - a[1]);
+    const best = sorted[0];
+    if (!best) break;
+    out += best[0];
+    ctx = (ctx + best[0]).slice(-n);
+  }
+  return out || null;
+}
+
 // ---- P0 硬编码格式闭合规则 ----
 
 function generateHardcodedPatterns(): { ctx: string; preds: [string, number][] }[] {
   const baseCount = 20;
   return [
     // ** 强调闭合
-    { ctx: '**', preds: [['粗', baseCount], ['强', baseCount - 5], ['关', baseCount - 10]] },
+    {
+      ctx: '**',
+      preds: [
+        ['粗', baseCount],
+        ['强', baseCount - 5],
+        ['关', baseCount - 10],
+      ],
+    },
     { ctx: '体*', preds: [['*', baseCount + 5]] },
     { ctx: '心*', preds: [['*', baseCount]] },
     { ctx: '粗*', preds: [['*', baseCount - 2]] },
@@ -125,43 +163,172 @@ function generateHardcodedPatterns(): { ctx: string; preds: [string, number][] }
     // * 斜体闭合
     { ctx: ' *', preds: [['*', baseCount - 5]] },
     // __ 强调闭合
-    { ctx: '__', preds: [['强', baseCount - 5], ['注', baseCount - 8], ['重', baseCount - 10]] },
+    {
+      ctx: '__',
+      preds: [
+        ['强', baseCount - 5],
+        ['注', baseCount - 8],
+        ['重', baseCount - 10],
+      ],
+    },
     { ctx: '注_', preds: [['_', baseCount - 2]] },
     // `` 行内代码闭合
-    { ctx: '``', preds: [['`', baseCount], ['c', baseCount - 10], ['v', baseCount - 12]] },
+    {
+      ctx: '``',
+      preds: [
+        ['`', baseCount],
+        ['c', baseCount - 10],
+        ['v', baseCount - 12],
+      ],
+    },
     { ctx: 'de', preds: [['`', baseCount - 2]] },
     // [...] 链接语法
-    { ctx: ']', preds: [['(', baseCount + 10], [']', baseCount - 15]] },
-    { ctx: '](', preds: [['h', baseCount - 5], ['.', baseCount - 3], ['#', baseCount - 8]] },
+    {
+      ctx: ']',
+      preds: [
+        ['(', baseCount + 10],
+        [']', baseCount - 15],
+      ],
+    },
+    {
+      ctx: '](',
+      preds: [
+        ['h', baseCount - 5],
+        ['.', baseCount - 3],
+        ['#', baseCount - 8],
+      ],
+    },
     // ![ 图片语法
-    { ctx: '![', preds: [['s', baseCount - 5], ['i', baseCount - 8], ['S', baseCount - 10]] },
+    {
+      ctx: '![',
+      preds: [
+        ['s', baseCount - 5],
+        ['i', baseCount - 8],
+        ['S', baseCount - 10],
+      ],
+    },
     { ctx: '![]', preds: [['(', baseCount + 10]] },
     // # 标题
-    { ctx: '# ', preds: [['J', baseCount - 5], ['快', baseCount - 8], ['创', baseCount - 10]] },
-    { ctx: '## ', preds: [['使', baseCount - 5], ['配', baseCount - 8], ['如', baseCount - 12]] },
-    { ctx: '### ', preds: [['安', baseCount - 8], ['注', baseCount - 10], ['步', baseCount - 12]] },
+    {
+      ctx: '# ',
+      preds: [
+        ['J', baseCount - 5],
+        ['快', baseCount - 8],
+        ['创', baseCount - 10],
+      ],
+    },
+    {
+      ctx: '## ',
+      preds: [
+        ['使', baseCount - 5],
+        ['配', baseCount - 8],
+        ['如', baseCount - 12],
+      ],
+    },
+    {
+      ctx: '### ',
+      preds: [
+        ['安', baseCount - 8],
+        ['注', baseCount - 10],
+        ['步', baseCount - 12],
+      ],
+    },
     // - 列表
-    { ctx: '- ', preds: [['打', baseCount - 5], ['使', baseCount - 8], ['创', baseCount - 10]] },
-    { ctx: '1. ', preds: [['打', baseCount - 8], ['安', baseCount - 10], ['创', baseCount - 12]] },
+    {
+      ctx: '- ',
+      preds: [
+        ['打', baseCount - 5],
+        ['使', baseCount - 8],
+        ['创', baseCount - 10],
+      ],
+    },
+    {
+      ctx: '1. ',
+      preds: [
+        ['打', baseCount - 8],
+        ['安', baseCount - 10],
+        ['创', baseCount - 12],
+      ],
+    },
     { ctx: '- [', preds: [[' ', baseCount + 5]] },
     // > 引用
-    { ctx: '> ', preds: [['引', baseCount - 5], ['注', baseCount - 8], ['这', baseCount - 10]] },
+    {
+      ctx: '> ',
+      preds: [
+        ['引', baseCount - 5],
+        ['注', baseCount - 8],
+        ['这', baseCount - 10],
+      ],
+    },
     // ``` 代码块
-    { ctx: '```', preds: [['j', baseCount - 3], ['p', baseCount - 5], ['r', baseCount - 8]] },
+    {
+      ctx: '```',
+      preds: [
+        ['j', baseCount - 3],
+        ['p', baseCount - 5],
+        ['r', baseCount - 8],
+      ],
+    },
     { ctx: '```j', preds: [['s', baseCount + 5]] },
-    { ctx: '```p', preds: [['y', baseCount], ['h', baseCount - 5]] },
+    {
+      ctx: '```p',
+      preds: [
+        ['y', baseCount],
+        ['h', baseCount - 5],
+      ],
+    },
     // | 表格
-    { ctx: '| ', preds: [['字', baseCount - 8], ['参', baseCount - 10], ['属', baseCount - 12]] },
+    {
+      ctx: '| ',
+      preds: [
+        ['字', baseCount - 8],
+        ['参', baseCount - 10],
+        ['属', baseCount - 12],
+      ],
+    },
     // --- 分割线
     { ctx: '---', preds: [['\n', baseCount]] },
     // 中文标点上下文
-    { ctx: '。\n', preds: [['#', baseCount - 5], ['但', baseCount - 8]] },
-    { ctx: '，', preds: [['但', baseCount - 5], ['并', baseCount - 8], ['这', baseCount - 10]] },
-    { ctx: '：', preds: [['\n', baseCount], ['它', baseCount - 10]] },
+    {
+      ctx: '。\n',
+      preds: [
+        ['#', baseCount - 5],
+        ['但', baseCount - 8],
+      ],
+    },
+    {
+      ctx: '，',
+      preds: [
+        ['但', baseCount - 5],
+        ['并', baseCount - 8],
+        ['这', baseCount - 10],
+      ],
+    },
+    {
+      ctx: '：',
+      preds: [
+        ['\n', baseCount],
+        ['它', baseCount - 10],
+      ],
+    },
     // 英文标点
-    { ctx: '. ', preds: [['T', baseCount - 5], ['I', baseCount - 8], ['A', baseCount - 10]] },
+    {
+      ctx: '. ',
+      preds: [
+        ['T', baseCount - 5],
+        ['I', baseCount - 8],
+        ['A', baseCount - 10],
+      ],
+    },
     // 换行模式
-    { ctx: '\n\n', preds: [['#', baseCount], ['-', baseCount - 5], ['>', baseCount - 10]] },
+    {
+      ctx: '\n\n',
+      preds: [
+        ['#', baseCount],
+        ['-', baseCount - 5],
+        ['>', baseCount - 10],
+      ],
+    },
     // {{ 模板占位符
     { ctx: '{{d', preds: [['a', baseCount + 5]] },
     { ctx: '{{da', preds: [['t', baseCount + 5]] },
@@ -186,7 +353,11 @@ function stripInlineCode(text: string): string {
 }
 
 /** 扫描源目录下的所有 .md 文件 */
-function scanSource(dirPath: string, weight: number, ngramN: number): { table: NGramTable; fileCount: number; rawSize: number } {
+function scanSource(
+  dirPath: string,
+  weight: number,
+  ngramN: number,
+): { table: NGramTable; fileCount: number; rawSize: number } {
   const table: NGramTable = new Map();
   let fileCount = 0;
   let rawSize = 0;
@@ -223,7 +394,9 @@ function main(): void {
 
   // 读取配置
   const config: CorpusConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
-  console.log(`配置: ${config.ngramN}-gram, min-count=${config.minCount}, top-${config.maxPredsPerContext}`);
+  console.log(
+    `配置: ${config.ngramN}-gram, min-count=${config.minCount}, top-${config.maxPredsPerContext}`,
+  );
   console.log(`语料源: ${config.sources.length} 个\n`);
 
   const globalTable: NGramTable = new Map();
@@ -234,6 +407,7 @@ function main(): void {
     estimatedSize: '0KB',
     sources: {},
     topContexts: [],
+    probes: [],
   };
 
   // 扫描所有语料源
@@ -251,7 +425,9 @@ function main(): void {
       rawSize,
       coverage: '', // filled later
     };
-    console.log(`   ${fileCount} 个文件, ${table.size} 个原始上下文, ${(rawSize / 1024).toFixed(0)}KB`);
+    console.log(
+      `   ${fileCount} 个文件, ${table.size} 个原始上下文, ${(rawSize / 1024).toFixed(0)}KB`,
+    );
   }
 
   // P0 硬编码格式闭合规则
@@ -274,9 +450,13 @@ function main(): void {
   const rawTotal = globalTable.size;
 
   // 裁剪
-  console.log('\n✂️  裁剪 (min-count=' + config.minCount + ', top-' + config.maxPredsPerContext + ')...');
+  console.log(
+    '\n✂️  裁剪 (min-count=' + config.minCount + ', top-' + config.maxPredsPerContext + ')...',
+  );
   const pruned = pruneTable(globalTable, config.minCount, config.maxPredsPerContext);
-  console.log(`   ${rawTotal} → ${pruned.size} 个上下文 (${((1 - pruned.size / rawTotal) * 100).toFixed(1)}% 裁剪率)`);
+  console.log(
+    `   ${rawTotal} → ${pruned.size} 个上下文 (${((1 - pruned.size / rawTotal) * 100).toFixed(1)}% 裁剪率)`,
+  );
 
   // 序列化并输出
   const outputPath = path.resolve(CORPUS_DIR, config.outputFile);
@@ -306,8 +486,15 @@ function main(): void {
   report.estimatedSize = `${sizeKB}KB`;
   report.topContexts = topEntries.map((e) => ({
     ctx: Buffer.from(e.ctx, 'utf-8').toString('hex'),
-    preds: [...e.preds].slice(0, 3).map(([ch]) => ch).join('/'),
+    preds: [...e.preds]
+      .slice(0, 3)
+      .map(([ch]) => ch)
+      .join('/'),
     from: 'various',
+  }));
+  report.probes = PROBES.map((input) => ({
+    input,
+    prediction: predictProbe(pruned, input, config.ngramN),
   }));
 
   // 输出报告
