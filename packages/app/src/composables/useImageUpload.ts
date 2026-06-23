@@ -27,6 +27,7 @@ const IMAGE_MIMES = new Set([
 
 /** 图片存放目录（相对于笔记本根目录） */
 const ASSETS_DIR = 'assets';
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 /** 根据 MIME 类型获取扩展名 */
 function extForMime(mime: string): string {
@@ -59,7 +60,49 @@ function insertImageMarkdown(view: EditorView, alt: string, relPath: string): vo
   view.focus();
 }
 
-export function useImageUpload(fs: IFileSystemService, getEditorView: () => EditorView | null) {
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('无法读取图片文件'));
+    reader.onload = () => {
+      const result = String(reader.result ?? '');
+      const comma = result.indexOf(',');
+      resolve(comma === -1 ? result : result.slice(comma + 1));
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function dirname(path: string): string {
+  const normalized = path.replace(/\\/g, '/');
+  const lastSlash = normalized.lastIndexOf('/');
+  return lastSlash <= 0 ? '/' : normalized.slice(0, lastSlash);
+}
+
+function segments(path: string): string[] {
+  return path.split('/').filter(Boolean);
+}
+
+function relativeMarkdownPath(fromFile: string | undefined, targetPath: string): string {
+  const from = segments(fromFile ? dirname(fromFile) : '/');
+  const target = segments(targetPath);
+  let common = 0;
+  while (common < from.length && common < target.length && from[common] === target[common]) {
+    common++;
+  }
+
+  const up = from.slice(common).map(() => '..');
+  const down = target.slice(common);
+  const rel = [...up, ...down].join('/');
+  return up.length === 0 ? `./${rel}` : rel;
+}
+
+export function useImageUpload(
+  fs: IFileSystemService,
+  getEditorView: () => EditorView | null,
+  getCurrentNotePath?: () => string,
+  onImageUploaded?: (path: string) => void | Promise<void>,
+) {
   const isUploading = ref(false);
   const uploadError = ref<string | null>(null);
 
@@ -75,17 +118,13 @@ export function useImageUpload(fs: IFileSystemService, getEditorView: () => Edit
     }
   }
 
-  /** 将文件写入 assets 目录，返回相对路径 */
+  /** 将文件写入 assets 目录，返回笔记本根目录相对路径 */
   async function writeImageFile(file: File): Promise<string> {
     await ensureAssetsDir();
     const name = uniqueName(file.type);
     const path = `/${ASSETS_DIR}/${name}`;
-    const dataUrl = await new Promise<string>((resolve) => {
-      const r = new FileReader();
-      r.onload = () => resolve(r.result as string);
-      r.readAsDataURL(file);
-    });
-    await fs.writeFile(path, dataUrl);
+    const base64 = await readFileAsBase64(file);
+    await fs.writeBinary(path, base64);
     return path;
   }
 
@@ -95,14 +134,19 @@ export function useImageUpload(fs: IFileSystemService, getEditorView: () => Edit
     if (!view) return;
 
     if (!IMAGE_MIMES.has(file.type)) return;
+    if (file.size > MAX_IMAGE_BYTES) {
+      uploadError.value = '图片超过 5MB，请压缩后再插入';
+      return;
+    }
 
     isUploading.value = true;
     uploadError.value = null;
     try {
       const path = await writeImageFile(file);
-      const relPath = `.${path}`; // 相对于笔记文件
+      const relPath = relativeMarkdownPath(getCurrentNotePath?.(), path);
       const alt = file.name.replace(/\.[^.]+$/, '');
       insertImageMarkdown(view, alt, relPath);
+      await onImageUploaded?.(path);
     } catch (e) {
       uploadError.value = `图片保存失败: ${e instanceof Error ? e.message : String(e)}`;
     } finally {

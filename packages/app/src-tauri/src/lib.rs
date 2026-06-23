@@ -70,6 +70,8 @@ pub fn run() {
             fs_ops::list_directory,
             fs_ops::read_file,
             fs_ops::write_file,
+            fs_ops::read_binary_file,
+            fs_ops::write_binary_file,
             fs_ops::delete_file,
             fs_ops::create_directory,
             fs_ops::rename_file,

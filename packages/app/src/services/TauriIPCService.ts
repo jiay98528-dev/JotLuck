@@ -9,6 +9,7 @@
  * @see fs_ops.rs — Rust 后端文件操作命令
  */
 import { invoke } from '@tauri-apps/api/core';
+import { listen, type UnlistenFn as TauriUnlistenFn } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import type {
   IFileSystemService,
@@ -29,6 +30,12 @@ interface RustDirEntry {
   modified_at: number; // Unix epoch seconds
 }
 
+interface RustFileChangeEvent {
+  kind: 'create' | 'modify' | 'remove' | 'rename';
+  path: string;
+  old_path?: string | null;
+}
+
 // ── Recent notebooks cache key ──
 
 const RECENT_KEY = 'markluck-recent-notebooks';
@@ -36,6 +43,7 @@ const RECENT_KEY = 'markluck-recent-notebooks';
 // ── TauriIPCService ──
 
 export class TauriIPCService implements IFileSystemService {
+  private unwatchFns: TauriUnlistenFn[] = [];
   // ====================================================================
   // Notebook Management
   // ====================================================================
@@ -90,11 +98,11 @@ export class TauriIPCService implements IFileSystemService {
   }
 
   async writeBinary(path: string, base64: string): Promise<void> {
-    return this.writeFile(path, base64);
+    return invoke('write_binary_file', { relativePath: path, base64 });
   }
 
   async readBinary(path: string): Promise<string> {
-    return this.readFile(path);
+    return invoke<string>('read_binary_file', { relativePath: path });
   }
 
   isBinaryPath(path: string): boolean {
@@ -157,15 +165,41 @@ export class TauriIPCService implements IFileSystemService {
   }
 
   // ====================================================================
-  // File Watching (stub — Tauri event system adaptation needed)
+  // File Watching
   // ====================================================================
 
-  watch(_rootPath: string, _callback: (event: FileChangeEvent) => void): Promise<UnwatchFn> {
-    return Promise.resolve(() => {});
+  async watch(rootPath: string, callback: (event: FileChangeEvent) => void): Promise<UnwatchFn> {
+    await invoke('start_file_watcher', { rootPath });
+    const unlisten = await listen<RustFileChangeEvent>('file-change', (event) => {
+      const payload = event.payload;
+      callback({
+        type: this.mapChangeKind(payload.kind),
+        path: payload.path.startsWith('/') ? payload.path : `/${payload.path}`,
+        oldPath: payload.old_path
+          ? payload.old_path.startsWith('/')
+            ? payload.old_path
+            : `/${payload.old_path}`
+          : undefined,
+      });
+    });
+    this.unwatchFns.push(unlisten);
+    return () => {
+      unlisten();
+      this.unwatchFns = this.unwatchFns.filter((fn) => fn !== unlisten);
+    };
   }
 
   async unwatchAll(): Promise<void> {
-    /* no-op */
+    for (const unwatch of this.unwatchFns.splice(0)) {
+      unwatch();
+    }
+  }
+
+  private mapChangeKind(kind: RustFileChangeEvent['kind']): FileChangeEvent['type'] {
+    if (kind === 'create') return 'created';
+    if (kind === 'modify') return 'modified';
+    if (kind === 'remove') return 'deleted';
+    return 'renamed';
   }
 
   // ====================================================================

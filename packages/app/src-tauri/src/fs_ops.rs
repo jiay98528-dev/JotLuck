@@ -3,7 +3,8 @@
 // Tauri IPC commands for reading, writing, deleting, and listing markdown files.
 // All operations go through path::resolve_safe_path for security.
 
-use crate::path::{resolve_safe_path, PathError};
+use crate::path::resolve_safe_path;
+use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -52,7 +53,9 @@ pub fn open_notebook(path: String, root: State<NotebookRoot>) -> Result<String, 
     if !p.is_dir() {
         return Err(format!("路径不是文件夹: {}", path));
     }
-    let canonical = p.canonicalize().map_err(|e| format!("无法解析路径: {}", e))?;
+    let canonical = p
+        .canonicalize()
+        .map_err(|e| format!("无法解析路径: {}", e))?;
     root.set(canonical.clone());
     Ok(canonical.to_string_lossy().to_string())
 }
@@ -67,7 +70,10 @@ pub fn get_notebook_root(root: State<NotebookRoot>) -> Result<String, String> {
 
 /// List all .md files and directories in a given directory (relative to notebook root).
 #[tauri::command]
-pub fn list_directory(relative_path: String, root: State<NotebookRoot>) -> Result<Vec<DirEntry>, String> {
+pub fn list_directory(
+    relative_path: String,
+    root: State<NotebookRoot>,
+) -> Result<Vec<DirEntry>, String> {
     let root_path = root.get().ok_or("未打开笔记本")?;
     let target = resolve_safe_path(&root_path, &relative_path).map_err(|e| e.to_string())?;
 
@@ -76,12 +82,24 @@ pub fn list_directory(relative_path: String, root: State<NotebookRoot>) -> Resul
 
     for entry in dir_iter {
         let entry = entry.map_err(|e| format!("读取条目失败: {}", e))?;
-        let file_type = entry.file_type().map_err(|e| format!("读取文件类型失败: {}", e))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|e| format!("读取文件类型失败: {}", e))?;
         let metadata = entry.metadata().ok();
 
-        // Show .md, .txt files and directories
+        // Show text notes, supported image assets, and directories
         let name = entry.file_name().to_string_lossy().to_string();
-        let is_supported = name.ends_with(".md") || name.ends_with(".txt");
+        let lower_name = name.to_lowercase();
+        let is_supported = lower_name.ends_with(".md")
+            || lower_name.ends_with(".markdown")
+            || lower_name.ends_with(".txt")
+            || lower_name.ends_with(".png")
+            || lower_name.ends_with(".jpg")
+            || lower_name.ends_with(".jpeg")
+            || lower_name.ends_with(".gif")
+            || lower_name.ends_with(".webp")
+            || lower_name.ends_with(".svg")
+            || lower_name.ends_with(".bmp");
         if !file_type.is_dir() && !is_supported {
             continue;
         }
@@ -102,7 +120,11 @@ pub fn list_directory(relative_path: String, root: State<NotebookRoot>) -> Resul
     }
 
     // Sort: directories first, then alphabetical
-    entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then(a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    entries.sort_by(|a, b| {
+        b.is_dir
+            .cmp(&a.is_dir)
+            .then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
 
     Ok(entries)
 }
@@ -142,6 +164,43 @@ pub fn write_file(
     fs::rename(&tmp_path, &target).map_err(|e| format!("保存文件失败: {}", e))?;
 
     Ok(())
+}
+
+/// Write binary content to a file (base64 payload, relative to notebook root).
+#[tauri::command]
+pub fn write_binary_file(
+    relative_path: String,
+    base64: String,
+    root: State<NotebookRoot>,
+) -> Result<(), String> {
+    let root_path = root.get().ok_or("未打开笔记本")?;
+    let target = resolve_safe_path(&root_path, &relative_path).map_err(|e| e.to_string())?;
+    let bytes = general_purpose::STANDARD
+        .decode(base64.as_bytes())
+        .map_err(|e| format!("图片数据解码失败: {}", e))?;
+
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
+    }
+
+    fs::write(&target, bytes).map_err(|e| format!("写入二进制文件失败: {}", e))
+}
+
+/// Read binary content from a file (returns base64 payload).
+#[tauri::command]
+pub fn read_binary_file(
+    relative_path: String,
+    root: State<NotebookRoot>,
+) -> Result<String, String> {
+    let root_path = root.get().ok_or("未打开笔记本")?;
+    let target = resolve_safe_path(&root_path, &relative_path).map_err(|e| e.to_string())?;
+
+    if !target.exists() {
+        return Err(format!("文件不存在: {}", relative_path));
+    }
+
+    let bytes = fs::read(&target).map_err(|e| format!("读取二进制文件失败: {}", e))?;
+    Ok(general_purpose::STANDARD.encode(bytes))
 }
 
 /// Delete a file — moves to system recycle bin (Windows/macOS/Linux).
@@ -193,7 +252,9 @@ pub fn get_file_meta(relative_path: String, root: State<NotebookRoot>) -> Result
     let root_path = root.get().ok_or("未打开笔记本")?;
     let target = resolve_safe_path(&root_path, &relative_path).map_err(|e| e.to_string())?;
 
-    let metadata = target.metadata().map_err(|e| format!("读取元数据失败: {}", e))?;
+    let metadata = target
+        .metadata()
+        .map_err(|e| format!("读取元数据失败: {}", e))?;
     let name = target
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
