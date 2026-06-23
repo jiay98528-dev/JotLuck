@@ -79,7 +79,9 @@ test.describe('持久化与跨会话', () => {
     await waitForAutoSave(page);
 
     // Read the post-save label — title may have changed due to content replacement
-    const postSaveLabel = await page.locator('.wing-bookmark-dot.active').getAttribute('aria-label');
+    const postSaveLabel = await page
+      .locator('.wing-bookmark-dot.active')
+      .getAttribute('aria-label');
 
     // Step 4-5: Reload page and verify content persisted
     await page.reload();
@@ -278,7 +280,11 @@ test.describe('持久化与跨会话', () => {
     // Click the delete option
     await expect(page.locator('.context-menu-item--danger')).toBeVisible({ timeout: 3000 });
     await page.locator('.context-menu-item--danger').click();
-    await page.waitForTimeout(500);
+
+    const deleteDialog = page.locator('[role="dialog"][aria-labelledby="delete-file-title"]');
+    await expect(deleteDialog).toBeVisible({ timeout: 3000 });
+    await deleteDialog.locator('.btn--danger').click();
+    await expect(deleteDialog).not.toBeVisible({ timeout: 3000 });
 
     // Step 4: Verify note is gone from bookmark dots
     await expect(page.locator(`.wing-bookmark-dot[aria-label="${noteTitle}"]`)).toHaveCount(0);
@@ -288,8 +294,11 @@ test.describe('持久化与跨会话', () => {
     // The drawer panel slides out from the left (~300px wide); clicking to the right of it
     // hits the overlay itself (no child elements), satisfying Vue's .self modifier.
     // @see BUG-022: 改变全局 UI 状态的交互完成后必须关闭 overlay
-    await page.locator('.drawer-overlay').click({ position: { x: 600, y: 300 } });
-    await page.waitForTimeout(300);
+    const drawerOverlay = page.locator('.drawer-overlay');
+    if (await drawerOverlay.isVisible().catch(() => false)) {
+      await drawerOverlay.click({ position: { x: 600, y: 300 } });
+      await expect(drawerOverlay).not.toBeVisible({ timeout: 3000 });
+    }
 
     // Step 5: Recreate a note with the same procedure (same date = same name)
     await page.locator('.wing-new-btn').click();
@@ -317,7 +326,9 @@ test.describe('持久化与跨会话', () => {
     await waitForAutoSave(page);
 
     // Read post-save label — title may have changed due to content replacement
-    const postSaveLabel = await page.locator('.wing-bookmark-dot.active').getAttribute('aria-label');
+    const postSaveLabel = await page
+      .locator('.wing-bookmark-dot.active')
+      .getAttribute('aria-label');
 
     // Step 2: First reload
     await page.reload();
