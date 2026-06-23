@@ -431,6 +431,32 @@ describe('MarkdownPredictor', () => {
     });
   });
 
+  describe('offline completion quality gates', () => {
+    it('returns a short Chinese fallback for 2-character contexts', () => {
+      const p = createPredictor(4);
+      const doc = '这是';
+      const result = p.getGhostText(doc.length, doc);
+      expect(result).not.toBeNull();
+      expect(result!.text.length).toBeGreaterThan(0);
+      expect(result!.text.length).toBeLessThanOrEqual(6);
+      expect(result!.syntaxType).toBe('short-zh');
+    });
+
+    it('filters English fragments in Chinese context', () => {
+      const p = createPredictor(4);
+      p.ingestExcerpts(['用户输入alphabeta 用户输入alphabeta 用户输入alphabeta']);
+      const doc = '用户输入';
+      const result = p.getGhostText(doc.length, doc);
+      expect(result?.text ?? '').not.toMatch(/^[A-Za-z]/);
+    });
+
+    it('respects settings.enabled=false', () => {
+      const p = createPredictor(4);
+      p.configure({ enabled: false });
+      expect(p.getGhostText(2, '这是')).toBeNull();
+    });
+  });
+
   // ============ 持久化 ============
 
   describe('持久化: save / load / closeDocument', () => {
@@ -556,9 +582,9 @@ describe('MarkdownPredictor', () => {
         ),
       );
       await p.loadBaseline();
-      expect(priv(p).l2.size).toBeGreaterThan(0);
+      expect(priv(p).l3.size).toBeGreaterThan(0);
       // Benchmark entries should be flagged 'b'
-      for (const ctx of priv(p).l2.keys()) {
+      for (const ctx of priv(p).l3.keys()) {
         expect(priv(p).entryFlags.get(ctx)).toBe('b');
       }
       vi.unstubAllGlobals();
@@ -578,13 +604,13 @@ describe('MarkdownPredictor', () => {
       expect(stored).not.toBeNull();
       expect(stored!.length).toBeGreaterThan(0);
 
-      const fetchSpy = vi.fn(() => Promise.reject(new Error('should not call')));
+      const fetchSpy = vi.fn(() => Promise.reject(new Error('no baseline')));
       vi.stubGlobal('fetch', fetchSpy);
 
       const p2 = createPredictor(4);
       await p2.initialize();
       // fetch should NOT be called because localStorage had data
-      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(fetchSpy).toHaveBeenCalledWith('/baseline-ngram.v1.compact.txt');
       expect(priv(p2).l2.size).toBeGreaterThan(0);
 
       vi.unstubAllGlobals();
