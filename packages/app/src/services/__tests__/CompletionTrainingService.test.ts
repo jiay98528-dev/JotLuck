@@ -132,4 +132,17 @@ describe('CompletionTrainingService', () => {
     service.removePath('/a.md');
     expect(loadTrainingMeta().fileCount).toBe(0);
   });
+
+  it('does not reuse the default trainedPaths object after localStorage is cleared', async () => {
+    const service = new CompletionTrainingService(mockFs({}), new MarkdownPredictor());
+    await service.trainFile('/a.md', '为了验证默认元数据隔离，写入一段普通文本。', {
+      mtime: 1,
+      size: 24,
+    });
+
+    localStorage.clear();
+
+    expect(loadTrainingMeta().trainedPaths).toEqual({});
+    expect(loadTrainingMeta().fileCount).toBe(0);
+  });
 });
