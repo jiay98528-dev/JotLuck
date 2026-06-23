@@ -38,5 +38,11 @@ src-tauri/target/
 # User data
 .markluck_index.json
 
+# E2E report artifacts
+e2e/report/data/
+
+# App assets (auto-generated)
+assets/
+
 # Vite
 *.local
