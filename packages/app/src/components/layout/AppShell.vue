@@ -129,4 +129,16 @@ defineEmits<{
   overflow: hidden auto;
   scroll-behavior: smooth;
 }
+
+@media (width <= 720px) {
+  .app-shell {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .editor-area + .wing-divider,
+  :deep(.right-wing) {
+    display: none;
+  }
+}
 </style>

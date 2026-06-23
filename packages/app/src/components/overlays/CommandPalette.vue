@@ -53,6 +53,7 @@
             >
               <div class="result-title">{{ result.noteTitle }}</div>
               <div class="result-path">{{ result.notePath }}</div>
+              <!-- eslint-disable vue/no-v-html -->
               <div
                 v-if="result.matches.length > 0"
                 class="result-snippet"
@@ -63,6 +64,7 @@
                   })
                 "
               />
+              <!-- eslint-enable vue/no-v-html -->
             </button>
 
             <!-- Empty State -->

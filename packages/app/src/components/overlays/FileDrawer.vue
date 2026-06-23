@@ -789,6 +789,8 @@ function cancelRename(): void {
 // ============================================================
 
 function openContextMenu(event: MouseEvent, node: FlatNode): void {
+  if (node.entry.isDirectory) return;
+
   contextMenu.value = {
     visible: true,
     x: event.clientX,
@@ -812,20 +814,23 @@ function closeContextMenu(): void {
 function handleContextMenuRename(): void {
   const node = contextMenu.value.node;
   closeContextMenu();
-  // 关闭右键菜单后 DOM 移除 → 焦点丢失 → 重新聚焦 overlay 恢复键盘事件可达性
-  nextTick().then(() => overlayRef.value?.focus());
-  if (node) {
+  if (node && !node.entry.isDirectory) {
     startRename(node.entry.path, node.entry.name);
+  } else {
+    // 关闭右键菜单后 DOM 移除 → 焦点丢失 → 重新聚焦 overlay 恢复键盘事件可达性
+    nextTick().then(() => overlayRef.value?.focus());
   }
 }
 
 function handleContextMenuDelete(): void {
   const node = contextMenu.value.node;
   closeContextMenu();
-  // 关闭右键菜单后 DOM 移除 → 焦点丢失 → 重新聚焦 overlay 恢复键盘事件可达性
-  nextTick().then(() => overlayRef.value?.focus());
-  if (node) {
+  if (node && !node.entry.isDirectory) {
     emit('delete-file', node.entry.path);
+    close();
+  } else {
+    // 关闭右键菜单后 DOM 移除 → 焦点丢失 → 重新聚焦 overlay 恢复键盘事件可达性
+    nextTick().then(() => overlayRef.value?.focus());
   }
 }
 

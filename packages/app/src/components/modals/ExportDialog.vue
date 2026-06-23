@@ -8,11 +8,11 @@
       @click.self="cancel"
       @keydown.escape="cancel"
     >
-      <div class="modal-card">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="export-dialog-title">
         <!-- Header -->
         <div class="modal-header">
-          <h2>导出笔记</h2>
-          <button class="modal-close" @click="cancel">&times;</button>
+          <h2 id="export-dialog-title">导出笔记</h2>
+          <button class="modal-close" aria-label="关闭" @click="cancel">&times;</button>
         </div>
 
         <!-- Body -->
@@ -27,6 +27,7 @@
                 :class="{ selected: selectedFormat === f.fmt }"
                 @click="selectFormat(f.fmt)"
               >
+                <!-- eslint-disable-next-line vue/no-v-html -->
                 <span class="format-icon" v-html="f.icon"></span>
                 <span class="format-name">{{ f.name }}</span>
                 <span class="format-ext">{{ f.ext }}</span>

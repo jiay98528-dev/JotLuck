@@ -8,7 +8,12 @@
       @click.self="cancel"
       @keydown.escape="cancel"
     >
-      <div class="modal-card" role="dialog" aria-labelledby="template-dialog-title">
+      <div
+        class="modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="template-dialog-title"
+      >
         <!-- Header -->
         <div class="modal-header">
           <h2 id="template-dialog-title">新建笔记</h2>
@@ -53,19 +58,23 @@
             </button>
 
             <!-- Custom templates -->
-            <button
+            <div
               v-for="tpl in customTemplates"
               :key="tpl.id"
               class="tpl-card custom-tpl"
               :class="{ active: selectedId === tpl.id }"
+              role="button"
+              tabindex="0"
               @click="selectTemplate(tpl)"
+              @keydown.enter.prevent="selectTemplate(tpl)"
+              @keydown.space.prevent="selectTemplate(tpl)"
             >
               <span class="tpl-card-title">{{ tpl.name }}</span>
               <span class="tpl-card-desc">{{ tpl.description }}</span>
               <button class="template-delete" title="删除模板" @click.stop="deleteTemplate(tpl.id)">
                 &times;
               </button>
-            </button>
+            </div>
 
             <!-- Save as template -->
             <div v-if="currentContent" class="save-as-template">

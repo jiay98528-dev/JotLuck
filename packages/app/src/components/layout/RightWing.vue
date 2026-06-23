@@ -265,7 +265,7 @@ const props = withDefaults(
     backlinks: BacklinkEntry[];
     tags: TagEntry[];
     activeHeadingId: string | null;
-    collapsed: boolean;
+    collapsed?: boolean;
   }>(),
   {
     collapsed: false,

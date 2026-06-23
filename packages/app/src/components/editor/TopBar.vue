@@ -323,6 +323,35 @@ defineEmits<{
   }
 }
 
+@media (width <= 560px) {
+  .topbar-inner {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    padding: 0 var(--space-8);
+  }
+
+  .topbar-notebook,
+  .topbar-kbd {
+    display: none;
+  }
+
+  .topbar-center {
+    padding: 0 var(--space-6);
+  }
+
+  .topbar-title {
+    max-width: 100%;
+  }
+
+  .topbar-right {
+    gap: 0;
+  }
+
+  .topbar-search-hint {
+    width: 32px !important;
+    padding: 0 !important;
+  }
+}
+
 /* ============================================================
  * Reduced Motion
  * ============================================================ */

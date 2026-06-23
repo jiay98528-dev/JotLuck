@@ -8,7 +8,7 @@
       @click.self="cancel"
       @keydown.escape="cancel"
     >
-      <div class="modal-card" role="dialog" aria-labelledby="share-dialog-title">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="share-dialog-title">
         <!-- Header -->
         <div class="modal-header">
           <h2 id="share-dialog-title">分享笔记</h2>
@@ -47,6 +47,7 @@
                 :aria-pressed="selectedFormat === f.fmt"
                 @click="selectedFormat = f.fmt"
               >
+                <!-- eslint-disable-next-line vue/no-v-html -->
                 <span class="option-icon" v-html="f.icon"></span>
                 <span class="option-name">{{ f.name }}</span>
                 <span class="option-ext">{{ f.ext }}</span>
@@ -64,6 +65,7 @@
                 class="option-card"
                 @click="doShare(ch.ch)"
               >
+                <!-- eslint-disable-next-line vue/no-v-html -->
                 <span class="option-icon" v-html="ch.icon"></span>
                 <span class="option-name">{{ ch.name }}</span>
               </button>
