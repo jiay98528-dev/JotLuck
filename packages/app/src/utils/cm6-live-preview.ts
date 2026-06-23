@@ -51,10 +51,16 @@ function collectRefDefs(text: string): Map<string, string> {
 /**
  * 将引用定义注入到 block 文本前，确保跨 block 引用可解析。
  */
-function renderBlock(raw: string, _type: string, refDefs: Map<string, string>): string {
-  if (refDefs.size === 0) return renderMarkdown(raw);
+function renderBlock(
+  raw: string,
+  _type: string,
+  refDefs: Map<string, string>,
+  options: LivePreviewOptions,
+): string {
+  const renderOptions = { wikiLinkExists: options.wikiLinkExists };
+  if (refDefs.size === 0) return renderMarkdown(raw, renderOptions);
   const prefix = [...refDefs.values()].join('\n');
-  return renderMarkdown(prefix + '\n\n' + raw);
+  return renderMarkdown(prefix + '\n\n' + raw, renderOptions);
 }
 
 // ---- Block Types ----
@@ -100,6 +106,7 @@ interface LivePreviewOptions {
   onExternalLinkClick?: (href: string) => void;
   onTagClick?: (tag: string) => void;
   onWikiLinkClick?: (note: string, anchor: null | string) => void;
+  wikiLinkExists?: (note: string) => boolean;
 }
 
 const SOURCE_PRESERVING_BLOCK_TYPES = new Set<BlockType>(['heading', 'paragraph', 'tableRow']);
@@ -126,7 +133,7 @@ function groupKey(lineNumber: number): string {
 
 // ---- Block Parser ----
 
-function parseLiveBlocks(text: string): LiveBlock[] {
+function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBlock[] {
   const lines = normalizeFullwidthMarkdownSyntax(text).split('\n');
   const blocks: LiveBlock[] = [];
   let pos = 0;
@@ -462,32 +469,38 @@ function parseLiveBlocks(text: string): LiveBlock[] {
   // Compute HTML for each block
   const refDefsForRender = collectRefDefs(text);
   for (const block of blocks) {
-    block.html = renderBlockHtml(block, refDefsForRender);
+    block.html = renderBlockHtml(block, refDefsForRender, options);
   }
 
   return blocks;
 }
 
-function renderBlockHtml(block: LiveBlock, refDefs: Map<string, string>): string {
+function renderBlockHtml(
+  block: LiveBlock,
+  refDefs: Map<string, string>,
+  options: LivePreviewOptions,
+): string {
   try {
     switch (block.type) {
       case 'heading':
       case 'paragraph':
-        return wrapBlockHtml(renderBlock(block.raw, block.type, refDefs), block);
+        return wrapBlockHtml(renderBlock(block.raw, block.type, refDefs, options), block);
 
       case 'unorderedListItem':
       case 'taskListItem': {
         // Strip outer <ul> wrapper — each item is independently rendered,
         // CSS ::before pseudo-elements + adjacent selectors connect them visually.
-        const raw = renderBlock(block.raw, block.type, refDefs);
-        const inner = raw.replace(/<\/?ul>\n?/g, '');
+        const raw = renderBlock(block.raw, block.type, refDefs, options);
+        const checked = /^\s*[-*+]\s+\[[xX]\]\s/.test(block.raw);
+        const toggle = `<input type="checkbox" class="cm-task-toggle" aria-label="${checked ? '标记为未完成' : '标记为完成'}" ${checked ? 'checked ' : ''}/>`;
+        const inner = raw.replace(/<\/?ul>\n?/g, '').replace(/<input[^>]*>/i, toggle);
         return wrapBlockHtml(inner, block);
       }
 
       case 'orderedListItem': {
         // Inline numbering: strip <ol> + <li> wrappers, prepend itemIndex.
         // Marked produces <ol><li>content</li></ol>, we want "N. content".
-        const raw = renderBlock(block.raw, 'paragraph', refDefs);
+        const raw = renderBlock(block.raw, 'paragraph', refDefs, options);
         const text = raw
           .replace(/<\/?ol>\n?/g, '')
           .replace(/<\/?li>/g, '')
@@ -530,7 +543,7 @@ function renderBlockHtml(block: LiveBlock, refDefs: Map<string, string>): string
         // Strip outer <blockquote> — each line independently rendered,
         // CSS border-left connects them visually.
         const content = block.raw.replace(/^>\s?/, '');
-        const raw = renderBlock(content, 'paragraph', refDefs);
+        const raw = renderBlock(content, 'paragraph', refDefs, options);
         const inner = raw
           .replace(/<\/?blockquote>\n?/g, '')
           .replace(/^<p>/, '')
@@ -540,7 +553,7 @@ function renderBlockHtml(block: LiveBlock, refDefs: Map<string, string>): string
 
       case 'setextHeadingText': {
         // Render as heading; level depends on the rule line (not available here, default h2)
-        const html = renderBlock(block.raw, 'heading', refDefs);
+        const html = renderBlock(block.raw, 'heading', refDefs, options);
         return wrapBlockHtml(html, block);
       }
 
@@ -564,7 +577,7 @@ function renderBlockHtml(block: LiveBlock, refDefs: Map<string, string>): string
           .map((cell) => {
             const trimmed = cell.trim();
             if (/^[\s\-:]+$/.test(trimmed)) return '<span class="ml-td"></span>';
-            const rendered = renderBlock(trimmed, 'paragraph', refDefs)
+            const rendered = renderBlock(trimmed, 'paragraph', refDefs, options)
               .replace(/^<p>/, '')
               .replace(/<\/p>\n?$/, '');
             return `<span class="ml-td">${rendered || '&nbsp;'}</span>`;
@@ -594,6 +607,7 @@ function renderBlockHtml(block: LiveBlock, refDefs: Map<string, string>): string
 function wrapBlockHtml(html: string, block: LiveBlock): string {
   const attrs: string[] = [
     `data-block-key="${escapeAttr(block.key)}"`,
+    `data-block-from="${block.from}"`,
     `data-block-type="${escapeAttr(block.type)}"`,
   ];
   if (block.groupKey) attrs.push(`data-block-group="${escapeAttr(block.groupKey)}"`);
@@ -627,7 +641,10 @@ class RenderedBlockWidget extends WidgetType {
     // If sanitization produced a fragment, wrap it; otherwise return the existing span
     if (frag.childNodes.length === 1) {
       const child = frag.firstChild as HTMLElement;
-      if (child.classList?.contains('cm-live-block')) return child;
+      if (child.classList?.contains('cm-live-block')) {
+        this.attachTaskToggleBridge(child);
+        return child;
+      }
     }
     const span = document.createElement('span');
     span.className = 'cm-live-block';
@@ -637,17 +654,37 @@ class RenderedBlockWidget extends WidgetType {
     if (m?.[1]) {
       const attrStr = m[1];
       // Copy data attributes
-      for (const attr of ['data-block-type', 'data-block-group', 'data-block-position']) {
+      for (const attr of [
+        'data-block-from',
+        'data-block-type',
+        'data-block-group',
+        'data-block-position',
+      ]) {
         const am = new RegExp(`${attr}="([^"]*)"`).exec(attrStr);
         if (am?.[1]) span.setAttribute(attr, am[1]);
       }
     }
     span.appendChild(frag);
+    this.attachTaskToggleBridge(span);
     return span;
   }
 
+  private attachTaskToggleBridge(block: HTMLElement): void {
+    if (block.getAttribute('data-block-type') !== 'taskListItem') return;
+    const preventEditorFocus = (event: Event) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('input[type="checkbox"], .cm-task-toggle')) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    block.addEventListener('mousedown', preventEditorFocus);
+    block.addEventListener('click', preventEditorFocus);
+  }
+
   /** 允许点击穿透 → CM6 将光标移到此处 → 源码切换 */
-  override ignoreEvent(): boolean {
+  override ignoreEvent(event: Event): boolean {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('input[type="checkbox"], .cm-task-toggle, a')) return true;
     return false;
   }
 }
@@ -720,8 +757,17 @@ const pinnedSourceField = StateField.define<Set<string>>({
 // ---- ViewPlugin ----
 
 function toggleTaskListItemAtWidget(view: EditorView, widget: Element): boolean {
-  const pos = view.posAtDOM(widget);
-  const line = view.state.doc.lineAt(pos);
+  const docText = view.state.doc.toString();
+  const blockFrom = Number(widget.getAttribute('data-block-from'));
+  const blockKey = widget.getAttribute('data-block-key');
+  const block = blockKey
+    ? parseLiveBlocks(docText).find((candidate) => candidate.key === blockKey)
+    : null;
+  const line = Number.isFinite(blockFrom)
+    ? view.state.doc.lineAt(blockFrom)
+    : block
+      ? view.state.doc.lineAt(block.from)
+      : view.state.doc.lineAt(view.posAtDOM(widget));
   const lineText = line.text;
   const uncheckedRe = /^(\s*[-*+]\s+)\[ \]\s?/;
   const checkedRe = /^(\s*[-*+]\s+)\[x\]\s?/;
@@ -776,6 +822,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
       // Stored listener refs for cleanup
       onClick: ((e: MouseEvent) => void) | null = null;
       onPointerDownCapture: ((e: PointerEvent) => void) | null = null;
+      onChangeCapture: ((e: Event) => void) | null = null;
       onCompStart: (() => void) | null = null;
       onCompEnd: (() => void) | null = null;
       compositionRebuildTimer: ReturnType<typeof setTimeout> | null = null;
@@ -827,13 +874,12 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         // cursor to a wrong line, which is especially disruptive for IME input.
         const onClick = (e: MouseEvent) => {
           const target = e.target as HTMLElement;
-          const checkbox = target.closest('input[type="checkbox"]');
+          const checkbox = target.closest('input[type="checkbox"], .cm-task-toggle');
           if (checkbox) {
             const widget = checkbox.closest('.cm-live-block[data-block-type="taskListItem"]');
             if (!widget) return;
             e.stopPropagation();
             e.preventDefault();
-            toggleTaskListItemAtWidget(view, widget);
             view.focus();
             return;
           }
@@ -887,10 +933,15 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           if (this.destroyed) return;
           const target = e.target as HTMLElement;
 
-          // Block CM6 from handling clicks on checkboxes — we toggle via onClick
-          if (target.closest('input[type="checkbox"]')) {
+          // Block CM6 from moving the cursor before the checkbox can mutate source.
+          const checkbox = target.closest('input[type="checkbox"], .cm-task-toggle');
+          if (checkbox) {
+            const widget = checkbox.closest('.cm-live-block[data-block-type="taskListItem"]');
+            if (!widget) return;
             e.stopPropagation();
             e.preventDefault();
+            toggleTaskListItemAtWidget(view, widget);
+            view.focus();
             return;
           }
 
@@ -909,9 +960,37 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         };
         this.onPointerDownCapture = onPointerDownCapture;
         view.dom.addEventListener('pointerdown', onPointerDownCapture, true);
+
+        const onChangeCapture = (e: Event) => {
+          if (this.destroyed) return;
+          const target = e.target as HTMLElement;
+          const checkbox = target.closest('input[type="checkbox"], .cm-task-toggle');
+          if (!checkbox) return;
+          const widget = checkbox.closest('.cm-live-block[data-block-type="taskListItem"]');
+          if (!widget) return;
+          e.stopPropagation();
+          e.preventDefault();
+          toggleTaskListItemAtWidget(view, widget);
+          view.focus();
+        };
+        this.onChangeCapture = onChangeCapture;
+        view.dom.addEventListener('change', onChangeCapture, true);
       }
 
       update(update: ViewUpdate) {
+        const hasComposeTransaction = update.transactions.some((tr) =>
+          tr.isUserEvent('input.type.compose'),
+        );
+        if (
+          this.isComposing &&
+          update.docChanged &&
+          !update.view.composing &&
+          !update.view.compositionStarted &&
+          !hasComposeTransaction
+        ) {
+          this.isComposing = false;
+        }
+
         // Skip decoration rebuild during IME composition to avoid corrupting
         // the composition preview (duplicate lines, cursor jumps, swallowed chars).
         // Two-layer detection: DOM compositionstart flag + CM6 transaction annotation.
@@ -923,8 +1002,18 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           // widgets reappear on unrelated lower lines after Backspace/commit.
           if (update.docChanged) {
             this.decorations = this.decorations.map(update.changes);
+            const cursor = update.view.state.selection.main.head;
+            const cursorLine = update.view.state.doc.lineAt(cursor);
+            if (cursorLine.length === 0) {
+              this.decorations = this.build(update.view);
+              this.decorationsBuilt = true;
+              update.view.dispatch({});
+            } else {
+              this.scheduleCompositionRebuild(update.view);
+            }
+          } else {
+            this.clearPendingCompositionRebuild();
           }
-          this.clearPendingCompositionRebuild();
           return;
         }
 
@@ -963,7 +1052,9 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         const blockKey = widget.getAttribute('data-block-key');
         if (!blockKey) return null;
         return (
-          parseLiveBlocks(view.state.doc.toString()).find((block) => block.key === blockKey) ?? null
+          parseLiveBlocks(view.state.doc.toString(), options).find(
+            (block) => block.key === blockKey,
+          ) ?? null
         );
       }
 
@@ -978,7 +1069,11 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         this.clearPendingCompositionRebuild();
         this.compositionRebuildTimer = setTimeout(() => {
           this.compositionRebuildTimer = null;
-          if (this.destroyed || this.isImeActive(view)) return;
+          if (this.destroyed) return;
+          if (this.isComposing || view.composing) {
+            this.scheduleCompositionRebuild(view);
+            return;
+          }
           this.decorations = this.build(view);
           view.dispatch({});
         }, 120);
@@ -986,7 +1081,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
 
       build(view: EditorView): DecorationSet {
         const text = view.state.doc.toString();
-        const blocks = parseLiveBlocks(text);
+        const blocks = parseLiveBlocks(text, options);
         const cursor = view.state.selection.main.head;
         const cursorLine = view.state.doc.lineAt(cursor);
         const pinned = view.state.field(pinnedSourceField, false) ?? new Set<string>();
@@ -1111,12 +1206,14 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           if (this.onClick) dom.removeEventListener('click', this.onClick);
           if (this.onPointerDownCapture)
             dom.removeEventListener('pointerdown', this.onPointerDownCapture, true);
+          if (this.onChangeCapture) dom.removeEventListener('change', this.onChangeCapture, true);
           this.editorView = null;
         }
         this.onCompStart = null;
         this.onCompEnd = null;
         this.onClick = null;
         this.onPointerDownCapture = null;
+        this.onChangeCapture = null;
       }
     },
     { decorations: (v) => v.decorations },
