@@ -1,4 +1,4 @@
-import { getThemeModuleById } from '@/themes/registry';
+import { getAllThemeModules } from '@/themes/registry';
 import type { OfficialThemeModule, ThemeTokenSet } from '@/types/theme-pack';
 import type {
   InstalledThemePack,
@@ -62,53 +62,31 @@ export const THEME_PERFORMANCE_BADGES: Record<ThemePerformanceLevel, ThemePerfor
  * 将 OfficialThemeModule 的声明式数据（recipe + tokens + meta）转换为
  * 运行时使用的 InstalledThemePack 格式，保持向后兼容。
  */
-function moduleToBuiltInPack(mod: OfficialThemeModule, themeId: string): InstalledThemePack {
+function moduleToBuiltInPack(mod: OfficialThemeModule): InstalledThemePack {
   return {
     manifest: {
-      id: themeId,
+      id: mod.id,
       version: '1.0.0',
       themeApi: 1,
       runtime: 'css-v1',
       minAppVersion: '0.15.0',
-      name: moduleNameFromId(themeId),
+      name: mod.name,
       author: 'MarkLuck',
       description: mod.meta.story,
-      capabilities: ['tokens', 'assets', 'animations', 'layout-preset', 'markdown', 'codemirror'],
+      capabilities: mod.capabilities,
       layoutPreset: mod.recipe.layoutPreset,
       checksums: { 'theme.css': BUILTIN_CHECKSUM },
       category: 'official',
-      tags: moduleTagsFromId(themeId),
+      tags: mod.tags,
       price: 'included',
     },
-    css: buildThemeCss(themeId, mod.tokens, mod.css),
+    css: buildThemeCss(mod.id, mod.tokens, mod.css),
     source: 'builtin',
     installedAt: 0,
     officialProfile: mod.meta,
     module: mod,
     readonly: true,
   };
-}
-
-function moduleNameFromId(id: string): string {
-  const NAMES: Record<string, string> = {
-    paper: '羽翼布局',
-    'markluck.ink-study': '墨线书房',
-    'markluck.archive': '档案馆',
-    'markluck.reader-nocturne': '夜读星幕',
-    'markluck.studio': '工坊轨道',
-  };
-  return NAMES[id] ?? '未知主题';
-}
-
-function moduleTagsFromId(id: string): string[] {
-  const TAGS: Record<string, string[]> = {
-    paper: ['default', 'writing', 'workflow'],
-    'markluck.ink-study': ['focus', 'writing', 'ink', 'collectible'],
-    'markluck.archive': ['archive', 'research', 'workflow'],
-    'markluck.reader-nocturne': ['reader', 'dark', 'collectible'],
-    'markluck.studio': ['studio', 'dense', 'workflow'],
-  };
-  return TAGS[id] ?? [];
 }
 
 /** 将 token 集 + 额外 CSS 合并为 theme.css 字符串 */
@@ -134,27 +112,9 @@ function buildThemeCss(id: string, tokens: ThemeTokenSet, extraCss?: string): st
   return parts.join('\n');
 }
 
-/** 按 id → module 的精确映射构建 builtInThemes */
+/** 遍历所有注册的主题模块构建 builtInThemes */
 function buildAllBuiltInPacks(): InstalledThemePack[] {
-  const idOrder = [
-    'paper',
-    'markluck.ink-study',
-    'markluck.archive',
-    'markluck.reader-nocturne',
-    'markluck.studio',
-  ];
-
-  return idOrder
-    .map((id) => {
-      const mod = getThemeModuleById(id);
-      if (!mod) {
-        // eslint-disable-next-line no-console
-        console.warn(`[ThemeRegistry] 主题模块缺失: ${id}`);
-        return null;
-      }
-      return moduleToBuiltInPack(mod, id);
-    })
-    .filter((pack): pack is InstalledThemePack => pack !== null);
+  return getAllThemeModules().map(moduleToBuiltInPack);
 }
 
 const builtInThemes: InstalledThemePack[] = buildAllBuiltInPacks();

@@ -4,6 +4,10 @@ import { tokens, css } from './tokens';
 import { assets } from './assets';
 
 const readerNocturneModule: OfficialThemeModule = {
+  id: 'markluck.reader-nocturne',
+  name: '夜读星幕',
+  tags: ['reader', 'dark', 'collectible'],
+  capabilities: ['tokens', 'assets', 'animations', 'layout-preset', 'markdown', 'codemirror'],
   meta: {
     role: 'collectible',
     headline: '夜间阅读的星幕桌面',

@@ -242,9 +242,22 @@ export interface ThemeAssetMap {
  * 一个模块声明了 meta（品牌信息）、recipe（布局装配）、tokens（色值）和可选 CSS/资产。
  */
 export interface OfficialThemeModule {
+  /** 全局唯一标识（如 'markluck.ink-study'） */
+  id: string;
+  /** 用户可见名称（如 '墨线书房'） */
+  name: string;
+  /** 分类标签 */
+  tags: string[];
+  /** 声明的能力集 */
+  capabilities: ThemeCapability[];
+  /** 品牌信息 */
   meta: OfficialThemeProfile;
+  /** 布局装配配方 */
   recipe: ShellRecipe;
+  /** light + dark 两套 OKLCH 色值 */
   tokens: ThemeTokenSet;
+  /** 超出 Token 可表达的附加 CSS */
   css?: string;
+  /** 静态资产 */
   assets?: ThemeAssetMap;
 }

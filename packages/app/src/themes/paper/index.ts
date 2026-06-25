@@ -4,6 +4,10 @@ import { tokens } from './tokens';
 import paperPreview from '@/assets/theme-assets/paper-preview.webp';
 
 const paperModule: OfficialThemeModule = {
+  id: 'paper',
+  name: '羽翼布局',
+  tags: ['default', 'writing', 'workflow'],
+  capabilities: ['tokens', 'layout-preset', 'markdown', 'codemirror'],
   meta: {
     role: 'baseline',
     headline: '稳定的写作桌面',

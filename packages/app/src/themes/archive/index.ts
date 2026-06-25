@@ -4,6 +4,10 @@ import { recipe } from './recipe';
 import { tokens, css } from './tokens';
 
 const archiveModule: OfficialThemeModule = {
+  id: 'markluck.archive',
+  name: '档案馆',
+  tags: ['archive', 'research', 'workflow'],
+  capabilities: ['tokens', 'animations', 'layout-preset', 'markdown', 'codemirror'],
   meta: {
     role: 'workflow',
     headline: '资料优先的研究台',

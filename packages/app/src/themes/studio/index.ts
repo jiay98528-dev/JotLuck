@@ -4,6 +4,10 @@ import { recipe } from './recipe';
 import { tokens } from './tokens';
 
 const studioModule: OfficialThemeModule = {
+  id: 'markluck.studio',
+  name: '工坊轨道',
+  tags: ['studio', 'dense', 'workflow'],
+  capabilities: ['tokens', 'animations', 'layout-preset', 'markdown', 'codemirror'],
   meta: {
     role: 'workflow',
     headline: '更紧凑的生产轨道',

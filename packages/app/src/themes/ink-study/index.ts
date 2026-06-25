@@ -4,6 +4,10 @@ import { tokens, css } from './tokens';
 import { assets } from './assets';
 
 const inkStudyModule: OfficialThemeModule = {
+  id: 'markluck.ink-study',
+  name: '墨线书房',
+  tags: ['focus', 'writing', 'ink', 'collectible'],
+  capabilities: ['tokens', 'assets', 'animations', 'layout-preset', 'markdown', 'codemirror'],
   meta: {
     role: 'collectible',
     headline: '纸面上的建筑线稿',
