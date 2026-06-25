@@ -1,5 +1,11 @@
 <template>
-  <div class="format-toolbar" role="toolbar" aria-label="固定格式工具栏">
+  <div
+    class="format-toolbar"
+    :class="`format-toolbar--${density}`"
+    :data-density="density"
+    role="toolbar"
+    aria-label="固定格式工具栏"
+  >
     <label class="format-toolbar__preset">
       <span class="sr-only">段落样式</span>
       <select :value="displayPreset" aria-label="段落样式" @change="onPresetChange">
@@ -52,15 +58,18 @@
 import { computed } from 'vue';
 import Button from '@/components/common/Button.vue';
 import type { FormatAction, ParagraphPreset } from '@/types';
+import type { ThemeToolbarDensity } from '@/types/theme-pack';
 
 const props = withDefaults(
   defineProps<{
     preset?: ParagraphPreset;
     activeAction?: FormatAction | null;
+    density?: ThemeToolbarDensity;
   }>(),
   {
     preset: 'paragraph',
     activeAction: null,
+    density: 'calm',
   },
 );
 
@@ -118,6 +127,19 @@ function onPresetChange(event: Event): void {
   scrollbar-width: thin;
 }
 
+.format-toolbar--compact {
+  gap: var(--space-2);
+  padding: var(--space-2);
+}
+
+.format-toolbar--productive {
+  gap: var(--space-6);
+  padding: var(--space-4) var(--space-6);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+}
+
 .format-toolbar__preset select {
   height: 28px;
   min-width: 104px;
@@ -129,6 +151,18 @@ function onPresetChange(event: Event): void {
   font: inherit;
   font-size: var(--text-xs);
   cursor: pointer;
+}
+
+.format-toolbar--compact .format-toolbar__preset select {
+  height: 24px;
+  min-width: 88px;
+  padding-inline-start: var(--space-6);
+  font-size: 11px;
+}
+
+.format-toolbar--productive .format-toolbar__preset select {
+  border-color: var(--rule-strong);
+  background: var(--paper-raised);
 }
 
 .format-toolbar__preset select:focus-visible {
@@ -168,6 +202,17 @@ function onPresetChange(event: Event): void {
 
 .format-toolbar__clear {
   color: var(--ink-muted);
+}
+
+.format-toolbar--compact .format-toolbar__clear {
+  min-width: 0;
+  padding-inline: var(--space-8);
+  font-size: 11px;
+}
+
+.format-toolbar--productive .format-toolbar__button.is-active,
+.format-toolbar--productive .format-toolbar__clear:hover {
+  background: var(--accent-soft);
 }
 
 .sr-only {

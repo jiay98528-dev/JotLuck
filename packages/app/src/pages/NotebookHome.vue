@@ -83,104 +83,147 @@
       :is-saving="isSaving"
       :save-error="saveError"
       :last-saved-at="lastSavedAt"
+      :theme-chrome="theme.activeChromeState"
+      :actions="shellActions"
       @select-note="onShellSelectNote"
-      @create-note="onShellCreateNote"
-      @open-settings="showSettings = true"
-      @toggle-left-wing="onToggleLeftDrawer"
-      @open-palette="onOpenPalette"
-      @open-export="showExport = true"
-      @open-share="showShare = true"
-      @toggle-theme="theme.toggleColorScheme()"
       @navigate-heading="onNavTreeNavigate"
       @navigate-backlink="onBacklinkNavigate"
       @select-tag="onTagSelect"
       @toggle-right-wing="showRightWing = !showRightWing"
     >
       <template #editor>
-        <div class="editor-control-bar">
-          <FormatToolbar
+        <div v-if="showHomeThemeShowcase" class="home-theme-showcase">
+          <section class="home-theme-copy">
+            <span class="home-theme-kicker">主题系统</span>
+            <h1>选择你的写作桌</h1>
+            <p>
+              首发内置 5
+              个官方深度主题。它们不只是换色，还会调整布局密度、侧栏权重、阅读版心和动效层级。
+            </p>
+            <div class="home-theme-actions">
+              <button class="btn btn--primary" @click="onShellCreateNote">新建笔记</button>
+              <button class="btn btn--secondary" @click="showLeftDrawer = true">
+                打开文件抽屉
+              </button>
+            </div>
+          </section>
+          <ThemeGallery
+            :items="homeThemeItems"
+            variant="home"
+            :show-role="true"
+            @preview="openThemePreview"
+          />
+        </div>
+
+        <div
+          v-else
+          class="workflow-canvas"
+          :data-workspace-intent="theme.activeChromeState.workspaceIntent"
+        >
+          <StudioRail
+            v-if="theme.activeChromeState.editorControlLayout === 'studio-rail'"
+            :actions="actionsForRegion('studio-rail')"
             :preset="activeParagraphPreset"
             :active-action="pendingFormatAction"
             @format="onToolbarFormat"
           />
-          <button
-            v-if="isExternalEditing"
-            class="view-mode-toggle"
-            title="返回只读预览"
-            @click="returnExternalReadonly"
-          >
-            只读预览
-          </button>
-          <button
-            class="view-mode-toggle"
-            :title="`点击切换到 ${nextModeLabels[viewMode]} 模式`"
-            @click="cycleViewMode"
-          >
-            {{ viewModeLabel }}
-          </button>
-        </div>
-        <!-- Format Bubble (floating, on text selection) -->
-        <FormatBubble
-          :visible="bubbleVisible"
-          :position="bubblePosition"
-          @format="onBubbleFormat"
-        />
-        <!-- Split Mode: left editor + right preview -->
-        <div v-if="viewMode === 'split'" class="split-pane">
-          <div class="split-left" :style="{ flex: `0 0 ${splitRatio}%` }">
-            <MarkdownEditor
-              ref="editorRef"
-              :key="'split-' + shellActivePath"
-              :model-value="currentContent"
-              :show-line-numbers="true"
-              :live-preview="false"
-              :source-only="true"
-              :pending-format="pendingFormatAction"
-              :wiki-link-exists="wikiLinkExists"
-              :wiki-link-revision="wikiLinkRevision"
-              :completion-settings="completionSettings"
-              :enable-autocomplete="!isExternalEditing"
-              :on-editor-drop="isExternalEditing ? undefined : imageUpload.handleDrop"
-              :on-editor-drag-over="isExternalEditing ? undefined : imageUpload.handleDragOver"
-              :on-editor-paste="isExternalEditing ? undefined : imageUpload.handlePaste"
-              @update:model-value="onEditorContentUpdate"
-              @selection-change="onSelectionChange"
-              @pending-format-ended="pendingFormatAction = null"
+
+          <div class="workflow-canvas__main">
+            <EditorControlStrip
+              v-if="theme.activeChromeState.editorControlLayout !== 'studio-rail'"
+              :layout="theme.activeChromeState.editorControlLayout"
+              :actions="actionsForRegion('editor-control')"
+              :preset="activeParagraphPreset"
+              :active-action="pendingFormatAction"
+              :density="theme.activeChromeState.toolbarDensity"
+              @format="onToolbarFormat"
             />
-          </div>
-          <div
-            class="split-divider"
-            :style="{ left: `${splitRatio}%` }"
-            @mousedown="onSplitDragStart"
-          />
-          <div class="split-right" :style="{ flex: `0 0 ${100 - splitRatio}%` }">
-            <!-- eslint-disable-next-line vue/no-v-html -->
-            <div class="markdown-body split-preview" v-html="splitPreviewHtml" />
+
+            <div v-if="viewMode === 'read'" class="reader-workbench" data-view-mode="read">
+              <div class="reader-workbench__bar">
+                <span class="reader-workbench__label">阅读</span>
+                <div class="reader-workbench__actions">
+                  <ShellActionButton
+                    v-for="action in actionsForRegion('reader-bar')"
+                    :key="action.id"
+                    :action="action"
+                    label-mode="short"
+                    size="sm"
+                  />
+                </div>
+              </div>
+              <!-- eslint-disable-next-line vue/no-v-html -->
+              <article class="markdown-body reader-preview" v-html="splitPreviewHtml" />
+            </div>
+
+            <template v-else>
+              <!-- Format Bubble (floating, on text selection) -->
+              <FormatBubble
+                :visible="bubbleVisible"
+                :position="bubblePosition"
+                @format="onBubbleFormat"
+              />
+              <!-- Split Mode: left editor + right preview -->
+              <div v-if="viewMode === 'split'" class="split-pane">
+                <div class="split-left" :style="{ flex: `0 0 ${splitRatio}%` }">
+                  <MarkdownEditor
+                    ref="editorRef"
+                    :key="'split-' + shellActivePath"
+                    :model-value="currentContent"
+                    :show-line-numbers="true"
+                    :live-preview="false"
+                    :source-only="true"
+                    :pending-format="pendingFormatAction"
+                    :wiki-link-exists="wikiLinkExists"
+                    :wiki-link-revision="wikiLinkRevision"
+                    :completion-settings="completionSettings"
+                    :enable-autocomplete="!isExternalEditing"
+                    :on-editor-drop="isExternalEditing ? undefined : imageUpload.handleDrop"
+                    :on-editor-drag-over="
+                      isExternalEditing ? undefined : imageUpload.handleDragOver
+                    "
+                    :on-editor-paste="isExternalEditing ? undefined : imageUpload.handlePaste"
+                    @update:model-value="onEditorContentUpdate"
+                    @selection-change="onSelectionChange"
+                    @pending-format-ended="pendingFormatAction = null"
+                  />
+                </div>
+                <div
+                  class="split-divider"
+                  :style="{ left: `${splitRatio}%` }"
+                  @mousedown="onSplitDragStart"
+                />
+                <div class="split-right" :style="{ flex: `0 0 ${100 - splitRatio}%` }">
+                  <!-- eslint-disable-next-line vue/no-v-html -->
+                  <div class="markdown-body split-preview" v-html="splitPreviewHtml" />
+                </div>
+              </div>
+              <!-- Live Mode: single editor with block-level live preview -->
+              <MarkdownEditor
+                v-if="viewMode === 'live'"
+                ref="editorRef"
+                :key="'live-' + shellActivePath"
+                :model-value="currentContent"
+                :show-line-numbers="false"
+                :live-preview="true"
+                :pending-format="pendingFormatAction"
+                :on-live-preview-external-link-click="onLivePreviewExternalLinkClick"
+                :on-live-preview-tag-click="onLivePreviewTagClick"
+                :on-live-preview-wiki-link-click="onLivePreviewWikiLinkClick"
+                :wiki-link-exists="wikiLinkExists"
+                :wiki-link-revision="wikiLinkRevision"
+                :completion-settings="completionSettings"
+                :enable-autocomplete="!isExternalEditing"
+                :on-editor-drop="isExternalEditing ? undefined : imageUpload.handleDrop"
+                :on-editor-drag-over="isExternalEditing ? undefined : imageUpload.handleDragOver"
+                :on-editor-paste="isExternalEditing ? undefined : imageUpload.handlePaste"
+                @update:model-value="onEditorContentUpdate"
+                @selection-change="onSelectionChange"
+                @pending-format-ended="pendingFormatAction = null"
+              />
+            </template>
           </div>
         </div>
-        <!-- Live Mode: single editor with block-level live preview -->
-        <MarkdownEditor
-          v-if="viewMode === 'live'"
-          ref="editorRef"
-          :key="'live-' + shellActivePath"
-          :model-value="currentContent"
-          :show-line-numbers="false"
-          :live-preview="true"
-          :pending-format="pendingFormatAction"
-          :on-live-preview-external-link-click="onLivePreviewExternalLinkClick"
-          :on-live-preview-tag-click="onLivePreviewTagClick"
-          :on-live-preview-wiki-link-click="onLivePreviewWikiLinkClick"
-          :wiki-link-exists="wikiLinkExists"
-          :wiki-link-revision="wikiLinkRevision"
-          :completion-settings="completionSettings"
-          :enable-autocomplete="!isExternalEditing"
-          :on-editor-drop="isExternalEditing ? undefined : imageUpload.handleDrop"
-          :on-editor-drag-over="isExternalEditing ? undefined : imageUpload.handleDragOver"
-          :on-editor-paste="isExternalEditing ? undefined : imageUpload.handlePaste"
-          @update:model-value="onEditorContentUpdate"
-          @selection-change="onSelectionChange"
-          @pending-format-ended="pendingFormatAction = null"
-        />
       </template>
     </AppShell>
   </Transition>
@@ -262,6 +305,14 @@
 
   <!-- Markdown Cheat Sheet -->
   <MarkdownCheatSheet />
+
+  <ThemePreviewDrawer
+    :visible="themePreviewVisible"
+    :item="selectedTheme"
+    @close="themePreviewVisible = false"
+    @apply="applyThemeFromPreview"
+    @restore-default="resetThemeFromPreview"
+  />
 
   <!-- New File Dialog -->
   <Teleport to="body">
@@ -380,9 +431,11 @@ import {
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import AppShell from '@/components/layout/AppShell.vue';
+import ShellActionButton from '@/components/layout/ShellActionButton.vue';
 import MarkdownEditor from '@/components/editor/MarkdownEditor.vue';
 import FormatBubble from '@/components/editor/FormatBubble.vue';
-import FormatToolbar from '@/components/editor/FormatToolbar.vue';
+import EditorControlStrip from '@/components/editor/EditorControlStrip.vue';
+import StudioRail from '@/components/editor/StudioRail.vue';
 import FileDrawer from '@/components/overlays/FileDrawer.vue';
 import ToastContainer, { useToast } from '@/components/common/Toast.vue';
 import { MockFSService } from '@/services/MockFSService';
@@ -402,6 +455,8 @@ import type {
 } from '@/types';
 import UpdateNotification from '@/components/overlays/UpdateNotification.vue';
 import MarkdownCheatSheet from '@/components/overlays/MarkdownCheatSheet.vue';
+import ThemeGallery from '@/components/theme/ThemeGallery.vue';
+import ThemePreviewDrawer from '@/components/theme/ThemePreviewDrawer.vue';
 import { useVersionCheck } from '@/composables/useVersionCheck';
 import { useImageUpload } from '@/composables/useImageUpload';
 import { normalizeUrl } from '@/utils/urlUtils';
@@ -429,6 +484,13 @@ import {
   stripSupportedNoteExtension,
   supportedNoteExtensionsLabel,
 } from '@/utils/note-files';
+import type { ThemeViewModel } from '@/stores/theme';
+import type {
+  ShellAction,
+  ThemeActionId,
+  ThemeActionRegion,
+  ThemeViewMode,
+} from '@/types/theme-pack';
 
 const CommandPalette = defineAsyncComponent(
   () => import('@/components/overlays/CommandPalette.vue'),
@@ -468,6 +530,9 @@ const currentDir = ref('/');
 
 // --- Theme ---
 const theme = useThemeStore();
+const themePreviewVisible = ref(false);
+const selectedTheme = ref<ThemeViewModel | null>(null);
+const homeThemeItems = computed(() => theme.themeViewModels.filter((item) => item.officialProfile));
 
 // --- Index & Search ---
 const indexStore = useIndexStore();
@@ -481,7 +546,7 @@ const imageUpload = useImageUpload(
 );
 
 // --- UI State ---
-type ViewMode = 'split' | 'live';
+type ViewMode = ThemeViewMode | string;
 const viewMode = ref<ViewMode>('live');
 const splitRatio = ref(50); // 50:50 default for split pane
 const splitPreviewHtml = ref('');
@@ -540,6 +605,111 @@ const externalReadStats = computed(() => {
   return `${chars} 字符 · ${lines} 行`;
 });
 
+function actionRegion(id: ThemeActionId): ThemeActionRegion {
+  return theme.activeChromeState.actionPlacements[id] ?? 'hidden';
+}
+
+const shellActions = computed<ShellAction[]>(() => [
+  {
+    id: 'new-note',
+    region: actionRegion('new-note'),
+    label: '新建笔记',
+    shortLabel: '新建',
+    title: '新建笔记',
+    icon: 'new-note',
+    run: onShellCreateNote,
+  },
+  {
+    id: 'file-drawer',
+    region: actionRegion('file-drawer'),
+    label: '文件抽屉',
+    shortLabel: '文件',
+    title: '打开文件抽屉',
+    icon: 'file-drawer',
+    run: onToggleLeftDrawer,
+    active: showLeftDrawer.value,
+  },
+  {
+    id: 'search',
+    region: actionRegion('search'),
+    label: '搜索 Ctrl+K',
+    shortLabel: '搜索',
+    title: '搜索笔记 (Ctrl+K)',
+    icon: 'search',
+    run: onOpenPalette,
+    active: searchVisible.value,
+  },
+  {
+    id: 'template',
+    region: actionRegion('template'),
+    label: '模板',
+    shortLabel: '模板',
+    title: '打开模板',
+    icon: 'template',
+    run: onShellCreateNote,
+    active: showTemplate.value,
+  },
+  {
+    id: 'export',
+    region: actionRegion('export'),
+    label: '导出',
+    shortLabel: '导出',
+    title: '导出笔记',
+    icon: 'export',
+    run: () => {
+      showExport.value = true;
+    },
+    active: showExport.value,
+  },
+  {
+    id: 'share',
+    region: actionRegion('share'),
+    label: '分享',
+    shortLabel: '分享',
+    title: '分享笔记',
+    icon: 'share',
+    run: () => {
+      showShare.value = true;
+    },
+    active: showShare.value,
+  },
+  {
+    id: 'settings',
+    region: actionRegion('settings'),
+    label: '设置',
+    shortLabel: '设置',
+    title: '打开设置',
+    icon: 'settings',
+    run: () => {
+      showSettings.value = true;
+    },
+    active: showSettings.value,
+  },
+  {
+    id: 'theme-toggle',
+    region: actionRegion('theme-toggle'),
+    label: '明暗',
+    shortLabel: '明暗',
+    title: '切换明暗主题',
+    icon: 'theme-toggle',
+    run: theme.toggleColorScheme,
+  },
+  {
+    id: 'view-toggle',
+    region: actionRegion('view-toggle'),
+    label: viewMode.value === 'read' ? '进入编辑' : `当前${resolvedViewModeLabel.value}`,
+    shortLabel: viewMode.value === 'read' ? '编辑' : resolvedViewModeLabel.value,
+    title: `切换视图，当前为${resolvedViewModeLabel.value}`,
+    icon: 'view-toggle',
+    run: cycleViewMode,
+    active: viewMode.value === theme.activeChromeState.defaultViewMode,
+  },
+]);
+
+function actionsForRegion(region: ThemeActionRegion): ShellAction[] {
+  return shellActions.value.filter((action) => action.region === region);
+}
+
 // --- Format Bubble ---
 const bubbleVisible = ref(false);
 const bubblePosition = ref({ x: 0, y: 0 });
@@ -550,7 +720,7 @@ const editorRef = ref<InstanceType<typeof MarkdownEditor> | null>(null);
 // --- View Mode ---
 const viewModeLabels: Record<ViewMode, string> = { split: '分栏', live: '即时' };
 const viewModeLabel = computed(() => viewModeLabels[viewMode.value]);
-const nextModeLabels: Record<ViewMode, string> = { split: '即时', live: '分栏' };
+const resolvedViewModeLabel = computed(() => viewModeLabel.value ?? '阅读');
 
 function cycleViewMode(): void {
   pendingFormatAction.value = null;
@@ -561,6 +731,24 @@ function cycleViewMode(): void {
     updateSplitPreview();
   }
 }
+
+function applyThemeWorkflowDefaults(): void {
+  const chrome = theme.activeChromeState;
+  pendingFormatAction.value = null;
+  viewMode.value = chrome.defaultViewMode;
+  showRightWing.value = chrome.rightWingPolicy !== 'collapsed';
+  if (viewMode.value === 'split' || viewMode.value === 'read') {
+    updateSplitPreview();
+  }
+}
+
+watch(
+  () => theme.activeThemeId,
+  () => {
+    applyThemeWorkflowDefaults();
+  },
+  { flush: 'post' },
+);
 
 // --- Split Pane ---
 function onSplitContentUpdate(content: string): void {
@@ -683,11 +871,31 @@ const externalRecentNotesWithColors = computed(() =>
 const shellRecentNotesWithColors = computed(() =>
   isExternalEditing.value ? externalRecentNotesWithColors.value : recentNotesWithColors.value,
 );
+const showHomeThemeShowcase = computed(
+  () => !loading.value && !isExternalSession.value && !shellActivePath.value,
+);
 
 function hashString(s: string): number {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
   return Math.abs(h);
+}
+
+function openThemePreview(item: ThemeViewModel): void {
+  selectedTheme.value = item;
+  themePreviewVisible.value = true;
+}
+
+function applyThemeFromPreview(themeId: string): void {
+  theme.setTheme(themeId);
+  selectedTheme.value =
+    theme.themeViewModels.find((item) => item.id === themeId) ?? selectedTheme.value;
+}
+
+function resetThemeFromPreview(): void {
+  theme.resetTheme();
+  selectedTheme.value =
+    theme.themeViewModels.find((item) => item.id === theme.activeThemeId) ?? selectedTheme.value;
 }
 
 // Debug watcher — log recentNotes population
@@ -1555,14 +1763,6 @@ function confirmExternalEdit(scanRoot = false): void {
   void nextTick(() => editorRef.value?.focus());
 }
 
-async function returnExternalReadonly(): Promise<void> {
-  await flushPendingCurrentSave();
-  externalSessionMode.value = 'readonly';
-  showLeftDrawer.value = false;
-  searchVisible.value = false;
-  updateExternalPreview();
-}
-
 async function confirmExternalEditAndScan(): Promise<void> {
   externalScanRootTextFiles.value = true;
   localStorage.setItem('markluck:external:scanRootTextFiles', 'true');
@@ -1984,6 +2184,7 @@ function shouldRunBackgroundVersionCheck(): boolean {
 
 onMounted(async () => {
   theme.init();
+  applyThemeWorkflowDefaults();
   window.addEventListener('keydown', onGlobalKeydown, { capture: true });
   if (window.__TAURI__) {
     unlistenOpenedFile = await listen<OpenedFilePayload | string>('opened-file', (event) => {
@@ -2250,25 +2451,146 @@ function onDismissVersion(version: string) {
   }
 }
 
-/* ===== View Mode Toggle ===== */
-.editor-control-bar {
-  position: absolute;
-  top: calc(var(--topbar-height) + var(--space-8));
-  left: var(--space-16);
-  right: var(--space-16);
-  z-index: calc(var(--z-overlay) + 1);
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  background: var(--paper-raised);
-  border: var(--border-thin) solid var(--rule);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sheet);
+/* ===== Home Theme Showcase ===== */
+.home-theme-showcase {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.58fr) minmax(320px, 1fr);
+  gap: clamp(var(--space-24), 4vw, var(--space-48));
+  height: 100%;
+  min-height: 0;
+  padding: clamp(var(--space-40), 7vh, var(--space-72)) clamp(var(--space-24), 5vw, var(--space-64));
+  overflow: auto;
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--paper-left) 42%, transparent), transparent),
+    var(--paper-bg);
 }
 
-.editor-control-bar :deep(.format-toolbar) {
-  flex: 1 1 auto;
+.home-theme-copy {
+  align-self: start;
+  max-width: 46ch;
+  padding-top: var(--space-8);
 }
+
+.home-theme-kicker {
+  display: block;
+  margin-bottom: var(--space-10);
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-wide);
+  line-height: var(--lh-ui);
+  text-transform: uppercase;
+}
+
+.home-theme-copy h1 {
+  margin: 0;
+  color: var(--ink-primary);
+  font-size: var(--text-2xl);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-heading);
+}
+
+.home-theme-copy p {
+  margin: var(--space-12) 0 0;
+  color: var(--ink-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--lh-body);
+}
+
+.home-theme-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-10);
+  margin-top: var(--space-20);
+}
+
+.home-theme-showcase :deep(.theme-gallery) {
+  align-self: start;
+}
+
+@media (width <= 900px) {
+  .home-theme-showcase {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===== Workflow Canvas ===== */
+.workflow-canvas {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--paper-surface);
+}
+
+.workflow-canvas__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.workflow-canvas .editor-control-bar {
+  flex: 0 0 auto;
+}
+
+.workflow-canvas[data-workspace-intent='writing'] {
+  display: grid;
+  place-items: stretch center;
+  padding: var(--space-24) clamp(var(--space-24), 8vw, var(--space-80));
+  background:
+    linear-gradient(90deg, transparent, color-mix(in oklch, var(--accent-soft) 20%, transparent)),
+    var(--paper-bg);
+}
+
+.workflow-canvas[data-workspace-intent='writing'] .workflow-canvas__main {
+  width: min(860px, 100%);
+  min-height: 100%;
+  border: var(--border-thin) solid color-mix(in oklch, var(--rule) 72%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--paper-surface) 94%, transparent);
+  box-shadow:
+    0 18px 48px oklch(0.2 0.018 190 / 0.08),
+    inset 0 0 0 1px color-mix(in oklch, var(--paper-raised) 76%, transparent);
+}
+
+.workflow-canvas[data-workspace-intent='writing'] :deep(.editor-control-strip) {
+  width: min(720px, calc(100% - var(--space-48)));
+  margin: var(--space-16) auto 0;
+}
+
+.workflow-canvas[data-workspace-intent='archive'] .workflow-canvas__main {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--accent-soft) 16%, transparent),
+      transparent 34%
+    ),
+    var(--paper-surface);
+}
+
+.workflow-canvas[data-workspace-intent='studio'] {
+  flex-direction: row;
+  background: var(--paper-bg);
+}
+
+.workflow-canvas[data-workspace-intent='studio'] .workflow-canvas__main {
+  border-left: var(--border-thin) solid var(--rule);
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--accent-soft) 12%, transparent),
+      transparent 28%
+    ),
+    var(--paper-surface);
+}
+
+.workflow-canvas[data-workspace-intent='reader'] {
+  background: color-mix(in oklch, var(--paper-bg) 82%, transparent);
+}
+
+/* ===== View Mode Toggle ===== */
 
 .view-mode-toggle {
   flex: 0 0 auto;
@@ -2296,14 +2618,63 @@ function onDismissVersion(version: string) {
   transform: scale(0.97);
 }
 
+.external-edit-return {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-6) var(--space-12) 0;
+}
+
+.reader-workbench {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: color-mix(in oklch, var(--paper-bg) 72%, var(--paper-surface));
+}
+
+.reader-workbench__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+  padding: var(--space-8) var(--space-24);
+  border-bottom: var(--border-thin) solid color-mix(in oklch, var(--rule) 66%, transparent);
+  background: color-mix(in oklch, var(--paper-bg) 88%, transparent);
+}
+
+.reader-workbench__label {
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0;
+}
+
+.reader-workbench__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.reader-preview {
+  width: min(760px, calc(100% - var(--space-48)));
+  margin: 0 auto;
+  padding: var(--space-48) 0 var(--space-64);
+}
+
 /* ===== Split Pane ===== */
 .split-pane {
   display: flex;
+  flex: 1;
+  min-height: 0;
   height: 100%;
   box-sizing: border-box;
   padding-top: var(--space-48);
   overflow: hidden;
   position: relative;
+}
+
+.workflow-canvas[data-workspace-intent='archive'] .split-pane,
+.workflow-canvas[data-workspace-intent='studio'] .split-pane {
+  padding-top: var(--space-16);
 }
 
 .split-left,

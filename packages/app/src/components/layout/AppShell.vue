@@ -1,12 +1,31 @@
 <template>
-  <div class="app-shell">
+  <div
+    class="app-shell"
+    :data-chrome-topbar="themeChrome.topBarVariant"
+    :data-chrome-left-wing="themeChrome.leftWingMode"
+    :data-chrome-right-wing="themeChrome.rightWingMode"
+    :data-chrome-toolbar="themeChrome.toolbarDensity"
+    :data-chrome-reading="themeChrome.readingWidth"
+    :data-chrome-official="themeChrome.official ? 'true' : 'false'"
+    :data-workspace-intent="themeChrome.workspaceIntent"
+    :data-topbar-layout="themeChrome.topBarLayout"
+    :data-left-wing-layout="themeChrome.leftWingLayout"
+    :data-editor-control-layout="themeChrome.editorControlLayout"
+    :data-status-layout="themeChrome.statusLayout"
+    :data-right-wing-policy="themeChrome.rightWingPolicy"
+  >
+    <ThemeEffectLayer
+      :effect-profile="themeChrome.effectProfile"
+      :motion-intensity="themeChrome.motionIntensity"
+    />
     <!-- Left Wing: 56px bookmark strip -->
     <LeftWing
       :notes="recentNotes"
       :active-path="activePath"
+      :mode="themeChrome.leftWingMode"
+      :layout="themeChrome.leftWingLayout"
+      :actions="actionsFor('left-wing')"
       @select-note="$emit('select-note', $event)"
-      @create-note="$emit('create-note')"
-      @open-settings="$emit('open-settings')"
     />
     <div class="wing-divider" />
     <!-- Center: Editor Area -->
@@ -15,11 +34,11 @@
         v-if="showTopBar"
         :note-title="noteTitle"
         :notebook-name="notebookName"
-        @toggle-left-wing="$emit('toggle-left-wing')"
-        @open-palette="$emit('open-palette')"
-        @open-export="$emit('open-export')"
-        @open-share="$emit('open-share')"
-        @toggle-theme="$emit('toggle-theme')"
+        :variant="themeChrome.topBarVariant"
+        :layout="themeChrome.topBarLayout"
+        :left-actions="actionsFor('topbar-left')"
+        :center-actions="actionsFor('topbar-center')"
+        :right-actions="actionsFor('topbar-right')"
       />
       <div class="editor-scroll">
         <slot name="editor" />
@@ -34,6 +53,8 @@
         :is-saving="isSaving"
         :save-error="saveError"
         :last-saved-at="lastSavedAt"
+        :density="themeChrome.statusDensity"
+        :layout="themeChrome.statusLayout"
       />
     </main>
     <div v-if="showRightWing" class="wing-divider" />
@@ -45,6 +66,10 @@
       :tags="tags"
       :active-heading-id="activeHeadingId"
       :collapsed="!showRightWing"
+      :mode="themeChrome.rightWingMode"
+      :policy="themeChrome.rightWingPolicy"
+      :sections="themeChrome.rightWingSections"
+      :default-open-sections="themeChrome.defaultOpenSections"
       @navigate-heading="(id: string, ln: number) => $emit('navigate-heading', id, ln)"
       @navigate-backlink="(entry: any) => $emit('navigate-backlink', entry)"
       @select-tag="$emit('select-tag', $event)"
@@ -66,9 +91,12 @@ import LeftWing from './LeftWing.vue';
 import RightWing from './RightWing.vue';
 import TopBar from '../editor/TopBar.vue';
 import StatusBar from '../editor/StatusBar.vue';
+import ThemeEffectLayer from '../theme/ThemeEffectLayer.vue';
 import type { HeadingItem, BacklinkEntry, TagEntry } from '@/types';
+import type { ShellAction, ThemeActionRegion, ThemeChromeState } from '@/types/theme-pack';
+import { computed } from 'vue';
 
-defineProps<{
+const props = defineProps<{
   recentNotes: Array<{ path: string; title: string; colorIndex: number }>;
   activePath: string;
   noteTitle: string;
@@ -88,22 +116,32 @@ defineProps<{
   isSaving: boolean;
   saveError: string | null;
   lastSavedAt: number | null;
+  themeChrome: ThemeChromeState;
+  actions: ShellAction[];
 }>();
 
 defineEmits<{
   'select-note': [path: string];
-  'create-note': [];
-  'open-settings': [];
-  'toggle-left-wing': [];
-  'open-palette': [];
-  'open-export': [];
-  'open-share': [];
-  'toggle-theme': [];
   'navigate-heading': [headingId: string, lineNumber: number];
   'navigate-backlink': [entry: BacklinkEntry];
   'select-tag': [tagName: string];
   'toggle-right-wing': [];
 }>();
+
+const actionGroups = computed(() => {
+  const groups = new Map<ThemeActionRegion, ShellAction[]>();
+  for (const action of props.actions) {
+    if (action.region === 'hidden') continue;
+    const group = groups.get(action.region) ?? [];
+    group.push(action);
+    groups.set(action.region, group);
+  }
+  return groups;
+});
+
+function actionsFor(region: ThemeActionRegion): ShellAction[] {
+  return actionGroups.value.get(region) ?? [];
+}
 </script>
 
 <style scoped>
@@ -115,6 +153,11 @@ defineEmits<{
   background: var(--paper-bg);
 }
 
+.app-shell > :not(.theme-effect-layer) {
+  position: relative;
+  z-index: 1;
+}
+
 .editor-area {
   flex: 1;
   display: flex;
@@ -124,10 +167,18 @@ defineEmits<{
   position: relative;
 }
 
+.app-shell[data-chrome-reading='immersive'] .editor-area {
+  background: color-mix(in oklch, var(--paper-surface) 88%, transparent);
+}
+
 .editor-scroll {
   flex: 1;
   overflow: hidden auto;
   scroll-behavior: smooth;
+}
+
+.app-shell[data-chrome-reading='compact'] .editor-scroll {
+  scroll-padding-top: var(--space-48);
 }
 
 @media (width <= 720px) {

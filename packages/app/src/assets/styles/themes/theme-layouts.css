@@ -1,0 +1,192 @@
+/* ===== Theme Pack Layout Hooks ===== */
+
+html[data-theme-id] body {
+  transition:
+    background-color var(--dur-micro) var(--ease-fade),
+    color var(--dur-micro) var(--ease-fade);
+}
+
+.app-shell {
+  position: relative;
+  isolation: isolate;
+}
+
+.app-shell::before,
+.app-shell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.app-shell > :not(.theme-effect-layer) {
+  position: relative;
+  z-index: 1;
+}
+
+.app-shell::before {
+  background-image: var(--theme-bg-image);
+  background-position: var(--theme-bg-position);
+  background-size: var(--theme-bg-size);
+  opacity: var(--theme-bg-opacity);
+}
+
+.app-shell::after {
+  background-image: var(--theme-crest-image);
+  background-repeat: no-repeat;
+  background-position: right var(--space-40) bottom var(--space-32);
+  background-size: var(--theme-crest-size);
+  opacity: var(--theme-crest-opacity);
+}
+
+[data-layout-preset='winged'] {
+  --wing-left-width: 56px;
+  --wing-right-width: 240px;
+  --editor-max-width: 680px;
+}
+
+[data-layout-preset='focus'] {
+  --wing-left-width: 44px;
+  --wing-right-width: 0px;
+  --editor-max-width: 720px;
+  --editor-top-pad: 80px;
+}
+
+[data-layout-preset='archive'] {
+  --wing-left-width: 88px;
+  --wing-right-width: 360px;
+  --editor-max-width: 740px;
+  --drawer-width: 400px;
+  --editor-top-pad: 72px;
+}
+
+[data-layout-preset='reader'] {
+  --wing-left-width: 48px;
+  --wing-right-width: 220px;
+  --editor-max-width: 780px;
+  --editor-top-pad: 88px;
+}
+
+[data-layout-preset='studio'] {
+  --wing-left-width: 48px;
+  --wing-right-width: 320px;
+  --editor-max-width: 640px;
+  --drawer-width: 340px;
+  --editor-top-pad: 56px;
+}
+
+[data-theme-id='markluck.ink-study'] {
+  --theme-bg-image: url('../../theme-assets/ink-study-bg.webp');
+  --theme-bg-position: center;
+  --theme-bg-size: cover;
+  --theme-bg-opacity: 0.18;
+  --theme-crest-opacity: 0;
+}
+
+[data-theme-id='markluck.reader-nocturne'] {
+  --theme-bg-image: url('../../theme-assets/nocturne-reader-bg.webp');
+  --theme-bg-position: center;
+  --theme-bg-size: cover;
+  --theme-bg-opacity: 0.3;
+  --theme-crest-opacity: 0;
+}
+
+[data-theme-id='markluck.archive'] {
+  --theme-bg-image:
+    repeating-linear-gradient(0deg, transparent 0 26px, oklch(0.58 0.028 92 / 0.08) 26px 27px),
+    linear-gradient(90deg, oklch(0.5 0.03 95 / 0.08), transparent 38%);
+  --theme-bg-position: left top;
+  --theme-bg-size: auto;
+  --theme-bg-opacity: 0.7;
+}
+
+[data-theme-id='markluck.studio'] {
+  --theme-bg-image:
+    linear-gradient(90deg, oklch(0.72 0.1 28 / 0.12) 0 1px, transparent 1px 100%),
+    repeating-linear-gradient(90deg, transparent 0 48px, oklch(0.62 0.05 28 / 0.1) 48px 49px);
+  --theme-bg-position: left top;
+  --theme-bg-size: 100% 100%, auto;
+  --theme-bg-opacity: 0.54;
+}
+
+[data-layout-preset='archive'] .left-wing,
+[data-layout-preset='archive'] .right-wing,
+[data-layout-preset='studio'] .left-wing,
+[data-layout-preset='studio'] .right-wing {
+  transition:
+    width var(--dur-micro) var(--ease-fade),
+    background-color var(--dur-micro) var(--ease-fade);
+}
+
+[data-layout-preset='reader'] .markdown-body {
+  max-width: min(var(--editor-max-width), 72ch);
+}
+
+[data-layout-preset='reader'] .right-wing,
+[data-layout-preset='reader'] .left-wing {
+  background: color-mix(in oklch, var(--paper-left) 82%, transparent);
+}
+
+[data-layout-preset='studio'] .markdown-body,
+[data-layout-preset='studio'] .cm-editor .cm-content {
+  line-height: 1.65;
+}
+
+[data-layout-preset='studio'] .editor-control-bar {
+  position: static;
+}
+
+[data-layout-preset='studio'] .topbar,
+[data-layout-preset='studio'] .statusbar {
+  min-height: var(--topbar-height);
+}
+
+[data-layout-preset='archive'] .right-wing {
+  border-left-color: var(--rule-strong);
+}
+
+[data-layout-preset='archive'] .file-drawer,
+[data-layout-preset='studio'] .file-drawer {
+  width: var(--drawer-width);
+}
+
+html[data-theme-role='collectible'] .app-shell {
+  background:
+    linear-gradient(color-mix(in oklch, var(--paper-bg) 82%, transparent), var(--paper-bg)),
+    var(--paper-bg);
+}
+
+html[data-theme-role='collectible'] .editor-control-bar {
+  background: color-mix(in oklch, var(--paper-raised) 92%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+html[data-theme-id='markluck.ink-study'] .topbar {
+  border-bottom-color: transparent;
+}
+
+html[data-theme-id='markluck.archive'] .topbar {
+  background: var(--paper-raised);
+}
+
+html[data-theme-id='markluck.studio'] .topbar {
+  border-bottom-color: var(--rule-strong);
+}
+
+html[data-theme-id='markluck.ink-study'] .app-shell::before {
+  mix-blend-mode: multiply;
+}
+
+html[data-theme-id='markluck.reader-nocturne'] .app-shell::before {
+  mix-blend-mode: screen;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme-id] body,
+  [data-layout-preset] .left-wing,
+  [data-layout-preset] .right-wing {
+    animation: none;
+    transition: none;
+  }
+}

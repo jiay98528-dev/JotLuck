@@ -172,6 +172,7 @@
 
               <div class="theme-actions">
                 <button
+                  v-if="showThemeImporter"
                   class="theme-action-btn theme-action-btn--primary"
                   :disabled="themeImporting"
                   @click="openThemeImporter"
@@ -181,9 +182,9 @@
                 <button
                   class="theme-action-btn"
                   :disabled="themeImporting"
-                  @click="theme.resetTheme()"
+                  @click="resetThemeFromSettings"
                 >
-                  恢复 Paper
+                  恢复默认主题
                 </button>
                 <input
                   ref="themeImportInput"
@@ -195,7 +196,8 @@
               </div>
 
               <p class="setting-help">
-                主题包仅允许受控 CSS、图片资源和内置布局预设；不会执行第三方脚本，也不会扫描笔记本。
+                官方主题支持受控深度布局、背景和动效。本地主题包仅保留 CSS
+                皮肤能力，不会执行第三方脚本，也不会扫描笔记本。
               </p>
 
               <p v-if="themeImportError" class="theme-message theme-message--error">
@@ -205,54 +207,35 @@
                 {{ themeImportMessage }}
               </p>
 
-              <div class="theme-pack-list" aria-label="主题包列表">
-                <article
-                  v-for="pack in theme.themes"
-                  :key="pack.manifest.id"
-                  class="theme-pack-row"
-                  :class="{ active: pack.manifest.id === theme.activeThemeId }"
-                >
-                  <div class="theme-pack-swatch" :data-theme-swatch="pack.manifest.layoutPreset">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                  </div>
-                  <div class="theme-pack-info">
-                    <div class="theme-pack-titleline">
-                      <strong>{{ pack.manifest.name }}</strong>
-                      <span class="theme-pack-source">
-                        {{ pack.source === 'builtin' ? '官方' : '本地' }}
-                      </span>
-                    </div>
-                    <p>{{ pack.manifest.description || '本地主题包' }}</p>
-                    <span class="theme-pack-meta">
-                      {{ pack.manifest.author }} · {{ pack.manifest.version }} ·
-                      {{ pack.manifest.layoutPreset }}
+              <ThemeGallery
+                :items="theme.themeViewModels"
+                variant="settings"
+                @preview="openThemePreview"
+              />
+
+              <div v-if="importedThemeItems.length > 0" class="theme-local-list">
+                <div v-for="item in importedThemeItems" :key="item.id" class="theme-local-item">
+                  <div>
+                    <strong>{{ item.name }}</strong>
+                    <span class="theme-local-meta">
+                      本地 CSS 皮肤 · {{ item.pack.manifest.version }}
                     </span>
                   </div>
-                  <div class="theme-pack-controls">
-                    <button
-                      class="theme-pack-btn"
-                      :disabled="pack.manifest.id === theme.activeThemeId || themeImporting"
-                      @click="theme.setTheme(pack.manifest.id)"
-                    >
-                      {{ pack.manifest.id === theme.activeThemeId ? '已启用' : '启用' }}
-                    </button>
-                    <button
-                      v-if="pack.source !== 'builtin'"
-                      class="theme-pack-btn theme-pack-btn--danger"
-                      :disabled="themeImporting"
-                      @click="theme.uninstallTheme(pack.manifest.id)"
-                    >
-                      卸载
-                    </button>
-                  </div>
-                </article>
+                  <button
+                    class="theme-pack-btn theme-pack-btn--danger"
+                    :disabled="themeImporting"
+                    @click="theme.uninstallTheme(item.id)"
+                  >
+                    卸载
+                  </button>
+                </div>
               </div>
 
               <div class="theme-market-note">
                 <strong>市场接口已预留</strong>
-                <span>后续在线主题市场会复用同一主题包清单、安装、校验和回滚机制。</span>
+                <span
+                  >首发只开放官方深度主题。未来在线主题市场会复用同一主题清单、预览、安装、校验和回滚机制。</span
+                >
               </div>
             </div>
 
@@ -464,11 +447,21 @@
       </div>
     </div>
   </Teleport>
+
+  <ThemePreviewDrawer
+    :visible="themePreviewVisible"
+    :item="selectedTheme"
+    @close="closeThemePreview"
+    @apply="applyThemeFromPreview"
+    @restore-default="resetThemeFromSettings"
+  />
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from 'vue';
-import { useThemeStore } from '@/stores/theme';
+import ThemeGallery from '@/components/theme/ThemeGallery.vue';
+import ThemePreviewDrawer from '@/components/theme/ThemePreviewDrawer.vue';
+import { useThemeStore, type ThemeViewModel } from '@/stores/theme';
 import {
   DEFAULT_COMPLETION_SETTINGS,
   type CompletionSettings,
@@ -500,6 +493,33 @@ const overlayRef = ref<HTMLDivElement | null>(null);
 
 // ── Theme ────────────────────────────────────────────────
 const theme = useThemeStore();
+const themePreviewVisible = ref(false);
+const selectedTheme = ref<ThemeViewModel | null>(null);
+const showThemeImporter = import.meta.env.DEV;
+const importedThemeItems = computed(() =>
+  theme.themeViewModels.filter((item) => item.pack.source !== 'builtin'),
+);
+
+function openThemePreview(item: ThemeViewModel): void {
+  selectedTheme.value = item;
+  themePreviewVisible.value = true;
+}
+
+function closeThemePreview(): void {
+  themePreviewVisible.value = false;
+}
+
+function applyThemeFromPreview(themeId: string): void {
+  theme.setTheme(themeId);
+  selectedTheme.value =
+    theme.themeViewModels.find((item) => item.id === themeId) ?? selectedTheme.value;
+}
+
+function resetThemeFromSettings(): void {
+  theme.resetTheme();
+  selectedTheme.value =
+    theme.themeViewModels.find((item) => item.id === theme.activeThemeId) ?? selectedTheme.value;
+}
 
 // ── Navigation tabs ──────────────────────────────────────
 interface TabDef {
@@ -1070,6 +1090,22 @@ watch(
   background: oklch(0.93 0.015 82);
 }
 
+.theme-pack-swatch[data-theme-swatch='focus'] {
+  background: oklch(0.94 0.012 195);
+}
+
+.theme-pack-swatch[data-theme-swatch='focus'] span:first-child {
+  background: oklch(0.62 0.035 190);
+}
+
+.theme-pack-swatch[data-theme-swatch='focus'] span:nth-child(2) {
+  background: oklch(0.98 0.004 190);
+}
+
+.theme-pack-swatch[data-theme-swatch='focus'] span:nth-child(3) {
+  background: oklch(0.82 0.035 190);
+}
+
 .theme-pack-swatch[data-theme-swatch='reader'] {
   background: oklch(0.2 0.01 245);
 }
@@ -1129,6 +1165,46 @@ watch(
 .theme-market-note strong {
   color: var(--ink-primary);
   font-weight: var(--fw-semibold);
+}
+
+.theme-local-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-10);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-surface);
+}
+
+.theme-local-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+
+.theme-local-item div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.theme-local-item strong {
+  overflow: hidden;
+  color: var(--ink-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.theme-local-meta {
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+  line-height: var(--lh-ui);
 }
 
 /* ===== Slider ===== */

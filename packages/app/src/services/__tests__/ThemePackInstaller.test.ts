@@ -81,6 +81,30 @@ describe('ThemePackInstaller', () => {
       ThemePackError,
     );
   });
+
+  it('rejects local theme attempts to control official deep chrome', () => {
+    expect(() =>
+      validateThemeCss("[data-theme-id='local.test'] { --wing-left-width: 96px; }"),
+    ).toThrow(ThemePackError);
+    expect(() =>
+      validateThemeCss("[data-theme-id='local.test'] { --editor-max-width: 960px; }"),
+    ).toThrow(ThemePackError);
+    expect(() =>
+      validateThemeCss("[data-effect-profile='immersive'] .topbar { opacity: 0.9; }"),
+    ).toThrow(ThemePackError);
+    expect(() =>
+      validateThemeCss("[data-theme-id='local.test'] { --theme-workflow-mode: reader; }"),
+    ).toThrow(ThemePackError);
+    expect(() =>
+      validateThemeCss("[data-theme-id='local.test'] { --theme-action-search-region: topbar; }"),
+    ).toThrow(ThemePackError);
+    expect(() =>
+      validateThemeCss("[data-workspace-intent='studio'] .topbar { opacity: 0.9; }"),
+    ).toThrow(ThemePackError);
+    expect(() =>
+      validateThemeCss("[data-editor-control-layout='studio-rail'] .format-toolbar { gap: 0; }"),
+    ).toThrow(ThemePackError);
+  });
 });
 
 async function createThemePack(options?: {

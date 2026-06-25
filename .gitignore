@@ -45,6 +45,9 @@ e2e/report/data/
 
 # App assets (auto-generated)
 assets/
+!packages/app/src/assets/
+!packages/app/src/assets/theme-assets/
+!packages/app/src/assets/theme-assets/*.webp
 
 # Vite
 *.local

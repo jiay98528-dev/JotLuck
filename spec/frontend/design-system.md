@@ -8,13 +8,13 @@
 
 ## 1. 权威来源
 
-| 文件                  | 路径                                                      | 内容                                                                   |
-| --------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------- |
-| **tokens.css**        | `packages/app/src/assets/styles/tokens.css`               | 共享 Token：字体、间距、Z-Index、动效、阴影、布局尺寸                  |
-| **paper.css**         | `packages/app/src/assets/styles/themes/paper.css`         | Paper 主题：亮色（暖纸）+ 暗色（深灰卡纸），全部 OKLCH 色值            |
-| **theme-layouts.css** | `packages/app/src/assets/styles/themes/theme-layouts.css` | Theme Pack 布局预设与背景/纹章 hooks                                   |
-| **accessibility.css** | `packages/app/src/assets/styles/accessibility.css`        | 无障碍：focus-ring、prefers-reduced-motion、prefers-contrast、触控目标 |
-| **theme-packs.md**    | `spec/frontend/theme-packs.md`                            | Theme Pack v1 包格式、运行时、安全边界、市场接口预留                   |
+| 文件                  | 路径                                                      | 内容                                                                       |
+| --------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------- |
+| **tokens.css**        | `packages/app/src/assets/styles/tokens.css`               | 共享 Token：字体、间距、Z-Index、动效、阴影、布局尺寸                      |
+| **paper.css**         | `packages/app/src/assets/styles/themes/paper.css`         | 默认 `paper`/羽翼布局主题：亮色（暖纸）+ 暗色（深灰卡纸），全部 OKLCH 色值 |
+| **theme-layouts.css** | `packages/app/src/assets/styles/themes/theme-layouts.css` | Theme Pack 布局预设与背景/纹章 hooks                                       |
+| **accessibility.css** | `packages/app/src/assets/styles/accessibility.css`        | 无障碍：focus-ring、prefers-reduced-motion、prefers-contrast、触控目标     |
+| **theme-packs.md**    | `spec/frontend/theme-packs.md`                            | Theme Pack v1 包格式、运行时、安全边界、市场接口预留                       |
 
 **设计决策以这些文件为准。** 本文档仅提供导航速查，不替代阅读代码。
 
@@ -169,21 +169,46 @@
 
 ### 3.6 Theme Pack v1 Hooks
 
-当前主题系统为 Paper 默认主题 + Theme Pack v1 受控主题包。主题切换通过 `<html data-theme-id data-color-scheme data-layout-preset>` 生效。
+当前主题系统为 `paper` 默认主题（设置页显示为“羽翼布局”）+ Theme Pack v1 受控主题包。主题切换通过 `<html data-theme-id data-color-scheme data-layout-preset data-theme-role data-effect-profile data-theme-performance data-chrome-* data-*-layout data-workspace-intent>` 生效。
+
+官方内置主题当前包含：羽翼布局、墨线书房、档案馆、夜读星幕、工坊轨道。内置主题由 `ThemeRegistry` 注册；主题名可变，但 `paper` ID 不得改名，以保持旧用户状态迁移和默认回退稳定。
+
+首发主题分为两个能力层级：
+
+- 官方内置主题：允许使用 `OfficialThemeProfile`，经 `ThemeChromeState` 控制布局 preset、默认视图、操作入口落点、工具密度、侧栏权重、右翼区块顺序、版心、性能等级、本地扁平纹理背景和 `ThemeEffectLayer`。
+- 本地导入主题：只允许 `css-v1` 皮肤能力，不能注入官方 profile，不能伪装性能等级，不能获取布局/动效的官方特权；即使 manifest 声明 `layoutPreset`，运行时也回落到安全 `winged` 壳层。
 
 公开 hooks：
 
-| Token / Attribute       | 用途                                                 |      权威来源       |
-| ----------------------- | ---------------------------------------------------- | :-----------------: |
-| `data-theme-id`         | 当前主题包 ID                                        |  `stores/theme.ts`  |
-| `data-color-scheme`     | `light` / `dark` 色彩方案                            |  `stores/theme.ts`  |
-| `data-layout-preset`    | `winged` / `focus` / `archive` / `reader` / `studio` | `theme-layouts.css` |
-| `--theme-bg-image`      | 主题背景图或纹理                                     |    `tokens.css`     |
-| `--theme-bg-opacity`    | 背景透明度                                           |    `tokens.css`     |
-| `--theme-crest-image`   | 纹章/标识背景                                        |    `tokens.css`     |
-| `--theme-crest-opacity` | 纹章透明度                                           |    `tokens.css`     |
+| Token / Attribute            | 用途                                                               |                  权威来源                   |
+| ---------------------------- | ------------------------------------------------------------------ | :-----------------------------------------: |
+| `data-theme-id`              | 当前主题包 ID                                                      |              `stores/theme.ts`              |
+| `data-color-scheme`          | `light` / `dark` 色彩方案                                          |              `stores/theme.ts`              |
+| `data-layout-preset`         | `winged` / `focus` / `archive` / `reader` / `studio`               |             `theme-layouts.css`             |
+| `data-theme-role`            | `baseline` / `workflow` / `collectible`，仅官方主题                |              `stores/theme.ts`              |
+| `data-effect-profile`        | `none` / `subtle` / `ambient` / `immersive`，仅官方主题            |             `ThemeEffectLayer`              |
+| `data-theme-performance`     | `1`-`5` 性能压力等级，仅官方主题                                   |              `stores/theme.ts`              |
+| `data-chrome-topbar`         | `balanced` / `writing` / `archive` / `reader` / `studio`           |               `AppShell.vue`                |
+| `data-chrome-left-wing`      | `default` / `research` / `quiet` / `rail`                          |               `LeftWing.vue`                |
+| `data-chrome-right-wing`     | `balanced` / `research` / `quiet` / `rail`                         |               `RightWing.vue`               |
+| `data-chrome-toolbar`        | `calm` / `compact` / `productive`                                  |             `FormatToolbar.vue`             |
+| `data-chrome-drawer`         | `low` / `medium` / `high`                                          |             `theme-layouts.css`             |
+| `data-chrome-reading`        | `standard` / `wide` / `immersive` / `compact`                      |               `AppShell.vue`                |
+| `data-workspace-intent`      | `baseline` / `writing` / `archive` / `reader` / `studio`           |              `stores/theme.ts`              |
+| `data-default-view-mode`     | `live` / `split` / `read`                                          |             `NotebookHome.vue`              |
+| `data-topbar-layout`         | `classic` / `title-first` / `search-first` / `reader` / `compact`  |                `TopBar.vue`                 |
+| `data-left-wing-layout`      | `bookmarks` / `quiet-bookmarks` / `research-stack` / `studio-rail` |               `LeftWing.vue`                |
+| `data-editor-control-layout` | `toolbar` / `writing-strip` / `hidden` / `studio-rail`             | `EditorControlStrip.vue` / `StudioRail.vue` |
+| `data-status-layout`         | `full` / `quiet` / `save-only` / `compact`                         |               `StatusBar.vue`               |
+| `data-right-wing-policy`     | `outline` / `research` / `collapsed` / `production`                |               `RightWing.vue`               |
+| `--theme-bg-image`           | 主题背景图或纹理                                                   |                `tokens.css`                 |
+| `--theme-bg-opacity`         | 背景透明度                                                         |                `tokens.css`                 |
+| `--theme-crest-image`        | 纹章/标识背景                                                      |                `tokens.css`                 |
+| `--theme-crest-opacity`      | 纹章透明度                                                         |                `tokens.css`                 |
 
-Theme Pack v1 只接受 `runtime: "css-v1"`，不执行第三方 JS。主题包不得隐藏核心控件、移除焦点环、引用远程资源或通过 CSS 覆盖保存/删除/权限提示。完整规则见 `spec/frontend/theme-packs.md`。
+收藏型官方主题使用本地打包的扁平纹理，不使用写实生成图作为主题页背景。当前资源位于 `packages/app/src/assets/theme-assets/`，包括 5 张官方主题真实 UI 预览图，以及 `ink-study-bg.webp`、`nocturne-reader-bg.webp` 两张本地背景纹理。
+
+Theme Pack v1 只接受 `runtime: "css-v1"`，不执行第三方 JS。主题包不得隐藏核心控件、移除焦点环、引用远程资源、设置官方深度 chrome/workflow 变量、选择官方 `data-*` 深度属性或通过 CSS 覆盖保存/删除/权限提示。完整规则见 `spec/frontend/theme-packs.md`。
 
 ---
 

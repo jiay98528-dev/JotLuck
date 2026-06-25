@@ -492,13 +492,37 @@ interface ThemeState {
   colorScheme: 'light' | 'dark'; // 当前明暗色方案
   installedThemes: InstalledThemePack[]; // 本地导入主题
   activeLayoutPreset: 'winged' | 'focus' | 'archive' | 'reader' | 'studio';
+  activeChromeState: ThemeChromeState; // 官方深度主题 workflow chrome，导入主题回落到安全默认
 }
 ```
 
 Theme Pack v1 只接受 `runtime: "css-v1"`，主题包由
 `ThemeRegistry` 和 `ThemePackInstaller` 管理。运行时写入
-`<html data-theme-id data-color-scheme data-layout-preset>`，并保留旧
-`markluck-theme` 明暗色 key 作为兼容镜像。完整包格式与安全边界见
+`<html data-theme-id data-color-scheme data-layout-preset data-chrome-* data-workspace-intent data-*-layout>`，并保留旧
+`markluck-theme` 明暗色 key 作为兼容镜像。
+
+官方内置主题可附带 `OfficialThemeProfile`，由 `ThemeRegistry` 提供并由
+`useThemeStore` 计算为主题 view model。官方 profile 只在内置主题中生效，
+包含 `role`、`headline`、`story`、`bestFor`、`visualFeatures`、
+`uiProfile`、`performanceLevel`、`previewImage`、`backgroundAsset` 和
+`effectProfile`。激活官方主题时，`useThemeStore` 计算 `ThemeChromeState`，
+并额外写入 `data-theme-role`、`data-effect-profile`、`data-theme-performance`
+和 `data-chrome-*` / workflow data attributes，供 `AppShell`、`TopBar`、
+`LeftWing`、`RightWing`、`EditorControlStrip`、`StudioRail`、`StatusBar`
+与 `ThemeEffectLayer` 执行组件级布局、操作入口重排和动效差异。
+
+`ThemeChromeState` 的 workflow 字段包括 `workspaceIntent`、`defaultViewMode`、
+`topBarLayout`、`leftWingLayout`、`editorControlLayout`、`statusLayout`、
+`rightWingPolicy` 与 `actionPlacements`。`NotebookHome` 只维护一份
+`ShellAction[]` 事件链，再由主题把 `new-note`、`file-drawer`、`search`、
+`template`、`export`、`share`、`settings`、`theme-toggle`、`view-toggle`
+分配到 TopBar、LeftWing、EditorControlStrip、StudioRail 或 reader bar。
+因此官方主题可以改变 UX 操作路径，但不会复制或绕过核心保存、导出、搜索和设置逻辑。
+
+本地导入 `.markluck-theme` 不持久化、不读取 `OfficialThemeProfile`，激活后会移除
+上述官方属性，并使用安全 `winged` chrome fallback；manifest 中的 `layoutPreset`
+仅作为兼容元数据，不授予深度布局、workflow action placement 或官方动效能力。本地 CSS 不得伪装官方深度主题、设置 workflow/chrome 变量或启用官方内置动效。
+完整包格式与安全边界见
 `spec/frontend/theme-packs.md`。
 
 ### 2.5 服务层抽象

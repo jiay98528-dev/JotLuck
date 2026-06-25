@@ -1,7 +1,12 @@
 <template>
-  <aside class="left-wing" aria-label="笔记本导航">
-    <!-- Logo Mark -->
-    <button class="wing-logo" title="MarkLuck — 回到首页" @click="$emit('select-note', '')">
+  <aside
+    class="left-wing"
+    :class="[`left-wing--${mode}`, `left-wing--layout-${layout}`]"
+    :data-mode="mode"
+    :data-layout="layout"
+    aria-label="笔记本导航"
+  >
+    <button class="wing-logo" title="MarkLuck, 回到首页" @click="$emit('select-note', '')">
       <svg
         width="20"
         height="20"
@@ -9,6 +14,7 @@
         fill="none"
         stroke="currentColor"
         stroke-width="1.5"
+        aria-hidden="true"
       >
         <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" stroke-linecap="round" />
         <path
@@ -21,34 +27,24 @@
       </svg>
     </button>
 
-    <!-- New Note Button -->
-    <Button
-      variant="ghost"
-      size="icon"
-      class="wing-new-btn"
-      title="新建笔记 (Ctrl+N)"
-      @click="$emit('create-note')"
-    >
-      <template #icon-left>
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <line x1="12" y1="5" x2="12" y2="19" stroke-linecap="round" />
-          <line x1="5" y1="12" x2="19" y2="12" stroke-linecap="round" />
-        </svg>
-      </template>
-    </Button>
+    <div v-if="topActions.length > 0" class="wing-action-stack wing-action-stack--top">
+      <ShellActionButton
+        v-for="action in topActions"
+        :key="action.id"
+        :action="action"
+        label-mode="icon"
+        size="icon-sm"
+      />
+    </div>
 
-    <!-- Divider -->
     <div class="wing-rule" />
 
-    <!-- Bookmark Dots -->
-    <nav ref="bookmarkList" class="wing-bookmarks">
+    <div v-if="layout === 'research-stack'" class="wing-index-count" aria-hidden="true">
+      {{ notes.length }}
+    </div>
+    <div v-else-if="layout === 'studio-rail'" class="wing-rail-groove" aria-hidden="true" />
+
+    <nav ref="bookmarkList" class="wing-bookmarks" aria-label="最近笔记">
       <button
         v-for="(note, i) in notes"
         :key="note.path"
@@ -62,9 +58,11 @@
       >
         <span class="dot-core" />
         <span v-if="note.path === activePath" class="dot-ring" />
+        <span v-if="layout === 'research-stack'" class="wing-bookmark-title">
+          {{ note.title }}
+        </span>
       </button>
 
-      <!-- Empty State -->
       <div v-if="notes.length === 0" class="wing-empty">
         <span class="wing-empty-dot" />
         <span class="wing-empty-dot" />
@@ -72,59 +70,52 @@
       </div>
     </nav>
 
-    <!-- Spacer -->
     <div class="wing-spacer" />
 
-    <!-- Bottom Settings -->
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      class="wing-settings-btn"
-      title="设置"
-      @click="$emit('open-settings')"
-    >
-      <template #icon-left>
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-        >
-          <circle cx="12" cy="12" r="3" />
-          <path
-            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
-          />
-        </svg>
-      </template>
-    </Button>
+    <div v-if="bottomActions.length > 0" class="wing-action-stack wing-action-stack--bottom">
+      <ShellActionButton
+        v-for="action in bottomActions"
+        :key="action.id"
+        :action="action"
+        label-mode="icon"
+        size="icon-sm"
+      />
+    </div>
   </aside>
 </template>
 
 <script setup lang="ts">
-import Button from '@/components/common/Button.vue';
-/**
- * LeftWing.vue — 56px 书签栏
- *
- * 彩色圆点 = 最近笔记。每个圆点颜色从 8 色色板自动分配。
- * 当前笔记圆点带 accent ring。
- *
- * @see migration-map.md §1 新建组件
- */
+import { computed } from 'vue';
+import ShellActionButton from './ShellActionButton.vue';
+import type { ShellAction, ThemeLeftWingLayout, ThemeLeftWingMode } from '@/types/theme-pack';
 
-defineProps<{
-  notes: Array<{ path: string; title: string; colorIndex: number }>;
-  activePath: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    notes: Array<{ path: string; title: string; colorIndex: number }>;
+    activePath: string;
+    mode?: ThemeLeftWingMode;
+    layout?: ThemeLeftWingLayout;
+    actions?: ShellAction[];
+  }>(),
+  {
+    mode: 'default',
+    layout: 'bookmarks',
+    actions: () => [],
+  },
+);
 
 defineEmits<{
   'select-note': [path: string];
-  'create-note': [];
-  'open-settings': [];
 }>();
 
 const dotPalette = Array.from({ length: 8 }, (_, i) => `var(--dot-${i})`);
+const bottomActionIds = new Set(['settings', 'theme-toggle']);
+const topActions = computed(() =>
+  props.actions.filter((action) => !bottomActionIds.has(action.id)),
+);
+const bottomActions = computed(() =>
+  props.actions.filter((action) => bottomActionIds.has(action.id)),
+);
 </script>
 
 <style scoped>
@@ -139,14 +130,39 @@ const dotPalette = Array.from({ length: 8 }, (_, i) => `var(--dot-${i})`);
   user-select: none;
 }
 
+.left-wing--layout-research-stack {
+  border-right: var(--border-thin) solid var(--rule-strong);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--accent-soft) 44%, transparent),
+      transparent 36%
+    ),
+    var(--paper-left);
+}
+
+.left-wing--layout-quiet-bookmarks {
+  background: color-mix(in oklch, var(--paper-left) 82%, transparent);
+}
+
+.left-wing--layout-studio-rail {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--accent-soft) 52%, transparent) 0 4px,
+      transparent 4px
+    ),
+    var(--paper-left);
+}
+
 .wing-logo {
   border: none;
   background: none;
   cursor: pointer;
   padding: 0;
   color: var(--ink-secondary);
-  opacity: 0.7;
-  margin-bottom: var(--space-12);
+  opacity: 0.75;
+  margin-bottom: var(--space-10);
   transition: opacity var(--dur-micro) var(--ease-fade);
   display: flex;
   align-items: center;
@@ -157,206 +173,169 @@ const dotPalette = Array.from({ length: 8 }, (_, i) => `var(--dot-${i})`);
   opacity: 1;
 }
 
-.wing-new-btn {
-  width: 32px;
-  height: 32px;
-  border: var(--border-thin) dashed var(--rule-strong);
-  border-radius: var(--radius);
-  background: none;
-  color: var(--ink-muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    border-color var(--dur-micro) var(--ease-fade),
-    color var(--dur-micro) var(--ease-fade),
-    background var(--dur-press) var(--ease-press);
+.wing-action-stack {
+  display: grid;
+  gap: var(--space-4);
+  place-items: center;
 }
 
-.wing-new-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-  border-style: solid;
+.wing-action-stack--top {
+  margin-bottom: var(--space-8);
 }
 
-.wing-new-btn:active {
-  background: var(--accent-soft);
-  transform: scale(0.93);
-  transition: transform var(--dur-press) var(--ease-press);
+.wing-action-stack--bottom {
+  margin-top: var(--space-8);
 }
 
 .wing-rule {
   width: 24px;
   height: var(--border-thin);
   background: var(--rule-wing);
-  margin: var(--space-12) 0;
+  margin: var(--space-8) 0 var(--space-12);
 }
 
-/* === Bookmark Dots === */
+.wing-index-count {
+  display: grid;
+  width: 26px;
+  height: 20px;
+  margin-bottom: var(--space-10);
+  place-items: center;
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius-full);
+  background: var(--paper-raised);
+  color: var(--ink-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wing-rail-groove {
+  width: 4px;
+  min-height: 36px;
+  margin-bottom: var(--space-10);
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  opacity: 0.64;
+}
+
 .wing-bookmarks {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-8);
-  overflow-y: auto;
-
-  /* overflow-x left as visible — dots are centered, no horizontal overflow. Tooltip ::after escapes to the right;
-    native title is the reliable fallback. */
-  padding: 0 var(--space-4);
+  gap: var(--space-10);
+  width: 100%;
+  min-height: 0;
+  overflow: hidden auto;
+  padding: var(--space-2) 0;
   scrollbar-width: none;
-}
-
-.wing-bookmarks::-webkit-scrollbar {
-  display: none;
 }
 
 .wing-bookmark-dot {
   position: relative;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: none;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  padding: 0;
+  background: transparent;
   cursor: pointer;
-  border-radius: var(--radius-full);
-  opacity: 0;
-  animation: dot-enter var(--dur-expand) var(--ease-enter) forwards;
-  animation-delay: var(--dot-delay, 0ms);
-  animation-fill-mode: forwards;
-  transition: transform var(--dur-release) var(--ease-back);
+  color: var(--dot-color);
+  animation: dot-enter var(--dur-palette) var(--ease-fold) both;
+  animation-delay: var(--dot-delay);
 }
 
-@keyframes dot-enter {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.left-wing--layout-research-stack .wing-bookmarks {
+  gap: var(--space-6);
+  align-items: stretch;
+  padding-inline: var(--space-6);
 }
 
-.wing-bookmark-dot:hover {
-  transform: scale(1.15);
-}
-
-.wing-bookmark-dot:active {
-  transform: scale(0.85);
-  transition: transform var(--dur-press) var(--ease-press);
-}
-
-/* Custom tooltip — 0.5s delay, appears on hover */
-.wing-bookmark-dot::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  left: calc(100% + 10px);
-  top: 50%;
-  transform: translateY(-50%);
-  white-space: nowrap;
-  padding: 4px 10px;
-  font-size: var(--text-xs);
-  font-family: var(--ff-body);
-  color: var(--ink-primary);
-  background: var(--paper-raised);
-  border: var(--border-thin) solid var(--rule);
+.left-wing--layout-research-stack .wing-bookmark-dot {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-6);
+  width: 100%;
+  height: 30px;
+  padding-inline: var(--space-6);
+  border: var(--border-thin) solid transparent;
   border-radius: var(--radius);
-  box-shadow: var(--shadow-stack);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 100ms var(--ease-fade);
-  transition-delay: 500ms;
-  z-index: var(--z-overlay);
 }
 
-.wing-bookmark-dot:hover::after {
-  opacity: 1;
-  transition-delay: 500ms;
+.left-wing--layout-research-stack .wing-bookmark-dot.active {
+  border-color: color-mix(in oklch, var(--accent) 42%, transparent);
+  background: color-mix(in oklch, var(--accent-soft) 48%, transparent);
 }
 
-.wing-bookmark-dot:not(:hover)::after {
-  transition-delay: 0ms;
+.left-wing--layout-quiet-bookmarks .wing-bookmark-dot:not(.active) {
+  opacity: 0.54;
 }
 
 .dot-core {
-  width: 12px;
-  height: 12px;
+  position: absolute;
+  inset: 8px;
   border-radius: var(--radius-full);
-  background: var(--dot-color, oklch(0.55 0.12 250));
-  transition:
-    width var(--dur-micro) var(--ease-fade),
-    height var(--dur-micro) var(--ease-fade),
-    box-shadow var(--dur-micro) var(--ease-fade);
+  background: currentcolor;
+  box-shadow: 0 0 0 1px color-mix(in oklch, currentcolor 44%, transparent);
 }
 
-.wing-bookmark-dot.active .dot-core {
-  width: 16px;
-  height: 16px;
-  box-shadow: 0 0 0 var(--border-medium) var(--accent-ring);
+.left-wing--layout-research-stack .dot-core {
+  position: static;
+  width: 8px;
+  height: 8px;
+}
+
+.wing-bookmark-dot:hover .dot-core {
+  inset: 6px;
 }
 
 .dot-ring {
   position: absolute;
-  inset: 0;
+  inset: 3px;
+  border: var(--border-thin) solid currentcolor;
   border-radius: var(--radius-full);
-  border: var(--border-medium) solid var(--accent);
-  animation: ring-breathe var(--dur-breathe) var(--ease-fade) infinite alternate;
 }
 
-@keyframes ring-breathe {
-  from {
-    opacity: 0.3;
-    transform: scale(0.9);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1.05);
-  }
+.left-wing--layout-research-stack .dot-ring {
+  display: none;
 }
 
-/* === Empty State === */
+.wing-bookmark-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-secondary);
+  font-size: 10px;
+  line-height: var(--lh-ui);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .wing-empty {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: var(--space-8);
-  align-items: center;
   padding-top: var(--space-8);
 }
 
 .wing-empty-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: var(--radius-full);
-  background: var(--rule);
+  background: var(--rule-wing);
+  opacity: 0.62;
 }
 
-/* === Spacer & Settings === */
 .wing-spacer {
-  flex: 0 0 auto;
+  flex: 1;
 }
 
-.wing-settings-btn {
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: var(--radius);
-  background: none;
-  color: var(--ink-muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color var(--dur-micro) var(--ease-fade);
-  margin-top: var(--space-4);
-}
+@keyframes dot-enter {
+  from {
+    transform: translateY(4px);
+    opacity: 0;
+  }
 
-.wing-settings-btn:hover {
-  color: var(--ink-secondary);
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 </style>

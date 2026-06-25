@@ -2,6 +2,7 @@
   <aside
     class="right-wing"
     :class="{ collapsed }"
+    :data-policy="policy"
     :style="{ width: collapsed ? '0px' : `${panelWidth}px` }"
     aria-label="参考面板"
   >
@@ -16,158 +17,134 @@
     </div>
 
     <!-- Panel Content -->
-    <div v-if="!collapsed" class="wing-content">
-      <!-- ======== Section 1: 大纲 ======== -->
-      <section class="wing-section">
-        <button class="section-header" @click="toggleSection('outline')">
-          <svg
-            class="section-icon"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-          >
-            <line x1="8" y1="6" x2="21" y2="6" stroke-linecap="round" />
-            <line x1="8" y1="12" x2="21" y2="12" stroke-linecap="round" />
-            <line x1="8" y1="18" x2="21" y2="18" stroke-linecap="round" />
-            <circle cx="4" cy="6" r="1.5" fill="currentColor" stroke="none" />
-            <circle cx="4" cy="12" r="1.5" fill="currentColor" stroke="none" />
-            <circle cx="4" cy="18" r="1.5" fill="currentColor" stroke="none" />
-          </svg>
-          <span class="section-label">大纲</span>
-          <span v-if="headings.length > 0" class="count-badge">{{ headings.length }}</span>
-          <svg
-            class="chevron"
-            :class="{ open: openSections.has('outline') }"
-            width="10"
-            height="10"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </button>
-        <div v-if="openSections.has('outline')" class="section-body section-body--outline">
-          <component
-            :is="HeadingTreeNode"
-            :nodes="headings"
-            :active-id="activeHeadingId"
-            @navigate-heading="onNavigateHeading"
-          />
-          <p v-if="headings.length === 0" class="empty-hint">暂无标题</p>
-        </div>
-      </section>
-
-      <div class="section-rule" />
-
-      <!-- ======== Section 2: 反链 ======== -->
-      <section class="wing-section">
-        <button class="section-header" @click="toggleSection('backlinks')">
-          <svg
-            class="section-icon"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-          >
-            <path
-              d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"
-              stroke-linecap="round"
-            />
-            <path
-              d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
-              stroke-linecap="round"
-            />
-          </svg>
-          <span class="section-label">反链</span>
-          <span v-if="backlinks.length > 0" class="count-badge">{{ backlinks.length }}</span>
-          <svg
-            class="chevron"
-            :class="{ open: openSections.has('backlinks') }"
-            width="10"
-            height="10"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </button>
-        <div v-if="openSections.has('backlinks')" class="section-body section-body--backlinks">
-          <template v-if="backlinks.length > 0">
-            <button
-              v-for="entry in backlinks"
-              :key="entry.notePath + ':' + entry.lineNumber"
-              class="backlink-item"
-              @click="emit('navigate-backlink', entry)"
+    <div v-if="!collapsed" class="wing-content" :data-mode="mode">
+      <template v-for="(section, index) in orderedSections" :key="section">
+        <section class="wing-section" :data-section="section">
+          <button class="section-header" @click="toggleSection(section)">
+            <svg
+              v-if="section === 'outline'"
+              class="section-icon"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
             >
-              <span class="backlink-title">{{ entry.noteTitle }}</span>
-              <span class="backlink-context">{{ entry.context }}</span>
-            </button>
-          </template>
-          <p v-else class="empty-hint">无反链</p>
-        </div>
-      </section>
+              <line x1="8" y1="6" x2="21" y2="6" stroke-linecap="round" />
+              <line x1="8" y1="12" x2="21" y2="12" stroke-linecap="round" />
+              <line x1="8" y1="18" x2="21" y2="18" stroke-linecap="round" />
+              <circle cx="4" cy="6" r="1.5" fill="currentColor" stroke="none" />
+              <circle cx="4" cy="12" r="1.5" fill="currentColor" stroke="none" />
+              <circle cx="4" cy="18" r="1.5" fill="currentColor" stroke="none" />
+            </svg>
+            <svg
+              v-else-if="section === 'backlinks'"
+              class="section-icon"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path
+                d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"
+                stroke-linecap="round"
+              />
+              <path
+                d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
+                stroke-linecap="round"
+              />
+            </svg>
+            <svg
+              v-else
+              class="section-icon"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path
+                d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"
+                stroke-linecap="round"
+              />
+              <line x1="7" y1="7" x2="7.01" y2="7" stroke-linecap="round" stroke-width="2" />
+            </svg>
+            <span class="section-label">{{ sectionLabel(section) }}</span>
+            <span v-if="sectionCount(section) > 0" class="count-badge">
+              {{ sectionCount(section) }}
+            </span>
+            <svg
+              class="chevron"
+              :class="{ open: openSections.has(section) }"
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
 
-      <div class="section-rule" />
-
-      <!-- ======== Section 3: 标签 ======== -->
-      <section class="wing-section">
-        <button class="section-header" @click="toggleSection('tags')">
-          <svg
-            class="section-icon"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
+          <div
+            v-if="section === 'outline' && openSections.has(section)"
+            class="section-body section-body--outline"
           >
-            <path
-              d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"
-              stroke-linecap="round"
+            <component
+              :is="HeadingTreeNode"
+              :nodes="headings"
+              :active-id="activeHeadingId"
+              @navigate-heading="onNavigateHeading"
             />
-            <line x1="7" y1="7" x2="7.01" y2="7" stroke-linecap="round" stroke-width="2" />
-          </svg>
-          <span class="section-label">标签</span>
-          <span v-if="tags.length > 0" class="count-badge">{{ tags.length }}</span>
-          <svg
-            class="chevron"
-            :class="{ open: openSections.has('tags') }"
-            width="10"
-            height="10"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
+            <p v-if="headings.length === 0" class="empty-hint">暂无标题</p>
+          </div>
+
+          <div
+            v-else-if="section === 'backlinks' && openSections.has(section)"
+            class="section-body section-body--backlinks"
           >
-            <polyline points="6 9 12 15 18 9" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </button>
-        <div v-if="openSections.has('tags')" class="section-body section-body--tags">
-          <template v-if="tags.length > 0">
-            <div class="tag-cloud">
+            <template v-if="backlinks.length > 0">
               <button
-                v-for="tag in styledTags"
-                :key="tag.name"
-                class="tag-chip"
-                :style="{ fontSize: tag.fontSize }"
-                @click="emit('select-tag', tag.name)"
+                v-for="entry in backlinks"
+                :key="entry.notePath + ':' + entry.lineNumber"
+                class="backlink-item"
+                @click="emit('navigate-backlink', entry)"
               >
-                {{ tag.name }}
+                <span class="backlink-title">{{ entry.noteTitle }}</span>
+                <span class="backlink-context">{{ entry.context }}</span>
               </button>
-            </div>
-          </template>
-          <p v-else class="empty-hint">无标签</p>
-        </div>
-      </section>
+            </template>
+            <p v-else class="empty-hint">无反链</p>
+          </div>
+
+          <div
+            v-else-if="section === 'tags' && openSections.has(section)"
+            class="section-body section-body--tags"
+          >
+            <template v-if="tags.length > 0">
+              <div class="tag-cloud">
+                <button
+                  v-for="tag in styledTags"
+                  :key="tag.name"
+                  class="tag-chip"
+                  :style="{ fontSize: tag.fontSize }"
+                  @click="emit('select-tag', tag.name)"
+                >
+                  {{ tag.name }}
+                </button>
+              </div>
+            </template>
+            <p v-else class="empty-hint">无标签</p>
+          </div>
+        </section>
+
+        <div v-if="index < orderedSections.length - 1" class="section-rule" />
+      </template>
     </div>
   </aside>
 </template>
@@ -253,8 +230,13 @@ export const HeadingTreeNode = defineComponent({
  * @see spec/frontend/components.md — RightWing 组件规格
  */
 // @ts-nocheck — agent-generated component, type quirks to be resolved in polish phase
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import type { BacklinkEntry, TagEntry } from '@/types';
+import type {
+  ThemeReferenceSection,
+  ThemeRightWingMode,
+  ThemeRightWingPolicy,
+} from '@/types/theme-pack';
 
 // ============================================================
 // Props
@@ -266,9 +248,17 @@ const props = withDefaults(
     tags: TagEntry[];
     activeHeadingId: string | null;
     collapsed?: boolean;
+    mode?: ThemeRightWingMode;
+    policy?: ThemeRightWingPolicy;
+    sections?: ThemeReferenceSection[];
+    defaultOpenSections?: ThemeReferenceSection[];
   }>(),
   {
     collapsed: false,
+    mode: 'balanced',
+    policy: 'outline',
+    sections: () => ['outline', 'backlinks', 'tags'],
+    defaultOpenSections: () => ['outline', 'tags'],
   },
 );
 
@@ -285,15 +275,53 @@ const emit = defineEmits<{
 // ============================================================
 // Section accordion — independent toggle
 // ============================================================
-type SectionKey = 'outline' | 'backlinks' | 'tags';
+type SectionKey = ThemeReferenceSection;
 
-const openSections = ref<Set<SectionKey>>(new Set(['outline', 'tags']));
+const orderedSections = computed<SectionKey[]>(() => {
+  const seen = new Set<SectionKey>();
+  const result: SectionKey[] = [];
+  for (const section of props.sections) {
+    if (!seen.has(section)) {
+      seen.add(section);
+      result.push(section);
+    }
+  }
+  return result.length > 0 ? result : ['outline', 'backlinks', 'tags'];
+});
+
+const openSections = ref<Set<SectionKey>>(new Set(props.defaultOpenSections));
+
+watch(
+  () => props.defaultOpenSections,
+  (sections) => {
+    openSections.value = new Set(sections);
+  },
+);
+
+watch(
+  () => props.policy,
+  (policy) => {
+    panelWidth.value = widthForPolicy(policy);
+  },
+);
 
 function toggleSection(key: SectionKey) {
   const next = new Set(openSections.value);
   if (next.has(key)) next.delete(key);
   else next.add(key);
   openSections.value = next;
+}
+
+function sectionLabel(section: SectionKey): string {
+  if (section === 'backlinks') return '反链';
+  if (section === 'tags') return '标签';
+  return '大纲';
+}
+
+function sectionCount(section: SectionKey): number {
+  if (section === 'backlinks') return props.backlinks.length;
+  if (section === 'tags') return props.tags.length;
+  return props.headings.length;
 }
 
 // ============================================================
@@ -308,7 +336,7 @@ function handleDoubleClick() {
 // ============================================================
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 400;
-const panelWidth = ref(240);
+const panelWidth = ref(widthForPolicy(props.policy));
 
 let resizeActive = false;
 
@@ -336,6 +364,12 @@ function handleResizeStart(e: MouseEvent) {
   document.body.style.userSelect = 'none';
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);
+}
+
+function widthForPolicy(policy: ThemeRightWingPolicy): number {
+  if (policy === 'research') return 360;
+  if (policy === 'production') return 320;
+  return 240;
 }
 
 // ============================================================
@@ -393,6 +427,15 @@ function onNavigateHeading(headingId: string, lineNumber: number) {
   overflow: hidden;
 }
 
+.right-wing[data-policy='research'] {
+  background: color-mix(in oklch, var(--paper-right) 86%, var(--accent-soft));
+}
+
+.right-wing[data-policy='production'] {
+  border-left: var(--border-thin) solid var(--rule-strong);
+  background: var(--paper-raised);
+}
+
 /* ============================================================
  * Grab Handle (left edge)
  * ============================================================ */
@@ -442,6 +485,25 @@ function onNavigateHeading(headingId: string, lineNumber: number) {
   scrollbar-width: thin;
 }
 
+.wing-content[data-mode='research'] {
+  padding-top: var(--space-8);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--accent-soft) 36%, transparent),
+      transparent 42%
+    ),
+    transparent;
+}
+
+.wing-content[data-mode='quiet'] {
+  opacity: 0.78;
+}
+
+.wing-content[data-mode='rail'] {
+  padding-block: var(--space-8);
+}
+
 /* ============================================================
  * Sections
  * ============================================================ */
@@ -478,6 +540,20 @@ function onNavigateHeading(headingId: string, lineNumber: number) {
 
 .section-header:active {
   background: var(--surface-active);
+}
+
+.wing-content[data-mode='rail'] .section-header {
+  padding-block: var(--space-6);
+}
+
+.wing-section[data-section='backlinks'] .section-header,
+.wing-section[data-section='tags'] .section-header {
+  min-height: 34px;
+}
+
+.wing-content[data-mode='research'] .wing-section:first-child .section-header {
+  border-block: var(--border-thin) solid var(--rule);
+  background: var(--paper-raised);
 }
 
 .section-icon {

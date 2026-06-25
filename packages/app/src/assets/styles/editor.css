@@ -309,8 +309,7 @@
   padding-left: var(--space-16);
 }
 
-.cm-live-block[data-block-type='tableRow']:not([data-block-position='first'])
-  .ml-table-cell {
+.cm-live-block[data-block-type='tableRow']:not([data-block-position='first']) .ml-table-cell {
   border-top-width: 0;
 }
 

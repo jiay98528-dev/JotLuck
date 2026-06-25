@@ -11,7 +11,7 @@
 
           <!-- Step Indicator -->
           <div class="welcome-steps" role="tablist" aria-label="引导进度">
-            <template v-for="i in 5" :key="i">
+            <template v-for="i in TOTAL_STEPS" :key="i">
               <span
                 class="welcome-step-dot"
                 :class="{ active: currentStep >= i }"
@@ -19,7 +19,11 @@
                 :aria-selected="currentStep === i"
                 :aria-label="`第 ${i} 步`"
               />
-              <span v-if="i < 5" class="welcome-step-line" :class="{ active: currentStep > i }" />
+              <span
+                v-if="i < TOTAL_STEPS"
+                class="welcome-step-line"
+                :class="{ active: currentStep > i }"
+              />
             </template>
           </div>
 
@@ -48,6 +52,21 @@
 
               <!-- Step 3 -->
               <div v-else-if="currentStep === 3" class="welcome-step-body">
+                <h2 class="welcome-step-title">先选一张写作桌</h2>
+                <p class="welcome-step-text">
+                  首发内置 5 个官方主题：2 个视觉收藏主题，3 个工作流主题。<br />
+                  点击主题先看预览、适用场景和性能等级，再决定是否启用。
+                </p>
+                <ThemeGallery
+                  :items="welcomeThemeItems"
+                  variant="welcome"
+                  :show-role="true"
+                  @preview="openThemePreview"
+                />
+              </div>
+
+              <!-- Step 4 -->
+              <div v-else-if="currentStep === 4" class="welcome-step-body">
                 <h2 class="welcome-step-title">MarkLuck 能为你做什么？</h2>
                 <p class="welcome-step-text">
                   Markdown 即时渲染，所见即所得。<br />
@@ -56,8 +75,8 @@
                 </p>
               </div>
 
-              <!-- Step 4 -->
-              <div v-else-if="currentStep === 4" class="welcome-step-body">
+              <!-- Step 5 -->
+              <div v-else-if="currentStep === 5" class="welcome-step-body">
                 <h2 class="welcome-step-title">把我设为默认编辑器？</h2>
                 <p class="welcome-step-text">
                   安装器会把 MarkLuck 注册为 .md/.markdown/.mdx 的可选打开程序。<br />
@@ -74,8 +93,8 @@
                 </p>
               </div>
 
-              <!-- Step 5 -->
-              <div v-else-if="currentStep === 5" class="welcome-step-body">
+              <!-- Step 6 -->
+              <div v-else-if="currentStep === 6" class="welcome-step-body">
                 <h2 class="welcome-step-title">需要我保持最新版本么？</h2>
 
                 <!-- Auto-check toggle -->
@@ -125,23 +144,36 @@
 
           <!-- Bottom Action Bar -->
           <div class="welcome-footer">
-            <button v-if="currentStep < 5" class="welcome-skip-link" @click="skip">跳过</button>
+            <button v-if="currentStep < TOTAL_STEPS" class="welcome-skip-link" @click="skip">
+              跳过
+            </button>
             <span v-else class="welcome-footer-spacer" />
 
             <Button variant="default" size="md" class="welcome-next-btn" @click="nextStep">
-              {{ currentStep < 5 ? '下一步' : '完成设置' }}
+              {{ currentStep < TOTAL_STEPS ? '下一步' : '完成设置' }}
             </Button>
           </div>
         </div>
       </div>
     </Transition>
   </Teleport>
+
+  <ThemePreviewDrawer
+    :visible="themePreviewVisible"
+    :item="selectedTheme"
+    @close="themePreviewVisible = false"
+    @apply="applyThemeFromPreview"
+    @restore-default="resetThemeFromPreview"
+  />
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { open as openExternal } from '@tauri-apps/plugin-shell';
 import Button from '@/components/common/Button.vue';
+import ThemeGallery from '@/components/theme/ThemeGallery.vue';
+import ThemePreviewDrawer from '@/components/theme/ThemePreviewDrawer.vue';
+import { useThemeStore, type ThemeViewModel } from '@/stores/theme';
 
 // ── Props / Emits ──────────────────────────────────────────
 defineProps<{ visible: boolean }>();
@@ -152,14 +184,22 @@ const WELCOME_KEY = 'markluck:welcome:completed';
 const AUTO_CHECK_KEY = 'markluck:version:autoCheck';
 const AUTO_INSTALL_KEY = 'markluck:version:autoInstall';
 const DEFAULT_EDITOR_PROMPT_KEY = 'markluck:welcome:defaultEditorPrompted';
+const TOTAL_STEPS = 6;
 
 const currentStep = ref(1);
 const autoCheckEnabled = ref(localStorage.getItem(AUTO_CHECK_KEY) === 'true');
 const autoInstallEnabled = ref(localStorage.getItem(AUTO_INSTALL_KEY) === 'true');
 const defaultEditorNotice = ref('');
+const theme = useThemeStore();
+const themePreviewVisible = ref(false);
+const selectedTheme = ref<ThemeViewModel | null>(null);
+const welcomeThemeItems = computed(() =>
+  theme.themeViewModels.filter((item) => item.officialProfile),
+);
 
 // ── Lifecycle ──────────────────────────────────────────────
 onMounted(() => {
+  theme.init();
   if (localStorage.getItem(WELCOME_KEY) === '1') {
     emit('update:visible', false);
   }
@@ -167,11 +207,28 @@ onMounted(() => {
 
 // ── Actions ────────────────────────────────────────────────
 function nextStep(): void {
-  if (currentStep.value < 5) {
+  if (currentStep.value < TOTAL_STEPS) {
     currentStep.value++;
     return;
   }
   complete();
+}
+
+function openThemePreview(item: ThemeViewModel): void {
+  selectedTheme.value = item;
+  themePreviewVisible.value = true;
+}
+
+function applyThemeFromPreview(themeId: string): void {
+  theme.setTheme(themeId);
+  selectedTheme.value =
+    theme.themeViewModels.find((item) => item.id === themeId) ?? selectedTheme.value;
+}
+
+function resetThemeFromPreview(): void {
+  theme.resetTheme();
+  selectedTheme.value =
+    theme.themeViewModels.find((item) => item.id === theme.activeThemeId) ?? selectedTheme.value;
 }
 
 function skip(): void {
@@ -249,7 +306,7 @@ async function onSetDefaultEditor(): Promise<void> {
 
 /* ===== Card ===== */
 .welcome-card {
-  width: 480px;
+  width: min(760px, calc(100vw - var(--space-32)));
   max-width: calc(100vw - var(--space-32));
   max-height: 85vh;
   background: var(--paper-raised);
@@ -335,7 +392,7 @@ async function onSetDefaultEditor(): Promise<void> {
 /* ===== Content Area ===== */
 .welcome-content {
   flex: 1;
-  min-height: 200px;
+  min-height: 280px;
   padding: 0 var(--space-24);
   overflow-y: auto;
 }
@@ -387,6 +444,15 @@ async function onSetDefaultEditor(): Promise<void> {
   margin: 0;
   line-height: var(--lh-body);
   max-width: 400px;
+}
+
+.welcome-step-body :deep(.theme-gallery) {
+  width: 100%;
+  margin-top: var(--space-8);
+}
+
+.welcome-step-body :deep(.theme-card) {
+  min-height: 168px;
 }
 
 /* ===== Step 4: Action Buttons ===== */

@@ -179,6 +179,8 @@ export function validateManifest(value: unknown): ThemePackManifest {
 export function validateThemeCss(css: string): void {
   const issues: ThemeValidationIssue[] = [];
   const lower = css.toLowerCase();
+  // This validator is only for imported css-v1 packs. Official deep themes
+  // use ThemeRegistry + ThemeChromeState and do not pass through this boundary.
   const forbidden = [
     ['css-import', /@import\b/i, '主题 CSS 不允许使用 @import。'],
     ['remote-url', /url\(\s*['"]?(?:https?:|\/\/)/i, '主题资源不允许远程 URL。'],
@@ -205,6 +207,24 @@ export function validateThemeCss(css: string): void {
     /(?:\.topbar|\.left-wing|\.right-wing|\.modal-card|\.statusbar|\.format-toolbar|\.wing-settings-btn|\.topbar-btn|\[role=['"]?(?:dialog|switch|button)['"]?\])[^{}]*\{[^}]*\b(?:display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0|pointer-events\s*:\s*none)\b/ims;
   if (criticalHidePattern.test(css)) {
     issues.push({ code: 'critical-ui-hidden', message: '主题不能隐藏或禁用核心控件。' });
+  }
+
+  const deepControlVariablePattern =
+    /--(?:wing-[\w-]+|drawer-width|topbar-height|statusbar-height|editor-max-width|editor-top-pad|theme-control-density|theme-chrome[\w-]*|theme-effect[\w-]*|theme-performance[\w-]*|theme-workflow[\w-]*|theme-action[\w-]*)\s*:/i;
+  if (deepControlVariablePattern.test(css)) {
+    issues.push({
+      code: 'deep-control-variable',
+      message: '本地主题不能设置布局、工具栏高度或官方深度主题控制变量。',
+    });
+  }
+
+  const officialSelectorPattern =
+    /\[(?:data-theme-role|data-effect-profile|data-theme-performance|data-chrome-[\w-]+|data-workspace-intent|data-default-view-mode|data-topbar-layout|data-left-wing-layout|data-editor-control-layout|data-status-layout|data-right-wing-policy)[^\]]*\]/i;
+  if (officialSelectorPattern.test(css)) {
+    issues.push({
+      code: 'official-selector',
+      message: '本地主题不能使用官方深度主题选择器。',
+    });
   }
 
   if (lower.includes('position: fixed') && lower.includes('z-index: 214748')) {
