@@ -167,6 +167,8 @@ export interface InstalledThemePack {
   previewImages?: string[];
   assetMap?: Record<string, string>;
   officialProfile?: OfficialThemeProfile;
+  /** v2: 关联的声明式主题模块（仅 officialTheme 填充） */
+  module?: OfficialThemeModule;
   readonly?: boolean;
 }
 
@@ -199,3 +201,50 @@ export const THEME_CAPABILITIES: ThemeCapability[] = [
   'markdown',
   'codemirror',
 ];
+
+// ── v2 Declarative Theme Module Types ──────────────────────
+
+/** 主题作者声明的 Shell 装配配方 — 直接声明布局意图，无需运行时推导 */
+export interface ShellRecipe {
+  layoutPreset: ThemeLayoutPreset;
+  workspaceIntent: ThemeWorkspaceIntent;
+  defaultViewMode: ThemeViewMode;
+  topBar: { variant: ThemeTopBarVariant; layout: ThemeTopBarLayout };
+  leftWing: { mode: ThemeLeftWingMode; layout: ThemeLeftWingLayout };
+  editorControl: { layout: ThemeEditorControlLayout; density: ThemeToolbarDensity };
+  statusBar: { layout: ThemeStatusLayout; density: ThemeToolbarDensity };
+  rightWing: {
+    mode: ThemeRightWingMode;
+    policy: ThemeRightWingPolicy;
+    sections: ThemeReferenceSection[];
+    defaultOpenSections: ThemeReferenceSection[];
+  };
+  readingWidth: OfficialThemeUiProfile['readingWidth'];
+  drawerEmphasis: OfficialThemeUiProfile['drawerEmphasis'];
+  motionIntensity: OfficialThemeUiProfile['motionIntensity'];
+  actionPlacements: ThemeActionPlacements;
+}
+
+/** 每个主题声明 light + dark 两套 OKLCH CSS 自定义属性覆盖 */
+export interface ThemeTokenSet {
+  light: Record<string, string>;
+  dark: Record<string, string>;
+}
+
+export interface ThemeAssetMap {
+  background?: string;
+  crest?: string;
+  [key: string]: string | undefined;
+}
+
+/**
+ * 官方深度主题模块 — 主题作者使用的声明式接口。
+ * 一个模块声明了 meta（品牌信息）、recipe（布局装配）、tokens（色值）和可选 CSS/资产。
+ */
+export interface OfficialThemeModule {
+  meta: OfficialThemeProfile;
+  recipe: ShellRecipe;
+  tokens: ThemeTokenSet;
+  css?: string;
+  assets?: ThemeAssetMap;
+}
