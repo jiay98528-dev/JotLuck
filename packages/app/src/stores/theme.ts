@@ -12,14 +12,9 @@ import type {
   ColorScheme,
   InstalledThemePack,
   OfficialThemeProfile,
-  OfficialThemeUiProfile,
-  ThemeActionPlacements,
   ThemeChromeState,
   ThemeLayoutPreset,
   ThemePerformanceBadge,
-  ThemeReferenceSection,
-  ThemeTopBarVariant,
-  ThemeWorkspaceIntent,
 } from '@/types/theme-pack';
 import { installThemePack } from '@/services/ThemePackInstaller';
 import {
@@ -97,196 +92,37 @@ function cloneChromeState(state: ThemeChromeState): ThemeChromeState {
 }
 
 function chromeStateFromPack(pack: InstalledThemePack): ThemeChromeState {
-  if (!pack.officialProfile) return cloneChromeState(SAFE_LOCAL_CHROME_STATE);
-  return chromeStateFromOfficialProfile(pack.manifest.layoutPreset, pack.officialProfile);
-}
-
-function chromeStateFromOfficialProfile(
-  layoutPreset: ThemeLayoutPreset,
-  profile: OfficialThemeProfile,
-): ThemeChromeState {
-  const ui = profile.uiProfile;
-  const topBarVariant = topBarVariantFor(layoutPreset);
-  const rightWingSections = rightWingSectionsFor(ui.sidebarMode);
-  const workspaceIntent = workspaceIntentFor(layoutPreset);
-  return {
-    official: true,
-    layoutPreset,
-    role: profile.role,
-    topBarVariant,
-    leftWingMode: leftWingModeFor(ui.sidebarMode),
-    rightWingMode: rightWingModeFor(ui.sidebarMode),
-    toolbarDensity: ui.toolbarDensity,
-    statusDensity: ui.toolbarDensity,
-    drawerEmphasis: ui.drawerEmphasis,
-    readingWidth: ui.readingWidth,
-    effectProfile: profile.effectProfile,
-    motionIntensity: ui.motionIntensity,
-    rightWingSections,
-    defaultOpenSections: defaultOpenSectionsFor(ui.sidebarMode, rightWingSections),
-    workspaceIntent,
-    defaultViewMode: defaultViewModeFor(workspaceIntent),
-    topBarLayout: topBarLayoutFor(workspaceIntent),
-    leftWingLayout: leftWingLayoutFor(workspaceIntent),
-    editorControlLayout: editorControlLayoutFor(workspaceIntent),
-    statusLayout: statusLayoutFor(workspaceIntent),
-    rightWingPolicy: rightWingPolicyFor(workspaceIntent),
-    actionPlacements: actionPlacementsFor(workspaceIntent),
-  };
-}
-
-function workspaceIntentFor(layoutPreset: ThemeLayoutPreset): ThemeWorkspaceIntent {
-  if (layoutPreset === 'focus') return 'writing';
-  if (layoutPreset === 'archive') return 'archive';
-  if (layoutPreset === 'reader') return 'reader';
-  if (layoutPreset === 'studio') return 'studio';
-  return 'baseline';
-}
-
-function defaultViewModeFor(intent: ThemeWorkspaceIntent): ThemeChromeState['defaultViewMode'] {
-  if (intent === 'archive' || intent === 'studio') return 'split';
-  if (intent === 'reader') return 'read';
-  return 'live';
-}
-
-function topBarLayoutFor(intent: ThemeWorkspaceIntent): ThemeChromeState['topBarLayout'] {
-  if (intent === 'writing') return 'title-first';
-  if (intent === 'archive') return 'search-first';
-  if (intent === 'reader') return 'reader';
-  if (intent === 'studio') return 'compact';
-  return 'classic';
-}
-
-function leftWingLayoutFor(intent: ThemeWorkspaceIntent): ThemeChromeState['leftWingLayout'] {
-  if (intent === 'writing' || intent === 'reader') return 'quiet-bookmarks';
-  if (intent === 'archive') return 'research-stack';
-  if (intent === 'studio') return 'studio-rail';
-  return 'bookmarks';
-}
-
-function editorControlLayoutFor(
-  intent: ThemeWorkspaceIntent,
-): ThemeChromeState['editorControlLayout'] {
-  if (intent === 'writing') return 'writing-strip';
-  if (intent === 'reader') return 'hidden';
-  if (intent === 'studio') return 'studio-rail';
-  return 'toolbar';
-}
-
-function statusLayoutFor(intent: ThemeWorkspaceIntent): ThemeChromeState['statusLayout'] {
-  if (intent === 'writing') return 'quiet';
-  if (intent === 'reader') return 'save-only';
-  if (intent === 'studio') return 'compact';
-  return 'full';
-}
-
-function rightWingPolicyFor(intent: ThemeWorkspaceIntent): ThemeChromeState['rightWingPolicy'] {
-  if (intent === 'writing') return 'collapsed';
-  if (intent === 'archive') return 'research';
-  if (intent === 'reader') return 'collapsed';
-  if (intent === 'studio') return 'production';
-  return 'outline';
-}
-
-function actionPlacementsFor(intent: ThemeWorkspaceIntent): ThemeActionPlacements {
-  if (intent === 'writing') {
+  // v2: 优先从声明式主题模块的 recipe 直接读取
+  if (pack.module) {
+    const recipe = pack.module.recipe;
+    const profile = pack.module.meta;
     return {
-      'new-note': 'left-wing',
-      'file-drawer': 'topbar-left',
-      search: 'topbar-right',
-      template: 'editor-control',
-      export: 'topbar-right',
-      share: 'hidden',
-      settings: 'left-wing',
-      'theme-toggle': 'topbar-right',
-      'view-toggle': 'editor-control',
+      official: true,
+      layoutPreset: recipe.layoutPreset,
+      role: profile.role,
+      topBarVariant: recipe.topBar.variant,
+      leftWingMode: recipe.leftWing.mode,
+      rightWingMode: recipe.rightWing.mode,
+      toolbarDensity: recipe.editorControl.density,
+      statusDensity: recipe.statusBar.density,
+      drawerEmphasis: recipe.drawerEmphasis,
+      readingWidth: recipe.readingWidth,
+      effectProfile: profile.effectProfile,
+      motionIntensity: recipe.motionIntensity,
+      rightWingSections: [...recipe.rightWing.sections],
+      defaultOpenSections: [...recipe.rightWing.defaultOpenSections],
+      workspaceIntent: recipe.workspaceIntent,
+      defaultViewMode: recipe.defaultViewMode,
+      topBarLayout: recipe.topBar.layout,
+      leftWingLayout: recipe.leftWing.layout,
+      editorControlLayout: recipe.editorControl.layout,
+      statusLayout: recipe.statusBar.layout,
+      rightWingPolicy: recipe.rightWing.policy,
+      actionPlacements: { ...recipe.actionPlacements },
     };
   }
-  if (intent === 'archive') {
-    return {
-      'new-note': 'left-wing',
-      'file-drawer': 'topbar-left',
-      search: 'topbar-center',
-      template: 'hidden',
-      export: 'topbar-right',
-      share: 'topbar-right',
-      settings: 'left-wing',
-      'theme-toggle': 'topbar-right',
-      'view-toggle': 'editor-control',
-    };
-  }
-  if (intent === 'reader') {
-    return {
-      'new-note': 'hidden',
-      'file-drawer': 'topbar-left',
-      search: 'topbar-right',
-      template: 'hidden',
-      export: 'topbar-right',
-      share: 'hidden',
-      settings: 'topbar-right',
-      'theme-toggle': 'hidden',
-      'view-toggle': 'reader-bar',
-    };
-  }
-  if (intent === 'studio') {
-    return {
-      'new-note': 'studio-rail',
-      'file-drawer': 'studio-rail',
-      search: 'topbar-right',
-      template: 'studio-rail',
-      export: 'studio-rail',
-      share: 'studio-rail',
-      settings: 'left-wing',
-      'theme-toggle': 'topbar-right',
-      'view-toggle': 'studio-rail',
-    };
-  }
-  return cloneChromeState(SAFE_LOCAL_CHROME_STATE).actionPlacements;
-}
-
-function topBarVariantFor(layoutPreset: ThemeLayoutPreset): ThemeTopBarVariant {
-  if (layoutPreset === 'focus') return 'writing';
-  if (layoutPreset === 'archive') return 'archive';
-  if (layoutPreset === 'reader') return 'reader';
-  if (layoutPreset === 'studio') return 'studio';
-  return 'balanced';
-}
-
-function leftWingModeFor(
-  mode: OfficialThemeUiProfile['sidebarMode'],
-): ThemeChromeState['leftWingMode'] {
-  if (mode === 'research') return 'research';
-  if (mode === 'quiet') return 'quiet';
-  if (mode === 'rail') return 'rail';
-  return 'default';
-}
-
-function rightWingModeFor(
-  mode: OfficialThemeUiProfile['sidebarMode'],
-): ThemeChromeState['rightWingMode'] {
-  if (mode === 'research') return 'research';
-  if (mode === 'quiet') return 'quiet';
-  if (mode === 'rail') return 'rail';
-  return 'balanced';
-}
-
-function rightWingSectionsFor(
-  mode: OfficialThemeUiProfile['sidebarMode'],
-): ThemeReferenceSection[] {
-  if (mode === 'research') return ['backlinks', 'tags', 'outline'];
-  if (mode === 'quiet') return ['outline', 'backlinks', 'tags'];
-  if (mode === 'rail') return ['outline', 'tags', 'backlinks'];
-  return ['outline', 'backlinks', 'tags'];
-}
-
-function defaultOpenSectionsFor(
-  mode: OfficialThemeUiProfile['sidebarMode'],
-  sections: ThemeReferenceSection[],
-): ThemeReferenceSection[] {
-  if (mode === 'research') return ['backlinks', 'tags'];
-  if (mode === 'quiet') return ['outline'];
-  if (mode === 'rail') return ['outline', 'backlinks', 'tags'];
-  return sections.filter((section) => section !== 'backlinks');
+  // v1 fallback: 导入/本地主题（无 module）
+  return cloneChromeState(SAFE_LOCAL_CHROME_STATE);
 }
 
 export const useThemeStore = defineStore('theme', () => {
