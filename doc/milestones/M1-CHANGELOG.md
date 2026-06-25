@@ -1,8 +1,8 @@
 # M1 声明式主题模块 — 变更记录
 
 > 日期: 2026-06-25
-> Commits: `9e8f6f2`, `3bd55bd`, `3c16e05`
-> 变更范围: +789 / -510 行，22 文件
+> Commits: `9e8f6f2`, `3bd55bd`, `3c16e05`, `f1e45ee`, `9ad0018`
+> 变更范围: +836 / -577 行，26 文件
 
 ## 变更概述
 
@@ -54,6 +54,18 @@
   `rightWingModeFor`, `rightWingSectionsFor`, `defaultOpenSectionsFor`
 - 替换为 `chromeStateFromPack()`：优先读取 `pack.module.recipe`，否则回退到 `SAFE_LOCAL_CHROME_STATE`
 - `ThemeChromeState` 从"运行时计算值"变为"模块声明透传值"
+
+### `f1e45ee` — M0/M1 文档
+- 提交 M0-ACCEPTANCE.md, M0-CHANGELOG.md, M1-ACCEPTANCE.md, M1-CHANGELOG.md
+
+### `9ad0018` — 审计修复 (8 files, +47 / -67)
+- `OfficialThemeModule` 新增 `id`, `name`, `tags`, `capabilities` 字段——模块成为唯一真源
+- 删除 `registry.ts` 中按 role 索引的 `MODULE_MAP`（3 个 role 对应 5 个主题，必然覆盖）
+- 删除 `getThemeModule(role)`——基于 role 的查找从根本上不可靠
+- `getThemeModuleById()` 改为遍历 `ALL_MODULES` 按 `mod.id` 查找
+- `ThemeRegistry.ts` 中删除 `moduleNameFromId()`, `moduleTagsFromId()`
+- `moduleToBuiltInPack()` 不再需要外部传入 id；所有元数据从模块自身读取
+- `buildAllBuiltInPacks()` 不再硬编码 `idOrder`；直接迭代 `getAllThemeModules()`
 
 ## 关键架构变化
 
