@@ -6,8 +6,12 @@
  * @see migration-map.md §4
  */
 import type { IFileSystemService, SearchIndex, DocumentEntry, BacklinkEntry } from '@/types';
+import { isSupportedNoteFile, stripSupportedNoteExtension } from '@/utils/note-files';
 import { SearchEngine } from './SearchEngine';
 import { parseFrontmatter, extractTitle } from './YAMLParser';
+
+const MAX_INDEXED_NOTE_FILES = 2000;
+const INDEX_LIMIT_ERROR = 'MARKLUCK_INDEX_LIMIT_EXCEEDED';
 
 export class IndexService {
   private fs: IFileSystemService;
@@ -17,10 +21,92 @@ export class IndexService {
   private recentNotesList: Array<{ path: string; title: string; lastOpenedAt: number }> = [];
   private tagIndex: Map<string, string[]> = new Map();
   private allDocuments: Record<string, DocumentEntry> = {};
+  private indexedNoteCount = 0;
+  private populateRecent: boolean;
 
-  constructor(fs: IFileSystemService) {
+  private normalizePath(path: string): string {
+    const normalized = path.replace(/\\/g, '/');
+    if (normalized === '/') return '/';
+    return normalized.endsWith('/') ? normalized.slice(0, -1) : normalized;
+  }
+
+  private clearIndexesForPaths(pathsToRemove: string[]): void {
+    if (pathsToRemove.length === 0) return;
+
+    const removeSet = new Set(pathsToRemove.map((p) => this.normalizePath(p)));
+    const searchIndexPaths = new Set<string>(removeSet);
+
+    for (const path of Object.keys(this.allDocuments)) {
+      if (removeSet.has(this.normalizePath(path))) {
+        delete this.allDocuments[path];
+        searchIndexPaths.add(path);
+      }
+    }
+
+    for (const [tag, paths] of this.tagIndex) {
+      const next = paths.filter((path) => !removeSet.has(this.normalizePath(path)));
+      if (next.length === 0) {
+        this.tagIndex.delete(tag);
+      } else {
+        this.tagIndex.set(tag, next);
+      }
+    }
+
+    for (const [path, outgoing] of this.wikiOutgoing) {
+      if (removeSet.has(this.normalizePath(path))) {
+        this.wikiOutgoing.delete(path);
+      } else {
+        const next = outgoing.filter((target) => !removeSet.has(this.normalizePath(target)));
+        this.wikiOutgoing.set(path, next);
+      }
+    }
+
+    for (const [target, sources] of this.wikiIncoming) {
+      if (removeSet.has(this.normalizePath(target))) {
+        this.wikiIncoming.delete(target);
+      } else {
+        const next = sources.filter((source) => !removeSet.has(this.normalizePath(source)));
+        if (next.length === 0) {
+          this.wikiIncoming.delete(target);
+        } else {
+          this.wikiIncoming.set(target, next);
+        }
+      }
+    }
+
+    this.recentNotesList = this.recentNotesList.filter(
+      (note) => !removeSet.has(this.normalizePath(note.path)),
+    );
+
+    for (const removed of searchIndexPaths) {
+      this.engine.removeDocument(removed);
+    }
+  }
+
+  synchronizeFromFileTree(filePaths: string[]): void {
+    const existing = new Set(filePaths.map((p) => this.normalizePath(p)));
+    const knownPaths = new Set<string>();
+
+    Object.keys(this.allDocuments).forEach((path) => knownPaths.add(path));
+    this.recentNotesList.forEach((note) => knownPaths.add(note.path));
+    for (const paths of this.tagIndex.values()) {
+      paths.forEach((path) => knownPaths.add(path));
+    }
+    for (const path of this.wikiOutgoing.keys()) {
+      knownPaths.add(path);
+    }
+    for (const sources of this.wikiIncoming.values()) {
+      sources.forEach((path) => knownPaths.add(path));
+    }
+
+    const stale = [...knownPaths].filter((path) => !existing.has(this.normalizePath(path)));
+    this.clearIndexesForPaths(stale);
+  }
+
+  constructor(fs: IFileSystemService, options: { populateRecent?: boolean } = {}) {
     this.fs = fs;
     this.engine = new SearchEngine();
+    this.populateRecent = options.populateRecent ?? true;
   }
 
   getEngine(): SearchEngine {
@@ -33,6 +119,7 @@ export class IndexService {
     this.wikiIncoming.clear();
     this.tagIndex.clear();
     this.recentNotesList = [];
+    this.indexedNoteCount = 0;
 
     const documents: Record<string, DocumentEntry> = {};
     await this.scanDirectory('/');
@@ -50,14 +137,16 @@ export class IndexService {
       }
     }
 
-    // Populate initial recentNotes from scanned documents
-    this.recentNotesList = Object.entries(this.allDocuments)
-      .map(([path, entry]) => ({
-        path,
-        title: entry.title,
-        lastOpenedAt: entry.created ?? Date.now(),
-      }))
-      .sort((a, b) => b.lastOpenedAt - a.lastOpenedAt);
+    // Populate initial recentNotes from scanned documents only for real notebook sessions.
+    this.recentNotesList = this.populateRecent
+      ? Object.entries(this.allDocuments)
+          .map(([path, entry]) => ({
+            path,
+            title: entry.title,
+            lastOpenedAt: entry.created ?? Date.now(),
+          }))
+          .sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)
+      : [];
 
     this.engine.buildIndex(documents);
     // Load full file content into the search engine for content-based matching
@@ -79,11 +168,18 @@ export class IndexService {
       for (const entry of entries) {
         if (entry.isDirectory) {
           await this.scanDirectory(entry.path);
-        } else if (entry.name.endsWith('.md')) {
+        } else if (isSupportedNoteFile(entry.name)) {
+          if (this.indexedNoteCount >= MAX_INDEXED_NOTE_FILES) {
+            throw new Error(
+              `${INDEX_LIMIT_ERROR}: 当前文件夹包含超过 ${MAX_INDEXED_NOTE_FILES} 个笔记文件，请选择更精确的笔记本文件夹。`,
+            );
+          }
           await this.indexFile(entry.path);
+          this.indexedNoteCount++;
         }
       }
     } catch (e) {
+      if (String(e).includes(INDEX_LIMIT_ERROR)) throw e;
       // eslint-disable-next-line no-console
       console.error('[IndexService] scanDirectory 失败:', e);
     }
@@ -94,7 +190,9 @@ export class IndexService {
       const content = await this.fs.readFile(path);
       const fm = parseFrontmatter(content);
       const title =
-        fm.data.title || extractTitle(content) || path.split('/').pop()?.replace(/\.md$/, '') || '';
+        fm.data.title ||
+        extractTitle(content) ||
+        stripSupportedNoteExtension(path.split('/').pop() ?? '');
 
       // Frontmatter tags
       const fmTags: string[] = Array.isArray(fm.data.tags)
@@ -167,7 +265,7 @@ export class IndexService {
     this.recentNotesList = this.recentNotesList.filter((n) => n.path !== path);
     this.recentNotesList.unshift({
       path,
-      title: entry?.title ?? path.split('/').pop()?.replace(/\.md$/, '') ?? '',
+      title: entry?.title ?? stripSupportedNoteExtension(path.split('/').pop() ?? ''),
       lastOpenedAt: Date.now(),
     });
     this.recentNotesList.sort((a, b) => b.lastOpenedAt - a.lastOpenedAt);
@@ -177,25 +275,7 @@ export class IndexService {
   }
 
   removeDocument(path: string): void {
-    // Clean up tag index
-    for (const [tag, paths] of this.tagIndex) {
-      const idx = paths.indexOf(path);
-      if (idx >= 0) {
-        paths.splice(idx, 1);
-        if (paths.length === 0) this.tagIndex.delete(tag);
-      }
-    }
-    // Clean up wiki-link maps
-    this.wikiOutgoing.delete(path);
-    for (const [, paths] of this.wikiIncoming) {
-      const idx = paths.indexOf(path);
-      if (idx >= 0) paths.splice(idx, 1);
-    }
-
-    delete this.allDocuments[path];
-    // 从 recentNotesList 中移除已删除的笔记
-    this.recentNotesList = this.recentNotesList.filter((n) => n.path !== path);
-    this.engine.removeDocument(path);
+    this.clearIndexesForPaths([path]);
   }
 
   /** 获取所有已索引文档的标题列表 (用于结构化补全) */
@@ -225,15 +305,16 @@ export class IndexService {
   }
 
   getBacklinks(notePath: string): BacklinkEntry[] {
-    const noteName = notePath.split('/').pop()?.replace(/\.md$/, '') ?? '';
+    const noteName = stripSupportedNoteExtension(notePath.split('/').pop() ?? '');
     const incoming = this.wikiIncoming.get(noteName) ?? [];
-    const alsoByName = this.wikiIncoming.get(notePath.replace(/\.md$/, '')) ?? [];
+    const alsoByName = this.wikiIncoming.get(stripSupportedNoteExtension(notePath)) ?? [];
     const allSources = [...new Set([...incoming, ...alsoByName])];
 
     return allSources.map((source) => ({
       notePath: source,
       noteTitle:
-        this.allDocuments[source]?.title ?? source.split('/').pop()?.replace(/\.md$/, '') ?? '',
+        this.allDocuments[source]?.title ??
+        stripSupportedNoteExtension(source.split('/').pop() ?? ''),
       context: '',
       lineNumber: 0,
     }));

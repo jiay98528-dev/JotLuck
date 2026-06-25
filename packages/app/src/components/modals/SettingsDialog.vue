@@ -96,10 +96,40 @@
                 <span
                   class="toggle-track"
                   :class="{ active: wordWrap }"
+                  role="switch"
+                  tabindex="0"
+                  aria-label="自动换行"
+                  :aria-checked="wordWrap"
                   @click="wordWrap = !wordWrap"
+                  @keydown.enter.prevent="wordWrap = !wordWrap"
+                  @keydown.space.prevent="wordWrap = !wordWrap"
                 >
                   <span class="toggle-thumb"></span>
                 </span>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-label">扫描根目录文本文件</span>
+                  <span class="setting-value">外部文件</span>
+                </div>
+                <span
+                  class="toggle-track"
+                  :class="{ active: externalScanRootTextFiles }"
+                  role="switch"
+                  tabindex="0"
+                  aria-label="扫描根目录文本文件"
+                  :aria-checked="externalScanRootTextFiles"
+                  @click="externalScanRootTextFiles = !externalScanRootTextFiles"
+                  @keydown.enter.prevent="externalScanRootTextFiles = !externalScanRootTextFiles"
+                  @keydown.space.prevent="externalScanRootTextFiles = !externalScanRootTextFiles"
+                >
+                  <span class="toggle-thumb"></span>
+                </span>
+                <p class="setting-help">
+                  仅影响外部 Markdown 的编辑会话。开启后可索引所在文件夹的
+                  .md/.markdown/.mdx/.txt，用于搜索和标签；不会把未打开文件加入左侧圆点或最近笔记本。
+                </p>
               </div>
             </div>
 
@@ -128,6 +158,104 @@
               </div>
             </div>
 
+            <!-- ── 主题 ── -->
+            <div v-show="activeTab === 'themes'" class="section theme-market-panel">
+              <h3 class="section-title">主题</h3>
+
+              <div class="theme-current">
+                <div>
+                  <span class="setting-label">当前主题</span>
+                  <p class="theme-current-name">{{ theme.activeThemeLabel }}</p>
+                </div>
+                <span class="theme-current-meta">{{ theme.activeLayoutPreset }}</span>
+              </div>
+
+              <div class="theme-actions">
+                <button
+                  class="theme-action-btn theme-action-btn--primary"
+                  :disabled="themeImporting"
+                  @click="openThemeImporter"
+                >
+                  {{ themeImporting ? '导入中' : '导入主题包' }}
+                </button>
+                <button
+                  class="theme-action-btn"
+                  :disabled="themeImporting"
+                  @click="theme.resetTheme()"
+                >
+                  恢复 Paper
+                </button>
+                <input
+                  ref="themeImportInput"
+                  class="sr-only"
+                  type="file"
+                  accept=".markluck-theme,application/zip"
+                  @change="onThemeFileChange"
+                />
+              </div>
+
+              <p class="setting-help">
+                主题包仅允许受控 CSS、图片资源和内置布局预设；不会执行第三方脚本，也不会扫描笔记本。
+              </p>
+
+              <p v-if="themeImportError" class="theme-message theme-message--error">
+                {{ themeImportError }}
+              </p>
+              <p v-else-if="themeImportMessage" class="theme-message">
+                {{ themeImportMessage }}
+              </p>
+
+              <div class="theme-pack-list" aria-label="主题包列表">
+                <article
+                  v-for="pack in theme.themes"
+                  :key="pack.manifest.id"
+                  class="theme-pack-row"
+                  :class="{ active: pack.manifest.id === theme.activeThemeId }"
+                >
+                  <div class="theme-pack-swatch" :data-theme-swatch="pack.manifest.layoutPreset">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                  <div class="theme-pack-info">
+                    <div class="theme-pack-titleline">
+                      <strong>{{ pack.manifest.name }}</strong>
+                      <span class="theme-pack-source">
+                        {{ pack.source === 'builtin' ? '官方' : '本地' }}
+                      </span>
+                    </div>
+                    <p>{{ pack.manifest.description || '本地主题包' }}</p>
+                    <span class="theme-pack-meta">
+                      {{ pack.manifest.author }} · {{ pack.manifest.version }} ·
+                      {{ pack.manifest.layoutPreset }}
+                    </span>
+                  </div>
+                  <div class="theme-pack-controls">
+                    <button
+                      class="theme-pack-btn"
+                      :disabled="pack.manifest.id === theme.activeThemeId || themeImporting"
+                      @click="theme.setTheme(pack.manifest.id)"
+                    >
+                      {{ pack.manifest.id === theme.activeThemeId ? '已启用' : '启用' }}
+                    </button>
+                    <button
+                      v-if="pack.source !== 'builtin'"
+                      class="theme-pack-btn theme-pack-btn--danger"
+                      :disabled="themeImporting"
+                      @click="theme.uninstallTheme(pack.manifest.id)"
+                    >
+                      卸载
+                    </button>
+                  </div>
+                </article>
+              </div>
+
+              <div class="theme-market-note">
+                <strong>市场接口已预留</strong>
+                <span>后续在线主题市场会复用同一主题包清单、安装、校验和回滚机制。</span>
+              </div>
+            </div>
+
             <!-- ── 自动保存 ── -->
             <div v-show="activeTab === 'autosave'" class="section">
               <h3 class="section-title">自动保存</h3>
@@ -137,7 +265,13 @@
                 <span
                   class="toggle-track"
                   :class="{ active: autoSaveEnabled }"
+                  role="switch"
+                  tabindex="0"
+                  aria-label="启用自动保存"
+                  :aria-checked="autoSaveEnabled"
                   @click="autoSaveEnabled = !autoSaveEnabled"
+                  @keydown.enter.prevent="autoSaveEnabled = !autoSaveEnabled"
+                  @keydown.space.prevent="autoSaveEnabled = !autoSaveEnabled"
                 >
                   <span class="toggle-thumb"></span>
                 </span>
@@ -170,8 +304,12 @@
                   class="toggle-track"
                   :class="{ active: autoCompleteEnabled }"
                   role="switch"
+                  tabindex="0"
+                  aria-label="启用幽灵文本补全"
                   :aria-checked="autoCompleteEnabled"
                   @click="autoCompleteEnabled = !autoCompleteEnabled"
+                  @keydown.enter.prevent="autoCompleteEnabled = !autoCompleteEnabled"
+                  @keydown.space.prevent="autoCompleteEnabled = !autoCompleteEnabled"
                 >
                   <span class="toggle-thumb"></span>
                 </span>
@@ -186,8 +324,12 @@
                   class="toggle-track"
                   :class="{ active: backgroundTraining }"
                   role="switch"
+                  tabindex="0"
+                  aria-label="后台训练当前笔记本"
                   :aria-checked="backgroundTraining"
                   @click="backgroundTraining = !backgroundTraining"
+                  @keydown.enter.prevent="backgroundTraining = !backgroundTraining"
+                  @keydown.space.prevent="backgroundTraining = !backgroundTraining"
                 >
                   <span class="toggle-thumb"></span>
                 </span>
@@ -222,7 +364,13 @@
                 <span
                   class="toggle-track"
                   :class="{ active: autoCheckUpdates }"
+                  role="switch"
+                  tabindex="0"
+                  aria-label="自动检查可用更新"
+                  :aria-checked="autoCheckUpdates"
                   @click="autoCheckUpdates = !autoCheckUpdates"
+                  @keydown.enter.prevent="autoCheckUpdates = !autoCheckUpdates"
+                  @keydown.space.prevent="autoCheckUpdates = !autoCheckUpdates"
                 >
                   <span class="toggle-thumb"></span>
                 </span>
@@ -326,6 +474,7 @@ import {
   type CompletionSettings,
 } from '@/services/CompletionSettings';
 import type { CompletionTrainingMeta } from '@/services/CompletionTrainingService';
+import { ThemePackError } from '@/services/ThemePackInstaller';
 
 // ── Props / Emits ────────────────────────────────────────
 const props = withDefaults(
@@ -333,15 +482,18 @@ const props = withDefaults(
     visible: boolean;
     completionSettings?: CompletionSettings;
     completionTrainingMeta?: CompletionTrainingMeta;
+    externalScanRootTextFiles?: boolean;
   }>(),
   {
     completionSettings: () => ({ ...DEFAULT_COMPLETION_SETTINGS }),
     completionTrainingMeta: undefined,
+    externalScanRootTextFiles: false,
   },
 );
 const emit = defineEmits<{
   'update:visible': [boolean];
   'update-completion-settings': [CompletionSettings];
+  'update-external-scan-root': [boolean];
 }>();
 
 const overlayRef = ref<HTMLDivElement | null>(null);
@@ -351,7 +503,7 @@ const theme = useThemeStore();
 
 // ── Navigation tabs ──────────────────────────────────────
 interface TabDef {
-  id: 'editor' | 'appearance' | 'autosave' | 'autocomplete' | 'updates' | 'about';
+  id: 'editor' | 'appearance' | 'themes' | 'autosave' | 'autocomplete' | 'updates' | 'about';
   label: string;
   icon: string;
 }
@@ -366,6 +518,11 @@ const tabs: TabDef[] = [
     id: 'appearance',
     label: '外观',
     icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>',
+  },
+  {
+    id: 'themes',
+    label: '主题',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l7 4v10l-7 4-7-4V7l7-4z"/><path d="M12 3v18M5 7l7 4 7-4"/></svg>',
   },
   {
     id: 'autosave',
@@ -391,11 +548,71 @@ const tabs: TabDef[] = [
 
 const activeTab = ref<TabDef['id']>('editor');
 
+// ── Theme packs ───────────────────────────────────────────
+const themeImportInput = ref<HTMLInputElement | null>(null);
+const themeImporting = ref(false);
+const themeImportError = ref('');
+const themeImportMessage = ref('');
+
+function openThemeImporter(): void {
+  themeImportError.value = '';
+  themeImportMessage.value = '';
+  themeImportInput.value?.click();
+}
+
+async function onThemeFileChange(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+
+  themeImportError.value = '';
+  themeImportMessage.value = '';
+
+  if (!file.name.toLowerCase().endsWith('.markluck-theme')) {
+    themeImportError.value = '请选择 .markluck-theme 主题包。';
+    return;
+  }
+
+  themeImporting.value = true;
+  try {
+    const pack = await theme.installThemeFromFile(file);
+    themeImportMessage.value = `已安装并启用 ${pack.manifest.name}。`;
+  } catch (error) {
+    themeImportError.value = formatThemeImportError(error);
+  } finally {
+    themeImporting.value = false;
+  }
+}
+
+function formatThemeImportError(error: unknown): string {
+  if (error instanceof ThemePackError) {
+    return error.issues.length > 0
+      ? error.issues.map((issue) => issue.message).join('；')
+      : error.message;
+  }
+  if (error instanceof Error) return error.message;
+  return '主题包导入失败。';
+}
+
 // ── Editor settings ──────────────────────────────────────
 const fontSize = ref(16);
 const lineHeight = ref(1.6);
 const tabSize = ref(2);
 const wordWrap = ref(true);
+const externalScanRootTextFiles = ref(props.externalScanRootTextFiles);
+
+watch(
+  () => props.externalScanRootTextFiles,
+  (value) => {
+    externalScanRootTextFiles.value = value;
+  },
+);
+
+watch(externalScanRootTextFiles, (value) => {
+  localStorage.setItem('markluck:external:scanRootTextFiles', String(value));
+  emit('update-external-scan-root', value);
+});
 
 // ── Auto-save settings ───────────────────────────────────
 const autoSaveEnabled = ref(true);
@@ -470,7 +687,7 @@ async function onCheckUpdate(): Promise<void> {
     const latest = data.tag_name || data.name || '';
     // Strip 'v' prefix for consistent comparison (GitHub tags often use v0.2.0)
     const cleanVersion = (v: string) => v.replace(/^v/, '');
-    const current = '0.1.0';
+    const current = '0.15.0';
     if (latest && cleanVersion(latest) !== current) {
       updateStatus.value = '发现新版本 ' + latest;
       updateHasUpdate.value = true;
@@ -494,7 +711,7 @@ function onReplayWelcome(): void {
 }
 
 // ── About ────────────────────────────────────────────────
-const appVersion = 'v0.1.0';
+const appVersion = 'v0.15';
 
 interface AboutLink {
   label: string;
@@ -545,7 +762,7 @@ watch(
 <style scoped>
 /* ===== Card (width and max-height override — skeleton in dialog.css) ===== */
 .modal-card {
-  width: 520px;
+  width: min(680px, calc(100vw - 32px));
   max-height: 70vh;
 }
 
@@ -702,6 +919,218 @@ watch(
   line-height: var(--lh-ui);
 }
 
+.setting-help {
+  max-width: 56ch;
+  margin: calc(-1 * var(--space-4)) 0 0;
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+  line-height: var(--lh-ui);
+}
+
+/* ===== Theme Packs ===== */
+.theme-market-panel {
+  gap: var(--space-12);
+}
+
+.theme-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-16);
+  padding: var(--space-12);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-surface);
+}
+
+.theme-current-name {
+  margin: var(--space-4) 0 0;
+  color: var(--ink-primary);
+  font-size: var(--text-lg);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-heading);
+}
+
+.theme-current-meta,
+.theme-pack-source,
+.theme-pack-meta {
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+  line-height: var(--lh-ui);
+}
+
+.theme-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+
+.theme-action-btn,
+.theme-pack-btn {
+  min-height: 32px;
+  padding: var(--space-8) var(--space-12);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-surface);
+  color: var(--ink-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--lh-ui);
+  cursor: pointer;
+  transition:
+    background var(--dur-press) var(--ease-press),
+    color var(--dur-press) var(--ease-press),
+    border-color var(--dur-press) var(--ease-press);
+}
+
+.theme-action-btn:disabled,
+.theme-pack-btn:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: default;
+}
+
+.theme-action-btn:hover,
+.theme-pack-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--ink-primary);
+}
+
+.theme-action-btn--primary {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.theme-message {
+  margin: 0;
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius);
+  background: var(--signal-success-soft);
+  color: var(--signal-success);
+  font-size: var(--text-xs);
+  line-height: var(--lh-ui);
+}
+
+.theme-message--error {
+  background: var(--signal-error-soft);
+  color: var(--signal-error);
+}
+
+.theme-pack-list {
+  display: flex;
+  flex-direction: column;
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.theme-pack-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  gap: var(--space-12);
+  align-items: center;
+  padding: var(--space-12);
+  background: var(--paper-surface);
+  border-bottom: var(--border-thin) solid var(--rule);
+}
+
+.theme-pack-row:last-child {
+  border-bottom: none;
+}
+
+.theme-pack-row.active {
+  background: var(--accent-soft);
+}
+
+.theme-pack-swatch {
+  width: 48px;
+  height: 36px;
+  display: grid;
+  grid-template-columns: 10px 1fr 12px;
+  gap: 3px;
+  padding: 4px;
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--paper-bg);
+}
+
+.theme-pack-swatch span {
+  border-radius: 2px;
+  background: var(--rule);
+}
+
+.theme-pack-swatch span:nth-child(2) {
+  background: var(--paper-raised);
+}
+
+.theme-pack-swatch span:nth-child(3) {
+  background: var(--accent-soft);
+}
+
+.theme-pack-swatch[data-theme-swatch='archive'] {
+  background: oklch(0.93 0.015 82);
+}
+
+.theme-pack-swatch[data-theme-swatch='reader'] {
+  background: oklch(0.2 0.01 245);
+}
+
+.theme-pack-swatch[data-theme-swatch='studio'] {
+  background: oklch(0.9 0.01 220);
+}
+
+.theme-pack-info {
+  min-width: 0;
+}
+
+.theme-pack-titleline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.theme-pack-titleline strong {
+  color: var(--ink-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-ui);
+}
+
+.theme-pack-info p {
+  margin: var(--space-4) 0;
+  color: var(--ink-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--lh-ui);
+}
+
+.theme-pack-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.theme-pack-btn--danger {
+  color: var(--signal-error);
+}
+
+.theme-market-note {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-12);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-surface);
+  color: var(--ink-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--lh-ui);
+}
+
+.theme-market-note strong {
+  color: var(--ink-primary);
+  font-weight: var(--fw-semibold);
+}
+
 /* ===== Slider ===== */
 .slider {
   appearance: none;
@@ -801,6 +1230,11 @@ watch(
 
 .toggle-track.active {
   background: var(--accent);
+}
+
+.toggle-track:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: var(--focus-ring-offset);
 }
 
 .toggle-thumb {

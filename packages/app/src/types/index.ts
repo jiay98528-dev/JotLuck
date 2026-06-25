@@ -22,6 +22,18 @@ export type {
 
 export type { ColorScheme } from './editor';
 
+// --- theme-pack.ts ---
+export type {
+  ThemeRuntime,
+  ThemeLayoutPreset,
+  ThemeCapability,
+  ThemePackSource,
+  ThemePackManifest,
+  InstalledThemePack,
+  ThemeValidationIssue,
+  ThemePackInstallResult,
+} from './theme-pack';
+
 // --- note.ts ---
 export type {
   NotePath,

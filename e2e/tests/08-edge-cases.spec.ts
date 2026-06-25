@@ -65,7 +65,9 @@ test.describe('边界与压力测试', () => {
     expect(content.length).toBeGreaterThan(0);
 
     // Verify the app is still functional — status bar present
-    await expect(page.locator('.status-saved, .status-dirty')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('status', { name: '编辑器状态栏' })).toBeVisible({
+      timeout: 5000,
+    });
 
     // Clear the editor and verify it handles truly-empty content
     await clearEditor(page);
@@ -92,20 +94,11 @@ test.describe('边界与压力测试', () => {
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 3000 });
     await expect(page.locator('.cm-content')).toBeVisible({ timeout: 5000 });
 
-    // Use page.evaluate to inject a 5500-char line directly into CM6 state
-    // This avoids the 55-second keyboard.type() delay
     const longText = longLine(5500);
-    await page.evaluate((text) => {
-      const getView = (window as any).__markluck_getEditorView as
-        | (() => { dispatch: (tr: any) => void; state: { doc: { length: number } } })
-        | undefined;
-      const view = getView?.();
-      if (view) {
-        view.dispatch({
-          changes: { from: 0, to: view.state.doc.length, insert: text },
-        });
-      }
-    }, longText);
+    await page.locator('.cm-content').click();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.insertText(longText);
 
     await page.waitForTimeout(500);
 

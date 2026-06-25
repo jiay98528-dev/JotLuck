@@ -47,15 +47,10 @@ async function setEditorContent(
   page: import('@playwright/test').Page,
   text: string,
 ): Promise<void> {
-  await page.evaluate((content) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const view = (window as any).__markluck_getEditorView?.();
-    if (view) {
-      view.dispatch({
-        changes: { from: 0, to: view.state.doc.length, insert: content },
-      });
-    }
-  }, text);
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Backspace');
+  await page.keyboard.insertText(text);
   await page.waitForTimeout(300);
 }
 
@@ -268,5 +263,36 @@ test.describe('安全测试', () => {
     const html = await getPreviewHTML(page);
     expect(html).not.toContain('<script');
     expect(html).not.toMatch(/on\w+=/);
+  });
+});
+
+test.describe('网络隐私', () => {
+  test('should not contact GitHub update API on startup when auto-check is disabled', async ({
+    page,
+  }) => {
+    let githubRequests = 0;
+    await page.route('https://api.github.com/**', async (route) => {
+      githubRequests++;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          tag_name: 'v0.1.0',
+          html_url: 'https://github.com/jiay98528-dev/MarkLuck/releases/tag/v0.1.0',
+          body: '',
+        }),
+      });
+    });
+
+    await page.addInitScript(() => {
+      localStorage.setItem('markluck:welcome:completed', '1');
+      localStorage.setItem('markluck:version:autoCheck', 'false');
+    });
+    await page.goto('http://localhost:5173');
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('.cm-content')).toBeVisible({ timeout: 10000 });
+
+    await page.waitForTimeout(16000);
+    expect(githubRequests).toBe(0);
   });
 });

@@ -52,6 +52,8 @@ export interface FileChangeEvent {
 export interface NotebookHandle {
   /** 根目录路径（或 Web 端的显示名称） */
   rootPath: string;
+  /** 显示名称，通常为目录名 */
+  name?: string;
   /** Web 端目录句柄（File System Access API） */
   rootHandle?: FileSystemDirectoryHandle;
 }
@@ -86,7 +88,7 @@ export interface IFileSystemService {
 
   /** 创建目录 */
   createDirectory(path: string): Promise<void>;
-  /** 列出目录内容（仅返回 .md 文件和子目录） */
+  /** 列出目录内容（仅返回支持的笔记文件和子目录） */
   listDirectory(path: string): Promise<DirEntry[]>;
 
   // --- 元数据 ---
@@ -124,6 +126,9 @@ export interface IFileSystemService {
 
   /** 弹出文件夹选择器，打开笔记本根目录 */
   openNotebook(): Promise<NotebookHandle>;
+
+  /** 使用已知目录路径打开笔记本，不弹出系统选择器。桌面端文件关联使用此入口。 */
+  openNotebookAt(path: string): Promise<NotebookHandle>;
 
   /** 获取最近使用的笔记本路径列表 */
   getRecentNotebooks(): Promise<string[]>;

@@ -24,13 +24,17 @@ export const useIndexStore = defineStore('index', () => {
   const recentNotes = ref<Array<{ path: string; title: string; lastOpenedAt: number }>>([]);
   const isReady = computed(() => status.value === 'ready');
 
-  async function initialize(fs: IFileSystemService): Promise<void> {
-    if (status.value === 'building' || status.value === 'ready') return;
+  async function initialize(
+    fs: IFileSystemService,
+    force = false,
+    options: { populateRecent?: boolean } = {},
+  ): Promise<void> {
+    if (!force && (status.value === 'building' || status.value === 'ready')) return;
     status.value = 'building';
     error.value = null;
 
     try {
-      indexService = new IndexService(fs);
+      indexService = new IndexService(fs, options);
       const idx = await indexService.buildFullIndex();
       documentCount.value = Object.keys(idx.documents).length;
       tags.value = indexService.getAllTags();
@@ -61,6 +65,15 @@ export const useIndexStore = defineStore('index', () => {
     indexService.removeDocument(path);
     tags.value = indexService.getAllTags();
     recentNotes.value = indexService.getRecentNotes(20);
+    documentCount.value = Object.keys(indexService.getAllDocuments()).length;
+  }
+
+  function synchronizeFromFileTree(filePaths: string[]): void {
+    if (!indexService) return;
+    indexService.synchronizeFromFileTree(filePaths);
+    tags.value = indexService.getAllTags();
+    recentNotes.value = indexService.getRecentNotes(20);
+    documentCount.value = Object.keys(indexService.getAllDocuments()).length;
   }
 
   function getBacklinks(notePath: string) {
@@ -90,6 +103,7 @@ export const useIndexStore = defineStore('index', () => {
     initialize,
     refreshDocument,
     removeDocument,
+    synchronizeFromFileTree,
     getIndexService,
     getBacklinks,
     getDeadLinks,

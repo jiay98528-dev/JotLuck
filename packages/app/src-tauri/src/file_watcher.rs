@@ -120,12 +120,14 @@ fn is_supported_path(path: &PathBuf) -> bool {
         Some(ext)
             if matches!(
                 ext.as_str(),
-                "md" | "markdown" | "txt" | "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp"
+                "md" | "markdown" | "mdx" | "txt" | "png" | "jpg" | "jpeg" | "gif" | "webp"
+                | "svg" | "bmp"
             )
     )
 }
 
 /// Stop watching. Called when the app closes.
+#[allow(dead_code)]
 pub fn stop_watching() {
     // Watcher is dropped when the app exits.
     // The thread will terminate when the channel closes.

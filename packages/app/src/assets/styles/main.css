@@ -9,6 +9,7 @@
 
 @import './tokens.css';
 @import './themes/paper.css';
+@import './themes/theme-layouts.css';
 @import './accessibility.css';
 @import './dialog.css';
 @import './editor.css';

@@ -69,5 +69,7 @@ export interface IFileSystemService {
   resolvePath(root: string, ...segments: string[]): string;
   isPathInNotebook(root: string, path: string): Promise<boolean>;
   openNotebook(): Promise<NotebookHandle>;
+  /** Open a known notebook directory without showing a picker. Used by desktop file association. */
+  openNotebookAt(path: string): Promise<NotebookHandle>;
   getRecentNotebooks(): Promise<string[]>;
 }

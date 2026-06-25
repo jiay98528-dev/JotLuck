@@ -100,6 +100,10 @@ interface LiveBlock {
   itemIndex?: number;
   /** 多行闭合块未找到闭合定界符（如代码围栏缺少 ```） */
   unclosed?: boolean;
+  tableGridTemplate?: string;
+  tableAlignments?: Array<'left' | 'center' | 'right'>;
+  tableHeader?: boolean;
+  tableColumnCount?: number;
 }
 
 interface LivePreviewOptions {
@@ -129,6 +133,43 @@ function blockKey(lineNumber: number, raw: string): string {
 
 function groupKey(lineNumber: number): string {
   return `G${lineNumber}`;
+}
+
+function splitTableCells(raw: string): string[] {
+  const trimmed = raw.trim();
+  const withoutLeading = trimmed.startsWith('|') ? trimmed.slice(1) : trimmed;
+  const withoutTrailing = withoutLeading.endsWith('|')
+    ? withoutLeading.slice(0, -1)
+    : withoutLeading;
+  return withoutTrailing.split('|').map((cell) => cell.trim());
+}
+
+function tableAlignments(
+  separator: string,
+  columnCount: number,
+): Array<'left' | 'center' | 'right'> {
+  const cells = splitTableCells(separator);
+  return Array.from({ length: columnCount }, (_, index) => {
+    const cell = cells[index] ?? '';
+    const starts = cell.startsWith(':');
+    const ends = cell.endsWith(':');
+    if (starts && ends) return 'center';
+    if (ends) return 'right';
+    return 'left';
+  });
+}
+
+function tableGridTemplate(rows: string[], columnCount: number): string {
+  const widths = Array.from({ length: columnCount }, () => 4);
+  for (const row of rows) {
+    splitTableCells(row).forEach((cell, index) => {
+      if (index >= columnCount) return;
+      widths[index] = Math.max(widths[index]!, Math.min(cell.length + 2, 32));
+    });
+  }
+  return widths
+    .map((width) => `minmax(${Math.max(6, width)}ch, ${Math.max(4, width)}fr)`)
+    .join(' ');
 }
 
 // ---- Block Parser ----
@@ -433,6 +474,14 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
       }
       const tblBlocks = blocks.filter((b) => b.groupKey === group);
       const hasSeparator = tblBlocks.length > 1 && /^\|[\s\-:|]+\|$/.test(tblBlocks[1]?.raw ?? '');
+      const visibleRows = tblBlocks
+        .filter((block) => !/^\|[\s\-:|]+\|$/.test(block.raw))
+        .map((block) => block.raw);
+      const columnCount = Math.max(1, ...visibleRows.map((row) => splitTableCells(row).length));
+      const gridTemplate = tableGridTemplate(visibleRows, columnCount);
+      const alignments = hasSeparator
+        ? tableAlignments(tblBlocks[1]?.raw ?? '', columnCount)
+        : Array.from({ length: columnCount }, () => 'left' as const);
       if (tblBlocks.length === 1) tblBlocks[0]!.position = 'single';
       else {
         tblBlocks[0]!.position = 'first';
@@ -443,6 +492,12 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
         for (let gi = 1; gi < tblBlocks.length - 1; gi++) {
           if (!tblBlocks[gi]!.position) tblBlocks[gi]!.position = 'middle';
         }
+      }
+      for (const tblBlock of tblBlocks) {
+        tblBlock.tableColumnCount = columnCount;
+        tblBlock.tableGridTemplate = gridTemplate;
+        tblBlock.tableAlignments = alignments;
+        tblBlock.tableHeader = hasSeparator && tblBlock === tblBlocks[0];
       }
       // Flag as unclosed if the table is missing its separator row
       if (!hasSeparator) {
@@ -473,6 +528,28 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
   }
 
   return blocks;
+}
+
+export function __parseLiveBlocksForTest(text: string): Array<{
+  type: string;
+  raw: string;
+  html: string;
+  position?: string;
+  tableGridTemplate?: string;
+  tableColumnCount?: number;
+  tableHeader?: boolean;
+  unclosed?: boolean;
+}> {
+  return parseLiveBlocks(text).map((block) => ({
+    type: block.type,
+    raw: block.raw,
+    html: block.html,
+    position: block.position,
+    tableGridTemplate: block.tableGridTemplate,
+    tableColumnCount: block.tableColumnCount,
+    tableHeader: block.tableHeader,
+    unclosed: block.unclosed,
+  }));
 }
 
 function renderBlockHtml(
@@ -562,25 +639,25 @@ function renderBlockHtml(
         return '';
 
       case 'tableRow': {
-        // Manually split cells instead of calling renderMarkdown(line),
-        // which produces a standalone <table> per line that cannot connect
-        // across rows.  Each cell is rendered individually for inline
-        // formatting, then wrapped in a <span> styled as table-cell.
+        // Render each table row as a grid with a table-group-level column
+        // template. CM6 cannot replace a multi-line table as one widget, so
+        // this keeps per-line widgets while preserving stable columns.
         const isSeparator = /^\|[\s\-:|]+\|$/.test(block.raw);
         if (isSeparator) {
           return wrapBlockHtml('', block);
         }
-        const cells = block.raw.split('|');
-        // first and last elements are empty (before first | and after last |)
-        const inner = cells.slice(1, -1);
-        const cellHtml = inner
-          .map((cell) => {
+        const columnCount = block.tableColumnCount ?? splitTableCells(block.raw).length;
+        const cells = splitTableCells(block.raw);
+        const alignments = block.tableAlignments ?? [];
+        const cellHtml = Array.from({ length: columnCount }, (_, index) => cells[index] ?? '')
+          .map((cell, index) => {
             const trimmed = cell.trim();
-            if (/^[\s\-:]+$/.test(trimmed)) return '<span class="ml-td"></span>';
             const rendered = renderBlock(trimmed, 'paragraph', refDefs, options)
               .replace(/^<p>/, '')
               .replace(/<\/p>\n?$/, '');
-            return `<span class="ml-td">${rendered || '&nbsp;'}</span>`;
+            const align = block.tableHeader ? 'left' : (alignments[index] ?? 'left');
+            const role = block.tableHeader ? 'columnheader' : 'cell';
+            return `<span class="ml-table-cell ml-table-cell--align-${align}${block.tableHeader ? ' ml-table-cell--header' : ''}" role="${role}">${rendered || '&nbsp;'}</span>`;
           })
           .join('');
         return wrapBlockHtml(cellHtml, block);
@@ -612,6 +689,12 @@ function wrapBlockHtml(html: string, block: LiveBlock): string {
   ];
   if (block.groupKey) attrs.push(`data-block-group="${escapeAttr(block.groupKey)}"`);
   if (block.position) attrs.push(`data-block-position="${escapeAttr(block.position)}"`);
+  if (block.tableColumnCount) {
+    attrs.push(`data-table-column-count="${block.tableColumnCount}"`);
+  }
+  if (block.tableGridTemplate) {
+    attrs.push(`style="--ml-table-template:${escapeAttr(block.tableGridTemplate)}"`);
+  }
 
   return `<span class="cm-live-block" ${attrs.join(' ')}>${html}</span>`;
 }
@@ -826,6 +909,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
       onCompStart: (() => void) | null = null;
       onCompEnd: (() => void) | null = null;
       compositionRebuildTimer: ReturnType<typeof setTimeout> | null = null;
+      compositionRebuildFrame: number | null = null;
       // rAF handle for deferred initialization
       __initRAF: number | null = null;
       // Guarantees decorations are built on the first update() call, even
@@ -1002,15 +1086,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           // widgets reappear on unrelated lower lines after Backspace/commit.
           if (update.docChanged) {
             this.decorations = this.decorations.map(update.changes);
-            const cursor = update.view.state.selection.main.head;
-            const cursorLine = update.view.state.doc.lineAt(cursor);
-            if (cursorLine.length === 0) {
-              this.decorations = this.build(update.view);
-              this.decorationsBuilt = true;
-              update.view.dispatch({});
-            } else {
-              this.scheduleCompositionRebuild(update.view);
-            }
+            this.scheduleCompositionRebuild(update.view);
           } else {
             this.clearPendingCompositionRebuild();
           }
@@ -1063,20 +1139,28 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           clearTimeout(this.compositionRebuildTimer);
           this.compositionRebuildTimer = null;
         }
+        if (this.compositionRebuildFrame !== null) {
+          cancelAnimationFrame(this.compositionRebuildFrame);
+          this.compositionRebuildFrame = null;
+        }
       }
 
       scheduleCompositionRebuild(view: EditorView): void {
         this.clearPendingCompositionRebuild();
         this.compositionRebuildTimer = setTimeout(() => {
           this.compositionRebuildTimer = null;
-          if (this.destroyed) return;
-          if (this.isComposing || view.composing) {
-            this.scheduleCompositionRebuild(view);
-            return;
-          }
-          this.decorations = this.build(view);
-          view.dispatch({});
-        }, 120);
+          this.compositionRebuildFrame = requestAnimationFrame(() => {
+            this.compositionRebuildFrame = null;
+            if (this.destroyed) return;
+            if (this.isComposing || view.composing || view.compositionStarted) {
+              this.scheduleCompositionRebuild(view);
+              return;
+            }
+            this.decorations = this.build(view);
+            this.decorationsBuilt = true;
+            view.dispatch({});
+          });
+        }, 0);
       }
 
       build(view: EditorView): DecorationSet {

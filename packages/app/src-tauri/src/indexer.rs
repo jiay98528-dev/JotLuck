@@ -1,11 +1,10 @@
 // M6-04: Tantivy full-text search indexer
 //
-// Builds and queries a full-text search index over all .md files
+// Builds and queries a full-text search index over supported note files
 // in the notebook directory. Supports incremental updates.
 
 use crate::path::display_path;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -31,6 +30,14 @@ pub struct SearchIndex {
     pub reader: Option<IndexReader>,
     pub writer: Option<std::sync::Mutex<IndexWriter>>,
     pub schema: Schema,
+}
+
+fn is_supported_note_path(path: &Path) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase());
+    matches!(ext.as_deref(), Some("md" | "markdown" | "mdx" | "txt"))
 }
 
 impl SearchIndex {
@@ -125,7 +132,9 @@ impl SearchIndex {
     pub fn commit(&self) -> Result<(), String> {
         let writer_mutex = self.writer.as_ref().ok_or("索引未打开")?;
         let mut writer = writer_mutex.lock().map_err(|e| e.to_string())?;
-        writer.commit().map_err(|e| format!("提交索引失败: {}", e))?;
+        writer
+            .commit()
+            .map_err(|e| format!("提交索引失败: {}", e))?;
         Ok(())
     }
 
@@ -225,12 +234,9 @@ fn generate_snippet(content: &str, query: &str, max_len: usize) -> String {
 // IPC Commands
 // ============================================================
 
-/// Build full index from all .md files in the notebook.
+/// Build full index from all supported note files in the notebook.
 #[tauri::command]
-pub fn build_index(
-    root_path: String,
-    index: State<Mutex<SearchIndex>>,
-) -> Result<usize, String> {
+pub fn build_index(root_path: String, index: State<Mutex<SearchIndex>>) -> Result<usize, String> {
     let mut idx = index.lock().map_err(|e| e.to_string())?;
     let index_dir = PathBuf::from(&root_path).join(".markluck_index");
     idx.open(&index_dir)?;
@@ -245,7 +251,7 @@ pub fn build_index(
     {
         if entry.file_type().is_file() {
             let path = entry.path();
-            if path.extension().map(|e| e == "md").unwrap_or(false) {
+            if is_supported_note_path(path) {
                 let content = fs::read_to_string(path).unwrap_or_default();
                 let title = extract_title(&content);
                 let tags = extract_tags(&content);

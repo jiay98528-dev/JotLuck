@@ -165,7 +165,7 @@ export class CompletionTrainingService {
   private isTrainablePath(path: string): boolean {
     const normalized = path.replace(/\\/g, '/').toLowerCase();
     if (normalized.includes('/assets/')) return false;
-    return /\.(md|markdown|txt)$/.test(normalized);
+    return /\.(md|markdown|mdx|txt)$/.test(normalized);
   }
 }
 

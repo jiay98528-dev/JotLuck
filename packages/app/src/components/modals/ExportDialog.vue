@@ -40,7 +40,13 @@
                 <span
                   class="toggle-track"
                   :class="{ active: includeFrontmatter }"
+                  role="switch"
+                  tabindex="0"
+                  aria-label="包含 YAML Frontmatter"
+                  :aria-checked="includeFrontmatter"
                   @click="includeFrontmatter = !includeFrontmatter"
+                  @keydown.enter.prevent="includeFrontmatter = !includeFrontmatter"
+                  @keydown.space.prevent="includeFrontmatter = !includeFrontmatter"
                 >
                   <span class="toggle-thumb"></span>
                 </span>
@@ -50,7 +56,13 @@
                 <span
                   class="toggle-track"
                   :class="{ active: codeLineNumbers }"
+                  role="switch"
+                  tabindex="0"
+                  aria-label="代码行号"
+                  :aria-checked="codeLineNumbers"
                   @click="codeLineNumbers = !codeLineNumbers"
+                  @keydown.enter.prevent="codeLineNumbers = !codeLineNumbers"
+                  @keydown.space.prevent="codeLineNumbers = !codeLineNumbers"
                 >
                   <span class="toggle-thumb"></span>
                 </span>
@@ -60,7 +72,13 @@
                 <span
                   class="toggle-track"
                   :class="{ active: includeWikiLinks }"
+                  role="switch"
+                  tabindex="0"
+                  aria-label="保留 Wiki 链接"
+                  :aria-checked="includeWikiLinks"
                   @click="includeWikiLinks = !includeWikiLinks"
+                  @keydown.enter.prevent="includeWikiLinks = !includeWikiLinks"
+                  @keydown.space.prevent="includeWikiLinks = !includeWikiLinks"
                 >
                   <span class="toggle-thumb"></span>
                 </span>
@@ -380,6 +398,11 @@ watch(
 
 .toggle-track.active {
   background: var(--accent);
+}
+
+.toggle-track:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: var(--focus-ring-offset);
 }
 
 .toggle-thumb {

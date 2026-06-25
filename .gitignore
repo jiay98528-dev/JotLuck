@@ -4,6 +4,7 @@ node_modules/
 # Build output
 dist/
 build/
+打包/
 
 # Environment
 .env
@@ -39,6 +40,7 @@ src-tauri/target/
 .markluck_index.json
 
 # E2E report artifacts
+e2e/report/
 e2e/report/data/
 
 # App assets (auto-generated)

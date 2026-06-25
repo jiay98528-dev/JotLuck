@@ -362,6 +362,7 @@ watch(
  * ============================================================ */
 .palette {
   width: var(--palette-width);
+  max-width: calc(100vw - 32px);
   max-height: 480px;
   display: flex;
   flex-direction: column;
@@ -609,6 +610,32 @@ watch(
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (width <= 480px) {
+  .palette-overlay {
+    padding: var(--space-12);
+    align-items: flex-start;
+  }
+
+  .palette {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100vh - 24px);
+  }
+
+  .palette-footer {
+    height: auto;
+    min-height: 36px;
+    align-items: flex-start;
+    gap: var(--space-8);
+    padding-block: var(--space-8);
+  }
+
+  .quick-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 }
 </style>

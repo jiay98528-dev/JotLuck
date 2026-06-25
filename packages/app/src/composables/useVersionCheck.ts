@@ -15,7 +15,7 @@ import { ref, computed } from 'vue';
 // Constants
 // ---------------------------------------------------------------------------
 
-const CURRENT_VERSION = '0.1.0';
+const CURRENT_VERSION = '0.15.0';
 const GITHUB_API_URL = 'https://api.github.com/repos/jiay98528-dev/MarkLuck/releases/latest';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 

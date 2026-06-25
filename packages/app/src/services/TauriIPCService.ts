@@ -19,6 +19,7 @@ import type {
   NotebookHandle,
   UnwatchFn,
 } from '@/types';
+import { isMarkdownLikeFile } from '@/utils/note-files';
 
 // ── Rust DirEntry wire format ──
 
@@ -40,6 +41,30 @@ interface RustFileChangeEvent {
 
 const RECENT_KEY = 'markluck-recent-notebooks';
 
+export function isLikelySystemNotebookScope(path: string): boolean {
+  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  if (!normalized) return false;
+  if (/^[a-z]:$/.test(normalized)) return true;
+  if (/^[a-z]:\/users\/[^/]+$/.test(normalized)) return true;
+  if (/^[a-z]:\/users\/[^/]+\/(desktop|downloads)$/.test(normalized)) return true;
+  if (/^\/users\/[^/]+$/.test(normalized)) return true;
+  if (/^\/users\/[^/]+\/(desktop|downloads)$/.test(normalized)) return true;
+  return false;
+}
+
+export function sanitizeRecentNotebookPaths(paths: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const path of paths) {
+    if (typeof path !== 'string' || !path.trim()) continue;
+    const normalizedKey = path.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+    if (seen.has(normalizedKey) || isLikelySystemNotebookScope(path)) continue;
+    seen.add(normalizedKey);
+    result.push(path);
+  }
+  return result;
+}
+
 // ── TauriIPCService ──
 
 export class TauriIPCService implements IFileSystemService {
@@ -55,15 +80,30 @@ export class TauriIPCService implements IFileSystemService {
       title: '选择笔记本文件夹',
     });
     if (!selected) throw new Error('用户取消了文件夹选择');
-    const root = await invoke<string>('open_notebook', { path: selected });
+    return this.openNotebookAt(selected);
+  }
+
+  async openNotebookAt(path: string): Promise<NotebookHandle> {
+    const root = await invoke<string>('open_notebook', { path });
     this.saveRecent(root);
-    return { rootPath: root };
+    return { rootPath: root, name: this.displayNameFromPath(root) };
+  }
+
+  async openDefaultNotebook(): Promise<NotebookHandle> {
+    const root = await invoke<string>('open_sample_notebook');
+    this.saveRecent(root);
+    return { rootPath: root, name: this.displayNameFromPath(root) };
   }
 
   async getRecentNotebooks(): Promise<string[]> {
     try {
       const raw = localStorage.getItem(RECENT_KEY);
-      return raw ? JSON.parse(raw) : [];
+      const list: string[] = raw ? JSON.parse(raw) : [];
+      const sanitized = sanitizeRecentNotebookPaths(list);
+      if (sanitized.length !== list.length) {
+        localStorage.setItem(RECENT_KEY, JSON.stringify(sanitized));
+      }
+      return sanitized;
     } catch (e) {
       // localStorage 读取失败时静默降级为空列表，不阻断应用启动
       // eslint-disable-next-line no-console
@@ -73,16 +113,22 @@ export class TauriIPCService implements IFileSystemService {
   }
 
   private saveRecent(root: string): void {
+    if (isLikelySystemNotebookScope(root)) return;
     try {
       const raw = localStorage.getItem(RECENT_KEY);
       const list: string[] = raw ? JSON.parse(raw) : [];
-      const filtered = list.filter((p) => p !== root);
+      const filtered = sanitizeRecentNotebookPaths(list).filter((p) => p !== root);
       filtered.unshift(root);
       localStorage.setItem(RECENT_KEY, JSON.stringify(filtered.slice(0, 10)));
     } catch (e) {
       // eslint-disable-next-line no-console
       console.warn('[TauriIPCService] saveRecent 失败', e);
     }
+  }
+
+  private displayNameFromPath(path: string): string {
+    const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '');
+    return normalized.split('/').pop() || normalized || 'Notebook';
   }
 
   // ====================================================================
@@ -146,6 +192,7 @@ export class TauriIPCService implements IFileSystemService {
 
   private detectMimeType(fileName: string): string | undefined {
     const ext = fileName.split('.').pop()?.toLowerCase();
+    if (isMarkdownLikeFile(fileName)) return 'text/markdown';
     if (ext === 'txt') return 'text/plain';
     return undefined;
   }

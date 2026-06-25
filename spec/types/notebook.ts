@@ -22,7 +22,7 @@ type IndexStatus = 'idle' | 'scanning' | 'indexing' | 'ready' | 'error';
 /**
  * 笔记本实体 —— 代表用户打开的一个本地文件夹（笔记本根目录）。
  *
- * 一个笔记本包含若干 .md 笔记文件和子文件夹（子笔记本）。
+ * 一个笔记本包含若干支持格式笔记文件和子文件夹（子笔记本）。
  * 所有数据存储在文件系统中，由 .markluck_index.json 维护索引。
  */
 interface Notebook {
@@ -79,7 +79,7 @@ interface FileTreeNode {
  * 笔记本索引元数据，存储在笔记本根目录的 .markluck_index.json 中。
  *
  * 该文件维护标签、反向链接、全文索引等结构化元数据，
- * 避免每次启动时全量扫描所有 .md 文件。
+ * 避免每次启动时全量扫描所有支持格式笔记文件。
  * 文件变更时增量更新，用户可手动触发"重建索引"。
  */
 interface NotebookMeta {
@@ -89,7 +89,7 @@ interface NotebookMeta {
   /** 最后一次索引时间（ISO 8601 字符串，如 "2026-06-03T10:30:00Z"） */
   lastIndexed: string;
 
-  /** 已索引的 .md 文件总数 */
+  /** 已索引的支持格式笔记文件总数 */
   fileCount: number;
 
   /** 已提取的唯一标签总数（合并 frontmatter tags 和行内 #tag） */

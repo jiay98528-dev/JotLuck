@@ -82,7 +82,9 @@ test.describe('Markdown 速查表', () => {
     await page.waitForTimeout(400);
 
     // 应该有关闭或折叠按钮
-    await expect(page.locator('.collapse-btn, [aria-label*="收起"], [aria-label*="关闭"]')).toBeVisible({ timeout: 3000 });
+    await expect(
+      page.locator('.collapse-btn, [aria-label*="收起"], [aria-label*="关闭"]'),
+    ).toBeVisible({ timeout: 3000 });
   });
 });
 

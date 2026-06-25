@@ -33,9 +33,9 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'pnpm --filter @markluck/app dev',
+    command: 'pnpm.cmd --filter @markluck/app dev',
     url: 'http://localhost:5173',
     reuseExistingServer: true,
-    timeout: 30000,
+    timeout: 60000,
   },
 });

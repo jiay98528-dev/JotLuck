@@ -78,10 +78,50 @@ test.describe('offline autocomplete user journeys', () => {
     await expect(page.locator('.modal-overlay')).toBeVisible({ timeout: 3000 });
     await page.locator('.settings-nav .nav-item').nth(3).click();
     await expect(page.locator('.section:visible .section-title')).toHaveText('文字补全');
-    await page.locator('.section:visible .toggle-track').first().click();
+    const completionSwitch = page.getByRole('switch', { name: '启用幽灵文本补全' });
+    await expect(completionSwitch).toHaveAttribute('aria-checked', 'true');
+    await completionSwitch.focus();
+    await page.keyboard.press('Space');
+    await expect(completionSwitch).toHaveAttribute('aria-checked', 'false');
+    await page.keyboard.press('Enter');
+    await expect(completionSwitch).toHaveAttribute('aria-checked', 'true');
+    await page.keyboard.press('Space');
+    await expect(completionSwitch).toHaveAttribute('aria-checked', 'false');
     await page.keyboard.press('Escape');
 
     await replaceEditorText(page, probe);
     await expect(page.locator('.cm-ghost-text')).not.toBeVisible({ timeout: 1000 });
+  });
+
+  test('Tab keeps native focus navigation outside editor and accepts ghost text inside editor', async ({
+    page,
+    browserName,
+  }) => {
+    const probe = probeText(browserName);
+    await replaceEditorText(page, probe);
+    const ghost = page.locator('.cm-ghost-text');
+    await expect(ghost).toBeVisible({ timeout: 3000 });
+
+    await page.locator('.wing-settings-btn').click();
+    await expect(page.locator('.modal-overlay')).toBeVisible({ timeout: 3000 });
+    await page.locator('.settings-nav .nav-item').nth(3).click();
+    const switchControl = page.getByRole('switch').first();
+    await switchControl.focus();
+    await expect(switchControl).toBeFocused();
+
+    await page.keyboard.press('Tab');
+    const editorCapturedTab = await page.evaluate(() => {
+      const active = document.activeElement;
+      return active instanceof Element && !!active.closest('.cm-content');
+    });
+    expect(editorCapturedTab).toBe(false);
+
+    await page.keyboard.press('Escape');
+    await replaceEditorText(page, probe);
+    await page.locator('.cm-content').click();
+    await expect(page.locator('.cm-ghost-text')).toBeVisible({ timeout: 3000 });
+    const suggestion = (await page.locator('.cm-ghost-text').textContent()) ?? '';
+    await page.locator('.cm-content').press('Tab');
+    await expect.poll(() => getEditorContent(page)).toContain(`${probe}${suggestion}`);
   });
 });

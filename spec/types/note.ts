@@ -112,7 +112,7 @@ export enum InlineFormatType {
 export interface NoteFrontmatter {
   /**
    * 笔记标题。
-   * 优先级: frontmatter.title > 首个 H1 > 文件名(去 .md)。
+   * 优先级: frontmatter.title > 首个 H1 > 文件名(去支持的笔记扩展名)。
    */
   title?: string;
 
@@ -177,7 +177,7 @@ export interface NoteFrontmatter {
  */
 export interface WikiLink {
   /**
-   * 目标笔记名称 (不含 .md 后缀，不含路径)。
+   * 目标笔记名称 (不含支持的笔记扩展名，不含路径)。
    *
    * 例如 `[[tutorials/JavaScript 闭包]]` 解析后 target = "JavaScript 闭包"。
    */
@@ -202,7 +202,7 @@ export interface WikiLink {
   /**
    * 目标笔记是否真实存在于笔记本中。
    *
-   * - `true`:  在索引中找到同名 `.md` 文件 → 正常渲染为蓝色可点击链接
+   * - `true`:  在索引中找到同名支持格式笔记文件 → 正常渲染为蓝色可点击链接
    * - `false`: 索引中找不到 → 渲染为红色虚线"死链"，点击可创建目标笔记
    *
    * 解析时机: 打开笔记时由 useIndexStore 验证并填充此字段。
@@ -317,17 +317,17 @@ export interface NoteBlock {
 /**
  * MarkLuck 核心实体 — 笔记。
  *
- * 一条笔记对应文件系统中的一个 `.md` 文件。
+ * 一条笔记对应文件系统中的一个支持格式纯文本笔记文件。
  * 当笔记在编辑器中打开时，Note.content 实时反映当前编辑内容；
  * 当笔记未打开时，Note.content 为从文件系统读取的最后一次保存内容。
  *
  * 生命周期:
  *   `创建 → useNotebookStore.openNote() → 加载 content →
  *    解析 frontmatter/links → 渲染块 → 用户编辑 →
- *    useEditorStore 更新 content → 防抖保存 → 写回 .md 文件 →
+ *    useEditorStore 更新 content → 防抖保存 → 写回笔记文件 →
  *    增量更新索引`
  *
- * @see ADR-003 — 纯文件架构，笔记即 .md 文件
+ * @see ADR-003 — 纯文件架构，笔记即纯文本文件
  * @see ADR-006 — 标签来源: frontmatter.tags + 正文 #tag 合并
  * @see ADR-007 — links[] 解析自 [[Wiki-link]] 语法
  */
@@ -346,7 +346,7 @@ export interface Note {
   /**
    * 笔记标题。
    *
-   * 确定优先级: YAML frontmatter.title > 首个 H1 > 文件名(去除 .md 后缀)。
+   * 确定优先级: YAML frontmatter.title > 首个 H1 > 文件名(去除支持的笔记扩展名)。
    * 若三个来源均无 → `"Untitled"` (需引导用户补充标题)。
    */
   title: string;

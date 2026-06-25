@@ -278,21 +278,9 @@ test.describe('即时模式 (Live Preview)', () => {
     await clearEditor(page);
     await switchToLiveMode(page);
 
-    // Step 2: 在即时模式下通过 CM6 API 直接写入任务列表
-    // 确保 __markluck_getEditorView 返回的是正确（live）的 view
-    await page.waitForTimeout(500); // 等待 live editor 初始化
-    await page.evaluate(() => {
-      const view = (window as any).__markluck_getEditorView?.();
-      if (view) {
-        view.dispatch({
-          changes: {
-            from: 0,
-            to: view.state.doc.length,
-            insert: '- [ ] Task 1\n- [x] Task 2\n- [ ] Task 3\n末尾参考',
-          },
-        });
-      }
-    });
+    // Step 2: 在即时模式下通过真实键盘输入任务列表
+    await page.locator('.cm-content').click();
+    await page.keyboard.insertText('- [ ] Task 1\n- [x] Task 2\n- [ ] Task 3\n末尾参考');
     await page.waitForTimeout(300);
 
     // Step 3: 验证内容写入正确
@@ -322,33 +310,13 @@ test.describe('即时模式 (Live Preview)', () => {
     expect(isChecked1).toBe(true);
     expect(isChecked2).toBe(false);
 
-    // Step 7: 通过 CM6 API 反转复选框状态
-    await page.evaluate(() => {
-      const view = (window as any).__markluck_getEditorView?.();
-      if (!view) return;
-      const doc = view.state.doc.toString();
-      // Toggle Task 1: - [ ] → - [x]
-      const updated = doc.replace('- [ ] Task 1', '- [x] Task 1');
-      view.dispatch({
-        changes: { from: 0, to: view.state.doc.length, insert: updated },
-      });
-    });
-    await page.waitForTimeout(300);
+    // Step 7: 点击真实复选框反转状态，并验证 Markdown 写回
+    await checkboxes.nth(0).click();
 
-    let updatedContent = await getEditorContent(page);
-    expect(updatedContent).toContain('- [x] Task 1');
+    await expect.poll(() => getEditorContent(page)).toContain('- [x] Task 1');
 
     // Toggle Task 2: - [x] → - [ ]
-    await page.evaluate(() => {
-      const view = (window as any).__markluck_getEditorView?.();
-      if (!view) return;
-      const doc = view.state.doc.toString();
-      const updated = doc.replace('- [x] Task 2', '- [ ] Task 2');
-      view.dispatch({
-        changes: { from: 0, to: view.state.doc.length, insert: updated },
-      });
-    });
-    await page.waitForTimeout(300);
+    await checkboxes.nth(1).click();
 
     const finalContent = await getEditorContent(page);
     expect(finalContent).toContain('- [x] Task 1');

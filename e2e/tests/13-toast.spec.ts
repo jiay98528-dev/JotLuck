@@ -157,7 +157,9 @@ test.describe('Toast 关闭', () => {
 
     await page.waitForTimeout(300);
 
-    await expect(page.locator('.toast-close, [title="关闭"]').first()).toBeVisible({ timeout: 3000 });
+    await expect(page.locator('.toast-close, [title="关闭"]').first()).toBeVisible({
+      timeout: 3000,
+    });
   });
 
   test('10-点击关闭按钮移除 Toast', async ({ page }) => {

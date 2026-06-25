@@ -31,6 +31,7 @@
 
 .modal-card {
   max-height: 80vh;
+  max-width: calc(100vw - 32px);
   background: var(--paper-raised);
   border: var(--border-thin) solid var(--rule);
   border-radius: var(--radius-lg);
@@ -96,4 +97,22 @@
   padding: var(--space-12) var(--space-20);
   border-top: var(--border-thin) solid var(--rule);
   flex-shrink: 0;
+}
+
+@media (width <= 480px) {
+  .modal-overlay {
+    padding: var(--space-12);
+    align-items: stretch;
+  }
+
+  .modal-card {
+    width: 100% !important;
+    max-width: 100%;
+    max-height: calc(100vh - 24px);
+  }
+
+  .modal-header,
+  .modal-footer {
+    padding-inline: var(--space-12);
+  }
 }

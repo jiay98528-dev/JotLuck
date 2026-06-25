@@ -1,129 +1,149 @@
 # MarkLuck
 
-> 轻量、本地优先、离线可用的 Markdown 笔记工具
+MarkLuck is a lightweight, local-first Markdown notebook. Each note is a plain
+text note file (`.md`, `.markdown`, `.mdx`, or `.txt`), and each folder is a
+notebook. The app adds editing, search, backlinks, templates, export, image
+assets, and offline completion without locking user data into a database.
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.96%2B-orange.svg)](https://rust-lang.org)
-[![Vue](https://img.shields.io/badge/vue-3.5%2B-green.svg)](https://vuejs.org)
+Current release channel: `v0.15`.
 
-MarkLuck 的核心理念：**每一篇笔记就是一个 `.md` 文件，文件夹即笔记本。数据完全由你掌控。**
+This is a release candidate, not a final stable release. The current hardening
+work has reached the M-R7 final stop point plus the desktop RC risk-validation
+pass and the follow-up external-file hotfix pass. Chromium full E2E, Firefox
+risk journeys, the installed Windows desktop GUI flow, and the Tauri release
+package have passed; WebKit and `cargo audit` remain environment-blocked on
+this machine.
 
-所有笔记都是纯文本 Markdown 文件——你可以用 Git 管理版本，用 OneDrive 同步，用任何文本编辑器打开。MarkLuck 让它更好用，但绝不锁死你的数据。
+## Core Principles
 
----
+- Notes remain local plain text note files.
+- Notebook data is not uploaded.
+- Images are written into an `assets/` directory in the notebook.
+- The Web app can run in a mock/local browser mode; the Desktop app uses Tauri
+  and the real filesystem.
+- Offline completion uses local models and notebook training data only.
 
-## 特性
+## Features
 
-- **📝 纯文本即笔记** — 每个 `.md` 文件就是一篇笔记，文件夹就是笔记本
-- **🔗 Wiki-link 双向链接** — `[[笔记名]]` 自动关联，反向链接面板追踪引用
-- **🔍 全文搜索** — 正则 + 标签 + 日期过滤，秒级检索
-- **🧠 智能文字补全** — N-gram 幽灵文本预测，Tab 一键接受，`[[/#/路径` 结构化补全
-- **📋 模板系统** — 内置日记/会议/周报模板，支持自定义，`{{date}}` 等占位符自动替换
-- **📤 多格式导出** — PDF / DOCX / XLSX / CSV / TXT / HTML，一键导出
-- **🎨 纸张主题** — 日本和纸隐喻，暖调米白底，墨色文字，亮/暗色模式
-- **💻 跨平台** — Web (PWA) · Windows · macOS · Linux
+- Markdown editing with CodeMirror 6.
+- Live Preview with block-level editing.
+- Wiki-link syntax: `[[note]]`, aliases, dead/live link styling, and backlinks.
+- Full-text search with keyword, regex, tag, date, and folder filters.
+- File drawer, recent notes, outline, tags, and backlink panels.
+- Built-in and custom templates with placeholders such as `{{date}}`.
+- Image paste/drop/file upload into notebook `assets/`.
+- Export to PDF, DOCX, XLSX, CSV, TXT, and HTML.
+- Single-line offline ghost text completion with Tab acceptance.
+- Paper theme, dark mode, Theme Pack v1 local imports, responsive dialogs, and
+  keyboard-accessible switches.
+- Tauri desktop build with real filesystem IPC and file watching.
 
-## 安装
+## Install And Run
 
-### 桌面版
+### Requirements
 
-从 [Releases](https://github.com/jiay98528-dev/MarkLuck/releases) 下载对应平台安装包：
+- Node.js 20+
+- pnpm 11.x, or at least pnpm 9+
+- Rust 1.77.2+ for Tauri development
+- Platform dependencies required by Tauri for desktop packaging
 
-- **Windows**: `.msi` 或 `.exe` 安装程序
-- **macOS**: `.dmg` 磁盘映像
-- **Linux**: `.AppImage` 或 `.deb` 包
+### Web Development
 
-### Web 版
-
-访问 [markluck.app](https://markluck.app) 直接在浏览器中使用（需要浏览器支持 File System Access API）。
-
-### 开发者
-
-```bash
-# 克隆仓库
-git clone https://github.com/jiay98528-dev/MarkLuck.git
-cd markluck
-
-# 安装依赖
-pnpm install
-
-# 启动 Web 开发服务器
-pnpm --filter @markluck/app dev
-
-# 启动 Tauri 桌面开发
-pnpm --filter @markluck/app tauri:dev
+```powershell
+pnpm.cmd install
+pnpm.cmd --filter @markluck/app dev
 ```
 
-## 使用
+The default Vite dev URL is usually `http://localhost:5173/`.
 
-### 基本操作
+### Web Build
 
-| 操作     | 快捷键               |
-| -------- | -------------------- |
-| 新建笔记 | `+` 按钮（选择模板） |
-| 搜索笔记 | `Ctrl + Shift + P`   |
-| 加粗     | `Ctrl + B`           |
-| 斜体     | `Ctrl + I`           |
-| 插入链接 | `Ctrl + K`           |
-
-### Wiki-link 语法
-
-```markdown
-[[笔记名]] → 链接到同名笔记
-[[笔记名|显示文字]] → 链接到笔记，显示别名
-[[笔记名#标题]] → 链接到笔记的指定标题
+```powershell
+pnpm.cmd --filter @markluck/app build
+pnpm.cmd --filter @markluck/app preview
 ```
 
-### 模板占位符
+### Desktop Development
 
-创建笔记时可用模板，以下占位符会自动替换：
-
-| 占位符         | 替换为                |
-| -------------- | --------------------- |
-| `{{date}}`     | `2026-06-04`          |
-| `{{time}}`     | `14:30:00`            |
-| `{{datetime}}` | `2026-06-04 14:30:00` |
-| `{{year}}`     | `2026`                |
-| `{{month}}`    | `06`                  |
-| `{{day}}`      | `04`                  |
-| `{{week}}`     | `周四`                |
-
----
-
-## 技术栈
-
-| 层级          | 技术                                 |
-| ------------- | ------------------------------------ |
-| 前端框架      | Vue 3 (Composition API) + TypeScript |
-| 构建工具      | Vite 5                               |
-| 编辑器        | CodeMirror 6                         |
-| Markdown 渲染 | marked + DOMPurify + highlight.js    |
-| 状态管理      | Pinia                                |
-| Web 搜索      | minisearch                           |
-| 桌面框架      | Tauri v2 (Rust)                      |
-| 桌面搜索      | tantivy                              |
-| 文件监控      | notify (Rust crate)                  |
-
-## 项目结构
-
-```
-MarkLuck/
-├── packages/
-│   ├── app/              # @markluck/app — Vue 3 主应用
-│   │   ├── src/
-│   │   │   ├── components/   # UI 组件
-│   │   │   ├── stores/       # Pinia 状态
-│   │   │   ├── services/     # 业务逻辑
-│   │   │   ├── composables/  # 组合式函数
-│   │   │   └── utils/        # 工具函数
-│   │   └── src-tauri/        # Tauri Rust 后端
-│   └── renderer/         # @markluck/renderer — 共享渲染库
-├── spec/                 # 规格文档
-├── doc/                  # 设计文档
-├── e2e/                  # E2E 测试
-└── memory/               # 项目错题本
+```powershell
+pnpm.cmd --filter @markluck/app tauri:dev
 ```
 
-## 许可证
+### Desktop Release Package
 
-MIT © MarkLuck
+```powershell
+pnpm.cmd --filter @markluck/app tauri:build
+```
+
+The latest verified Windows NSIS release installer is copied to
+`打包/MarkLuck-v0.15-windows-x64/MarkLuck_v0.15_x64-setup.exe`.
+The latest verified SHA256 is
+`ace8db6f110eb13f3f7ad159fe25be309d7b8223f1515eb151c0e76fb30cac10`.
+
+External `.md/.markdown/.mdx` files opened from Windows start in a single-file
+read-only preview. MarkLuck does not scan the parent folder or add it as a
+notebook unless the user explicitly opens that folder as a notebook. `.txt`
+remains an app-internal note format and is not registered as a system launch
+format.
+
+## Release Verification
+
+Useful release-gate commands:
+
+```powershell
+pnpm.cmd --filter @markluck/app typecheck
+pnpm.cmd exec eslint packages/app/src packages/renderer/src
+pnpm.cmd exec prettier --check packages/app/src packages/renderer/src e2e spec memory README.md CHANGELOG.md RELEASE_NOTES.md KNOWN_LIMITATIONS.md
+pnpm.cmd --filter @markluck/app lint:style
+pnpm.cmd --filter @markluck/app exec vitest run
+pnpm.cmd --filter @markluck/app build
+pnpm.cmd --filter @markluck/app exec playwright test --project=chromium --workers=1
+pnpm.cmd --filter @markluck/app exec playwright test --project=firefox --workers=1
+pnpm.cmd audit --audit-level high
+pnpm.cmd --filter @markluck/app tauri:build
+```
+
+Known environment-dependent gates:
+
+- WebKit Playwright requires the WebKit browser binary to be installed.
+- `cargo audit` requires the `cargo-audit` subcommand.
+- Final release validation includes manual GUI journeys. The current RC pass
+  covered the tool in-app browser journey and an installed Windows desktop GUI
+  risk pass for `.mdx` launch, file-drawer filtering, `.txt` opening, default
+  documents, Chinese IME + Live Preview, Tab focus navigation, and welcome-page
+  default-app guidance.
+
+## Web And Desktop Capability Notes
+
+| Area                | Web app                                                     | Desktop app                               |
+| ------------------- | ----------------------------------------------------------- | ----------------------------------------- |
+| Note storage        | Browser/mock or File System Access depending on environment | Real local filesystem through Tauri IPC   |
+| File watching       | Limited by browser capability                               | Native file watcher through Rust `notify` |
+| Binary image writes | Supported by app abstraction; browser capability may vary   | Supported by Tauri binary IPC             |
+| Packaging           | Vite build                                                  | Tauri release bundle                      |
+| System dialogs      | Browser-limited                                             | Tauri dialog plugin                       |
+
+## User Data Safety
+
+- Notes are plain text note files in the selected notebook folder.
+- The app does not upload notebook content.
+- Images pasted into notes are written to `assets/img_*` files.
+- Deleting a note removes the note entry and related indexes; image assets are
+  not automatically deleted because assets can be shared by multiple notes.
+- Exported files are generated from the current Markdown content and downloaded
+  or written through the platform export path.
+
+## Documentation
+
+- Release notes: [RELEASE_NOTES.md](./RELEASE_NOTES.md)
+- Known limitations: [KNOWN_LIMITATIONS.md](./KNOWN_LIMITATIONS.md)
+- Product requirements: [doc/PRD.md](./doc/PRD.md)
+- Technical architecture: [doc/TAD.md](./doc/TAD.md)
+- Release hardening log:
+  [memory/release-hardening-execution-log.md](./memory/release-hardening-execution-log.md)
+- Final RC report:
+  [memory/release-candidate-final-report.md](./memory/release-candidate-final-report.md)
+
+## License
+
+MIT

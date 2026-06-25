@@ -52,9 +52,16 @@ pub fn resolve_safe_path(root: &Path, relative: &str) -> Result<PathBuf, PathErr
         return Err(PathError::InvalidChars(normalized));
     }
 
-    let target = Path::new(&normalized);
+    // The frontend uses notebook-rooted paths such as `/note.md` and `/folder/a.md`.
+    // Treat leading slashes as notebook-root markers, not OS absolute paths.
+    let notebook_relative = normalized.trim_start_matches('/');
+    let target = Path::new(notebook_relative);
 
-    if normalized.contains("..") && !is_safe_path(root, target) {
+    if target.is_absolute() {
+        return Err(PathError::PathTraversal(normalized));
+    }
+
+    if notebook_relative.contains("..") && !is_safe_path(root, target) {
         return Err(PathError::PathTraversal(normalized));
     }
 
@@ -90,7 +97,7 @@ mod tests {
     #[test]
     fn test_safe_path_within_root() {
         let root = env::temp_dir().join("markluck-test-safe");
-        let _ = std::fs::create_dir_all(&root);
+        let _ = std::fs::create_dir_all(root.join("notes"));
         let target = Path::new("notes/test.md");
         assert!(is_safe_path(&root, target));
         let _ = std::fs::remove_dir_all(&root);
@@ -103,5 +110,27 @@ mod tests {
         let target = Path::new("../../etc/passwd");
         assert!(!is_safe_path(&root, target));
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn test_resolve_notebook_root_marker() {
+        let root = env::temp_dir().join("markluck-test-root-marker");
+        let _ = std::fs::create_dir_all(root.join("notes"));
+        let resolved = resolve_safe_path(&root, "/notes/test.md").unwrap();
+        assert_eq!(resolved, root.join("notes/test.md"));
+        let resolved_root = resolve_safe_path(&root, "/").unwrap();
+        assert_eq!(resolved_root, root);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn test_reject_absolute_path_after_normalization() {
+        let root = env::temp_dir().join("markluck-test-absolute");
+        let _ = std::fs::create_dir_all(&root);
+        let outside = env::temp_dir().join("markluck-outside.md");
+        let outside_str = outside.to_string_lossy().to_string();
+        let result = resolve_safe_path(&root, &outside_str);
+        assert!(result.is_err());
+        let _ = std::fs::remove_dir_all(root);
     }
 }

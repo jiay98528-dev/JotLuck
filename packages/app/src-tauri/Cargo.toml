@@ -1,6 +1,6 @@
 [package]
 name = "markluck"
-version = "0.1.0"
+version = "0.15.0"
 description = "MarkLuck — local-first Markdown note-taking tool"
 authors = ["MarkLuck"]
 license = "MIT"
@@ -26,6 +26,7 @@ tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-process = "2"
+tauri-plugin-single-instance = "2"
 
 # M6-03: File system operations
 walkdir = "2"

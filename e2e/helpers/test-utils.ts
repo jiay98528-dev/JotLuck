@@ -15,11 +15,15 @@ import { expect } from '@playwright/test';
 export async function getEditorContent(page: Page): Promise<string> {
   return page.evaluate(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const view = (window as any).__markluck_getEditorView?.();
-    if (view) return view.state.doc.toString();
-    // fallback: read from .cm-content
-    const content = document.querySelector('.cm-content');
-    return content?.textContent ?? '';
+    const content = (window as any).__markluck_getEditorContent?.();
+    if (typeof content === 'string') return content;
+
+    const lines = Array.from(document.querySelectorAll('.cm-content .cm-line')).map(
+      (line) => line.textContent ?? '',
+    );
+    if (lines.length > 0) return lines.join('\n');
+
+    return document.querySelector('.cm-content')?.textContent ?? '';
   });
 }
 
@@ -54,6 +58,26 @@ export async function clearEditor(page: Page): Promise<void> {
 /** 等待自动保存完成 (状态栏显示"已保存") */
 export async function waitForAutoSave(page: Page): Promise<void> {
   await expect(page.locator('.status-saved')).toBeVisible({ timeout: 10000 });
+}
+
+/** 等待 MockFS 中指定文件内容落盘。 */
+export async function waitForMockFileContent(
+  page: Page,
+  path: string,
+  expectedText: string,
+): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate((targetPath) => {
+          const raw = localStorage.getItem('markluck-mockfs');
+          if (!raw) return '';
+          const data = JSON.parse(raw) as { files?: Record<string, { content?: string }> };
+          return data.files?.[targetPath]?.content ?? '';
+        }, path),
+      { timeout: 10000 },
+    )
+    .toContain(expectedText);
 }
 
 // ============================================================
@@ -108,10 +132,10 @@ export async function waitForAppReady(page: Page): Promise<void> {
   await page.addInitScript(() => {
     localStorage.setItem('markluck:welcome:completed', '1');
   });
-  await page.goto(APP_URL);
-  await page.waitForLoadState('networkidle');
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   // Wait for editor to be ready
   await expect(page.locator('.cm-content')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('.welcome-overlay')).toHaveCount(0);
   await page.waitForTimeout(500);
 }
 
@@ -135,17 +159,10 @@ export async function resetAppState(page: Page): Promise<void> {
     }
     keysToRemove.forEach((k) => localStorage.removeItem(k));
     sessionStorage.clear();
-  });
-  await page.reload();
-  await page.waitForLoadState('networkidle');
-  // Re-apply welcome skip after reload (addInitScript is persistent across navigations
-  // but not across reload() — the init script is re-injected on the next goto(),
-  // so we need to set it manually here)
-  await page.evaluate(() => {
     localStorage.setItem('markluck:welcome:completed', '1');
   });
-  await page.reload();
-  await page.waitForLoadState('networkidle');
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.locator('.cm-content')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('.welcome-overlay')).toHaveCount(0);
   await page.waitForTimeout(500);
 }

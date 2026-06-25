@@ -60,7 +60,7 @@ MarkLuck 采用严格的三层分离架构：
 │                          │                                       │
 │                    ┌─────┴─────┐                                 │
 │                    │ Local FS  │                                 │
-│                    │(.md files)│                                 │
+│                    │note files │                                 │
 │                    └───────────┘                                 │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -85,12 +85,12 @@ MarkLuck 采用严格的三层分离架构：
 
 ### 1.3 关键的不可变决策
 
-| 决策         | 说明                                                                        |
-| ------------ | --------------------------------------------------------------------------- |
-| 文件即数据源 | `.md` 文件是唯一数据源，绝不引入 SQLite/IndexedDB/LocalStorage 存储笔记内容 |
-| 前端先行     | Phase 1-3 纯 Web 开发，Phase 4 接入 Tauri；Mock 与真实实现共享同一接口签名  |
-| 离线优先     | 零网络依赖。PWA Service Worker 缓存所有静态资源，Tauri 端完全本地           |
-| 安全底线     | 所有 Markdown 渲染必经 DOMPurify。文件操作限定在用户选择的笔记本根目录内    |
+| 决策         | 说明                                                                                                                    |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| 文件即数据源 | `.md` / `.markdown` / `.mdx` / `.txt` 等纯文本笔记文件是唯一数据源，绝不引入 SQLite/IndexedDB/LocalStorage 存储笔记内容 |
+| 前端先行     | Phase 1-3 纯 Web 开发，Phase 4 接入 Tauri；Mock 与真实实现共享同一接口签名                                              |
+| 离线优先     | 零网络依赖。PWA Service Worker 缓存所有静态资源，Tauri 端完全本地                                                       |
+| 安全底线     | 所有 Markdown 渲染必经 DOMPurify。文件操作限定在用户选择的笔记本根目录内                                                |
 
 ### 1.4 项目结构（Monorepo）
 
@@ -143,7 +143,7 @@ MarkLuck/
 
 ### 1.5 系统文件关联（Tauri 端）
 
-MarkLuck 可通过 Tauri 配置文件注册为系统默认 `.md` 打开程序。
+MarkLuck 可通过 Tauri 配置文件注册为 Markdown 家族文件（`.md` / `.markdown` / `.mdx`）的可选打开程序。`.txt` 可在应用内部打开，但不注册为系统默认关联，避免抢占通用文本文件。
 
 **`tauri.conf.json` 配置**：
 
@@ -166,16 +166,16 @@ MarkLuck 可通过 Tauri 配置文件注册为系统默认 `.md` 打开程序。
 
 ```
 Tauri 启动 → 检查是否首次运行 → 是 → 显示 WelcomePage
-    ├── [设为默认] → 调用 Tauri API 注册文件关联
+    ├── [打开系统设置] → 引导用户在系统默认应用中手动选择 MarkLuck
     ├── [否] → 跳过
     └── [以后再说] → 记录标志，下次提示
                           ↓
-后续：设置页 → "文件关联" → [设为默认] / [取消关联]
+后续：设置页 → "文件关联" → [打开系统设置] / 手动路径提示
 ```
 
 **平台实现差异**：
 
-- Windows：写入注册表 `HKEY_CLASSES_ROOT\.md`
+- Windows：NSIS/Tauri 注册 `.md/.markdown/.mdx` 为可选打开程序；系统默认应用必须由用户在 Windows 设置中确认
 - macOS：修改 `Info.plist` + Launch Services
 - Linux：更新 `.desktop` 文件 MIME 类型
 
@@ -488,11 +488,18 @@ actions: {
 ```typescript
 // src/stores/theme.ts
 interface ThemeState {
-  mode: 'light' | 'dark' | 'system'; // 当前主题模式
-  resolved: 'light' | 'dark'; // 实际生效的主题
-  codeTheme: 'github' | 'github-dark'; // 代码高亮主题
+  activeThemeId: string; // 当前 Theme Pack ID，默认 paper
+  colorScheme: 'light' | 'dark'; // 当前明暗色方案
+  installedThemes: InstalledThemePack[]; // 本地导入主题
+  activeLayoutPreset: 'winged' | 'focus' | 'archive' | 'reader' | 'studio';
 }
 ```
+
+Theme Pack v1 只接受 `runtime: "css-v1"`，主题包由
+`ThemeRegistry` 和 `ThemePackInstaller` 管理。运行时写入
+`<html data-theme-id data-color-scheme data-layout-preset>`，并保留旧
+`markluck-theme` 明暗色 key 作为兼容镜像。完整包格式与安全边界见
+`spec/frontend/theme-packs.md`。
 
 ### 2.5 服务层抽象
 
@@ -1117,18 +1124,20 @@ function scan(text: string, n: number): NGramTable {
   return table;
 }
 
-function predict(
-  table: NGramTable, ctx: string, maxLen: number, minConfidence: number
-): string {
+function predict(table: NGramTable, ctx: string, maxLen: number, minConfidence: number): string {
   let result = '';
   let currentCtx = ctx;
   for (let i = 0; i < maxLen; i++) {
     const counts = table.get(currentCtx);
     if (!counts || counts.size === 0) break;
     // 取最高频次的下一个字符
-    let best = '', bestCount = 0;
+    let best = '',
+      bestCount = 0;
     for (const [ch, c] of counts) {
-      if (c > bestCount) { best = ch; bestCount = c; }
+      if (c > bestCount) {
+        best = ch;
+        bestCount = c;
+      }
     }
     // 置信度 = 最佳频次 / 总频次
     const total = [...counts.values()].reduce((a, b) => a + b, 0);
@@ -1160,7 +1169,7 @@ Tab 按下 → ghostText 可见 → 接受 ghost text（消费 Tab）
 function getGhostText(
   cursorPos: number,
   doc: string,
-  indexStore: IndexStore
+  indexStore: IndexStore,
 ): PredictionResult | null {
   // 0. 语法上下文快速短路
   if (isDisabledContext(cursorPos, doc)) return null; // 代码块/frontmatter
@@ -1177,13 +1186,17 @@ function getGhostText(
   let structured: PredictionResult | null = null;
   switch (syntaxCtx.type) {
     case 'wiki-link':
-      structured = predictWikiLink(syntaxCtx.prefix, indexStore); break;
+      structured = predictWikiLink(syntaxCtx.prefix, indexStore);
+      break;
     case 'tag':
-      structured = predictTag(syntaxCtx.prefix, indexStore); break;
+      structured = predictTag(syntaxCtx.prefix, indexStore);
+      break;
     case 'file-path':
-      structured = predictFilePath(syntaxCtx.prefix, indexStore); break;
+      structured = predictFilePath(syntaxCtx.prefix, indexStore);
+      break;
     case 'markdown-format':
-      structured = predictFormatClosure(syntaxCtx, doc); break;
+      structured = predictFormatClosure(syntaxCtx, doc);
+      break;
   }
 
   // 4. 融合：结构化高置信度时优先，否则信任 N-gram
@@ -1221,31 +1234,30 @@ function detectSyntaxContext(cursorPos: number, doc: string): SyntaxContext {
 
 **性能指标**：
 
-| 指标 | 目标 |
-|------|------|
-| N-gram 扫描 (100KB 文档) | < 50ms |
-| 单次预测查询（含融合） | < 1ms |
-| Ghost text 渲染 | < 5ms |
-| 结构化匹配查询 | < 1ms |
-| 内存占用 (1 文档) | < 5MB |
-| localStorage 持久化 (10 万条) | < 3MB |
+| 指标                          | 目标   |
+| ----------------------------- | ------ |
+| N-gram 扫描 (100KB 文档)      | < 50ms |
+| 单次预测查询（含融合）        | < 1ms  |
+| Ghost text 渲染               | < 5ms  |
+| 结构化匹配查询                | < 1ms  |
+| 内存占用 (1 文档)             | < 5MB  |
+| localStorage 持久化 (10 万条) | < 3MB  |
 
 **与现有扩展的集成点**：
 
 MarkdownEditor.vue 新增 `autocompleteCompartment`：
+
 ```typescript
 const autocompleteCompartment = new Compartment();
 // 在 createState 中：
-autocompleteCompartment.of(props.enableAutocomplete !== false
-  ? ghostTextPlugin(predictor)
-  : [])
+autocompleteCompartment.of(props.enableAutocomplete !== false ? ghostTextPlugin(predictor) : []);
 ```
 
 **基准 L2 预训练**：
 
 训练工具 `scripts/train-baseline.ts`（语料驱动，非硬编码）：
 
-```
+````
 架构:
   scripts/
   ├── train-baseline.ts              ← 训练工具：读语料 → 出基准
@@ -1258,7 +1270,7 @@ autocompleteCompartment.of(props.enableAutocomplete !== false
 
 训练流程:
   1. 读取 corpus.config.json → 获取源目录列表和权重
-  2. 扫描每个源目录下的所有 .md 文件
+  2. 扫描每个源目录下的 Markdown 语料文件
   3. 剥离代码块（```...```）和行内代码（`...`）
   4. N-gram 扫描（4-gram），按 source.weight 加权合并
   5. 注入 P0 硬编码格式闭合规则（~50 条，Markdown 语法规则）
@@ -1289,7 +1301,7 @@ autocompleteCompartment.of(props.enableAutocomplete !== false
 输出:
   public/baseline-ngram.v1.compact.txt (~2500-3000条, ~300-500KB)
   格式: ctx(hex)|pred1,cnt1|pred2,cnt2|pred3,cnt3|b\n
-```
+````
 
 **持久化格式**：
 
@@ -1786,12 +1798,12 @@ interface RecentNoteEntry {
 - 用户点击"重建索引"按钮
 - 笔记本首次打开，`.markluck_index.json` 不存在
 - 索引文件格式版本不兼容
-- 检测到索引数据严重不一致（notes 数量与实际 .md 文件数量偏差 > 10%）
+- 检测到索引数据严重不一致（notes 数量与实际支持格式笔记文件数量偏差 > 10%）
 
 重建流程：
 
 ```
-1. 扫描笔记本根目录下所有 .md 文件
+1. 扫描笔记本根目录下所有支持格式笔记文件
 2. 逐个解析：提取标题、标签、outlinks、摘要
 3. 构建反向链接映射
 4. 构建标签索引
@@ -1869,7 +1881,7 @@ fn fs_create_directory(path: String) -> Result<(), String>;
 
 #[tauri::command]
 fn fs_read_directory(path: String) -> Result<Vec<DirEntry>, String>;
-// 返回目录内容列表，仅返回 .md 文件和子目录
+// 返回目录内容列表，仅返回支持格式笔记文件和子目录
 
 #[tauri::command]
 fn fs_stat_file(path: String) -> Result<FileStat, String>;
@@ -2046,7 +2058,7 @@ pub fn start_watcher(
      │
      ├── PDF:   window.print() + print.css
      ├── docx:  docx.js Client API
-     ├── XLSX:  sheetjs (仅表格内容)
+     ├── XLSX:  write-excel-file (仅表格内容)
      ├── CSV:   string concat (仅表格内容)
      ├── TXT:   strip Markdown syntax
      └── HTML:  self-contained HTML (内嵌 CSS + JS)
@@ -2101,22 +2113,21 @@ function exportToDocx(markdown: string, options: ExportOptions): Blob {
 }
 ```
 
-#### XLSX/CSV — sheetjs
+#### XLSX/CSV — write-excel-file
 
 ```typescript
 // 仅提取 Markdown 中的表格内容导出
-function exportToXlsx(markdown: string): Blob {
+async function exportToXlsx(markdown: string): Promise<Blob> {
   const tables = extractTables(markdown);
-  const wb = XLSX.utils.book_new();
+  const sheets =
+    tables.length === 0
+      ? [{ sheet: 'Sheet1', data: [[markdown || '']] }]
+      : tables.map((table, i) => ({
+          sheet: tables.length === 1 ? 'Sheet1' : `Table_${i + 1}`,
+          data: [table.headers, ...table.rows],
+        }));
 
-  tables.forEach((table, i) => {
-    const ws = XLSX.utils.aoa_to_sheet(table.rows);
-    XLSX.utils.book_append_sheet(wb, ws, `Table_${i + 1}`);
-  });
-
-  return new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
+  return writeXlsxFile(sheets).toBlob();
 }
 
 function exportToCsv(markdown: string): string {
@@ -2891,7 +2902,7 @@ class MockFSService implements IFileSystemService {
 │                               │
 │ Web 路径 (minisearch):        │
 │  1. 从 useIndexStore 获取     │
-│     所有 .md 文件文本缓存     │
+│   所有支持格式笔记文本缓存   │
 │  2. 全文搜索: minisearch      │
 │  3. 标签过滤: filter by tags  │
 │  4. 日期范围: filter by date  │
@@ -2946,7 +2957,7 @@ class MockFSService implements IFileSystemService {
 │ │ docx.js → Blob            │ │
 │ └───────────────────────────┘ │
 │ ┌─ format === 'xlsx' ───────┐ │
-│ │ extractTables → sheetjs   │ │
+│ │ extractTables → write-excel-file   │ │
 │ └───────────────────────────┘ │
 │ ┌─ format === 'csv' ────────┐ │
 │ │ extractTables → CSV str   │ │
@@ -3119,23 +3130,23 @@ interface ShareOptions {
 
 ### 前端 (package.json)
 
-| 包名                      | 版本            | 用途              |
-| ------------------------- | --------------- | ----------------- |
-| vue                       | ^3.4            | 前端框架          |
-| vue-router                | ^4              | 路由              |
-| pinia                     | ^2              | 状态管理          |
-| @codemirror/view          | ^6              | CodeMirror 核心   |
-| @codemirror/state         | ^6              | CodeMirror 状态   |
-| @codemirror/lang-markdown | ^6              | Markdown 语法支持 |
-| @codemirror/commands      | ^6              | 基础快捷键        |
-| @codemirror/search        | ^6              | 编辑器内搜索      |
-| marked                    | ^14             | Markdown 解析     |
-| dompurify                 | ^3              | XSS 防护          |
-| highlight.js              | ^11             | 代码语法高亮      |
-| minisearch                | ^7              | Web 全文搜索      |
-| docx                      | ^9              | DOCX 导出         |
-| xlsx                      | ^0.20 (sheetjs) | XLSX 导出         |
-| @tauri-apps/api           | ^2              | Tauri IPC 前端    |
+| 包名                      | 版本 | 用途              |
+| ------------------------- | ---- | ----------------- |
+| vue                       | ^3.4 | 前端框架          |
+| vue-router                | ^4   | 路由              |
+| pinia                     | ^2   | 状态管理          |
+| @codemirror/view          | ^6   | CodeMirror 核心   |
+| @codemirror/state         | ^6   | CodeMirror 状态   |
+| @codemirror/lang-markdown | ^6   | Markdown 语法支持 |
+| @codemirror/commands      | ^6   | 基础快捷键        |
+| @codemirror/search        | ^6   | 编辑器内搜索      |
+| marked                    | ^14  | Markdown 解析     |
+| dompurify                 | ^3   | XSS 防护          |
+| highlight.js              | ^11  | 代码语法高亮      |
+| minisearch                | ^7   | Web 全文搜索      |
+| docx                      | ^9   | DOCX 导出         |
+| write-excel-file          | ^4.x | XLSX 导出         |
+| @tauri-apps/api           | ^2   | Tauri IPC 前端    |
 
 ### Rust (Cargo.toml) — Phase 4 启用
 

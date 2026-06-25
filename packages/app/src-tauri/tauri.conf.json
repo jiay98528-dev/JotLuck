@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "MarkLuck",
-  "version": "0.1.0",
+  "version": "0.15.0",
   "identifier": "com.markluck.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -40,18 +40,36 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": {
+      "icons/file-icon.ico": "file-icon.ico"
+    },
     "fileAssociations": [
       {
-        "ext": ["md", "markdown"],
-        "name": "Markdown",
+        "ext": ["md", "markdown", "mdx"],
+        "name": "MarkLuck.Markdown",
         "description": "Markdown Document",
         "role": "Editor"
       }
     ],
     "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper",
+        "silent": true
+      },
       "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "headerImage": "installer-assets/header.bmp",
+        "uninstallerHeaderImage": "installer-assets/header.bmp",
+        "sidebarImage": "installer-assets/sidebar.bmp",
         "installMode": "currentUser",
-        "languages": ["SimpChinese", "English"]
+        "languages": ["SimpChinese", "English"],
+        "customLanguageFiles": {
+          "SimpChinese": "installer-assets/SimpChinese.nsh",
+          "English": "installer-assets/English.nsh"
+        },
+        "installerHooks": "installer-assets/hooks.nsh",
+        "displayLanguageSelector": true
       }
     },
     "macOS": {
@@ -74,12 +92,6 @@
     }
   },
   "plugins": {
-    "fs": {
-      "scope": {
-        "allow": ["**"],
-        "deny": []
-      }
-    },
     "shell": {
       "open": true
     }

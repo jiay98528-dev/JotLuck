@@ -60,15 +60,18 @@
               <div v-else-if="currentStep === 4" class="welcome-step-body">
                 <h2 class="welcome-step-title">把我设为默认编辑器？</h2>
                 <p class="welcome-step-text">
-                  双击 .md 文件，即刻开始编辑与预览。<br />
-                  轻量化启动，清爽界面，干净的文档体验。
+                  安装器会把 MarkLuck 注册为 .md/.markdown/.mdx 的可选打开程序。<br />
+                  Windows 仍要求你在系统设置中手动选择默认应用。
                 </p>
                 <div class="welcome-step-4-actions">
                   <Button variant="default" size="md" @click="onSetDefaultEditor">
-                    设为默认编辑器
+                    打开系统设置
                   </Button>
                   <button class="welcome-link-btn" @click="nextStep">暂不设置</button>
                 </div>
+                <p v-if="defaultEditorNotice" class="welcome-setting-note">
+                  {{ defaultEditorNotice }}
+                </p>
               </div>
 
               <!-- Step 5 -->
@@ -137,6 +140,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { open as openExternal } from '@tauri-apps/plugin-shell';
 import Button from '@/components/common/Button.vue';
 
 // ── Props / Emits ──────────────────────────────────────────
@@ -147,10 +151,12 @@ const emit = defineEmits<{ 'update:visible': [boolean]; complete: [] }>();
 const WELCOME_KEY = 'markluck:welcome:completed';
 const AUTO_CHECK_KEY = 'markluck:version:autoCheck';
 const AUTO_INSTALL_KEY = 'markluck:version:autoInstall';
+const DEFAULT_EDITOR_PROMPT_KEY = 'markluck:welcome:defaultEditorPrompted';
 
 const currentStep = ref(1);
 const autoCheckEnabled = ref(localStorage.getItem(AUTO_CHECK_KEY) === 'true');
 const autoInstallEnabled = ref(localStorage.getItem(AUTO_INSTALL_KEY) === 'true');
+const defaultEditorNotice = ref('');
 
 // ── Lifecycle ──────────────────────────────────────────────
 onMounted(() => {
@@ -186,12 +192,25 @@ function complete(): void {
   emit('complete');
 }
 
-function onSetDefaultEditor(): void {
-  // TODO(Tauri): Call Tauri API to register MarkLuck as the default .md file handler.
-  // In the web build, this is a no-op with a console log for development visibility.
-  // eslint-disable-next-line no-console
-  console.log('[WelcomePage] 设为默认编辑器 — Tauri default file handler registration requested.');
-  nextStep();
+async function onSetDefaultEditor(): Promise<void> {
+  localStorage.setItem(DEFAULT_EDITOR_PROMPT_KEY, '1');
+  defaultEditorNotice.value =
+    '已为你打开 Windows 默认应用设置。请搜索 .md、.markdown 或 .mdx，并选择 MarkLuck 作为默认应用。';
+
+  if (!window.__TAURI__) {
+    defaultEditorNotice.value =
+      '当前是 Web 预览环境。安装版会打开 Windows 默认应用设置，默认应用需要你手动选择 MarkLuck。';
+    return;
+  }
+
+  try {
+    await openExternal('ms-settings:defaultapps');
+  } catch (e) {
+    defaultEditorNotice.value =
+      '无法自动打开系统设置。请手动进入 Windows 设置 > 应用 > 默认应用，搜索 .md、.markdown 或 .mdx 后选择 MarkLuck。';
+    // eslint-disable-next-line no-console
+    console.warn('[WelcomePage] 打开 Windows 默认应用设置失败:', e);
+  }
 }
 </script>
 
@@ -394,6 +413,14 @@ function onSetDefaultEditor(): void {
 .welcome-link-btn:hover {
   color: var(--ink-primary);
   background: var(--surface-hover);
+}
+
+.welcome-setting-note {
+  max-width: 400px;
+  margin: var(--space-8) 0 0;
+  color: var(--ink-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--lh-body);
 }
 
 /* ===== Step 5: Version Settings ===== */

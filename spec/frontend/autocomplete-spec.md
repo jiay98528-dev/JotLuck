@@ -20,37 +20,37 @@ MarkdownPredictor (服务层)        ← 融合决策
 
 ### 文件清单
 
-| 文件 | 职责 |
-|------|------|
-| `packages/app/src/utils/ngram-engine.ts` | N-gram 纯算法：scan/predict/learn/merge/prune/serialize/deserialize |
-| `packages/app/src/services/MarkdownPredictor.ts` | 服务层：L1/L2 管理 + 融合决策 + 持久化 + 淘汰 |
-| `packages/app/src/utils/cm6-ghost-text.ts` | CM6 插件：GhostTextPlugin + Tab/Escape keymap |
-| `packages/app/src/assets/styles/editor.css` | Ghost text CSS 样式 |
-| `packages/app/src/components/editor/MarkdownEditor.vue` | 集成点：autocomplete Compartment |
-| `scripts/train-baseline.ts` | 构建脚本：生成基准 L2 |
-| `packages/app/public/baseline-ngram.v1.compact.txt` | 基准数据文件 |
+| 文件                                                    | 职责                                                                |
+| ------------------------------------------------------- | ------------------------------------------------------------------- |
+| `packages/app/src/utils/ngram-engine.ts`                | N-gram 纯算法：scan/predict/learn/merge/prune/serialize/deserialize |
+| `packages/app/src/services/MarkdownPredictor.ts`        | 服务层：L1/L2 管理 + 融合决策 + 持久化 + 淘汰                       |
+| `packages/app/src/utils/cm6-ghost-text.ts`              | CM6 插件：GhostTextPlugin + Tab/Escape keymap                       |
+| `packages/app/src/assets/styles/editor.css`             | Ghost text CSS 样式                                                 |
+| `packages/app/src/components/editor/MarkdownEditor.vue` | 集成点：autocomplete Compartment                                    |
+| `scripts/train-baseline.ts`                             | 构建脚本：生成基准 L2                                               |
+| `packages/app/public/baseline-ngram.v1.compact.txt`     | 基准数据文件                                                        |
 
 ## 三、数据架构
 
 ### 分层缓存
 
-| 层 | 位置 | 来源 | 大小 | 生命周期 |
-|----|------|------|:--:|------|
-| L0 | IndexStore (Pinia) | .markluck_index.json | — | 应用启动→关闭 |
-| L1 | 内存 | scanDocument(当前文档) | ~300KB | 文档打开→关闭 |
-| L2 | localStorage | 基准 + 用户积累 | ~500KB-3.5MB | 持久化 |
+| 层  | 位置               | 来源                   |     大小     | 生命周期      |
+| --- | ------------------ | ---------------------- | :----------: | ------------- |
+| L0  | IndexStore (Pinia) | .markluck_index.json   |      —       | 应用启动→关闭 |
+| L1  | 内存               | scanDocument(当前文档) |    ~300KB    | 文档打开→关闭 |
+| L2  | localStorage       | 基准 + 用户积累        | ~500KB-3.5MB | 持久化        |
 
 ### 基准 L2 预训练
 
-| 优先级 | 类别 | 条目 | 生成方式 |
-|:--:|------|:--:|------|
-| P0 | Markdown 格式闭合 | ~80 | 硬编码规则 |
-| P1 | 中文技术文档搭配 | ~1200 | 扫描 doc/*.md + spec/*.md |
-| P2 | 标点/空白/换行模式 | ~300 | 硬编码规则 |
-| P3 | 英文编程/文档 N-gram | ~600 | 手工列表 |
-| P4 | 中文技术高频搭配 | ~500 | 手工列表 |
-| P5 | 日期/时间/模板 | ~200 | 硬编码规则 |
-| | **合计** | **~2880** | |
+| 优先级 | 类别                 |   条目    | 生成方式                  |
+| :----: | -------------------- | :-------: | ------------------------- |
+|   P0   | Markdown 格式闭合    |    ~80    | 硬编码规则                |
+|   P1   | 中文技术文档搭配     |   ~1200   | 扫描 doc/_.md + spec/_.md |
+|   P2   | 标点/空白/换行模式   |   ~300    | 硬编码规则                |
+|   P3   | 英文编程/文档 N-gram |   ~600    | 手工列表                  |
+|   P4   | 中文技术高频搭配     |   ~500    | 手工列表                  |
+|   P5   | 日期/时间/模板       |   ~200    | 硬编码规则                |
+|        | **合计**             | **~2880** |                           |
 
 ### 持久化格式
 
@@ -102,15 +102,15 @@ scripts/corpus/
 
 ### 场景覆盖矩阵
 
-| 上下文 | 触发条件 | 预测来源 | 示例输入 → 预测 |
-|--------|----------|----------|----------------|
-| 普通段落 | 任意文本 | N-gram (L1+L2) | `为了解` → `决这个问题` |
-| 格式闭合 | `**`/`*`/`` ` ``/`__` 未闭合 | N-gram | `**粗` → `体**` |
-| Wiki-link | `[[` 内 | 结构化优先 | `[[` → `快速入门]]` |
-| 标签 | 空格后 `#` | 结构化优先 | `#` → `javascript ` |
-| 文件路径 | `[text](` 或 `![](`` 内 | 结构化优先 | `[link](` → `./notes/readme.md)` |
-| 列表续行 | `- ` / `1. ` 行首 | N-gram | `- ` → `列表项` |
-| 代码块 | `` ``` `` 内 | **不触发** | — |
+| 上下文    | 触发条件                     | 预测来源       | 示例输入 → 预测                  |
+| --------- | ---------------------------- | -------------- | -------------------------------- |
+| 普通段落  | 任意文本                     | N-gram (L1+L2) | `为了解` → `决这个问题`          |
+| 格式闭合  | `**`/`*`/`` ` ``/`__` 未闭合 | N-gram         | `**粗` → `体**`                  |
+| Wiki-link | `[[` 内                      | 结构化优先     | `[[` → `快速入门]]`              |
+| 标签      | 空格后 `#`                   | 结构化优先     | `#` → `javascript `              |
+| 文件路径  | `[text](` 或 `![](`` 内      | 结构化优先     | `[link](` → `./notes/readme.md)` |
+| 列表续行  | `- ` / `1. ` 行首            | N-gram         | `- ` → `列表项`                  |
+| 代码块    | ` ``` ` 内                   | **不触发**     | —                                |
 
 ### 语法上下文检测
 
@@ -120,7 +120,7 @@ type SyntaxContext =
   | { type: 'tag'; prefix: string }
   | { type: 'file-path'; prefix: string }
   | { type: 'markdown-format'; openMarker: string }
-  | { type: 'general' }
+  | { type: 'general' };
 ```
 
 ### 融合决策
@@ -135,43 +135,43 @@ ngram 为 null → 返回 structured
 
 ## 五、交互规范
 
-| 用户行为 | 系统响应 |
-|----------|----------|
-| 停止输入 150ms | 出现 ghost text（如果存在高置信度预测） |
-| `Tab` | ghost text 变为实际文本，learn() 更新统计表 |
-| 继续输入任意字符 | ghost text 消失，150ms 后重新预测 |
-| `Escape` | 清除 ghost text，降低该上下文权重 |
-| 切换笔记 | L1 切换为新文档，L2 保留 |
-| 首次启动 | fetch 基准 L2 → 基础预测立即可用 |
+| 用户行为         | 系统响应                                    |
+| ---------------- | ------------------------------------------- |
+| 停止输入 150ms   | 出现 ghost text（如果存在高置信度预测）     |
+| `Tab`            | ghost text 变为实际文本，learn() 更新统计表 |
+| 继续输入任意字符 | ghost text 消失，150ms 后重新预测           |
+| `Escape`         | 清除 ghost text，降低该上下文权重           |
+| 切换笔记         | L1 切换为新文档，L2 保留                    |
+| 首次启动         | fetch 基准 L2 → 基础预测立即可用            |
 
 ### 快捷键
 
-| 按键 | 行为 | 优先级 |
-|------|------|:--:|
-| `Tab` | Ghost text 可见 → 接受补全 | 最高 |
-| `Tab` | Ghost text 不可见 → 插入制表符缩进 | 默认 |
-| `Escape` | 清除 ghost text + 降低权重 | 高 |
+| 按键     | 行为                               | 优先级 |
+| -------- | ---------------------------------- | :----: |
+| `Tab`    | Ghost text 可见 → 接受补全         |  最高  |
+| `Tab`    | Ghost text 不可见 → 插入制表符缩进 |  默认  |
+| `Escape` | 清除 ghost text + 降低权重         |   高   |
 
 ### 禁用区域
 
-- 代码块内（`` ``` `` 到 `` ``` ``）
+- 代码块内（` ``` ` 到 ` ``` `）
 - YAML frontmatter 内（文件开头的 `---` 到 `---`）
 - 空行/纯空白行
 - 置信度 < 0.15
 
 ## 六、性能约束
 
-| 指标 | 目标 |
-|------|------|
-| scanDocument (100KB) | < 50ms |
-| 单次 predict | < 1ms |
-| Ghost text 渲染 | < 5ms |
-| 结构化匹配 | < 1ms |
-| 总端到端延迟 (含防抖) | < 160ms |
-| L1 内存占用 | < 500KB |
-| L2 localStorage | < 5MB |
-| Bundle 增量 (gzip) | < 5KB |
-| Baseline 静态资源 | < 500KB (gzip ~90KB) |
+| 指标                  | 目标                 |
+| --------------------- | -------------------- |
+| scanDocument (100KB)  | < 50ms               |
+| 单次 predict          | < 1ms                |
+| Ghost text 渲染       | < 5ms                |
+| 结构化匹配            | < 1ms                |
+| 总端到端延迟 (含防抖) | < 160ms              |
+| L1 内存占用           | < 500KB              |
+| L2 localStorage       | < 5MB                |
+| Bundle 增量 (gzip)    | < 5KB                |
+| Baseline 静态资源     | < 500KB (gzip ~90KB) |
 
 ## 七、验收标准
 

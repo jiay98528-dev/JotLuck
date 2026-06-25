@@ -90,6 +90,8 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
       // IME listener refs for cleanup in destroy()
       private __compStart: ((e: Event) => void) | null = null;
       private __compEnd: ((e: Event) => void) | null = null;
+      private __focus: ((e: FocusEvent) => void) | null = null;
+      private __blur: ((e: FocusEvent) => void) | null = null;
 
       constructor(view: EditorView) {
         this.editorView = view;
@@ -108,6 +110,19 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         view.contentDOM.addEventListener('compositionend', onCompEnd, { passive: true });
         this.__compStart = onCompStart;
         this.__compEnd = onCompEnd;
+
+        const onFocus = () => {
+          if (this.isImeActive(view)) return;
+          this.schedulePredict(view);
+        };
+        const onBlur = () => {
+          this.clearPendingTimers();
+          this.clearGhost(view);
+        };
+        view.contentDOM.addEventListener('focus', onFocus);
+        view.contentDOM.addEventListener('blur', onBlur);
+        this.__focus = onFocus;
+        this.__blur = onBlur;
 
         this.schedulePredict(view);
       }
@@ -207,9 +222,20 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
       }
 
       private isImeActive(view: EditorView, update?: ViewUpdate): boolean {
-        void view;
         void update;
-        return this.isComposing;
+        return this.isComposing || view.composing || view.compositionStarted;
+      }
+
+      canAcceptGhost(view: EditorView): boolean {
+        if (!this.currentGhostText) return false;
+        if (this.isImeActive(view)) return false;
+        if (!view.state.selection.main.empty) return false;
+
+        const activeElement = view.root.activeElement;
+        const editorHasDomFocus =
+          activeElement === view.contentDOM ||
+          (activeElement instanceof Node && view.contentDOM.contains(activeElement));
+        return view.hasFocus || editorHasDomFocus;
       }
 
       private clearPendingTimers(): void {
@@ -234,7 +260,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
 
       /** 接受当前 ghost text */
       acceptGhost(view: EditorView): boolean {
-        if (!this.currentGhostText) return false;
+        if (!this.canAcceptGhost(view)) return false;
 
         const cursor = view.state.selection.main.head;
         const text = this.currentGhostText;
@@ -306,6 +332,8 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           const dom = this.editorView.contentDOM;
           if (this.__compStart) dom.removeEventListener('compositionstart', this.__compStart);
           if (this.__compEnd) dom.removeEventListener('compositionend', this.__compEnd);
+          if (this.__focus) dom.removeEventListener('focus', this.__focus);
+          if (this.__blur) dom.removeEventListener('blur', this.__blur);
           this.editorView = null;
         }
       }
@@ -323,8 +351,9 @@ function ghostTextKeymap(pluginSpec: ReturnType<typeof createGhostTextPlugin>) {
         if (view.composing || view.compositionStarted) return false;
         const plugin = view.plugin(pluginSpec);
         if (!plugin) return false;
-        // 如果有 ghost text → 接受
-        if (plugin.currentGhostText) {
+        // Accept Tab only when the editor owns focus and the current cursor has
+        // a visible ghost text. Otherwise native focus navigation must win.
+        if (plugin.canAcceptGhost(view)) {
           return plugin.acceptGhost(view);
         }
         // 否则回退默认行为
@@ -372,7 +401,9 @@ export function ghostTextPlugin(
         if (view.composing || view.compositionStarted) {
           return false;
         }
-        if (event.key === 'Tab' && p.currentGhostText) {
+        if (event.key === 'Tab' && p.canAcceptGhost(view)) {
+          const target = event.target;
+          if (target instanceof Node && !view.contentDOM.contains(target)) return false;
           event.preventDefault();
           return p.acceptGhost(view);
         }

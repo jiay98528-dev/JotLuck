@@ -179,4 +179,15 @@
   /* === Transform — Winged === */
   --lift-hover: translateY(-1px);
   --lift-active: translateY(0) scale(0.96);
+
+  /* === Theme Pack Hooks === */
+  --theme-bg-image: none;
+  --theme-bg-size: cover;
+  --theme-bg-position: center;
+  --theme-bg-opacity: 0;
+  --theme-crest-image: none;
+  --theme-crest-size: 220px;
+  --theme-crest-opacity: 0;
+  --theme-control-density: 1;
+  --theme-transition: opacity var(--dur-micro) var(--ease-fade);
 }

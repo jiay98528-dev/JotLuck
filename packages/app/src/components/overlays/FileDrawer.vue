@@ -474,6 +474,11 @@
  */
 import { ref, computed, watch, nextTick } from 'vue';
 import type { DirEntry } from '@/types';
+import {
+  isMarkdownLikeFile,
+  isSupportedNoteFile,
+  stripSupportedNoteExtension,
+} from '@/utils/note-files';
 
 // ============================================================
 // Props & Emits
@@ -562,7 +567,7 @@ const contextMenuStyle = computed(() => ({
  * Only expanded directories' children are included in the output.
  */
 const flatTree = computed<FlatNode[]>(() => {
-  const files = props.files;
+  const files = props.files.filter(isVisibleDrawerEntry);
   if (files.length === 0) return [];
 
   // Group entries by parent directory path
@@ -651,11 +656,21 @@ function dirname(path: string): string {
 }
 
 function isMarkdownFile(name: string): boolean {
-  return /\.(md|mdx|markdown)$/i.test(name);
+  return isMarkdownLikeFile(name);
 }
 
 function isImageFile(name: string): boolean {
   return /\.(png|jpe?g|gif|svg|webp|bmp|ico|avif)$/i.test(name);
+}
+
+function isHiddenAssetEntry(entry: DirEntry): boolean {
+  const normalized = entry.path.replace(/\\/g, '/').toLowerCase();
+  return normalized === '/assets' || normalized.startsWith('/assets/');
+}
+
+function isVisibleDrawerEntry(entry: DirEntry): boolean {
+  if (isHiddenAssetEntry(entry)) return false;
+  return entry.isDirectory || isSupportedNoteFile(entry.name);
 }
 
 function iconClass(node: FlatNode): string {
@@ -667,13 +682,14 @@ function iconClass(node: FlatNode): string {
   return 'icon-generic';
 }
 
-function extractFileNameWithoutExt(fullName: string): string {
-  const lastDot = fullName.lastIndexOf('.');
-  return lastDot <= 0 ? fullName : fullName.substring(0, lastDot);
-}
-
 function setRenameInputRef(el: unknown): void {
   renameInputEl.value = el as HTMLInputElement | null;
+}
+
+function preserveSupportedExtension(oldName: string, requestedName: string): string {
+  if (isSupportedNoteFile(requestedName) || requestedName.includes('.')) return requestedName;
+  const ext = oldName.match(/\.(?:markdown|mdx|md|txt)$/i)?.[0] ?? '';
+  return ext ? `${requestedName}${ext}` : requestedName;
 }
 
 // ============================================================
@@ -725,14 +741,14 @@ function handleItemClick(node: FlatNode): void {
   if (node.entry.isDirectory) {
     toggleDir(node.entry.path);
     emit('navigate-dir', node.entry.path);
-  } else {
+  } else if (isSupportedNoteFile(node.entry.name)) {
     emit('select-file', node.entry.path);
     close(); // 选择文件后自动关闭抽屉，避免 overlay 永久遮挡编辑器
   }
 }
 
 function handleItemDblClick(node: FlatNode): void {
-  if (!node.entry.isDirectory) {
+  if (!node.entry.isDirectory && isSupportedNoteFile(node.entry.name)) {
     startRename(node.entry.path, node.entry.name);
   }
 }
@@ -747,9 +763,9 @@ function startRename(path: string, currentName: string): void {
   void nextTick(() => {
     const input = renameInputEl.value;
     if (input) {
-      // Select filename without extension for Markdown files
-      if (isMarkdownFile(currentName)) {
-        const nameWithoutExt = extractFileNameWithoutExt(currentName);
+      // Select filename without extension for supported note files
+      if (isSupportedNoteFile(currentName)) {
+        const nameWithoutExt = stripSupportedNoteExtension(currentName);
         input.setSelectionRange(0, nameWithoutExt.length);
       } else {
         input.select();
@@ -762,15 +778,14 @@ function startRename(path: string, currentName: string): void {
 function commitRename(): void {
   if (renamingPath.value === null) return;
 
-  const newName = renameValue.value.trim();
   const oldPath = renamingPath.value;
+  const oldName = oldPath.includes('/') ? oldPath.substring(oldPath.lastIndexOf('/') + 1) : oldPath;
+  const newName = preserveSupportedExtension(oldName, renameValue.value.trim());
 
   renamingPath.value = null;
   renameValue.value = '';
 
   if (newName.length === 0) return;
-
-  const oldName = oldPath.includes('/') ? oldPath.substring(oldPath.lastIndexOf('/') + 1) : oldPath;
 
   if (newName === oldName) return;
 
@@ -790,6 +805,7 @@ function cancelRename(): void {
 
 function openContextMenu(event: MouseEvent, node: FlatNode): void {
   if (node.entry.isDirectory) return;
+  if (!isSupportedNoteFile(node.entry.name)) return;
 
   contextMenu.value = {
     visible: true,
@@ -814,7 +830,7 @@ function closeContextMenu(): void {
 function handleContextMenuRename(): void {
   const node = contextMenu.value.node;
   closeContextMenu();
-  if (node && !node.entry.isDirectory) {
+  if (node && !node.entry.isDirectory && isSupportedNoteFile(node.entry.name)) {
     startRename(node.entry.path, node.entry.name);
   } else {
     // 关闭右键菜单后 DOM 移除 → 焦点丢失 → 重新聚焦 overlay 恢复键盘事件可达性
@@ -825,7 +841,7 @@ function handleContextMenuRename(): void {
 function handleContextMenuDelete(): void {
   const node = contextMenu.value.node;
   closeContextMenu();
-  if (node && !node.entry.isDirectory) {
+  if (node && !node.entry.isDirectory && isSupportedNoteFile(node.entry.name)) {
     emit('delete-file', node.entry.path);
     close();
   } else {
@@ -922,7 +938,6 @@ watch(
   box-shadow: var(--shadow-stack);
   z-index: calc(var(--z-drawer) + 1);
   contain: layout style paint;
-  will-change: transform;
 }
 
 /* ============================================================
@@ -1423,7 +1438,7 @@ watch(
 }
 
 .drawer-enter-active .file-drawer {
-  transition: transform var(--dur-drawer) var(--ease-fold);
+  transition: none;
 }
 
 .drawer-leave-active {
@@ -1431,7 +1446,7 @@ watch(
 }
 
 .drawer-leave-active .file-drawer {
-  transition: transform var(--dur-collapse) var(--ease-exit);
+  transition: none;
 }
 
 .drawer-enter-from {
@@ -1439,7 +1454,7 @@ watch(
 }
 
 .drawer-enter-from .file-drawer {
-  transform: translateX(calc(var(--drawer-width) * -1));
+  transform: none;
 }
 
 .drawer-leave-to {
@@ -1447,7 +1462,7 @@ watch(
 }
 
 .drawer-leave-to .file-drawer {
-  transform: translateX(calc(var(--drawer-width) * -1));
+  transform: none;
 }
 
 /* ============================================================

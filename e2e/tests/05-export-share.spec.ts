@@ -5,6 +5,7 @@
  *       分享对话框打开/关闭/格式选项
  */
 import { test, expect } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import {
   waitForAppReady,
   openExportDialog,
@@ -129,27 +130,53 @@ test.describe('导出与分享', () => {
 
   // ── Export Action ──────────────────────────────────────
 
-  test('08-选择格式后触发导出动作', async ({ page }) => {
+  test('08-选择格式后触发导出动作并验证文件内容', async ({ page }) => {
     await openExportDialog(page);
     await expect(page.locator('.modal-overlay')).toBeVisible();
 
     // 默认选中 PDF，点击导出
     await expect(page.locator('.format-card.selected')).toContainText('PDF');
 
-    // 选择 DOCX 格式
-    await page.locator('.format-card', { hasText: 'DOCX' }).click();
-    await expect(page.locator('.format-card.selected')).toContainText('DOCX');
+    // 选择 TXT 格式，便于直接读取下载文件内容做强断言
+    await page.locator('.format-card', { hasText: 'TXT' }).click();
+    await expect(page.locator('.format-card.selected')).toContainText('TXT');
 
-    // 点击导出按钮触发导出
+    const downloadPromise = page.waitForEvent('download');
     await page.locator('.modal-footer button', { hasText: '导出' }).click();
+    const download = await downloadPromise;
 
-    // 导出过程中/完成后应有状态反馈（spinner 或成功/失败状态）
-    // 等待至少一种状态出现
+    const downloadPath = await download.path();
+    expect(download.suggestedFilename()).toMatch(/\.txt$/);
+    expect(downloadPath).toBeTruthy();
+    const exported = await readFile(downloadPath!, 'utf8');
+    expect(exported).toContain('测试导出');
+    expect(exported).toContain('这是一段用于导出测试的 Markdown 内容。');
+
+    // 导出过程中/完成后应有状态反馈
     const exportStatus = page.locator('.export-status, .spinner, .checkmark, .error-icon');
     await expect(exportStatus.first()).toBeVisible({ timeout: 10000 });
 
     // 最终应该看到成功状态（在 mock/web 环境下导出较快）
     const successOrClose = page.locator('.modal-footer button:has-text("关闭"), .success-text');
     await expect(successOrClose.first()).toBeVisible({ timeout: 10000 });
+  });
+
+  test('09-export XLSX creates a readable workbook container', async ({ page }) => {
+    await openExportDialog(page);
+    await expect(page.locator('.modal-overlay')).toBeVisible();
+
+    await page.locator('.format-card', { hasText: 'XLSX' }).click();
+    await expect(page.locator('.format-card.selected')).toContainText('XLSX');
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.locator('.modal-footer button:last-child').click();
+    const download = await downloadPromise;
+
+    const downloadPath = await download.path();
+    expect(download.suggestedFilename()).toMatch(/\.xlsx$/);
+    expect(downloadPath).toBeTruthy();
+    const exported = await readFile(downloadPath!);
+    expect(exported.byteLength).toBeGreaterThan(100);
+    expect(exported.subarray(0, 2).toString('utf8')).toBe('PK');
   });
 });

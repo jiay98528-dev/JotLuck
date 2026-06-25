@@ -532,9 +532,9 @@ interface ToastAPI {
 
 // Slots
 {
-  'left-sidebar'   // 左侧栏 (260px)
-  editor           // 中央编辑区 (flex: 1)
-  'right-sidebar'  // 右侧栏 (240px)
+  ('left-sidebar'); // 左侧栏 (260px)
+  editor; // 中央编辑区 (flex: 1)
+  ('right-sidebar'); // 右侧栏 (240px)
 }
 
 // 行为: CSS Grid `260px 1fr 240px`, 移动端 (<768px) 单栏 + 抽屉
@@ -550,6 +550,7 @@ interface ToastAPI {
 ```
 
 #### SidebarLeft `[M0 Placeholder]` / SidebarRight `[M0 Placeholder]`
+
 - 布局容器，无对外接口
 
 ---
@@ -708,7 +709,7 @@ interface ToastAPI {
 ```typescript
 // Props
 {
-  entry: BacklinkEntry            // REQUIRED
+  entry: BacklinkEntry; // REQUIRED
 }
 
 // Events: { click: [entry: BacklinkEntry] }
@@ -922,19 +923,21 @@ NotebookHome
 
 **NotebookHome 依赖清单**:
 
-| 类别 | 导入 |
-|------|------|
-| 组件 | AppLayout, FileTree, MarkdownEditor, SearchPanel, ExportDialog, ShareDialog, TemplateDialog, StatusBar, FormatToolbar, ThemeSelector, WelcomePage, NavTree, BacklinksPanel, TagCloud, RecentNotes |
-| 服务 | MockFSService (instantiated as `new MockFSService(50)`) |
-| Store | useIndexStore, useSearchStore |
-| Composable | useHeadings, useImageUpload |
-| Utils | parseBlocks (blockParser), scanContentWarnings, humanizeError (contentUtils), setImageResolver (cm6-live-preview) |
-| 渲染库 | renderMarkdown, highlightCodeBlocks (@markluck/renderer) |
+| 类别       | 导入                                                                                                                                                                                              |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 组件       | AppLayout, FileTree, MarkdownEditor, SearchPanel, ExportDialog, ShareDialog, TemplateDialog, StatusBar, FormatToolbar, ThemeSelector, WelcomePage, NavTree, BacklinksPanel, TagCloud, RecentNotes |
+| 服务       | MockFSService (instantiated as `new MockFSService(50)`)                                                                                                                                           |
+| Store      | useIndexStore, useSearchStore                                                                                                                                                                     |
+| Composable | useHeadings, useImageUpload                                                                                                                                                                       |
+| Utils      | parseBlocks (blockParser), scanContentWarnings, humanizeError (contentUtils), setImageResolver (cm6-live-preview)                                                                                 |
+| 渲染库     | renderMarkdown, highlightCodeBlocks (@markluck/renderer)                                                                                                                                          |
 
 ### NotFoundPage `[M0 Placeholder]`
+
 - 404 页面，无 Props/Events
 
 ### SettingsPage `[M0 Placeholder]`
+
 - 设置页面路由目标
 
 ---
@@ -1014,9 +1017,11 @@ getEngine(): SearchEngine | null
 ```
 
 ### editor (Store) `[M0 Placeholder]`
+
 - 编辑器内容、块状态、光标位置管理
 
 ### notebook (Store) `[M0 Placeholder]`
+
 - 笔记本/文件树/标签页管理
 
 ---
@@ -1028,43 +1033,43 @@ getEngine(): SearchEngine | null
 ```typescript
 interface IFileSystemService {
   // 文件读写
-  readFile(path: string): Promise<string>
-  writeFile(path: string, content: string): Promise<void>
-  writeBinary(path: string, base64: string): Promise<void>
-  readBinary(path: string): Promise<string>
-  isBinaryPath(path: string): boolean
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, content: string): Promise<void>;
+  writeBinary(path: string, base64: string): Promise<void>;
+  readBinary(path: string): Promise<string>;
+  isBinaryPath(path: string): boolean;
 
   // 文件操作
-  deleteFile(path: string): Promise<void>
-  renameFile(oldPath: string, newPath: string): Promise<void>
-  createDirectory(path: string): Promise<void>
+  deleteFile(path: string): Promise<void>;
+  renameFile(oldPath: string, newPath: string): Promise<void>;
+  createDirectory(path: string): Promise<void>;
 
   // 目录浏览
-  listDirectory(path: string): Promise<DirEntry[]>
-  statFile(path: string): Promise<FileStat>
+  listDirectory(path: string): Promise<DirEntry[]>;
+  statFile(path: string): Promise<FileStat>;
 
   // 文件监控
-  watch(rootPath: string, callback: (events: FileChangeEvent[]) => void): Promise<UnwatchFn>
-  unwatchAll(): Promise<void>
+  watch(rootPath: string, callback: (events: FileChangeEvent[]) => void): Promise<UnwatchFn>;
+  unwatchAll(): Promise<void>;
 
   // 路径
-  resolvePath(root: string, ...segments: string[]): string
-  isPathInNotebook(root: string, path: string): Promise<boolean>
+  resolvePath(root: string, ...segments: string[]): string;
+  isPathInNotebook(root: string, path: string): Promise<boolean>;
 
   // 笔记本
-  openNotebook(): Promise<NotebookHandle>
-  getRecentNotebooks(): Promise<string[]>
+  openNotebook(): Promise<NotebookHandle>;
+  getRecentNotebooks(): Promise<string[]>;
 }
 
 // 注入 Key
-const FS_SERVICE_KEY: unique symbol
+const FS_SERVICE_KEY: unique symbol;
 ```
 
 ### MockFSService `implements IFileSystemService`
 
 ```typescript
 class MockFSService implements IFileSystemService {
-  constructor(delay?: number)  // default: 50ms — 模拟文件 IO 延迟
+  constructor(delay?: number); // default: 50ms — 模拟文件 IO 延迟
 
   // 所有 IFileSystemService 方法 + localStorage 持久化
   // 内置示例笔记本数据 (sample notebook)
@@ -1081,11 +1086,11 @@ class TauriIPCService implements IFileSystemService {
   // 事件监听 @tauri-apps/api/event listen()
 
   // 额外方法 (超出接口的 Tauri 特有功能)
-  buildIndex(): Promise<number>
-  searchIndex(query: string): Promise<SearchResult[]>
-  updateIndexDocument(filePath: string): Promise<void>
-  renderTemplate(template: string): Promise<string>
-  getBuiltinTemplate(type: string): Promise<string>
+  buildIndex(): Promise<number>;
+  searchIndex(query: string): Promise<SearchResult[]>;
+  updateIndexDocument(filePath: string): Promise<void>;
+  renderTemplate(template: string): Promise<string>;
+  getBuiltinTemplate(type: string): Promise<string>;
 }
 ```
 
@@ -1096,36 +1101,65 @@ class TauriIPCService implements IFileSystemService {
 function exportNote(
   markdown: string,
   fileName: string,
-  options?: Partial<ExportOptions>
-): Promise<ExportResult>
+  options?: Partial<ExportOptions>,
+): Promise<ExportResult>;
 
 // 6 种格式导出函数 (内部使用)
-function exportPDF(markdown: string, fileName: string, options?: Partial<ExportOptions>): Promise<ExportResult>
-function exportDocx(markdown: string, fileName: string, options?: Partial<ExportOptions>): Promise<ExportResult>
-function exportXlsx(markdown: string, fileName: string, options?: Partial<ExportOptions>): Promise<ExportResult>
-function exportCsv(markdown: string, fileName: string, options?: Partial<ExportOptions>): Promise<ExportResult>
-function exportTxt(markdown: string, fileName: string, options?: Partial<ExportOptions>): Promise<ExportResult>
-function exportHtml(markdown: string, fileName: string, options?: Partial<ExportOptions>): Promise<ExportResult>
+function exportPDF(
+  markdown: string,
+  fileName: string,
+  options?: Partial<ExportOptions>,
+): Promise<ExportResult>;
+function exportDocx(
+  markdown: string,
+  fileName: string,
+  options?: Partial<ExportOptions>,
+): Promise<ExportResult>;
+function exportXlsx(
+  markdown: string,
+  fileName: string,
+  options?: Partial<ExportOptions>,
+): Promise<ExportResult>;
+function exportCsv(
+  markdown: string,
+  fileName: string,
+  options?: Partial<ExportOptions>,
+): Promise<ExportResult>;
+function exportTxt(
+  markdown: string,
+  fileName: string,
+  options?: Partial<ExportOptions>,
+): Promise<ExportResult>;
+function exportHtml(
+  markdown: string,
+  fileName: string,
+  options?: Partial<ExportOptions>,
+): Promise<ExportResult>;
 ```
 
 ### IndexService
 
 ```typescript
 class IndexService {
-  constructor(fs: IFileSystemService)
+  constructor(fs: IFileSystemService);
 
-  getIndex(): SearchIndex | null
-  buildFullIndex(): Promise<SearchIndex>
-  updateDocument(path: string): Promise<void>
-  removeDocument(path: string): void
-  getAllTags(): Array<{ name: string; count: number }>
-  getWikiLinkGraph(): { outgoing: Map; incoming: Map; deadLinks: Array }
+  getIndex(): SearchIndex | null;
+  buildFullIndex(): Promise<SearchIndex>;
+  updateDocument(path: string): Promise<void>;
+  removeDocument(path: string): void;
+  getAllTags(): Array<{ name: string; count: number }>;
+  getWikiLinkGraph(): { outgoing: Map; incoming: Map; deadLinks: Array };
   getBacklinks(notePath: string): Array<{
-    notePath: string; noteTitle: string; context: string; lineNumber: number
-  }>
+    notePath: string;
+    noteTitle: string;
+    context: string;
+    lineNumber: number;
+  }>;
   getRecentNotes(limit?: number): Array<{
-    path: string; title: string; lastOpenedAt: number
-  }>
+    path: string;
+    title: string;
+    lastOpenedAt: number;
+  }>;
 }
 ```
 
@@ -1133,17 +1167,17 @@ class IndexService {
 
 ```typescript
 class SearchEngine {
-  constructor()
+  constructor();
 
-  buildIndex(documents: Record<string, DocumentEntry>): void
+  buildIndex(documents: Record<string, DocumentEntry>): void;
   preloadContent(
     documents: Record<string, DocumentEntry>,
-    contentProvider: (path: string) => Promise<string>
-  ): Promise<void>
-  search(query: SearchQuery): SearchResult[]
-  updateDocument(path: string, doc: DocumentEntry, content: string): void
-  removeDocument(path: string): void
-  destroy(): void
+    contentProvider: (path: string) => Promise<string>,
+  ): Promise<void>;
+  search(query: SearchQuery): SearchResult[];
+  updateDocument(path: string, doc: DocumentEntry, content: string): void;
+  removeDocument(path: string): void;
+  destroy(): void;
 }
 ```
 
@@ -1151,18 +1185,18 @@ class SearchEngine {
 
 ```typescript
 // 模板渲染
-function renderTemplate(template: string, date?: Date): string
-function previewTemplate(template: string): string
+function renderTemplate(template: string, date?: Date): string;
+function previewTemplate(template: string): string;
 
 // 内置模板 (日记/会议纪要/周报)
-function getBuiltInTemplates(): TemplateItem[]
-function getBuiltInTemplateContent(templatePath: string): string
+function getBuiltInTemplates(): TemplateItem[];
+function getBuiltInTemplateContent(templatePath: string): string;
 
 // 自定义模板 (localStorage 持久化)
-function getCustomTemplates(): TemplateItem[]
-function getCustomTemplateContent(templatePath: string): string
-function saveCustomTemplate(name: string, description: string, content: string): TemplateItem
-function deleteCustomTemplate(path: string): boolean
+function getCustomTemplates(): TemplateItem[];
+function getCustomTemplateContent(templatePath: string): string;
+function saveCustomTemplate(name: string, description: string, content: string): TemplateItem;
+function deleteCustomTemplate(path: string): boolean;
 ```
 
 ### YAMLParser
@@ -1170,29 +1204,29 @@ function deleteCustomTemplate(path: string): boolean
 ```typescript
 // 类型
 interface FrontmatterData {
-  title?: string
-  tags?: string | string[]
-  created?: string
-  updated?: string
-  [key: string]: unknown
+  title?: string;
+  tags?: string | string[];
+  created?: string;
+  updated?: string;
+  [key: string]: unknown;
 }
 interface FrontmatterResult {
-  data: FrontmatterData
-  raw: string
-  contentStart: number
-  hasFrontmatter: boolean
+  data: FrontmatterData;
+  raw: string;
+  contentStart: number;
+  hasFrontmatter: boolean;
 }
 
 // 函数
-function parseFrontmatter(content: string): FrontmatterResult
-function stripFrontmatter(content: string): string
-function extractTitle(content: string): string
+function parseFrontmatter(content: string): FrontmatterResult;
+function stripFrontmatter(content: string): string;
+function extractTitle(content: string): string;
 ```
 
 ### block-parser (Service)
 
 ```typescript
-function parseBlocks(source: string, notePath: string): MarkdownBlock[]
+function parseBlocks(source: string, notePath: string): MarkdownBlock[];
 // 内部使用 marked.lexer
 ```
 
@@ -1200,33 +1234,33 @@ function parseBlocks(source: string, notePath: string): MarkdownBlock[]
 
 ```typescript
 class MarkdownPredictor {
-  constructor(indexStore: IndexStore)
+  constructor(indexStore: IndexStore);
 
   // 统一预测入口 — 融合 N-gram + 结构化知识 + 语法上下文
-  getGhostText(cursorPos: number, doc: string): PredictionResult | null
+  getGhostText(cursorPos: number, doc: string): PredictionResult | null;
 
   // 学习
-  learn(ctx: string, acceptedText: string): void
-  rejectEscape(ctx: string): void        // Escape 拒绝时降低权重
-  scanDocument(text: string): void        // 全文档扫描构建 L1 统计表
+  learn(ctx: string, acceptedText: string): void;
+  rejectEscape(ctx: string): void; // Escape 拒绝时降低权重
+  scanDocument(text: string): void; // 全文档扫描构建 L1 统计表
 
   // 结构化知识注入 (内部调用)
-  injectStructuredKnowledge(syntaxCtx: SyntaxContext): PredictionResult | null
+  injectStructuredKnowledge(syntaxCtx: SyntaxContext): PredictionResult | null;
 
   // 语法上下文检测
-  detectSyntaxContext(cursorPos: number, doc: string): SyntaxContext
-  isDisabledContext(cursorPos: number, doc: string): boolean
+  detectSyntaxContext(cursorPos: number, doc: string): SyntaxContext;
+  isDisabledContext(cursorPos: number, doc: string): boolean;
 
   // 持久化
-  save(): void          // L2 统计表 → localStorage (Top-N 裁剪)
-  load(): void          // localStorage → L2 统计表
-  clearDocument(): void // 切换笔记时清理 L1，保留 L2
+  save(): void; // L2 统计表 → localStorage (Top-N 裁剪)
+  load(): void; // localStorage → L2 统计表
+  clearDocument(): void; // 切换笔记时清理 L1，保留 L2
 }
 
 interface PredictionResult {
-  text: string
-  confidence: number  // 0-1
-  from: number
+  text: string;
+  confidence: number; // 0-1
+  from: number;
 }
 
 type SyntaxContext =
@@ -1234,10 +1268,11 @@ type SyntaxContext =
   | { type: 'tag'; prefix: string }
   | { type: 'file-path'; prefix: string }
   | { type: 'markdown-format'; openMarker: string }
-  | { type: 'general' }
+  | { type: 'general' };
 ```
 
 ### M0 Placeholder Services
+
 - **IndexManager** — 索引文件 CRUD + 增量更新
 - **MarkdownRenderer** — renderMarkdown() 封装
 - **ShareManager** — 分享生成和分发逻辑
@@ -1251,11 +1286,11 @@ type SyntaxContext =
 
 ```typescript
 function useHeadings(): {
-  headings: Ref<HeadingItem[]>
-  parseHeadings(content: string): HeadingItem[]
-  update(content: string): void
-  getActiveHeadingId(cursorLine: number): string | null
-}
+  headings: Ref<HeadingItem[]>;
+  parseHeadings(content: string): HeadingItem[];
+  update(content: string): void;
+  getActiveHeadingId(cursorLine: number): string | null;
+};
 ```
 
 ### useImageUpload
@@ -1263,32 +1298,32 @@ function useHeadings(): {
 ```typescript
 function useImageUpload(
   fs: IFileSystemService,
-  getEditorView: () => EditorView | null
+  getEditorView: () => EditorView | null,
 ): {
-  isUploading: Ref<boolean>
-  uploadError: Ref<string | null>
-  getFileIcon(path: string): string
-  createFilePickerHandler(): (file: File) => Promise<void>
-  handleDragOver(event: DragEvent): void
-  handleDrop(event: DragEvent): Promise<void>
-  handleFileTreeDrop(event: DragEvent): boolean
-  handlePaste(event: ClipboardEvent): Promise<boolean>
-}
+  isUploading: Ref<boolean>;
+  uploadError: Ref<string | null>;
+  getFileIcon(path: string): string;
+  createFilePickerHandler(): (file: File) => Promise<void>;
+  handleDragOver(event: DragEvent): void;
+  handleDrop(event: DragEvent): Promise<void>;
+  handleFileTreeDrop(event: DragEvent): boolean;
+  handlePaste(event: ClipboardEvent): Promise<boolean>;
+};
 ```
 
 ### useMarkdownParser
 
 ```typescript
 function useMarkdownParser(notePath: string): {
-  source: Ref<string>
-  blocks: Ref<MarkdownBlock[]>
-  renderedHtml: Ref<string>
-  blockCount: ComputedRef<number>
-  updateBlocks(content: string): void
-  updateRendered(): void
-  applyHighlight(container: HTMLElement): void
-  toggleBlockMode(index: number): void
-}
+  source: Ref<string>;
+  blocks: Ref<MarkdownBlock[]>;
+  renderedHtml: Ref<string>;
+  blockCount: ComputedRef<number>;
+  updateBlocks(content: string): void;
+  updateRendered(): void;
+  applyHighlight(container: HTMLElement): void;
+  toggleBlockMode(index: number): void;
+};
 ```
 
 ### useSearch
@@ -1296,22 +1331,23 @@ function useMarkdownParser(notePath: string): {
 ```typescript
 function useSearch(): {
   // 300ms 防抖
-  searchWithDebounce(queryText: string): void
+  searchWithDebounce(queryText: string): void;
   // 立即搜索
-  searchImmediately(queryText: string): void
+  searchImmediately(queryText: string): void;
   // 标签搜索
-  selectResultByQuery(tagQuery: string): void
+  selectResultByQuery(tagQuery: string): void;
   // 面板控制
-  openSearch(initialQuery?: string): void
-  closeSearch(): void
+  openSearch(initialQuery?: string): void;
+  closeSearch(): void;
   // 键盘导航
-  navigateUp(): void
-  navigateDown(): void
-  getSelected(): SearchResult | null
-}
+  navigateUp(): void;
+  navigateDown(): void;
+  getSelected(): SearchResult | null;
+};
 ```
 
 ### M0 Placeholder Composables
+
 - **useBlockDetection** — 语法格式自动识别
 - **useDebouncedSave** — 防抖保存逻辑
 - **useFileWatcher** — 文件变更监控订阅
@@ -1325,32 +1361,32 @@ function useSearch(): {
 
 ```typescript
 // 行级正则解析 (不同于 services/block-parser 的 marked 解析)
-function parseBlocks(content: string, notePath?: string): MarkdownBlock[]
+function parseBlocks(content: string, notePath?: string): MarkdownBlock[];
 ```
 
 ### cm6-extensions
 
 ```typescript
 // CodeMirror 6 扩展体系
-function markluckExtensions(): Extension[]       // [blockDecorator, imeHandler, throttledParser]
-function setBlocksForDecorations(blocks: MarkdownBlock[]): void
-function markdownKeymap(): Record<string, (view: EditorView) => boolean>  // Ctrl+B/I/K/`, Enter
+function markluckExtensions(): Extension[]; // [blockDecorator, imeHandler, throttledParser]
+function setBlocksForDecorations(blocks: MarkdownBlock[]): void;
+function markdownKeymap(): Record<string, (view: EditorView) => boolean>; // Ctrl+B/I/K/`, Enter
 
 // ViewPlugin 工厂
-blockDecorator: ViewPlugin     // 块边界标记点
-imeHandler: ViewPlugin         // IME composition 状态跟踪
-throttledParser: ViewPlugin    // 150ms 防抖解析 + 'markluck-parse' 自定义事件
+blockDecorator: ViewPlugin; // 块边界标记点
+imeHandler: ViewPlugin; // IME composition 状态跟踪
+throttledParser: ViewPlugin; // 150ms 防抖解析 + 'markluck-parse' 自定义事件
 ```
 
 ### cm6-live-preview
 
 ```typescript
 // 实时预览扩展
-function livePreviewExtension(): Extension[]
-function toggleBlockRender(view: EditorView): boolean   // Ctrl+Click 替代了原来的 Tab 键
-function unpinFocusedBlock(view: EditorView): boolean   // Escape 键取消固定
-function enableLivePreviewAll(view: EditorView): void
-function setImageResolver(fn: (path: string) => Promise<string | null>): void
+function livePreviewExtension(): Extension[];
+function toggleBlockRender(view: EditorView): boolean; // Ctrl+Click 替代了原来的 Tab 键
+function unpinFocusedBlock(view: EditorView): boolean; // Escape 键取消固定
+function enableLivePreviewAll(view: EditorView): void;
+function setImageResolver(fn: (path: string) => Promise<string | null>): void;
 
 // 内置 Widget: HRWidget, TaskCheckboxWidget, ImageWidget
 ```
@@ -1359,7 +1395,7 @@ function setImageResolver(fn: (path: string) => Promise<string | null>): void
 
 ```typescript
 // Ghost text 统一补全插件：统计预测 + 结构化知识融合
-function ghostTextPlugin(predictor: MarkdownPredictor): Extension[]
+function ghostTextPlugin(predictor: MarkdownPredictor): Extension[];
 // 150ms 防抖 → 调用 MarkdownPredictor.getGhostText()
 // Decoration.widget 在光标后渲染灰色斜体幽灵文本（1-20字符）
 // keymap: Tab → 接受 ghost text（ghost text 可见时优先）
@@ -1370,45 +1406,46 @@ function ghostTextPlugin(predictor: MarkdownPredictor): Extension[]
 
 ```typescript
 // 纯算法 N-gram 统计预测引擎（零依赖）
-function scanNGrams(text: string, n: number): NGramTable
-function predictNext(table: NGramTable, ctx: string, maxLen: number, minConfidence: number): string
-function learnNGram(table: NGramTable, ctx: string, text: string): void
-function mergeTables(a: NGramTable, b: NGramTable): NGramTable
+function scanNGrams(text: string, n: number): NGramTable;
+function predictNext(table: NGramTable, ctx: string, maxLen: number, minConfidence: number): string;
+function learnNGram(table: NGramTable, ctx: string, text: string): void;
+function mergeTables(a: NGramTable, b: NGramTable): NGramTable;
 ```
 
 ### contentUtils
 
 ```typescript
 interface ContentWarning {
-  type: 'zero-width' | 'bidi-override' | 'control-char'
-  message: string
-  position?: number
+  type: 'zero-width' | 'bidi-override' | 'control-char';
+  message: string;
+  position?: number;
 }
 
-function scanContentWarnings(content: string): ContentWarning[]
-function hasRTLContent(content: string): boolean
-function humanizeError(error: unknown): string   // 技术错误 → 中文用户消息
+function scanContentWarnings(content: string): ContentWarning[];
+function hasRTLContent(content: string): boolean;
+function humanizeError(error: unknown): string; // 技术错误 → 中文用户消息
 ```
 
 ### toolbarConfig
 
 ```typescript
 interface ToolbarItemConfig {
-  type: string
-  icon: string
-  label: string
-  shortcut: string
-  kind?: 'inline' | 'block' | 'special'
+  type: string;
+  icon: string;
+  label: string;
+  shortcut: string;
+  kind?: 'inline' | 'block' | 'special';
 }
 
 // 12 个按钮 + 2 个分隔符，分 3 组:
 //   Group 1: 加粗, 斜体, 删除线
 //   Group 2: 标题, 无序列表, 有序列表, 任务列表, 引用
 //   Group 3: 代码块, 链接, 图片, 分割线
-const DEFAULT_TOOLBAR_ITEMS: ToolbarItemConfig[]
+const DEFAULT_TOOLBAR_ITEMS: ToolbarItemConfig[];
 ```
 
 ### M0 Placeholder Utils
+
 - **content-type** — MIME 类型检测
 - **highlight** — highlight.js 封装
 - **marked-extensions** — Wiki-link + #tag marked 扩展
@@ -1425,194 +1462,277 @@ const DEFAULT_TOOLBAR_ITEMS: ToolbarItemConfig[]
 
 ```typescript
 // === editor.ts ===
-type BlockType = 'heading' | 'paragraph' | 'bold' | 'italic' | 'strikethrough'
-  | 'inlineCode' | 'codeBlock' | 'blockquote' | 'unorderedList' | 'orderedList'
-  | 'taskList' | 'link' | 'image' | 'table' | 'horizontalRule' | 'wikiLink'
-  | 'tag' | 'math' | 'footnote' | 'frontmatter'
+type BlockType =
+  | 'heading'
+  | 'paragraph'
+  | 'bold'
+  | 'italic'
+  | 'strikethrough'
+  | 'inlineCode'
+  | 'codeBlock'
+  | 'blockquote'
+  | 'unorderedList'
+  | 'orderedList'
+  | 'taskList'
+  | 'link'
+  | 'image'
+  | 'table'
+  | 'horizontalRule'
+  | 'wikiLink'
+  | 'tag'
+  | 'math'
+  | 'footnote'
+  | 'frontmatter';
 
-type BlockMode = 'source' | 'render'
+type BlockMode = 'source' | 'render';
 
 interface MarkdownBlock {
-  id: string; index: number; type: BlockType
-  raw: string; from: number; to: number
-  isValid: boolean; mode: BlockMode
-  renderedHtml?: string; meta?: Record<string, unknown>
+  id: string;
+  index: number;
+  type: BlockType;
+  raw: string;
+  from: number;
+  to: number;
+  isValid: boolean;
+  mode: BlockMode;
+  renderedHtml?: string;
+  meta?: Record<string, unknown>;
 }
 
 interface HeadingItem {
-  id: string; level: number   // 1-6
-  text: string; lineNumber: number
-  children: HeadingItem[]
+  id: string;
+  level: number; // 1-6
+  text: string;
+  lineNumber: number;
+  children: HeadingItem[];
 }
 
 interface TabItem {
-  id: string; notePath: string; title: string
-  isDirty: boolean; isLoading: boolean
+  id: string;
+  notePath: string;
+  title: string;
+  isDirty: boolean;
+  isLoading: boolean;
 }
 
 interface BacklinkEntry {
-  notePath: string; noteTitle: string
-  context: string; lineNumber: number
+  notePath: string;
+  noteTitle: string;
+  context: string;
+  lineNumber: number;
 }
 
 interface TagEntry {
-  name: string; count: number
+  name: string;
+  count: number;
 }
 
 interface TemplateItem {
-  id: string; name: string; description: string
-  content: string; isBuiltin: boolean
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  isBuiltin: boolean;
 }
 
 interface ContextMenuItem {
-  id: string; label: string; icon?: string
-  shortcut?: string; disabled?: boolean
-  danger?: boolean; divider?: boolean
-  children?: ContextMenuItem[]
-  action?: () => void
+  id: string;
+  label: string;
+  icon?: string;
+  shortcut?: string;
+  disabled?: boolean;
+  danger?: boolean;
+  divider?: boolean;
+  children?: ContextMenuItem[];
+  action?: () => void;
 }
 
-type ColorScheme = 'light' | 'dark'
+type ColorScheme = 'light' | 'dark';
 
 interface AppSettings {
-  editorFontSize: number; editorLineHeight: number
-  editorFontFamily: string; editorTabSize: number
-  editorWordWrap: boolean; editorShowLineNumbers: boolean
-  editorShowBlockMarkers: boolean; editorAutoFormat: boolean
-  themeMode: 'light' | 'dark' | 'system'
-  codeThemeLight: string; codeThemeDark: string
-  autoSaveEnabled: boolean; autoSaveDelayMs: number
-  defaultNotebookPath: string; maxRecentNotes: number
-  language: 'zh-CN' | 'en'
+  editorFontSize: number;
+  editorLineHeight: number;
+  editorFontFamily: string;
+  editorTabSize: number;
+  editorWordWrap: boolean;
+  editorShowLineNumbers: boolean;
+  editorShowBlockMarkers: boolean;
+  editorAutoFormat: boolean;
+  themeMode: 'light' | 'dark' | 'system';
+  codeThemeLight: string;
+  codeThemeDark: string;
+  autoSaveEnabled: boolean;
+  autoSaveDelayMs: number;
+  defaultNotebookPath: string;
+  maxRecentNotes: number;
+  language: 'zh-CN' | 'en';
 }
 
 // === export.ts ===
-enum ExportFormat { PDF, DOCX, XLSX, CSV, TXT, HTML, MD }
-
-interface ExportOptions {
-  format: ExportFormat
-  includeFrontmatter: boolean
-  includeWikiLinks: boolean
-  codeLineNumbers: boolean
-  imageHandling: 'base64' | 'relative-path' | 'remove'
-  readBinary?: (path: string) => Promise<string>
+enum ExportFormat {
+  PDF,
+  DOCX,
+  XLSX,
+  CSV,
+  TXT,
+  HTML,
+  MD,
 }
 
-enum ShareChannel { SYSTEM_SHARE, EMAIL, CLIPBOARD, LOCAL_EXPORT }
+interface ExportOptions {
+  format: ExportFormat;
+  includeFrontmatter: boolean;
+  includeWikiLinks: boolean;
+  codeLineNumbers: boolean;
+  imageHandling: 'base64' | 'relative-path' | 'remove';
+  readBinary?: (path: string) => Promise<string>;
+}
+
+enum ShareChannel {
+  SYSTEM_SHARE,
+  EMAIL,
+  CLIPBOARD,
+  LOCAL_EXPORT,
+}
 
 interface ShareOptions {
-  format: ExportFormat
-  channel: ShareChannel
-  fileName: string
+  format: ExportFormat;
+  channel: ShareChannel;
+  fileName: string;
 }
 
 interface ExportResult {
-  success: boolean
-  format: ExportFormat
-  fileName?: string
-  filePath?: string
-  size?: number
-  error?: string
+  success: boolean;
+  format: ExportFormat;
+  fileName?: string;
+  filePath?: string;
+  size?: number;
+  error?: string;
 }
 
 // === file-system.ts ===
 interface DirEntry {
-  name: string; path: string
-  isDirectory: boolean; isMarkdown: boolean
-  children?: DirEntry[]
-  size?: number; mtime?: number
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  isMarkdown: boolean;
+  children?: DirEntry[];
+  size?: number;
+  mtime?: number;
 }
 
 interface FileStat {
-  path: string; size: number
-  mtime: number; isDirectory: boolean
+  path: string;
+  size: number;
+  mtime: number;
+  isDirectory: boolean;
 }
 
 interface FileChangeEvent {
-  type: 'create' | 'modify' | 'delete'
-  path: string; isDirectory: boolean
+  type: 'create' | 'modify' | 'delete';
+  path: string;
+  isDirectory: boolean;
 }
 
 interface NotebookHandle {
-  rootPath: string; name: string
+  rootPath: string;
+  name: string;
 }
 
-type UnwatchFn = () => void
+type UnwatchFn = () => void;
 
 interface IFileSystemService {
-  readFile(path: string): Promise<string>
-  writeFile(path: string, content: string): Promise<void>
-  writeBinary(path: string, base64: string): Promise<void>
-  readBinary(path: string): Promise<string>
-  isBinaryPath(path: string): boolean
-  deleteFile(path: string): Promise<void>
-  renameFile(oldPath: string, newPath: string): Promise<void>
-  createDirectory(path: string): Promise<void>
-  listDirectory(path: string): Promise<DirEntry[]>
-  statFile(path: string): Promise<FileStat>
-  watch(rootPath: string, callback: (events: FileChangeEvent[]) => void): Promise<UnwatchFn>
-  unwatchAll(): Promise<void>
-  resolvePath(root: string, ...segments: string[]): string
-  isPathInNotebook(root: string, path: string): Promise<boolean>
-  openNotebook(): Promise<NotebookHandle>
-  getRecentNotebooks(): Promise<string[]>
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, content: string): Promise<void>;
+  writeBinary(path: string, base64: string): Promise<void>;
+  readBinary(path: string): Promise<string>;
+  isBinaryPath(path: string): boolean;
+  deleteFile(path: string): Promise<void>;
+  renameFile(oldPath: string, newPath: string): Promise<void>;
+  createDirectory(path: string): Promise<void>;
+  listDirectory(path: string): Promise<DirEntry[]>;
+  statFile(path: string): Promise<FileStat>;
+  watch(rootPath: string, callback: (events: FileChangeEvent[]) => void): Promise<UnwatchFn>;
+  unwatchAll(): Promise<void>;
+  resolvePath(root: string, ...segments: string[]): string;
+  isPathInNotebook(root: string, path: string): Promise<boolean>;
+  openNotebook(): Promise<NotebookHandle>;
+  getRecentNotebooks(): Promise<string[]>;
 }
 
 // === note.ts ===
-type NotePath = string
+type NotePath = string;
 
 interface NoteFrontmatter {
-  title?: string; tags?: string[]
-  created?: string; updated?: string
-  [key: string]: unknown
+  title?: string;
+  tags?: string[];
+  created?: string;
+  updated?: string;
+  [key: string]: unknown;
 }
 
 interface Note {
-  path: string; title: string; content: string
-  frontmatter: NoteFrontmatter
-  size: number; mtime: number
+  path: string;
+  title: string;
+  content: string;
+  frontmatter: NoteFrontmatter;
+  size: number;
+  mtime: number;
 }
 
 // === notebook.ts ===
 interface Notebook {
-  rootPath: string; name: string
-  fileTree: FileTreeNode[]
-  breadcrumb: string[]
+  rootPath: string;
+  name: string;
+  fileTree: FileTreeNode[];
+  breadcrumb: string[];
 }
 
 // === search.ts ===
-interface DateRange { from?: Date; to?: Date }
+interface DateRange {
+  from?: Date;
+  to?: Date;
+}
 
 interface SearchQuery {
-  text?: string
-  regex?: string; regexFlags?: string
-  tags?: string[]
-  dateRange?: DateRange
-  folders?: string[]
+  text?: string;
+  regex?: string;
+  regexFlags?: string;
+  tags?: string[];
+  dateRange?: DateRange;
+  folders?: string[];
 }
 
 interface SearchMatch {
-  text: string; positions: Array<{ from: number; to: number }>
-  notePath: string; noteTitle: string
+  text: string;
+  positions: Array<{ from: number; to: number }>;
+  notePath: string;
+  noteTitle: string;
 }
 
 interface SearchResult {
-  notePath: string; noteTitle: string
-  snippet: string; matchType: 'title' | 'content' | 'filename'
-  relevanceScore: number
-  positions: Array<{ from: number; to: number }>
+  notePath: string;
+  noteTitle: string;
+  snippet: string;
+  matchType: 'title' | 'content' | 'filename';
+  relevanceScore: number;
+  positions: Array<{ from: number; to: number }>;
 }
 
 interface DocumentEntry {
-  path: string; title: string; tags: string[]
-  created?: number; updated?: number; folder: string
+  path: string;
+  title: string;
+  tags: string[];
+  created?: number;
+  updated?: number;
+  folder: string;
 }
 
 interface SearchIndex {
-  documents: Record<string, DocumentEntry>
-  termIndex: Record<string, TermEntry>
-  wikiLinks: { outgoing: Record<string, string[]>; incoming: Record<string, string[]> }
-  tagIndex: Record<string, string[]>
+  documents: Record<string, DocumentEntry>;
+  termIndex: Record<string, TermEntry>;
+  wikiLinks: { outgoing: Record<string, string[]>; incoming: Record<string, string[]> };
+  tagIndex: Record<string, string[]>;
 }
 ```
 
@@ -1707,6 +1827,7 @@ AppLayout ◄── NotebookHome
 ```
 
 **Pinia Store 依赖**:
+
 ```
 NotebookHome
   ├── useIndexStore   ← IndexService ← SearchEngine
@@ -1721,6 +1842,7 @@ NotebookHome
 重构完成后，逐项验证：
 
 ### 接口兼容性
+
 - [ ] 所有组件的 Props 类型签名与本文档一致
 - [ ] 所有组件的 Events 名称和 payload 类型与本文档一致
 - [ ] 所有组件的 Slots 名称和 scoped 数据与本文档一致
@@ -1728,12 +1850,14 @@ NotebookHome
 - [ ] `SearchInput` 的 `defineExpose` 暴露 `focus()`
 
 ### Store 兼容性
+
 - [ ] `useThemeStore` — State/Computed/Actions 全部保持
 - [ ] `useSearchStore` — State/Computed/Actions 全部保持
 - [ ] `useIndexStore` — State/Computed/Actions 全部保持
 - [ ] Store 的 localStorage key 不变
 
 ### Service 兼容性
+
 - [ ] `IFileSystemService` 接口 — 18 个方法签名不变
 - [ ] `MockFSService` — constructor 参数和所有方法签名不变
 - [ ] `TauriIPCService` — 所有方法签名不变
@@ -1744,6 +1868,7 @@ NotebookHome
 - [ ] `YAMLParser` — 所有导出函数和类型不变
 
 ### 页面集成
+
 - [ ] `NotebookHome.vue` 的组件导入路径有效
 - [ ] `NotebookHome.vue` 的 template 中所有组件标签名可用
 - [ ] `AppLayout` 的三个命名 slot 正常工作
@@ -1751,6 +1876,7 @@ NotebookHome
 - [ ] `setImageResolver()` 在 `onMounted` 中正确注册
 
 ### Token 合规
+
 - [ ] 无硬编码色值 (stylelint `color-no-hex` 通过)
 - [ ] 所有颜色使用 `--paper-*` / `--ink-*` / `--accent` / `--rule` / `--signal-*` Token
 - [ ] 所有间距使用 `--space-*` Token
@@ -1759,6 +1885,7 @@ NotebookHome
 - [ ] `prefers-reduced-motion` 媒体查询正确覆盖
 
 ### 类型安全
+
 - [ ] `vue-tsc --noEmit` 零错误
 - [ ] 所有组件 Props 有完整类型注解
 - [ ] 所有 Store 的 State 类型导出

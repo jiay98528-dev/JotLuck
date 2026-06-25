@@ -14,6 +14,7 @@ import {
   typeInEditor,
   getEditorContent,
   waitForAutoSave,
+  waitForMockFileContent,
   switchToNote,
 } from '../helpers/test-utils';
 
@@ -51,6 +52,20 @@ async function toggleTheme(page: import('@playwright/test').Page): Promise<'ligh
   return expected;
 }
 
+async function openDrawerFile(
+  page: import('@playwright/test').Page,
+  fileName: string,
+): Promise<void> {
+  await page.locator('.topbar-btn--menu').click();
+  await expect(page.locator('.file-drawer')).toBeVisible({ timeout: 3000 });
+  await page.waitForTimeout(300);
+  const item = page.locator('.tree-item').filter({ hasText: fileName }).first();
+  await expect(item).toBeVisible({ timeout: 5000 });
+  await item.click({ force: true });
+  await expect(page.locator('.file-drawer')).not.toBeVisible({ timeout: 3000 });
+  await expect(page.locator('.cm-content')).toBeVisible({ timeout: 5000 });
+}
+
 // ============================================================
 // Tests
 // ============================================================
@@ -62,12 +77,8 @@ test.describe('持久化与跨会话', () => {
 
   // ── 1. 笔记内容刷新持久化 ──────────────────────────────────
   test('V3: 笔记内容 — 刷新后保持', async ({ page }) => {
-    // Step 1: Click the first bookmark dot to open a sample note
-    const firstDot = page.locator('.wing-bookmark-dot').first();
-    await expect(firstDot).toBeVisible({ timeout: 5000 });
-    const firstLabel = await firstDot.getAttribute('aria-label');
-    await firstDot.click();
-    await page.waitForTimeout(500);
+    // Step 1: Open a stable sample note from the file drawer.
+    await openDrawerFile(page, '快速入门.md');
 
     // Step 2: Type content in editor — use H1 to preserve a stable title
     // (extractTitle() only matches # H1; H2/H3 cause title to fall back to filename,
@@ -75,25 +86,15 @@ test.describe('持久化与跨会话', () => {
     const testMarker = '# V3刷新持久化测试内容';
     await typeInEditor(page, testMarker);
 
-    // Step 3: Wait for auto-save
-    await waitForAutoSave(page);
-
-    // Read the post-save label — title may have changed due to content replacement
-    const postSaveLabel = await page
-      .locator('.wing-bookmark-dot.active')
-      .getAttribute('aria-label');
+    // Step 3: Wait until the file-system layer contains the edited content.
+    await waitForMockFileContent(page, '/快速入门.md', 'V3刷新持久化测试内容');
 
     // Step 4-5: Reload page and verify content persisted
     await page.reload();
     await waitForAppReady(page);
 
-    // Step 6: Navigate back to the same note using post-save label
-    if (postSaveLabel) {
-      await switchToNote(page, postSaveLabel);
-    } else if (firstLabel) {
-      // Fallback: try original label (works if title was preserved)
-      await switchToNote(page, firstLabel);
-    }
+    // Step 6: Navigate back through the file drawer and verify disk-backed content.
+    await openDrawerFile(page, '快速入门.md');
     const content = await getEditorContent(page);
     expect(content).toContain('V3刷新持久化测试内容');
   });
@@ -184,26 +185,27 @@ test.describe('持久化与跨会话', () => {
   });
 
   // ── 5. 样本笔记刷新后加载 ──────────────────────────────────
-  test('V3: 样本笔记 — 刷新后书签点仍然存在', async ({ page }) => {
-    // Step 1: Verify initial bookmark dots exist
-    const initialDots = page.locator('.wing-bookmark-dot');
-    const initialCount = await initialDots.count();
-    expect(initialCount).toBeGreaterThanOrEqual(3); // Sample notebook has >=3 notes
+  test('V3: 样本笔记 — 刷新后文件抽屉仍然存在', async ({ page }) => {
+    // Step 1: Verify sample files exist in the file drawer.
+    await page.locator('.topbar-btn--menu').click();
+    await expect(page.locator('.file-drawer')).toBeVisible({ timeout: 3000 });
+    const expectedFiles = ['快速入门.md', '项目规划.md', '设计笔记.md'];
+    for (const fileName of expectedFiles) {
+      await expect(page.locator('.tree-item').filter({ hasText: fileName })).toBeVisible({
+        timeout: 5000,
+      });
+    }
 
     // Step 2: Reload
     await page.reload();
     await waitForAppReady(page);
 
-    // Step 3: Verify same number of bookmark dots
-    const reloadDots = page.locator('.wing-bookmark-dot');
-    const reloadCount = await reloadDots.count();
-    expect(reloadCount).toBe(initialCount);
-
-    // Step 4: Verify known sample note titles are present
-    const expectedNotes = ['快速入门', '项目规划', '设计笔记'];
-    for (const title of expectedNotes) {
-      await expect(page.locator(`.wing-bookmark-dot[aria-label="${title}"]`)).toBeVisible({
-        timeout: 3000,
+    // Step 3: Verify the same sample files remain discoverable after reload.
+    await page.locator('.topbar-btn--menu').click();
+    await expect(page.locator('.file-drawer')).toBeVisible({ timeout: 3000 });
+    for (const fileName of expectedFiles) {
+      await expect(page.locator('.tree-item').filter({ hasText: fileName })).toBeVisible({
+        timeout: 5000,
       });
     }
   });

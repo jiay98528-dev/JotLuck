@@ -16,6 +16,17 @@ declare global {
     __markluck_getEditorView?: () => unknown;
     __markluck_editorInitValue?: string;
     __markluck_predictor?: unknown;
+    __markluck_mockOpenedFile?: {
+      absolutePath: string;
+      notebookRoot?: string;
+      relativePath?: string;
+    };
+    __markluck_externalFiles?: Record<string, string>;
+    __markluck_externalWrites?: Array<{
+      absolutePath: string;
+      content: string;
+      time: number;
+    }>;
     __markluck_modelOverwrites?: Array<{
       fromLen: number;
       toLen: number;

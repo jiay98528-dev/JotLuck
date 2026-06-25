@@ -1,7 +1,7 @@
 /**
  * Exporter — 6 格式导出服务
  *
- * PDF (window.print + rendered HTML) / DOCX (docx.js) / XLSX (sheetjs) /
+ * PDF (window.print + rendered HTML) / DOCX (docx.js) / XLSX (write-excel-file) /
  * CSV / TXT / HTML (self-contained)
  *
  * @see TAD.md §7.2
@@ -22,9 +22,9 @@ import {
   BorderStyle,
   ShadingType,
 } from 'docx';
-import * as XLSX from 'xlsx';
 import { marked } from 'marked';
 import type { Token, Tokens } from 'marked';
+import writeXlsxFile, { type Sheet, type SheetData } from 'write-excel-file/browser';
 
 // ============================================================================
 // Internal Options — aligned with ExportOptions type
@@ -613,7 +613,7 @@ async function exportDocx(
 }
 
 // ============================================================================
-// XLSX — sheetjs table extraction
+// XLSX — write-excel-file table extraction
 // ============================================================================
 
 interface ParsedTable {
@@ -663,48 +663,41 @@ function parseTableRow(line: string): string[] {
     .map((cell) => cell.trim());
 }
 
-function exportXlsx(md: string, fileName: string, options?: Partial<ExportOptions>): ExportResult {
+function tableToSheetData(table: ParsedTable): SheetData {
+  return [table.headers, ...table.rows];
+}
+
+function buildXlsxColumns(table: ParsedTable): { width: number }[] {
+  return table.headers.map((header, ci) => {
+    let maxLen = header.length;
+    for (const row of table.rows) {
+      maxLen = Math.max(maxLen, (row[ci] || '').length);
+    }
+    return { width: Math.min(Math.max(maxLen + 4, 10), 60) };
+  });
+}
+
+async function exportXlsx(
+  md: string,
+  fileName: string,
+  options?: Partial<ExportOptions>,
+): Promise<ExportResult> {
   const opts = buildInternalOpts(options);
   const processed = preprocessMarkdown(md, opts);
   const tables = extractMarkdownTables(processed);
 
-  if (tables.length === 0) {
-    // No tables found — create an empty workbook or export as single-sheet CSV
-    triggerDownload(
-      '',
-      `${fileName}.xlsx`,
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    );
-    return { success: true, format: ExportFormat.XLSX, fileName: `${fileName}.xlsx` };
-  }
+  const sheets: Sheet<Blob>[] =
+    tables.length === 0
+      ? [{ sheet: 'Sheet1', data: [[processed || '']] }]
+      : tables.map((table, idx) => ({
+          sheet: tables.length === 1 ? 'Sheet1' : `Table_${idx + 1}`,
+          data: tableToSheetData(table),
+          columns: buildXlsxColumns(table),
+        }));
 
-  const wb = XLSX.utils.book_new();
-
-  tables.forEach((table, idx) => {
-    // Build 2D array: headers + rows
-    const aoa: string[][] = [table.headers, ...table.rows];
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-
-    // Auto-size columns (approximate)
-    const colWidths: { wch: number }[] = [];
-    for (let ci = 0; ci < table.headers.length; ci++) {
-      let maxLen = table.headers[ci]!.length;
-      for (const row of table.rows) {
-        maxLen = Math.max(maxLen, (row[ci] || '').length);
-      }
-      colWidths.push({ wch: Math.min(maxLen + 4, 60) });
-    }
-    ws['!cols'] = colWidths;
-
-    const sheetName = tables.length === 1 ? 'Sheet1' : `Table_${idx + 1}`;
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
-  });
-
-  const data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = await writeXlsxFile(sheets).toBlob();
   triggerDownload(
-    new Blob([new Uint8Array(data)], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    }),
+    blob,
     `${fileName}.xlsx`,
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   );
