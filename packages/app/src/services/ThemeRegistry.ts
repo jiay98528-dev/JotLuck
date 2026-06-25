@@ -1,10 +1,5 @@
-import archivePreview from '@/assets/theme-assets/archive-preview.webp';
-import inkStudyBackground from '@/assets/theme-assets/ink-study-bg.webp';
-import inkStudyPreview from '@/assets/theme-assets/ink-study-preview.webp';
-import nocturneReaderBackground from '@/assets/theme-assets/nocturne-reader-bg.webp';
-import nocturneReaderPreview from '@/assets/theme-assets/nocturne-reader-preview.webp';
-import paperPreview from '@/assets/theme-assets/paper-preview.webp';
-import studioPreview from '@/assets/theme-assets/studio-preview.webp';
+import { getThemeModuleById } from '@/themes/registry';
+import type { OfficialThemeModule, ThemeTokenSet } from '@/types/theme-pack';
 import type {
   InstalledThemePack,
   OfficialThemeProfile,
@@ -61,333 +56,108 @@ export const THEME_PERFORMANCE_BADGES: Record<ThemePerformanceLevel, ThemePerfor
   },
 };
 
-const builtInThemes: InstalledThemePack[] = [
-  createBuiltInTheme({
-    id: DEFAULT_THEME_ID,
-    name: '羽翼布局',
-    description: '默认三栏羽翼布局，保留 MarkLuck 的安静书房气质。',
-    capabilities: ['tokens', 'layout-preset', 'markdown', 'codemirror'],
-    layoutPreset: 'winged',
-    tags: ['default', 'writing', 'workflow'],
-    profile: {
-      role: 'baseline',
-      headline: '稳定的写作桌面',
-      story: 'MarkLuck 的基线体验。左翼承载最近笔记，中心保留写作版心，右翼提供大纲、反链和标签。',
-      bestFor: ['日常写作', '首次使用', '低性能设备', '长时间整理'],
-      visualFeatures: ['三栏稳定布局', '低干扰纸面', '最少动效', '完整控件权重'],
-      uiProfile: {
-        toolbarDensity: 'calm',
-        sidebarMode: 'balanced',
-        drawerEmphasis: 'medium',
-        readingWidth: 'standard',
-        motionIntensity: 'none',
-      },
-      performanceLevel: 1,
-      previewImage: paperPreview,
-      effectProfile: 'none',
-    },
-    css: '',
-  }),
-  createBuiltInTheme({
-    id: 'markluck.ink-study',
-    name: '墨线书房',
-    description: '日间墨线、纸纹与纹章背景，适合长文写作和安静校订。',
-    capabilities: ['tokens', 'assets', 'animations', 'layout-preset', 'markdown', 'codemirror'],
-    layoutPreset: 'focus',
-    tags: ['focus', 'writing', 'ink', 'collectible'],
-    profile: {
-      role: 'collectible',
-      headline: '纸面上的建筑线稿',
-      story:
-        '更窄的焦点版心配合墨绿色结构线。背景不是装饰画，而是把文件、纹章和书写网格融成一个工作台。',
-      bestFor: ['长文写作', '校订', '需要轻仪式感的日间工作', '收藏主题展示'],
-      visualFeatures: ['本地纸纹背景', '左侧纹章结构', '微弱脉冲线', '轻粒子层'],
-      uiProfile: {
-        toolbarDensity: 'calm',
-        sidebarMode: 'quiet',
-        drawerEmphasis: 'low',
-        readingWidth: 'standard',
-        motionIntensity: 'medium',
-      },
-      performanceLevel: 3,
-      previewImage: inkStudyPreview,
-      backgroundAsset: inkStudyBackground,
-      effectProfile: 'ambient',
-    },
-    css: `
-[data-theme-id='markluck.ink-study'][data-color-scheme='light'] {
-  --paper-bg: oklch(0.968 0.006 205);
-  --paper-left: oklch(0.932 0.011 198);
-  --paper-surface: oklch(0.989 0.003 190);
-  --paper-right: oklch(0.948 0.008 186);
-  --paper-raised: oklch(0.996 0.002 190);
-  --ink-primary: oklch(0.18 0.018 205);
-  --ink-secondary: oklch(0.42 0.016 198);
-  --ink-muted: oklch(0.58 0.012 196);
-  --accent: oklch(0.44 0.075 190);
-  --accent-hover: oklch(0.38 0.085 190);
-  --accent-soft: oklch(0.9 0.032 190 / 0.62);
-  --rule: oklch(0.79 0.018 190);
-  --rule-strong: oklch(0.67 0.024 190);
-  --rule-wing: oklch(0.76 0.02 196);
-  --editor-bg: oklch(0.985 0.003 190);
-  --editor-line-highlight: oklch(0.95 0.012 190);
-  --editor-max-width: 720px;
-  --lh-body: 1.82;
-  --radius: 3px;
-  --radius-md: 5px;
-  --shadow-sheet: 0 12px 30px oklch(0.42 0.025 190 / 0.1);
-}
-[data-theme-id='markluck.ink-study'][data-color-scheme='dark'] {
-  --paper-bg: oklch(0.14 0.012 210);
-  --paper-left: oklch(0.115 0.014 208);
-  --paper-surface: oklch(0.17 0.01 208);
-  --paper-right: oklch(0.13 0.012 198);
-  --paper-raised: oklch(0.205 0.011 205);
-  --ink-primary: oklch(0.9 0.005 198);
-  --ink-secondary: oklch(0.68 0.008 198);
-  --ink-muted: oklch(0.52 0.008 198);
-  --accent: oklch(0.68 0.08 184);
-  --accent-hover: oklch(0.74 0.08 184);
-  --accent-soft: oklch(0.28 0.038 184 / 0.74);
-  --rule: oklch(0.29 0.014 205);
-  --rule-strong: oklch(0.38 0.016 198);
-  --rule-wing: oklch(0.25 0.014 205);
-  --editor-bg: oklch(0.158 0.01 208);
-  --editor-line-highlight: oklch(0.21 0.012 205);
-  --editor-max-width: 720px;
-  --lh-body: 1.82;
-  --radius: 3px;
-  --radius-md: 5px;
-  --shadow-sheet: 0 18px 36px oklch(0.02 0.01 210 / 0.38);
-}
-[data-theme-id='markluck.ink-study'] .app-shell {
-  box-shadow:
-    inset 1px 0 0 var(--rule-wing),
-    inset -1px 0 0 var(--rule-wing);
-}
-[data-theme-id='markluck.ink-study'] .topbar {
-  border-bottom-color: var(--rule-strong);
-}
-[data-theme-id='markluck.ink-study'] .markdown-body blockquote {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-[data-theme-id='markluck.ink-study'] .markdown-body table {
-  border-color: var(--rule-strong);
-}
-[data-theme-id='markluck.ink-study'] .cm-editor .cm-cursor {
-  border-left-color: var(--accent);
-}
-`,
-  }),
-  createBuiltInTheme({
-    id: 'markluck.archive',
-    name: '档案馆',
-    description: '资料研究工作流主题，强化文件、标签、反链和搜索的权重。',
-    capabilities: ['tokens', 'animations', 'layout-preset', 'markdown', 'codemirror'],
-    layoutPreset: 'archive',
-    tags: ['archive', 'research', 'workflow'],
-    profile: {
-      role: 'workflow',
-      headline: '资料优先的研究台',
-      story:
-        '侧栏更厚重，文件抽屉和右侧参考区更像档案柜。它不是更花，而是把检索、标签和反链放到更高优先级。',
-      bestFor: ['资料整理', '研究笔记', '多文件对照', '标签和反链密集场景'],
-      visualFeatures: ['加宽右翼', '厚重侧栏', '档案纸色', '检索面板权重提升'],
-      uiProfile: {
-        toolbarDensity: 'productive',
-        sidebarMode: 'research',
-        drawerEmphasis: 'high',
-        readingWidth: 'wide',
-        motionIntensity: 'low',
-      },
-      performanceLevel: 2,
-      previewImage: archivePreview,
-      effectProfile: 'subtle',
-    },
-    css: `
-[data-theme-id='markluck.archive'][data-color-scheme='light'] {
-  --paper-bg: oklch(0.965 0.006 76);
-  --paper-left: oklch(0.94 0.014 82);
-  --paper-surface: oklch(0.982 0.004 78);
-  --paper-right: oklch(0.953 0.006 108);
-  --paper-raised: oklch(0.995 0.002 78);
-  --ink-primary: oklch(0.19 0.01 72);
-  --ink-secondary: oklch(0.42 0.012 80);
-  --accent: oklch(0.48 0.1 155);
-  --accent-hover: oklch(0.43 0.11 155);
-  --accent-soft: oklch(0.9 0.04 155 / 0.55);
-  --editor-max-width: 740px;
-  --wing-right-width: 284px;
-  --drawer-width: 380px;
-  --radius: 4px;
-  --radius-md: 6px;
-}
-[data-theme-id='markluck.archive'][data-color-scheme='dark'] {
-  --paper-bg: oklch(0.16 0.009 80);
-  --paper-left: oklch(0.13 0.012 84);
-  --paper-surface: oklch(0.19 0.008 78);
-  --paper-right: oklch(0.16 0.01 120);
-  --paper-raised: oklch(0.23 0.008 78);
-  --ink-primary: oklch(0.88 0.006 78);
-  --ink-secondary: oklch(0.66 0.008 86);
-  --accent: oklch(0.66 0.11 155);
-  --accent-hover: oklch(0.72 0.11 155);
-  --accent-soft: oklch(0.28 0.045 155 / 0.7);
-  --editor-max-width: 740px;
-  --wing-right-width: 284px;
-  --drawer-width: 380px;
-  --radius: 4px;
-  --radius-md: 6px;
-}
-[data-theme-id='markluck.archive'] .app-shell {
-  box-shadow: inset 64px 0 0 oklch(0.48 0.04 104 / 0.065);
-}
-`,
-  }),
-  createBuiltInTheme({
-    id: 'markluck.reader-nocturne',
-    name: '夜读星幕',
-    description: '深色沉浸阅读主题，降低侧翼噪声并加入本地星幕动效。',
-    capabilities: ['tokens', 'assets', 'animations', 'layout-preset', 'markdown', 'codemirror'],
-    layoutPreset: 'reader',
-    tags: ['reader', 'dark', 'collectible'],
-    profile: {
-      role: 'collectible',
-      headline: '夜间阅读的星幕桌面',
-      story:
-        '深色正文版心、暗纸纹和轻微星尘层共同服务夜间阅读。它更像一张安静的阅读桌，而不是终端皮肤。',
-      bestFor: ['夜间阅读', '外部 Markdown 只读打开', '长文复盘', '沉浸式主题收藏'],
-      visualFeatures: ['本地星幕背景', '柔和呼吸光', '弱化侧翼', '更宽阅读版心'],
-      uiProfile: {
-        toolbarDensity: 'calm',
-        sidebarMode: 'quiet',
-        drawerEmphasis: 'low',
-        readingWidth: 'immersive',
-        motionIntensity: 'high',
-      },
-      performanceLevel: 4,
-      previewImage: nocturneReaderPreview,
-      backgroundAsset: nocturneReaderBackground,
-      effectProfile: 'immersive',
-    },
-    css: `
-[data-theme-id='markluck.reader-nocturne'] {
-  --paper-bg: oklch(0.12 0.008 245);
-  --paper-left: oklch(0.105 0.01 245);
-  --paper-surface: oklch(0.155 0.008 250);
-  --paper-right: oklch(0.12 0.01 232);
-  --paper-raised: oklch(0.2 0.009 250);
-  --ink-primary: oklch(0.9 0.004 250);
-  --ink-secondary: oklch(0.69 0.006 245);
-  --ink-muted: oklch(0.52 0.006 245);
-  --accent: oklch(0.72 0.09 196);
-  --accent-hover: oklch(0.78 0.09 196);
-  --accent-soft: oklch(0.26 0.04 196 / 0.68);
-  --rule: oklch(0.25 0.008 245);
-  --rule-wing: oklch(0.22 0.009 245);
-  --editor-bg: oklch(0.14 0.007 250);
-  --editor-line-highlight: oklch(0.18 0.008 250);
-  --editor-max-width: 780px;
-  --lh-body: 1.9;
-}
-[data-theme-id='markluck.reader-nocturne'] .markdown-body {
-  font-size: 1.04rem;
-}
-`,
-  }),
-  createBuiltInTheme({
-    id: 'markluck.studio',
-    name: '工坊轨道',
-    description: '生产工作流主题，压缩工具轨并突出导出、模板和多文件操作。',
-    capabilities: ['tokens', 'animations', 'layout-preset', 'markdown', 'codemirror'],
-    layoutPreset: 'studio',
-    tags: ['studio', 'dense', 'workflow'],
-    profile: {
-      role: 'workflow',
-      headline: '更紧凑的生产轨道',
-      story: '顶部工具和状态栏更紧凑，版心更窄，操作密度提升。适合把笔记快速整理、导出和分发。',
-      bestFor: ['模板复用', '批量整理', '导出交付', '窗口较小的工作场景'],
-      visualFeatures: ['紧凑工具轨', '更短状态栏', '暖橙操作强调', '生产面板优先'],
-      uiProfile: {
-        toolbarDensity: 'compact',
-        sidebarMode: 'rail',
-        drawerEmphasis: 'high',
-        readingWidth: 'compact',
-        motionIntensity: 'low',
-      },
-      performanceLevel: 2,
-      previewImage: studioPreview,
-      effectProfile: 'subtle',
-    },
-    css: `
-[data-theme-id='markluck.studio'][data-color-scheme='light'] {
-  --paper-bg: oklch(0.965 0.004 215);
-  --paper-left: oklch(0.94 0.008 220);
-  --paper-surface: oklch(0.985 0.002 215);
-  --paper-right: oklch(0.948 0.007 210);
-  --ink-primary: oklch(0.16 0.006 220);
-  --accent: oklch(0.5 0.12 28);
-  --accent-hover: oklch(0.45 0.13 28);
-  --accent-soft: oklch(0.92 0.045 28 / 0.55);
-  --editor-max-width: 640px;
-  --topbar-height: 40px;
-  --statusbar-height: 26px;
-  --radius: 5px;
-}
-[data-theme-id='markluck.studio'][data-color-scheme='dark'] {
-  --paper-bg: oklch(0.145 0.006 220);
-  --paper-left: oklch(0.12 0.008 220);
-  --paper-surface: oklch(0.18 0.006 220);
-  --paper-right: oklch(0.14 0.008 210);
-  --ink-primary: oklch(0.9 0.004 220);
-  --accent: oklch(0.66 0.13 28);
-  --accent-hover: oklch(0.72 0.13 28);
-  --accent-soft: oklch(0.25 0.05 28 / 0.72);
-  --editor-max-width: 640px;
-  --topbar-height: 40px;
-  --statusbar-height: 26px;
-  --radius: 5px;
-}
-`,
-  }),
-];
-
-function createBuiltInTheme(options: {
-  id: string;
-  name: string;
-  description: string;
-  capabilities: ThemePackManifest['capabilities'];
-  layoutPreset: ThemeLayoutPreset;
-  tags: string[];
-  profile: OfficialThemeProfile;
-  css: string;
-}): InstalledThemePack {
+/**
+ * v2 声明式主题模块 → InstalledThemePack 转换器。
+ *
+ * 将 OfficialThemeModule 的声明式数据（recipe + tokens + meta）转换为
+ * 运行时使用的 InstalledThemePack 格式，保持向后兼容。
+ */
+function moduleToBuiltInPack(mod: OfficialThemeModule, themeId: string): InstalledThemePack {
   return {
     manifest: {
-      id: options.id,
+      id: themeId,
       version: '1.0.0',
       themeApi: 1,
       runtime: 'css-v1',
       minAppVersion: '0.15.0',
-      name: options.name,
+      name: moduleNameFromId(themeId),
       author: 'MarkLuck',
-      description: options.description,
-      capabilities: options.capabilities,
-      layoutPreset: options.layoutPreset,
+      description: mod.meta.story,
+      capabilities: ['tokens', 'assets', 'animations', 'layout-preset', 'markdown', 'codemirror'],
+      layoutPreset: mod.recipe.layoutPreset,
       checksums: { 'theme.css': BUILTIN_CHECKSUM },
       category: 'official',
-      tags: options.tags,
+      tags: moduleTagsFromId(themeId),
       price: 'included',
     },
-    css: options.css,
+    css: buildThemeCss(themeId, mod.tokens, mod.css),
     source: 'builtin',
     installedAt: 0,
-    officialProfile: options.profile,
+    officialProfile: mod.meta,
+    module: mod,
     readonly: true,
   };
 }
+
+function moduleNameFromId(id: string): string {
+  const NAMES: Record<string, string> = {
+    paper: '羽翼布局',
+    'markluck.ink-study': '墨线书房',
+    'markluck.archive': '档案馆',
+    'markluck.reader-nocturne': '夜读星幕',
+    'markluck.studio': '工坊轨道',
+  };
+  return NAMES[id] ?? '未知主题';
+}
+
+function moduleTagsFromId(id: string): string[] {
+  const TAGS: Record<string, string[]> = {
+    paper: ['default', 'writing', 'workflow'],
+    'markluck.ink-study': ['focus', 'writing', 'ink', 'collectible'],
+    'markluck.archive': ['archive', 'research', 'workflow'],
+    'markluck.reader-nocturne': ['reader', 'dark', 'collectible'],
+    'markluck.studio': ['studio', 'dense', 'workflow'],
+  };
+  return TAGS[id] ?? [];
+}
+
+/** 将 token 集 + 额外 CSS 合并为 theme.css 字符串 */
+function buildThemeCss(id: string, tokens: ThemeTokenSet, extraCss?: string): string {
+  const parts: string[] = [];
+
+  for (const scheme of ['light', 'dark'] as const) {
+    const tokenMap = tokens[scheme];
+    const entries = Object.entries(tokenMap);
+    if (entries.length === 0) continue;
+
+    parts.push(
+      `[data-theme-id='${id}'][data-color-scheme='${scheme}'] {\n` +
+        entries.map(([key, value]) => `  ${key}: ${value};`).join('\n') +
+        '\n}',
+    );
+  }
+
+  if (extraCss) {
+    parts.push(extraCss.trim());
+  }
+
+  return parts.join('\n');
+}
+
+/** 按 id → module 的精确映射构建 builtInThemes */
+function buildAllBuiltInPacks(): InstalledThemePack[] {
+  const idOrder = [
+    'paper',
+    'markluck.ink-study',
+    'markluck.archive',
+    'markluck.reader-nocturne',
+    'markluck.studio',
+  ];
+
+  return idOrder
+    .map((id) => {
+      const mod = getThemeModuleById(id);
+      if (!mod) {
+        // eslint-disable-next-line no-console
+        console.warn(`[ThemeRegistry] 主题模块缺失: ${id}`);
+        return null;
+      }
+      return moduleToBuiltInPack(mod, id);
+    })
+    .filter((pack): pack is InstalledThemePack => pack !== null);
+}
+
+const builtInThemes: InstalledThemePack[] = buildAllBuiltInPacks();
 
 function storageAvailable(): boolean {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
