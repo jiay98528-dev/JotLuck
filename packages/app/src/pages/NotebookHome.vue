@@ -526,7 +526,7 @@ const currentDir = ref('/');
 // --- Theme ---
 const theme = useThemeStore();
 // 便捷别名：主题 ChromeState（布局 recipe 的运行时镜像）
-const chrome = computed(() => chrome);
+const chrome = computed(() => theme.activeChromeState);
 const themePreviewVisible = ref(false);
 const selectedTheme = ref<ThemeViewModel | null>(null);
 const homeThemeItems = computed(() => theme.themeViewModels.filter((item) => item.officialProfile));
