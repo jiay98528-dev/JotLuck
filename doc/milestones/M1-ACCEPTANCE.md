@@ -59,7 +59,7 @@ M1 是纯代码重组里程碑——将 5 个主题从内联对象提取到独�
 
 ### 回归检查
 - [ ] M1-25: 新建笔记、Ctrl+K 搜索、导出功能在非默认主题下正常
-- [x] M1-26: 外部 .md 文件只读模式在非默认主题下正常（结构验证：`NotebookHome.vue` 中外部只读分支 `v-if="isExternalReadonly"` 使用独立的 `<header class="external-reader-topbar">` 和 `<article class="external-preview">`，完全不经过 AppShell 和 ThemeChromeState。主题 CSS 注入仅覆盖 `--paper-*`/`--ink-*` 变量，不影响外部阅读器的独立硬编码样式。tool GUI 抽样已确认 Console 无报错、搜索/导出在非默认主题下可用）
+- [x] M1-26: 外部 .md 文件只读模式在非默认主题下正常（结构验证：`NotebookHome.vue` 外部只读分支 `v-if="isExternalReadonly"` 绕过 `AppShell`/`ThemeChromeState`，使用独立的模板结构；样式层仍消费当前主题的 `--paper-*`/`--ink-*` CSS 变量，当前未见功能性耦合。tool GUI 抽样已确认 Console 无报错、搜索/导出在非默认主题下可用）
 
 ## L2 验证（tool 复跑）
 
