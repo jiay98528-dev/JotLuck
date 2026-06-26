@@ -380,12 +380,12 @@ const styledTags = computed<StyledTag[]>(() => {
   if (list.length === 0) return [];
   const maxCount = Math.max(...list.map((t) => t.count));
   if (maxCount === 0) {
-    return list.map((t) => ({ ...t, fontSize: FONT_LEVELS[0] }));
+    return list.map((t) => ({ ...t, fontSize: FONT_LEVELS[0] as string }));
   }
   return list.map((t) => {
     const ratio = t.count / maxCount; // 0..1
     const level = Math.min(Math.ceil(ratio * 5), 5); // 1..5
-    return { ...t, fontSize: FONT_LEVELS[level - 1] };
+    return { ...t, fontSize: FONT_LEVELS[level - 1] as string };
   });
 });
 

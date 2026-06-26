@@ -26,7 +26,7 @@
 | #   | 严重度 | 描述                                           |              判定              |
 | --- | :----: | ---------------------------------------------- | :----------------------------: |
 | F1  |   🟡   | components.md Props 表未更新为 v2 region 模型  |           ✅ 已修复            |
-| F2  |   🟡   | RightWing.vue `@ts-nocheck` 抑制类型检查       | ✅ 已移除 — 修复 HeadingTreeNode 递归类型、补回缺失 import |
+| F2  |   🟡   | RightWing.vue `@ts-nocheck` 抑制类型检查       | ✅ 已移除 — 修复 HeadingTreeNode 递归类型、缺失 import、FONT_LEVELS 索引类型 |
 | F3  |   🟡   | EditorControlStrip.vue 孤立的 `density` 默认值 |           ✅ 已删除            |
 | F4  |   🟢   | 夜读星幕 light/dark token 相同                 |       已知悉（有意为之）       |
 | F5  |   🟢   | buildThemeCss 无 CSS 值转义                    | 已知悉（所有值来自 TS 源文件） |
