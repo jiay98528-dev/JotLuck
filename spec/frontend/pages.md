@@ -303,7 +303,7 @@ NotebookHome
 
 ### 5.1 主题持久化
 
-`useThemeStore` 是全局单例，在 `NotebookHome.onMounted()` 中调用 `theme.init()` 初始化。通过 `<html data-color-scheme="light|dark">` 切换，`localStorage` 键 `markluck-theme` 持久化。
+`useThemeStore` 是全局单例，在 `NotebookHome.onMounted()` 中调用 `theme.init()` 初始化。管理 5 个官方主题的声明式模块（`OfficialThemeModule` → `ShellRecipe`）和亮/暗色方案。通过 `<html data-theme-id data-color-scheme data-layout-preset data-workspace-intent>` 属性驱动 CSS 和组件布局。持久化键：`markluck:theme:v2`（v2 状态）+ `markluck-theme`（亮暗色兼容镜像）。
 
 ### 5.2 引导完成状态
 

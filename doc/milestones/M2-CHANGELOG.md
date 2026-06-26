@@ -17,14 +17,14 @@
 
 ### 组件层
 
-| 组件 | 旧 Props | 新 Props |
-|------|----------|----------|
-| **AppShell** | 传递散字段给子组件 | 计算 `topBarRegion`/`leftWingRegion`/`statusBarRegion`/`rightWingRegion` computed，统一传递 `:region` |
-| **TopBar** | `:variant="..." :layout="..."` | `:region="{ variant, layout }"` (TopBarRegion) |
-| **LeftWing** | `:mode="..." :layout="..."` | `:region="{ mode, layout }"` (LeftWingRegion) |
-| **StatusBar** | `:density="..." :layout="..."` | `:region="{ layout, density }"` (StatusBarRegion) |
-| **RightWing** | `:mode="..." :policy="..." :sections="..." :defaultOpenSections="..."` | `:region="{ mode, policy, sections, defaultOpenSections }"` (RightWingRegion) |
-| **EditorControlStrip** | `:layout="..." :density="..."` | `:region="{ layout, density }"` (EditorControlRegion) |
+| 组件                   | 旧 Props                                                               | 新 Props                                                                                              |
+| ---------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| **AppShell**           | 传递散字段给子组件                                                     | 计算 `topBarRegion`/`leftWingRegion`/`statusBarRegion`/`rightWingRegion` computed，统一传递 `:region` |
+| **TopBar**             | `:variant="..." :layout="..."`                                         | `:region="{ variant, layout }"` (TopBarRegion)                                                        |
+| **LeftWing**           | `:mode="..." :layout="..."`                                            | `:region="{ mode, layout }"` (LeftWingRegion)                                                         |
+| **StatusBar**          | `:density="..." :layout="..."`                                         | `:region="{ layout, density }"` (StatusBarRegion)                                                     |
+| **RightWing**          | `:mode="..." :policy="..." :sections="..." :defaultOpenSections="..."` | `:region="{ mode, policy, sections, defaultOpenSections }"` (RightWingRegion)                         |
+| **EditorControlStrip** | `:layout="..." :density="..."`                                         | `:region="{ layout, density }"` (EditorControlRegion)                                                 |
 
 ### NotebookHome
 
@@ -34,9 +34,9 @@
 
 ## L1+L2 验证
 
-| 检查项 | 结果 |
-|--------|:---:|
-| `vue-tsc --noEmit` | ✅ PASS |
-| `eslint` | ✅ PASS |
-| `prettier --check` | ✅ PASS |
-| `vitest run` | ✅ 167 passed / 11 files |
+| 检查项             |           结果           |
+| ------------------ | :----------------------: |
+| `vue-tsc --noEmit` |         ✅ PASS          |
+| `eslint`           |         ✅ PASS          |
+| `prettier --check` |         ✅ PASS          |
+| `vitest run`       | ✅ 167 passed / 11 files |

@@ -1,7 +1,7 @@
 # MarkLuck CSS & 样式规范
 
 > 版本：v1.0 | 日期：2026-06-03
-> 关联文档：`DESIGN.md`（双主题视觉规格）、`spec/frontend/design-system.md`（CSS Token 数值）
+> 关联文档：`spec/frontend/design-system.md`（CSS Token 数值）、`packages/app/src/themes/`（主题模块目录）
 
 ---
 
@@ -134,93 +134,40 @@
 
 ---
 
-## 四、双主题实现
+## 四、主题系统
 
-### 4.1 主题切换机制
+> 2026-06-26 更新：原"构成主义+磨玻璃"双主题已废弃，由 Paper 纸张隐喻单主题 + 声明式主题模块系统替代。
+> 详见 `spec/frontend/theme-packs.md` 和 `packages/app/src/themes/`。
 
-```css
-/* 默认：构成主义亮色（无属性 = 默认） */
-:root,
-[data-theme='construct-light'] {
-  --clr-bg: oklch(0.98 0.002 250);
-  --clr-text-primary: oklch(0.18 0.005 260);
-  /* ...完整 Token 定义见 design-system.md */
-}
-
-/* 磨玻璃亮色 */
-[data-theme='glass-light'] {
-  --clr-bg: oklch(0.97 0.003 250);
-  --glass-bg: oklch(0.995 0.001 260 / 0.72);
-  /* ... */
-}
-
-/* 暗色变体 — 仅覆盖变化的 Token */
-[data-color-scheme='dark'] {
-  --clr-text-primary: oklch(0.92 0.003 260);
-  --clr-bg: oklch(0.16 0.005 260);
-  --clr-surface: oklch(0.2 0.005 260);
-  /* ... */
-}
-```
-
-### 4.2 HTML 属性设置
+### 4.1 主题运行时
 
 ```html
-<!-- 构成主义亮色（默认） -->
-<html>
-  <!-- 磨玻璃亮色 -->
-  <html data-theme="glass-light">
-    <!-- 构成主义暗色 -->
-    <html data-theme="construct-light" data-color-scheme="dark">
-      <!-- 磨玻璃暗色 -->
-      <html data-theme="glass-light" data-color-scheme="dark"></html>
-    </html>
-  </html>
-</html>
+<html
+  data-theme-id="paper"
+  data-color-scheme="light"
+  data-layout-preset="winged"
+  data-workspace-intent="baseline"
+></html>
 ```
+
+通过 `useThemeStore.apply()` 设置属性 + 注入主题 CSS（token 集 + 附加 CSS）。
+
+### 4.2 OKLCH Token 体系
+
+所有色值/字号/间距/圆角必须引用 `tokens.css` 或 `paper.css` 中定义的 CSS 变量。
+**禁止硬编码**。`stylelint` 配置了 `color-no-hex` 规则强制此约束。
+
+命名规范：`--paper-*`（纸面层级）、`--ink-*`（墨色文字）、`--accent`（冷蓝强调）、`--rule`（分隔线）、`--signal-*`（语义色）。
+
+### 4.3 动效三层体系
+
+- Tier 1 Tactile (80-120ms): 按钮按压、hover
+- Tier 2 Spatial (250-400ms): 面板展开
+- Tier 3 Ambient (1.5-3s): 主题动效层
 
 ---
 
-## 五、玻璃效果规范
-
-### 5.1 专用类
-
-```css
-/* ✅ 通过语义类应用玻璃 */
-.glass-panel {
-  background: var(--glass-bg, var(--clr-surface));
-  backdrop-filter: blur(var(--glass-blur, 12px)) saturate(var(--glass-saturate, 140%));
-  border: 1px solid var(--glass-border, transparent);
-}
-
-.glass-raised {
-  background: var(--glass-raised-bg, var(--clr-surface));
-  backdrop-filter: blur(var(--glass-raised-blur, 20px)) saturate(var(--glass-saturate, 140%));
-  box-shadow: var(--glass-raised-shadow, none);
-}
-
-/* ✅ 必须提供降级 */
-@supports not (backdrop-filter: blur(1px)) {
-  .glass-panel {
-    background: var(--clr-surface);
-    /* 无模糊时退化到纯色面板 */
-  }
-}
-
-/* ❌ 禁止：到处用玻璃 */
-.note-card {
-  backdrop-filter: blur(10px); /* 应该用 .glass-panel 类 */
-}
-```
-
-### 5.2 性能约束
-
-- 视口内玻璃面板 ≤ 3 个
-- 不在滚动容器内使用 `backdrop-filter`（每帧重绘开销大）
-- 玻璃面板不动画（不改变 blur 值）
-- 给玻璃面板加 `will-change: backdrop-filter` 提示浏览器
-
-### 5.3 Z-Index 层级
+## 五、Z-Index 层级
 
 ```
 0    — 根背景
@@ -353,12 +300,12 @@
 .cm-ghost-text {
   color: oklch(from var(--ink-muted) l c h / 0.4);
   font-style: italic;
-  pointer-events: none;          /* 不阻碍光标和点击事件 */
-  user-select: none;             /* 不可选中 */
+  pointer-events: none; /* 不阻碍光标和点击事件 */
+  user-select: none; /* 不可选中 */
 }
 
 /* ✅ 暗色模式适配 */
-[data-color-scheme="dark"] .cm-ghost-text {
+[data-color-scheme='dark'] .cm-ghost-text {
   color: oklch(from var(--ink-muted) l c h / 0.35); /* 暗色下稍高透明度 */
 }
 ```

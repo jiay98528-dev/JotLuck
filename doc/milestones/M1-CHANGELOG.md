@@ -15,27 +15,27 @@
 
 **新增文件 (18):**
 
-| 文件 | 说明 |
-|------|------|
-| `packages/app/src/types/theme-pack.ts` | 新增 `ShellRecipe`, `ThemeTokenSet`, `ThemeAssetMap`, `OfficialThemeModule` 接口；`InstalledThemePack` 新增 `module?` 字段 |
-| `packages/app/src/themes/registry.ts` | 主题模块注册表：聚合 5 个模块，提供 `getAllThemeModules()` 和 `getThemeModuleById()` |
-| `packages/app/src/themes/paper/index.ts` | 羽翼布局模块（baseline, winged, live） |
-| `packages/app/src/themes/paper/recipe.ts` | 羽翼布局 ShellRecipe |
-| `packages/app/src/themes/paper/tokens.ts` | 空 Token 集（使用默认 paper.css） |
-| `packages/app/src/themes/ink-study/index.ts` | 墨线书房模块（collectible, focus, writing） |
-| `packages/app/src/themes/ink-study/recipe.ts` | 墨线书房 ShellRecipe |
-| `packages/app/src/themes/ink-study/tokens.ts` | OKLCH 色值 + 选择器级 CSS |
-| `packages/app/src/themes/ink-study/assets.ts` | 背景图/预览图 import |
-| `packages/app/src/themes/archive/index.ts` | 档案馆模块（workflow, archive, split） |
-| `packages/app/src/themes/archive/recipe.ts` | 档案馆 ShellRecipe |
-| `packages/app/src/themes/archive/tokens.ts` | OKLCH 色值 + CSS |
-| `packages/app/src/themes/reader-nocturne/index.ts` | 夜读星幕模块（collectible, reader, read） |
-| `packages/app/src/themes/reader-nocturne/recipe.ts` | 夜读星幕 ShellRecipe |
-| `packages/app/src/themes/reader-nocturne/tokens.ts` | OKLCH 色值 + CSS |
-| `packages/app/src/themes/reader-nocturne/assets.ts` | 星幕背景图/预览图 import |
-| `packages/app/src/themes/studio/index.ts` | 工坊轨道模块（workflow, studio, split） |
-| `packages/app/src/themes/studio/recipe.ts` | 工坊轨道 ShellRecipe |
-| `packages/app/src/themes/studio/tokens.ts` | OKLCH 色值 |
+| 文件                                                | 说明                                                                                                                       |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `packages/app/src/types/theme-pack.ts`              | 新增 `ShellRecipe`, `ThemeTokenSet`, `ThemeAssetMap`, `OfficialThemeModule` 接口；`InstalledThemePack` 新增 `module?` 字段 |
+| `packages/app/src/themes/registry.ts`               | 主题模块注册表：聚合 5 个模块，提供 `getAllThemeModules()` 和 `getThemeModuleById()`                                       |
+| `packages/app/src/themes/paper/index.ts`            | 羽翼布局模块（baseline, winged, live）                                                                                     |
+| `packages/app/src/themes/paper/recipe.ts`           | 羽翼布局 ShellRecipe                                                                                                       |
+| `packages/app/src/themes/paper/tokens.ts`           | 空 Token 集（使用默认 paper.css）                                                                                          |
+| `packages/app/src/themes/ink-study/index.ts`        | 墨线书房模块（collectible, focus, writing）                                                                                |
+| `packages/app/src/themes/ink-study/recipe.ts`       | 墨线书房 ShellRecipe                                                                                                       |
+| `packages/app/src/themes/ink-study/tokens.ts`       | OKLCH 色值 + 选择器级 CSS                                                                                                  |
+| `packages/app/src/themes/ink-study/assets.ts`       | 背景图/预览图 import                                                                                                       |
+| `packages/app/src/themes/archive/index.ts`          | 档案馆模块（workflow, archive, split）                                                                                     |
+| `packages/app/src/themes/archive/recipe.ts`         | 档案馆 ShellRecipe                                                                                                         |
+| `packages/app/src/themes/archive/tokens.ts`         | OKLCH 色值 + CSS                                                                                                           |
+| `packages/app/src/themes/reader-nocturne/index.ts`  | 夜读星幕模块（collectible, reader, read）                                                                                  |
+| `packages/app/src/themes/reader-nocturne/recipe.ts` | 夜读星幕 ShellRecipe                                                                                                       |
+| `packages/app/src/themes/reader-nocturne/tokens.ts` | OKLCH 色值 + CSS                                                                                                           |
+| `packages/app/src/themes/reader-nocturne/assets.ts` | 星幕背景图/预览图 import                                                                                                   |
+| `packages/app/src/themes/studio/index.ts`           | 工坊轨道模块（workflow, studio, split）                                                                                    |
+| `packages/app/src/themes/studio/recipe.ts`          | 工坊轨道 ShellRecipe                                                                                                       |
+| `packages/app/src/themes/studio/tokens.ts`          | OKLCH 色值                                                                                                                 |
 
 ### `3bd55bd` — ThemeRegistry 重构 (1 file, +88 / -318)
 
@@ -56,9 +56,11 @@
 - `ThemeChromeState` 从"运行时计算值"变为"模块声明透传值"
 
 ### `f1e45ee` — M0/M1 文档
+
 - 提交 M0-ACCEPTANCE.md, M0-CHANGELOG.md, M1-ACCEPTANCE.md, M1-CHANGELOG.md
 
 ### `9ad0018` — 审计修复 (8 files, +47 / -67)
+
 - `OfficialThemeModule` 新增 `id`, `name`, `tags`, `capabilities` 字段——模块成为唯一真源
 - 删除 `registry.ts` 中按 role 索引的 `MODULE_MAP`（3 个 role 对应 5 个主题，必然覆盖）
 - 删除 `getThemeModule(role)`——基于 role 的查找从根本上不可靠
@@ -68,6 +70,7 @@
 - `buildAllBuiltInPacks()` 不再硬编码 `idOrder`；直接迭代 `getAllThemeModules()`
 
 ### `ffde204` — 文档同步
+
 - 更新 M1 CHANGELOG 中所有描述以对齐当前实现（移除已废弃的 `idOrder`、`moduleToBuiltInPack(module, id)` 等旧引用）
 
 ## 关键架构变化
@@ -85,7 +88,7 @@ After (M1):
     ├── recipe.ts   (ShellRecipe — 直接声明所有布局参数)
     ├── tokens.ts   (ThemeTokenSet — 结构化 OKLCH 色值)
     └── assets.ts   (Vite 图片 import)
-  
+
   ThemeRegistry.moduleToBuiltInPack(module)
     → InstalledThemePack (带 .module 引用, id/name/tags 来自模块自身)
     → useThemeStore.chromeStateFromPack(pack)
@@ -95,9 +98,9 @@ After (M1):
 
 ## L1 验证
 
-| 检查项 | 状态 |
-|--------|:---:|
-| `vue-tsc --noEmit` | ✅ PASS |
-| `eslint` | ✅ PASS |
-| `prettier --check` | ✅ PASS |
+| 检查项                 |     状态     |
+| ---------------------- | :----------: |
+| `vue-tsc --noEmit`     |   ✅ PASS    |
+| `eslint`               |   ✅ PASS    |
+| `prettier --check`     |   ✅ PASS    |
 | 主题单元测试 (11 case) | ✅ 全量 PASS |
