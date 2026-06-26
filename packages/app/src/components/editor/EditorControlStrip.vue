@@ -41,7 +41,6 @@ withDefaults(
     actions: () => [],
     preset: 'paragraph',
     activeAction: null,
-    density: 'calm',
   },
 );
 

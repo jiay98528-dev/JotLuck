@@ -229,7 +229,6 @@ export const HeadingTreeNode = defineComponent({
  *
  * @see spec/frontend/components.md — RightWing 组件规格
  */
-// @ts-nocheck — agent-generated component, type quirks to be resolved in polish phase
 import { ref, computed, watch } from 'vue';
 import type { BacklinkEntry, TagEntry } from '@/types';
 import type { RightWingRegion } from '@/types/theme-pack';
