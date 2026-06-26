@@ -1,13 +1,13 @@
 <template>
   <footer
     class="status-bar"
-    :class="[`status-bar--${density}`, `status-bar--layout-${layout}`]"
-    :data-density="density"
-    :data-layout="layout"
+    :class="[`status-bar--${region.density}`, `status-bar--layout-${region.layout}`]"
+    :data-density="region.density"
+    :data-layout="region.layout"
     role="status"
     aria-label="编辑器状态栏"
   >
-    <template v-if="layout === 'save-only'">
+    <template v-if="region.layout === 'save-only'">
       <span class="status-reader-save">
         <span v-if="saveError" class="status-error" :title="saveError"
           >&#9888; {{ saveError }}</span
@@ -25,7 +25,7 @@
       </span>
       <span class="status-center">
         {{ charCount }} 字 &middot; {{ wordCount }} 词
-        <span v-if="layout !== 'compact'" class="status-hint">
+        <span v-if="region.layout !== 'compact'" class="status-hint">
           &middot; 选中文字以格式化 &middot; Ctrl+点击固定区块
         </span>
       </span>
@@ -43,7 +43,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import type { ThemeStatusLayout, ThemeToolbarDensity } from '@/types/theme-pack';
+import type { StatusBarRegion } from '@/types/theme-pack';
 
 const props = withDefaults(
   defineProps<{
@@ -56,8 +56,7 @@ const props = withDefaults(
     isSaving?: boolean;
     saveError?: string | null;
     lastSavedAt?: number | null;
-    density?: ThemeToolbarDensity;
-    layout?: ThemeStatusLayout;
+    region?: StatusBarRegion;
   }>(),
   {
     charCount: 0,
@@ -69,8 +68,7 @@ const props = withDefaults(
     isSaving: false,
     saveError: null,
     lastSavedAt: null,
-    density: 'calm',
-    layout: 'full',
+    region: () => ({ layout: 'full' as const, density: 'calm' as const }),
   },
 );
 

@@ -83,7 +83,7 @@
       :is-saving="isSaving"
       :save-error="saveError"
       :last-saved-at="lastSavedAt"
-      :theme-chrome="theme.activeChromeState"
+      :theme-chrome="chrome"
       :actions="shellActions"
       @select-note="onShellSelectNote"
       @navigate-heading="onNavTreeNavigate"
@@ -115,13 +115,9 @@
           />
         </div>
 
-        <div
-          v-else
-          class="workflow-canvas"
-          :data-workspace-intent="theme.activeChromeState.workspaceIntent"
-        >
+        <div v-else class="workflow-canvas" :data-workspace-intent="chrome.workspaceIntent">
           <StudioRail
-            v-if="theme.activeChromeState.editorControlLayout === 'studio-rail'"
+            v-if="chrome.editorControlLayout === 'studio-rail'"
             :actions="actionsForRegion('studio-rail')"
             :preset="activeParagraphPreset"
             :active-action="pendingFormatAction"
@@ -130,12 +126,11 @@
 
           <div class="workflow-canvas__main">
             <EditorControlStrip
-              v-if="theme.activeChromeState.editorControlLayout !== 'studio-rail'"
-              :layout="theme.activeChromeState.editorControlLayout"
+              v-if="chrome.editorControlLayout !== 'studio-rail'"
+              :region="{ layout: chrome.editorControlLayout, density: chrome.toolbarDensity }"
               :actions="actionsForRegion('editor-control')"
               :preset="activeParagraphPreset"
               :active-action="pendingFormatAction"
-              :density="theme.activeChromeState.toolbarDensity"
               @format="onToolbarFormat"
             />
 
@@ -530,6 +525,8 @@ const currentDir = ref('/');
 
 // --- Theme ---
 const theme = useThemeStore();
+// 便捷别名：主题 ChromeState（布局 recipe 的运行时镜像）
+const chrome = computed(() => chrome);
 const themePreviewVisible = ref(false);
 const selectedTheme = ref<ThemeViewModel | null>(null);
 const homeThemeItems = computed(() => theme.themeViewModels.filter((item) => item.officialProfile));
@@ -606,7 +603,7 @@ const externalReadStats = computed(() => {
 });
 
 function actionRegion(id: ThemeActionId): ThemeActionRegion {
-  return theme.activeChromeState.actionPlacements[id] ?? 'hidden';
+  return chrome.value.actionPlacements[id] ?? 'hidden';
 }
 
 const shellActions = computed<ShellAction[]>(() => [
@@ -702,7 +699,7 @@ const shellActions = computed<ShellAction[]>(() => [
     title: `切换视图，当前为${resolvedViewModeLabel.value}`,
     icon: 'view-toggle',
     run: cycleViewMode,
-    active: viewMode.value === theme.activeChromeState.defaultViewMode,
+    active: viewMode.value === chrome.value.defaultViewMode,
   },
 ]);
 
@@ -733,10 +730,9 @@ function cycleViewMode(): void {
 }
 
 function applyThemeWorkflowDefaults(): void {
-  const chrome = theme.activeChromeState;
   pendingFormatAction.value = null;
-  viewMode.value = chrome.defaultViewMode;
-  showRightWing.value = chrome.rightWingPolicy !== 'collapsed';
+  viewMode.value = chrome.value.defaultViewMode;
+  showRightWing.value = chrome.value.rightWingPolicy !== 'collapsed';
   if (viewMode.value === 'split' || viewMode.value === 'read') {
     updateSplitPreview();
   }

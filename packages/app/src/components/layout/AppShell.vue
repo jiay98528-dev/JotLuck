@@ -18,12 +18,10 @@
       :effect-profile="themeChrome.effectProfile"
       :motion-intensity="themeChrome.motionIntensity"
     />
-    <!-- Left Wing: 56px bookmark strip -->
     <LeftWing
       :notes="recentNotes"
       :active-path="activePath"
-      :mode="themeChrome.leftWingMode"
-      :layout="themeChrome.leftWingLayout"
+      :region="leftWingRegion"
       :actions="actionsFor('left-wing')"
       @select-note="$emit('select-note', $event)"
     />
@@ -34,8 +32,7 @@
         v-if="showTopBar"
         :note-title="noteTitle"
         :notebook-name="notebookName"
-        :variant="themeChrome.topBarVariant"
-        :layout="themeChrome.topBarLayout"
+        :region="topBarRegion"
         :left-actions="actionsFor('topbar-left')"
         :center-actions="actionsFor('topbar-center')"
         :right-actions="actionsFor('topbar-right')"
@@ -53,12 +50,10 @@
         :is-saving="isSaving"
         :save-error="saveError"
         :last-saved-at="lastSavedAt"
-        :density="themeChrome.statusDensity"
-        :layout="themeChrome.statusLayout"
+        :region="statusBarRegion"
       />
     </main>
     <div v-if="showRightWing" class="wing-divider" />
-    <!-- Right Wing: 240px reference panel -->
     <RightWing
       v-if="showRightWing"
       :headings="headings"
@@ -66,10 +61,7 @@
       :tags="tags"
       :active-heading-id="activeHeadingId"
       :collapsed="!showRightWing"
-      :mode="themeChrome.rightWingMode"
-      :policy="themeChrome.rightWingPolicy"
-      :sections="themeChrome.rightWingSections"
-      :default-open-sections="themeChrome.defaultOpenSections"
+      :region="rightWingRegion"
       @navigate-heading="(id: string, ln: number) => $emit('navigate-heading', id, ln)"
       @navigate-backlink="(entry: any) => $emit('navigate-backlink', entry)"
       @select-tag="$emit('select-tag', $event)"
@@ -93,7 +85,15 @@ import TopBar from '../editor/TopBar.vue';
 import StatusBar from '../editor/StatusBar.vue';
 import ThemeEffectLayer from '../theme/ThemeEffectLayer.vue';
 import type { HeadingItem, BacklinkEntry, TagEntry } from '@/types';
-import type { ShellAction, ThemeActionRegion, ThemeChromeState } from '@/types/theme-pack';
+import type {
+  ShellAction,
+  ThemeActionRegion,
+  ThemeChromeState,
+  TopBarRegion,
+  LeftWingRegion,
+  StatusBarRegion,
+  RightWingRegion,
+} from '@/types/theme-pack';
 import { computed } from 'vue';
 
 const props = defineProps<{
@@ -127,6 +127,29 @@ defineEmits<{
   'select-tag': [tagName: string];
   'toggle-right-wing': [];
 }>();
+
+// ── Region objects: 将 ThemeChromeState 散字段聚合为统一 region ──
+const topBarRegion = computed<TopBarRegion>(() => ({
+  variant: props.themeChrome.topBarVariant,
+  layout: props.themeChrome.topBarLayout,
+}));
+
+const leftWingRegion = computed<LeftWingRegion>(() => ({
+  mode: props.themeChrome.leftWingMode,
+  layout: props.themeChrome.leftWingLayout,
+}));
+
+const statusBarRegion = computed<StatusBarRegion>(() => ({
+  layout: props.themeChrome.statusLayout,
+  density: props.themeChrome.statusDensity,
+}));
+
+const rightWingRegion = computed<RightWingRegion>(() => ({
+  mode: props.themeChrome.rightWingMode,
+  policy: props.themeChrome.rightWingPolicy,
+  sections: props.themeChrome.rightWingSections,
+  defaultOpenSections: props.themeChrome.defaultOpenSections,
+}));
 
 const actionGroups = computed(() => {
   const groups = new Map<ThemeActionRegion, ShellAction[]>();

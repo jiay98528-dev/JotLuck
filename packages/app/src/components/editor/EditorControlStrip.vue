@@ -1,15 +1,15 @@
 <template>
   <div
-    v-if="layout !== 'hidden' && layout !== 'studio-rail'"
+    v-if="region.layout !== 'hidden' && region.layout !== 'studio-rail'"
     class="editor-control-strip editor-control-bar"
-    :class="`editor-control-strip--${layout}`"
-    :data-layout="layout"
-    :data-toolbar-density="density"
+    :class="`editor-control-strip--${region.layout}`"
+    :data-layout="region.layout"
+    :data-toolbar-density="region.density"
   >
     <FormatToolbar
       :preset="preset"
       :active-action="activeAction"
-      :density="density"
+      :density="region.density"
       @format="$emit('format', $event)"
     />
     <div v-if="actions.length > 0" class="editor-control-strip__actions">
@@ -17,7 +17,7 @@
         v-for="action in actions"
         :key="action.id"
         :action="action"
-        :label-mode="layout === 'writing-strip' ? 'icon' : 'short'"
+        :label-mode="region.layout === 'writing-strip' ? 'icon' : 'short'"
       />
     </div>
   </div>
@@ -27,22 +27,17 @@
 import FormatToolbar from './FormatToolbar.vue';
 import ShellActionButton from '@/components/layout/ShellActionButton.vue';
 import type { FormatAction, ParagraphPreset } from '@/types';
-import type {
-  ShellAction,
-  ThemeEditorControlLayout,
-  ThemeToolbarDensity,
-} from '@/types/theme-pack';
+import type { ShellAction, EditorControlRegion } from '@/types/theme-pack';
 
 withDefaults(
   defineProps<{
-    layout?: ThemeEditorControlLayout;
+    region?: EditorControlRegion;
     actions?: ShellAction[];
     preset?: ParagraphPreset;
     activeAction?: FormatAction | null;
-    density?: ThemeToolbarDensity;
   }>(),
   {
-    layout: 'toolbar',
+    region: () => ({ layout: 'toolbar' as const, density: 'calm' as const }),
     actions: () => [],
     preset: 'paragraph',
     activeAction: null,

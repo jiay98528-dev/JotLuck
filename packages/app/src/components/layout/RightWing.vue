@@ -2,7 +2,7 @@
   <aside
     class="right-wing"
     :class="{ collapsed }"
-    :data-policy="policy"
+    :data-policy="region.policy"
     :style="{ width: collapsed ? '0px' : `${panelWidth}px` }"
     aria-label="参考面板"
   >
@@ -17,7 +17,7 @@
     </div>
 
     <!-- Panel Content -->
-    <div v-if="!collapsed" class="wing-content" :data-mode="mode">
+    <div v-if="!collapsed" class="wing-content" :data-mode="region.mode">
       <template v-for="(section, index) in orderedSections" :key="section">
         <section class="wing-section" :data-section="section">
           <button class="section-header" @click="toggleSection(section)">
@@ -232,11 +232,7 @@ export const HeadingTreeNode = defineComponent({
 // @ts-nocheck — agent-generated component, type quirks to be resolved in polish phase
 import { ref, computed, watch } from 'vue';
 import type { BacklinkEntry, TagEntry } from '@/types';
-import type {
-  ThemeReferenceSection,
-  ThemeRightWingMode,
-  ThemeRightWingPolicy,
-} from '@/types/theme-pack';
+import type { RightWingRegion } from '@/types/theme-pack';
 
 // ============================================================
 // Props
@@ -248,17 +244,16 @@ const props = withDefaults(
     tags: TagEntry[];
     activeHeadingId: string | null;
     collapsed?: boolean;
-    mode?: ThemeRightWingMode;
-    policy?: ThemeRightWingPolicy;
-    sections?: ThemeReferenceSection[];
-    defaultOpenSections?: ThemeReferenceSection[];
+    region?: RightWingRegion;
   }>(),
   {
     collapsed: false,
-    mode: 'balanced',
-    policy: 'outline',
-    sections: () => ['outline', 'backlinks', 'tags'],
-    defaultOpenSections: () => ['outline', 'tags'],
+    region: () => ({
+      mode: 'balanced' as const,
+      policy: 'outline' as const,
+      sections: ['outline', 'backlinks', 'tags'] as const,
+      defaultOpenSections: ['outline', 'tags'] as const,
+    }),
   },
 );
 
@@ -280,7 +275,7 @@ type SectionKey = ThemeReferenceSection;
 const orderedSections = computed<SectionKey[]>(() => {
   const seen = new Set<SectionKey>();
   const result: SectionKey[] = [];
-  for (const section of props.sections) {
+  for (const section of props.region.sections) {
     if (!seen.has(section)) {
       seen.add(section);
       result.push(section);
@@ -289,17 +284,17 @@ const orderedSections = computed<SectionKey[]>(() => {
   return result.length > 0 ? result : ['outline', 'backlinks', 'tags'];
 });
 
-const openSections = ref<Set<SectionKey>>(new Set(props.defaultOpenSections));
+const openSections = ref<Set<SectionKey>>(new Set(props.region.defaultOpenSections));
 
 watch(
-  () => props.defaultOpenSections,
+  () => props.region.defaultOpenSections,
   (sections) => {
     openSections.value = new Set(sections);
   },
 );
 
 watch(
-  () => props.policy,
+  () => props.region.policy,
   (policy) => {
     panelWidth.value = widthForPolicy(policy);
   },
@@ -336,7 +331,7 @@ function handleDoubleClick() {
 // ============================================================
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 400;
-const panelWidth = ref(widthForPolicy(props.policy));
+const panelWidth = ref(widthForPolicy(props.region.policy));
 
 let resizeActive = false;
 

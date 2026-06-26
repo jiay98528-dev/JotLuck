@@ -1,9 +1,9 @@
 <template>
   <aside
     class="left-wing"
-    :class="[`left-wing--${mode}`, `left-wing--layout-${layout}`]"
-    :data-mode="mode"
-    :data-layout="layout"
+    :class="[`left-wing--${region.mode}`, `left-wing--layout-${region.layout}`]"
+    :data-mode="region.mode"
+    :data-layout="region.layout"
     aria-label="笔记本导航"
   >
     <button class="wing-logo" title="MarkLuck, 回到首页" @click="$emit('select-note', '')">
@@ -39,10 +39,10 @@
 
     <div class="wing-rule" />
 
-    <div v-if="layout === 'research-stack'" class="wing-index-count" aria-hidden="true">
+    <div v-if="region.layout === 'research-stack'" class="wing-index-count" aria-hidden="true">
       {{ notes.length }}
     </div>
-    <div v-else-if="layout === 'studio-rail'" class="wing-rail-groove" aria-hidden="true" />
+    <div v-else-if="region.layout === 'studio-rail'" class="wing-rail-groove" aria-hidden="true" />
 
     <nav ref="bookmarkList" class="wing-bookmarks" aria-label="最近笔记">
       <button
@@ -58,7 +58,7 @@
       >
         <span class="dot-core" />
         <span v-if="note.path === activePath" class="dot-ring" />
-        <span v-if="layout === 'research-stack'" class="wing-bookmark-title">
+        <span v-if="region.layout === 'research-stack'" class="wing-bookmark-title">
           {{ note.title }}
         </span>
       </button>
@@ -87,19 +87,17 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import ShellActionButton from './ShellActionButton.vue';
-import type { ShellAction, ThemeLeftWingLayout, ThemeLeftWingMode } from '@/types/theme-pack';
+import type { ShellAction, LeftWingRegion } from '@/types/theme-pack';
 
 const props = withDefaults(
   defineProps<{
     notes: Array<{ path: string; title: string; colorIndex: number }>;
     activePath: string;
-    mode?: ThemeLeftWingMode;
-    layout?: ThemeLeftWingLayout;
+    region?: LeftWingRegion;
     actions?: ShellAction[];
   }>(),
   {
-    mode: 'default',
-    layout: 'bookmarks',
+    region: () => ({ mode: 'default' as const, layout: 'bookmarks' as const }),
     actions: () => [],
   },
 );

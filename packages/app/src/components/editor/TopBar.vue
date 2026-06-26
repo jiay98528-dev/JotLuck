@@ -1,13 +1,13 @@
 <template>
   <header
     class="topbar"
-    :class="[`topbar--${variant}`, `topbar--layout-${layout}`]"
-    :data-variant="variant"
-    :data-layout="layout"
+    :class="[`topbar--${region.variant}`, `topbar--layout-${region.layout}`]"
+    :data-variant="region.variant"
+    :data-layout="region.layout"
     role="banner"
     aria-label="编辑器工具栏"
   >
-    <div v-if="layout === 'search-first'" class="topbar-inner topbar-inner--search-first">
+    <div v-if="region.layout === 'search-first'" class="topbar-inner topbar-inner--search-first">
       <div class="topbar-left">
         <ShellActionButton
           v-for="action in leftActions"
@@ -37,7 +37,7 @@
       </div>
     </div>
 
-    <div v-else-if="layout === 'reader'" class="topbar-inner topbar-inner--reader">
+    <div v-else-if="region.layout === 'reader'" class="topbar-inner topbar-inner--reader">
       <div class="topbar-left">
         <ShellActionButton
           v-for="action in leftActions"
@@ -59,7 +59,7 @@
       </div>
     </div>
 
-    <div v-else-if="layout === 'compact'" class="topbar-inner topbar-inner--compact">
+    <div v-else-if="region.layout === 'compact'" class="topbar-inner topbar-inner--compact">
       <div class="topbar-left topbar-left--compact">
         <span class="topbar-title" :title="titleText">{{ titleText }}</span>
       </div>
@@ -76,7 +76,7 @@
     <div
       v-else
       class="topbar-inner"
-      :class="{ 'topbar-inner--title-first': layout === 'title-first' }"
+      :class="{ 'topbar-inner--title-first': region.layout === 'title-first' }"
     >
       <div class="topbar-left">
         <ShellActionButton
@@ -105,21 +105,19 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import ShellActionButton from '@/components/layout/ShellActionButton.vue';
-import type { ShellAction, ThemeTopBarLayout, ThemeTopBarVariant } from '@/types/theme-pack';
+import type { ShellAction, TopBarRegion } from '@/types/theme-pack';
 
 const props = withDefaults(
   defineProps<{
     noteTitle: string;
     notebookName: string;
-    variant?: ThemeTopBarVariant;
-    layout?: ThemeTopBarLayout;
+    region?: TopBarRegion;
     leftActions?: ShellAction[];
     centerActions?: ShellAction[];
     rightActions?: ShellAction[];
   }>(),
   {
-    variant: 'balanced',
-    layout: 'classic',
+    region: () => ({ variant: 'balanced' as const, layout: 'classic' as const }),
     leftActions: () => [],
     centerActions: () => [],
     rightActions: () => [],

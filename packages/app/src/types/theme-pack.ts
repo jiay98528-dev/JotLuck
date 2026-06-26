@@ -204,21 +204,44 @@ export const THEME_CAPABILITIES: ThemeCapability[] = [
 
 // ── v2 Declarative Theme Module Types ──────────────────────
 
+/** 区域装配片段 — 每个区域组件接收一个统一的 recipe 对象 */
+export interface TopBarRegion {
+  variant: ThemeTopBarVariant;
+  layout: ThemeTopBarLayout;
+}
+
+export interface LeftWingRegion {
+  mode: ThemeLeftWingMode;
+  layout: ThemeLeftWingLayout;
+}
+
+export interface EditorControlRegion {
+  layout: ThemeEditorControlLayout;
+  density: ThemeToolbarDensity;
+}
+
+export interface StatusBarRegion {
+  layout: ThemeStatusLayout;
+  density: ThemeToolbarDensity;
+}
+
+export interface RightWingRegion {
+  mode: ThemeRightWingMode;
+  policy: ThemeRightWingPolicy;
+  sections: ThemeReferenceSection[];
+  defaultOpenSections: ThemeReferenceSection[];
+}
+
 /** 主题作者声明的 Shell 装配配方 — 直接声明布局意图，无需运行时推导 */
 export interface ShellRecipe {
   layoutPreset: ThemeLayoutPreset;
   workspaceIntent: ThemeWorkspaceIntent;
   defaultViewMode: ThemeViewMode;
-  topBar: { variant: ThemeTopBarVariant; layout: ThemeTopBarLayout };
-  leftWing: { mode: ThemeLeftWingMode; layout: ThemeLeftWingLayout };
-  editorControl: { layout: ThemeEditorControlLayout; density: ThemeToolbarDensity };
-  statusBar: { layout: ThemeStatusLayout; density: ThemeToolbarDensity };
-  rightWing: {
-    mode: ThemeRightWingMode;
-    policy: ThemeRightWingPolicy;
-    sections: ThemeReferenceSection[];
-    defaultOpenSections: ThemeReferenceSection[];
-  };
+  topBar: TopBarRegion;
+  leftWing: LeftWingRegion;
+  editorControl: EditorControlRegion;
+  statusBar: StatusBarRegion;
+  rightWing: RightWingRegion;
   readingWidth: OfficialThemeUiProfile['readingWidth'];
   drawerEmphasis: OfficialThemeUiProfile['drawerEmphasis'];
   motionIntensity: OfficialThemeUiProfile['motionIntensity'];
