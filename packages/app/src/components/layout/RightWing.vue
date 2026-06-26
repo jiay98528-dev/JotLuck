@@ -159,7 +159,7 @@
 import { defineComponent, h, type PropType } from 'vue';
 import type { HeadingItem } from '@/types';
 
-export const HeadingTreeNode = defineComponent({
+export const HeadingTreeNode: ReturnType<typeof defineComponent> = defineComponent({
   name: 'HeadingTreeNode',
   props: {
     nodes: {
@@ -231,7 +231,7 @@ export const HeadingTreeNode = defineComponent({
  */
 import { ref, computed, watch } from 'vue';
 import type { BacklinkEntry, TagEntry } from '@/types';
-import type { RightWingRegion } from '@/types/theme-pack';
+import type { RightWingRegion, ThemeReferenceSection, ThemeRightWingPolicy } from '@/types/theme-pack';
 
 // ============================================================
 // Props

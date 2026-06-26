@@ -26,9 +26,9 @@
 }
 
 /* ✅ 带降级（可选 token） */
-.glass-sidebar {
-  background: var(--glass-bg, var(--clr-surface));
-  backdrop-filter: var(--glass-blur, none);
+.theme-surface {
+  background: var(--paper-raised, var(--paper-surface));
+  box-shadow: var(--shadow-sheet);
 }
 
 /* ❌ 禁止：硬编码 */
@@ -171,9 +171,9 @@
 
 ```
 0    — 根背景
-10   — 玻璃面板 (.glass-panel)
-20   — 浮层面板 (.glass-raised, dropdown)
-30   — 模态框
+10   — 纸面面板 (--paper-surface)
+20   — 浮起面板 (--paper-raised, dropdown)
+30   — 模态框 (--z-modal)
 1000 — Toast 通知
 ```
 
@@ -234,8 +234,8 @@
 
   /* 光晕：暗背景下可提高 20% 强度 */
   --glow-sidebar: oklch(0.5 0.04 240 / 0.12);
-  /* 暗色玻璃：增加模糊强度 */
-  --glass-blur: 16px;
+  /* 暗色主题 token 示例 */
+  --paper-raised: oklch(0.24 0.005 260);
 }
 ```
 
