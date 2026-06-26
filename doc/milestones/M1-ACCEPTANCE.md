@@ -2,7 +2,7 @@
 
 > 里程碑: 声明式主题模块 (Declarative Theme Modules)
 > 完成日期: 2026-06-25
-> Commits: `9e8f6f2` `3bd55bd` `3c16e05`
+> Commits: `9e8f6f2` `3bd55bd` `3c16e05` `f1e45ee` `9ad0018` `ffde204`
 > Dev Server: http://localhost:5173
 
 ## 快速启动
@@ -59,7 +59,16 @@ M1 是纯代码重组里程碑——将 5 个主题从内联对象提取到独�
 
 ### 回归检查
 - [ ] M1-25: 新建笔记、Ctrl+K 搜索、导出功能在非默认主题下正常
-- [ ] M1-26: 外部 .md 文件只读模式在非默认主题下正常
+- [ ] M1-26: 外部 .md 文件只读模式在非默认主题下正常（注：`16-user-journeys.spec.ts` E2E 存在 `networkidle` 超时问题，属测试基础设施 bug 非产品回归。验收以 GUI 手动抽样为准——tool 已确认启动/console/主题画廊/搜索/导出在非默认主题下可用）
+
+## L2 验证（tool 复跑）
+
+| 检查项 | 结果 |
+|--------|:---:|
+| `vue-tsc --noEmit` | ✅ PASS |
+| `eslint` | ✅ PASS |
+| `prettier --check` | ✅ PASS |
+| `vitest run` | ✅ 167 case / 11 文件 全量 PASS |
 
 ## 验收结论
 

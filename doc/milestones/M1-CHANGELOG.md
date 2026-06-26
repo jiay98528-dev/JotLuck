@@ -1,7 +1,7 @@
 # M1 声明式主题模块 — 变更记录
 
 > 日期: 2026-06-25
-> Commits: `9e8f6f2`, `3bd55bd`, `3c16e05`, `f1e45ee`, `9ad0018`
+> Commits: `9e8f6f2`, `3bd55bd`, `3c16e05`, `f1e45ee`, `9ad0018`, `ffde204`
 > 变更范围: +836 / -577 行，26 文件
 
 ## 变更概述
@@ -42,7 +42,7 @@
 - 删除内联 `builtInThemes` 数组（~300 行 CSS 字符串 + `createBuiltInTheme()` 函数）
 - 新增 `moduleToBuiltInPack()` — 将 `OfficialThemeModule` 转换为 `InstalledThemePack`
 - 新增 `buildThemeCss()` — 将结构化 `ThemeTokenSet` 编译为 CSS 字符串
-- 新增 `buildAllBuiltInPacks()` — 遍历 id 顺序，查找模块，构建 packs
+- 新增 `buildAllBuiltInPacks()` — 调用 `getAllThemeModules().map(moduleToBuiltInPack)` 构建
 - 所有持久化/查询函数（`listThemePacks`, `findThemePack`, `loadInstalledThemePacks` 等）保持不变
 
 ### `3c16e05` — Store 重构 (1 file, +28 / -192)
@@ -62,10 +62,13 @@
 - `OfficialThemeModule` 新增 `id`, `name`, `tags`, `capabilities` 字段——模块成为唯一真源
 - 删除 `registry.ts` 中按 role 索引的 `MODULE_MAP`（3 个 role 对应 5 个主题，必然覆盖）
 - 删除 `getThemeModule(role)`——基于 role 的查找从根本上不可靠
-- `getThemeModuleById()` 改为遍历 `ALL_MODULES` 按 `mod.id` 查找
+- `getThemeModuleById()` 改为按 `BY_ID` Map（模块自声明 id）做 O(1) 查找
 - `ThemeRegistry.ts` 中删除 `moduleNameFromId()`, `moduleTagsFromId()`
-- `moduleToBuiltInPack()` 不再需要外部传入 id；所有元数据从模块自身读取
+- `moduleToBuiltInPack()` 改为 `moduleToBuiltInPack(mod)` — 所有元数据从模块自身读取（id/name/tags/capabilities）
 - `buildAllBuiltInPacks()` 不再硬编码 `idOrder`；直接迭代 `getAllThemeModules()`
+
+### `ffde204` — 文档同步
+- 更新 M1 CHANGELOG 中所有描述以对齐当前实现（移除已废弃的 `idOrder`、`moduleToBuiltInPack(module, id)` 等旧引用）
 
 ## 关键架构变化
 
@@ -83,8 +86,8 @@ After (M1):
     ├── tokens.ts   (ThemeTokenSet — 结构化 OKLCH 色值)
     └── assets.ts   (Vite 图片 import)
   
-  ThemeRegistry.moduleToBuiltInPack(module, id)
-    → InstalledThemePack (带 .module 引用)
+  ThemeRegistry.moduleToBuiltInPack(module)
+    → InstalledThemePack (带 .module 引用, id/name/tags 来自模块自身)
     → useThemeStore.chromeStateFromPack(pack)
     → 直接从 pack.module.recipe 读取 → ThemeChromeState
     → AppShell / NotebookHome 消费（行为不变）
