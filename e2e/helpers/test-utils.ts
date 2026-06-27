@@ -13,6 +13,7 @@ import { expect } from '@playwright/test';
 
 /** 获取 CodeMirror 编辑器内容 */
 export async function getEditorContent(page: Page): Promise<string> {
+  await ensureEditorReady(page);
   return page.evaluate(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const content = (window as any).__markluck_getEditorContent?.();
@@ -29,6 +30,7 @@ export async function getEditorContent(page: Page): Promise<string> {
 
 /** 在编辑器中输入文本 (聚焦 .cm-content 后逐字键入) */
 export async function typeInEditor(page: Page, text: string): Promise<void> {
+  await ensureEditorReady(page);
   const editor = page.locator('.cm-content');
   await editor.click();
   // 使用 Ctrl+A+Backspace 清除内容（经 CM6 key handler，避免 fill() 的 MutationObserver 竞态）
@@ -40,6 +42,7 @@ export async function typeInEditor(page: Page, text: string): Promise<void> {
 
 /** 在编辑器中追加文本 */
 export async function appendInEditor(page: Page, text: string): Promise<void> {
+  await ensureEditorReady(page);
   const editor = page.locator('.cm-content');
   await editor.click();
   // Move to end
@@ -49,6 +52,7 @@ export async function appendInEditor(page: Page, text: string): Promise<void> {
 
 /** 清空编辑器内容 */
 export async function clearEditor(page: Page): Promise<void> {
+  await ensureEditorReady(page);
   const editor = page.locator('.cm-content');
   await editor.click();
   await page.keyboard.press('Control+a');
@@ -89,6 +93,36 @@ export async function switchToNote(page: Page, noteLabel: string): Promise<void>
   const dot = page.locator(`.wing-bookmark-dot[aria-label="${noteLabel}"]`);
   await dot.click();
   await page.waitForTimeout(300);
+}
+
+/** 确保编辑器处于可交互状态；若当前停留在首页主题展柜，则打开一个样例笔记。 */
+export async function ensureEditorReady(page: Page, noteLabel: string = '快速入门'): Promise<void> {
+  const editor = page.locator('.cm-content');
+  if (await editor.isVisible().catch(() => false)) return;
+
+  const bookmark = page.locator(`.wing-bookmark-dot[aria-label="${noteLabel}"]`);
+  await expect(bookmark).toBeVisible({ timeout: 5000 });
+  await bookmark.click();
+  await expect(page.locator('.cm-editor')).toBeVisible({ timeout: 10000 });
+  await expect(editor).toBeVisible({ timeout: 10000 });
+  await page.waitForTimeout(300);
+}
+
+/** 创建一篇空白笔记，并等待编辑器可交互。 */
+export async function createBlankNote(page: Page): Promise<void> {
+  await page.locator('.wing-new-btn').click();
+  await expect(page.locator('.tpl-card.blank-card')).toBeVisible({ timeout: 5000 });
+  await page.locator('.tpl-card.blank-card').click();
+  await expect(page.locator('.cm-editor')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('.cm-content')).toBeVisible({ timeout: 10000 });
+  await page.waitForTimeout(300);
+}
+
+/** 等待笔记索引完成，确保搜索结果源已准备好。 */
+export async function waitForSearchReady(page: Page): Promise<void> {
+  await expect
+    .poll(() => page.locator('.wing-bookmark-dot').count(), { timeout: 10000 })
+    .toBeGreaterThan(0);
 }
 
 // ============================================================
@@ -133,10 +167,8 @@ export async function waitForAppReady(page: Page): Promise<void> {
     localStorage.setItem('markluck:welcome:completed', '1');
   });
   await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
-  // Wait for editor to be ready
-  await expect(page.locator('.cm-content')).toBeVisible({ timeout: 10000 });
-  await expect(page.locator('.welcome-overlay')).toHaveCount(0);
-  await page.waitForTimeout(500);
+  await waitForShellReady(page);
+  await page.waitForTimeout(100);
 }
 
 /**
@@ -162,7 +194,24 @@ export async function resetAppState(page: Page): Promise<void> {
     localStorage.setItem('markluck:welcome:completed', '1');
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await expect(page.locator('.cm-content')).toBeVisible({ timeout: 10000 });
+  await waitForShellReady(page);
+  await page.waitForTimeout(100);
+}
+
+async function waitForShellReady(page: Page): Promise<void> {
   await expect(page.locator('.welcome-overlay')).toHaveCount(0);
-  await page.waitForTimeout(500);
+  await expect(page.locator('#markluck-app')).toBeVisible({ timeout: 10000 });
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() =>
+          Boolean(
+            document.querySelector(
+              '.home-theme-showcase, .cm-content, [data-testid="external-file-session"]',
+            ),
+          ),
+        ),
+      { timeout: 10000 },
+    )
+    .toBe(true);
 }

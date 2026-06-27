@@ -122,7 +122,7 @@
 - Export support for PDF, DOCX, XLSX, CSV, TXT, and HTML.
 - Template system with built-in and custom templates.
 - Formatting toolbar and common keyboard shortcuts.
-- Paper theme and dark mode.
+- Paper layout.
 - Tauri v2 desktop backend with filesystem, search, watcher, and path safety
   foundations.
 - DOMPurify-based Markdown rendering safety.

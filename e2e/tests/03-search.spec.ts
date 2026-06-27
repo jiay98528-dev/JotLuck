@@ -8,11 +8,12 @@
  * @see e2e/helpers/test-utils.ts
  */
 import { test, expect } from '@playwright/test';
-import { waitForAppReady } from '../helpers/test-utils';
+import { waitForAppReady, waitForSearchReady } from '../helpers/test-utils';
 
 test.describe('搜索系统', () => {
   test.beforeEach(async ({ page }) => {
     await waitForAppReady(page);
+    await waitForSearchReady(page);
   });
 
   // ============================================================

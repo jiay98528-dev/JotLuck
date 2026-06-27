@@ -93,12 +93,8 @@ export interface ToolbarItemConfig {
   shortcut?: string;
 }
 
-/** 颜色方案 */
-export type ColorScheme = 'light' | 'dark';
-
 /** 应用全局设置 */
 export interface AppSettings {
-  colorScheme: ColorScheme;
   autoFormat: boolean;
   autoFormatDelay: number;
   fontSize: number;

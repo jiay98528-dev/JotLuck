@@ -6,20 +6,42 @@
     :data-layout="region.layout"
     :data-toolbar-density="region.density"
   >
-    <FormatToolbar
-      :preset="preset"
-      :active-action="activeAction"
-      :density="region.density"
-      @format="$emit('format', $event)"
-    />
-    <div v-if="actions.length > 0" class="editor-control-strip__actions">
-      <ShellActionButton
-        v-for="action in actions"
-        :key="action.id"
-        :action="action"
-        :label-mode="region.layout === 'writing-strip' ? 'icon' : 'short'"
+    <div v-if="region.layout === 'stacked'" class="editor-control-strip__stack">
+      <div
+        v-if="actions.length > 0"
+        class="editor-control-strip__actions editor-control-strip__actions--stacked"
+      >
+        <ShellActionButton
+          v-for="action in actions"
+          :key="action.id"
+          :action="action"
+          label-mode="short"
+          size="sm"
+        />
+      </div>
+      <FormatToolbar
+        :preset="preset"
+        :active-action="activeAction"
+        :density="region.density"
+        @format="$emit('format', $event)"
       />
     </div>
+    <template v-else>
+      <FormatToolbar
+        :preset="preset"
+        :active-action="activeAction"
+        :density="region.density"
+        @format="$emit('format', $event)"
+      />
+      <div v-if="actions.length > 0" class="editor-control-strip__actions">
+        <ShellActionButton
+          v-for="action in actions"
+          :key="action.id"
+          :action="action"
+          :label-mode="region.layout === 'writing-strip' ? 'icon' : 'short'"
+        />
+      </div>
+    </template>
   </div>
 </template>
 
@@ -70,11 +92,35 @@ defineEmits<{
   background: color-mix(in oklch, var(--paper-surface) 84%, transparent);
 }
 
+.editor-control-strip--stacked {
+  padding-block: var(--space-10);
+  border-bottom-color: color-mix(in oklch, var(--rule) 84%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--accent-soft) 18%, transparent),
+      transparent 52%
+    ),
+    var(--paper-surface);
+}
+
+.editor-control-strip__stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  width: 100%;
+}
+
 .editor-control-strip__actions {
   display: flex;
   align-items: center;
   gap: var(--space-4);
   min-width: 0;
+}
+
+.editor-control-strip__actions--stacked {
+  flex-wrap: wrap;
+  gap: var(--space-6);
 }
 
 .editor-control-strip--writing-strip .editor-control-strip__actions {
@@ -85,6 +131,10 @@ defineEmits<{
   .editor-control-strip {
     flex-wrap: wrap;
     align-items: stretch;
+  }
+
+  .editor-control-strip__actions--stacked {
+    width: 100%;
   }
 }
 </style>

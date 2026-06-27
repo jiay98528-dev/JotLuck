@@ -14,59 +14,85 @@
     :data-status-layout="themeChrome.statusLayout"
     :data-right-wing-policy="themeChrome.rightWingPolicy"
   >
-    <ThemeEffectLayer
-      :effect-profile="themeChrome.effectProfile"
-      :motion-intensity="themeChrome.motionIntensity"
-    />
-    <LeftWing
-      :notes="recentNotes"
-      :active-path="activePath"
-      :region="leftWingRegion"
-      :actions="actionsFor('left-wing')"
-      @select-note="$emit('select-note', $event)"
-    />
+    <ThemeRuntimeRenderer
+      slot-id="left-wing"
+      :theme-id="theme.renderedTheme.manifest.id"
+      :recipe="theme.activeUxRecipes['left-wing']"
+      :actions="actions"
+    >
+      <LeftWing
+        :notes="recentNotes"
+        :active-path="activePath"
+        :region="leftWingRegion"
+        :actions="actionsFor('left-wing')"
+        @select-note="$emit('select-note', $event)"
+      />
+    </ThemeRuntimeRenderer>
     <div class="wing-divider" />
     <!-- Center: Editor Area -->
     <main class="editor-area">
-      <TopBar
+      <ThemeRuntimeRenderer
         v-if="showTopBar"
-        :note-title="noteTitle"
-        :notebook-name="notebookName"
-        :region="topBarRegion"
-        :left-actions="actionsFor('topbar-left')"
-        :center-actions="actionsFor('topbar-center')"
-        :right-actions="actionsFor('topbar-right')"
-      />
+        slot-id="topbar"
+        :theme-id="theme.renderedTheme.manifest.id"
+        :recipe="theme.activeUxRecipes.topbar"
+        :actions="actions"
+      >
+        <TopBar
+          :note-title="noteTitle"
+          :notebook-name="notebookName"
+          :region="topBarRegion"
+          :left-actions="actionsFor('topbar-left')"
+          :center-actions="actionsFor('topbar-center')"
+          :right-actions="actionsFor('topbar-right')"
+        />
+      </ThemeRuntimeRenderer>
       <div class="editor-scroll">
         <slot name="editor" />
       </div>
-      <StatusBar
-        :char-count="charCount"
-        :word-count="wordCount"
-        :line-count="lineCount"
-        :cursor-line="cursorLine"
-        :cursor-col="cursorCol"
-        :is-dirty="isDirty"
-        :is-saving="isSaving"
-        :save-error="saveError"
-        :last-saved-at="lastSavedAt"
-        :region="statusBarRegion"
-      />
+      <ThemeRuntimeRenderer
+        slot-id="status-bar"
+        :theme-id="theme.renderedTheme.manifest.id"
+        :recipe="theme.activeUxRecipes['status-bar']"
+        :actions="actions"
+        :status-text="statusText"
+      >
+        <StatusBar
+          :char-count="charCount"
+          :word-count="wordCount"
+          :line-count="lineCount"
+          :cursor-line="cursorLine"
+          :cursor-col="cursorCol"
+          :is-dirty="isDirty"
+          :is-saving="isSaving"
+          :save-error="saveError"
+          :last-saved-at="lastSavedAt"
+          :region="statusBarRegion"
+          :actions="actionsFor('status-right')"
+        />
+      </ThemeRuntimeRenderer>
     </main>
     <div v-if="showRightWing" class="wing-divider" />
-    <RightWing
+    <ThemeRuntimeRenderer
       v-if="showRightWing"
-      :headings="headings"
-      :backlinks="backlinks"
-      :tags="tags"
-      :active-heading-id="activeHeadingId"
-      :collapsed="!showRightWing"
-      :region="rightWingRegion"
-      @navigate-heading="(id: string, ln: number) => $emit('navigate-heading', id, ln)"
-      @navigate-backlink="(entry: any) => $emit('navigate-backlink', entry)"
-      @select-tag="$emit('select-tag', $event)"
-      @toggle-collapse="$emit('toggle-right-wing')"
-    />
+      slot-id="right-wing"
+      :theme-id="theme.renderedTheme.manifest.id"
+      :recipe="theme.activeUxRecipes['right-wing']"
+      :actions="actions"
+    >
+      <RightWing
+        :headings="headings"
+        :backlinks="backlinks"
+        :tags="tags"
+        :active-heading-id="activeHeadingId"
+        :collapsed="!showRightWing"
+        :region="rightWingRegion"
+        @navigate-heading="(id: string, ln: number) => $emit('navigate-heading', id, ln)"
+        @navigate-backlink="(entry: BacklinkEntry) => $emit('navigate-backlink', entry)"
+        @select-tag="$emit('select-tag', $event)"
+        @toggle-collapse="$emit('toggle-right-wing')"
+      />
+    </ThemeRuntimeRenderer>
   </div>
 </template>
 
@@ -83,7 +109,9 @@ import LeftWing from './LeftWing.vue';
 import RightWing from './RightWing.vue';
 import TopBar from '../editor/TopBar.vue';
 import StatusBar from '../editor/StatusBar.vue';
-import ThemeEffectLayer from '../theme/ThemeEffectLayer.vue';
+import ThemeRuntimeRenderer from '@/components/theme/ThemeRuntimeRenderer.vue';
+import { activateTrustedThemeRuntime, unregisterTrustedTheme } from '@/services/ThemeRuntimeHost';
+import { useThemeStore } from '@/stores/theme';
 import type { HeadingItem, BacklinkEntry, TagEntry } from '@/types';
 import type {
   ShellAction,
@@ -94,7 +122,9 @@ import type {
   StatusBarRegion,
   RightWingRegion,
 } from '@/types/theme-pack';
-import { computed } from 'vue';
+import { computed, watchEffect } from 'vue';
+
+const theme = useThemeStore();
 
 const props = defineProps<{
   recentNotes: Array<{ path: string; title: string; colorIndex: number }>;
@@ -151,6 +181,13 @@ const rightWingRegion = computed<RightWingRegion>(() => ({
   defaultOpenSections: props.themeChrome.defaultOpenSections,
 }));
 
+const statusText = computed(() => {
+  if (props.isSaving) return '保存中';
+  if (props.saveError) return '保存失败';
+  if (props.isDirty) return '未保存';
+  return `${props.wordCount} 词 · ${props.charCount} 字`;
+});
+
 const actionGroups = computed(() => {
   const groups = new Map<ThemeActionRegion, ShellAction[]>();
   for (const action of props.actions) {
@@ -165,6 +202,18 @@ const actionGroups = computed(() => {
 function actionsFor(region: ThemeActionRegion): ShellAction[] {
   return actionGroups.value.get(region) ?? [];
 }
+
+watchEffect((onCleanup) => {
+  const pack = theme.renderedTheme;
+  if (pack.manifest.runtime !== 'trusted-code') {
+    unregisterTrustedTheme(pack.manifest.id);
+    return;
+  }
+  void activateTrustedThemeRuntime(pack, props.actions).catch(() => {
+    unregisterTrustedTheme(pack.manifest.id);
+  });
+  onCleanup(() => unregisterTrustedTheme(pack.manifest.id));
+});
 </script>
 
 <style scoped>
@@ -176,7 +225,7 @@ function actionsFor(region: ThemeActionRegion): ShellAction[] {
   background: var(--paper-bg);
 }
 
-.app-shell > :not(.theme-effect-layer) {
+.app-shell > * {
   position: relative;
   z-index: 1;
 }

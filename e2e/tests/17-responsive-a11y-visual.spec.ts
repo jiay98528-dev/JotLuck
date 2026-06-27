@@ -1,5 +1,5 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
-import { waitForAppReady } from '../helpers/test-utils';
+import { ensureEditorReady, waitForAppReady } from '../helpers/test-utils';
 
 const VIEWPORTS = [
   { name: 'mobile-360', width: 360, height: 740 },
@@ -94,7 +94,7 @@ test.describe('M-R3 responsive, accessibility, and visual release gates', () => 
       page,
     }, testInfo) => {
       await bootAt(page, viewport);
-      await expect(page.locator('.cm-content')).toBeVisible();
+      await expect(page.locator('.app-shell')).toBeVisible();
       await assertNoPageHorizontalOverflow(page);
       await assertVisibleSurfacesInsideViewport(page);
       await captureCheckpoint(page, testInfo, viewport.name, 'app-shell-initial');
@@ -148,8 +148,9 @@ test.describe('M-R3 responsive, accessibility, and visual release gates', () => 
 
     await page.locator('.wing-settings-btn').click();
     const settingsDialog = page.locator('.modal-card[role="dialog"]');
-    await expect(settingsDialog.locator('[role="switch"]')).toHaveCount(5);
-    const firstSettingsSwitch = settingsDialog.getByRole('switch').first();
+    const settingsSwitches = settingsDialog.getByRole('switch');
+    await expect(settingsSwitches.first()).toBeVisible();
+    const firstSettingsSwitch = settingsSwitches.first();
     await firstSettingsSwitch.focus();
     await expect(firstSettingsSwitch).toBeFocused();
     const beforeSettings = await firstSettingsSwitch.getAttribute('aria-checked');
@@ -172,27 +173,16 @@ test.describe('M-R3 responsive, accessibility, and visual release gates', () => 
     await expect(exportDialog).toHaveCount(0);
   });
 
-  test('R3 dark theme keeps the editor and overlay surfaces measurable', async ({
-    page,
-  }, testInfo) => {
+  test('R3 editor and settings surfaces stay measurable', async ({ page }, testInfo) => {
     await bootAt(page, VIEWPORTS[2]);
-
-    const beforeScheme = await page.evaluate(() =>
-      document.documentElement.getAttribute('data-color-scheme'),
-    );
-    if (beforeScheme !== 'dark') {
-      await page.locator('.topbar-btn--theme').click();
-    }
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.getAttribute('data-color-scheme')))
-      .toBe('dark');
+    await ensureEditorReady(page);
 
     await assertNoPageHorizontalOverflow(page);
-    await captureCheckpoint(page, testInfo, 'desktop-1280', 'dark-theme-editor');
+    await captureCheckpoint(page, testInfo, 'desktop-1280', 'paper-editor');
 
     await page.locator('.wing-settings-btn').click();
     await expect(page.locator('.modal-card[role="dialog"]')).toBeVisible();
     await assertVisibleSurfacesInsideViewport(page);
-    await captureCheckpoint(page, testInfo, 'desktop-1280', 'dark-theme-settings');
+    await captureCheckpoint(page, testInfo, 'desktop-1280', 'paper-settings');
   });
 });

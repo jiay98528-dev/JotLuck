@@ -12,6 +12,7 @@
 import { test, expect } from '@playwright/test';
 import {
   waitForAppReady,
+  ensureEditorReady,
   getEditorContent,
   typeInEditor,
   appendInEditor,
@@ -31,10 +32,13 @@ test.describe('编辑器核心', () => {
   });
 
   // ==========================================================
-  // Test 1: 应用加载后编辑器可见
+  // Test 1: 应用加载后可进入编辑器
   // ==========================================================
   test('should load app with editor visible', async ({ page }) => {
-    // V1: 验证交互结果 — 编辑器 DOM 存在且可见
+    // V1: 验证交互结果 — 应用壳层可见，且可进入编辑器
+    await expect(page.locator('.app-shell')).toBeVisible({ timeout: 10000 });
+    await ensureEditorReady(page);
+
     const editor = page.locator('.cm-editor');
     await expect(editor).toBeVisible({ timeout: 10000 });
 
@@ -81,8 +85,8 @@ test.describe('编辑器核心', () => {
     await expect(page.locator('.topbar-btn--export')).toBeVisible();
     // 分享按钮
     await expect(page.locator('.topbar-btn--share')).toBeVisible();
-    // 主题切换按钮
-    await expect(page.locator('.topbar-btn--theme')).toBeVisible();
+    // 设置按钮
+    await expect(page.locator('.wing-settings-btn')).toBeVisible();
 
     // 验证笔记本名称显示
     await expect(page.locator('.topbar-notebook')).toBeVisible();
@@ -226,6 +230,7 @@ test.describe('编辑器核心', () => {
   });
 
   test('固定格式栏支持先选格式、输入内容并在 Enter 后结束', async ({ page }) => {
+    await ensureEditorReady(page);
     const toolbar = page.getByRole('toolbar', { name: '固定格式工具栏' });
     await expect(toolbar).toBeVisible();
 

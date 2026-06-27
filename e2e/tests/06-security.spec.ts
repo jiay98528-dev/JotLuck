@@ -10,7 +10,12 @@
  * @see packages/app/src/utils/contentUtils.ts — 内容安全扫描器
  */
 import { test, expect } from '@playwright/test';
-import { waitForAppReady, typeInEditor, getEditorContent } from '../helpers/test-utils';
+import {
+  ensureEditorReady,
+  waitForAppReady,
+  typeInEditor,
+  getEditorContent,
+} from '../helpers/test-utils';
 
 // ============================================================
 // Helpers
@@ -47,6 +52,7 @@ async function setEditorContent(
   page: import('@playwright/test').Page,
   text: string,
 ): Promise<void> {
+  await ensureEditorReady(page);
   await page.locator('.cm-content').click();
   await page.keyboard.press('Control+a');
   await page.keyboard.press('Backspace');
@@ -288,9 +294,8 @@ test.describe('网络隐私', () => {
       localStorage.setItem('markluck:welcome:completed', '1');
       localStorage.setItem('markluck:version:autoCheck', 'false');
     });
-    await page.goto('http://localhost:5173');
-    await page.waitForLoadState('networkidle');
-    await expect(page.locator('.cm-content')).toBeVisible({ timeout: 10000 });
+    await page.goto('http://localhost:5173', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.app-shell')).toBeVisible({ timeout: 10000 });
 
     await page.waitForTimeout(16000);
     expect(githubRequests).toBe(0);

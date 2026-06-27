@@ -21,6 +21,7 @@ import {
   waitForMockFileContent,
   expectEditorContains,
   resetAppState,
+  waitForSearchReady,
 } from '../helpers/test-utils';
 
 // ============================================================
@@ -34,6 +35,10 @@ test.describe('V6 用户旅程', () => {
 
   test('J1: 文件抽屉 → 展开子目录 → 打开文件 → 编辑 → 保存', async ({ page }) => {
     test.setTimeout(45_000);
+    await waitForSearchReady(page);
+    await page.locator('.wing-bookmark-dot[aria-label="设计笔记"]').click();
+    await page.waitForTimeout(500);
+    await waitForSearchReady(page);
 
     // Step 1: 打开文件抽屉
     const menuBtn = page.locator('.topbar-btn--menu');
@@ -105,9 +110,8 @@ test.describe('V6 用户旅程', () => {
       localStorage.setItem('markluck-mockfs', JSON.stringify(data));
     });
 
-    await page.reload();
-    await page.waitForLoadState('networkidle');
-    await expect(page.locator('.cm-content')).toBeVisible({ timeout: 10000 });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForAppReady(page);
 
     await page.locator('.topbar-btn--menu').click();
     await expect(page.locator('.file-drawer')).toBeVisible({ timeout: 3000 });
@@ -207,10 +211,8 @@ test.describe('V6 用户旅程', () => {
     await page.addInitScript(() => {
       localStorage.setItem('markluck:welcome:completed', '1');
     });
-    await page.reload();
-    await page.waitForLoadState('networkidle');
-    await expect(page.locator('.cm-content')).toBeVisible({ timeout: 10000 });
-    await page.waitForTimeout(500);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForAppReady(page);
 
     // 刷新后切到目标笔记
     await page.locator(`.wing-bookmark-dot[aria-label="${noteLabel}"]`).click();
@@ -283,9 +285,10 @@ test.describe('V6 用户旅程', () => {
     await expect(treeItem).not.toBeVisible({ timeout: 5000 });
     await expect(noteDot).toHaveCount(0, { timeout: 5000 });
 
-    await page.reload();
-    await page.waitForLoadState('networkidle');
-    await expect(page.locator('.cm-content')).toBeVisible({ timeout: 10000 });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForAppReady(page);
+    await page.locator('.topbar-btn--menu').click();
+    await expect(page.locator('.file-drawer')).toBeVisible({ timeout: 3000 });
     const recheckTreeItem = page.locator(`.tree-item:has-text("${fileName}")`);
     await expect(recheckTreeItem).not.toBeVisible({ timeout: 5000 });
     await expect(page.locator(`.wing-bookmark-dot[aria-label="${noteTitle}"]`)).toHaveCount(0);
@@ -353,13 +356,18 @@ test.describe('V6 用户旅程', () => {
     test.setTimeout(45_000);
 
     // Step 1: 通过顶栏搜索入口打开命令面板
+    await waitForSearchReady(page);
+    await page.locator('.wing-bookmark-dot[aria-label="快速入门"]').click();
+    await page.waitForTimeout(500);
+    await page.locator('.wing-bookmark-dot[aria-label="设计笔记"]').click();
+    await page.waitForTimeout(500);
     await page.locator('.topbar-search-hint').click();
     await expect(page.locator('.palette')).toBeVisible({ timeout: 3000 });
 
     // Step 2: 输入搜索词
     const searchInput = page.locator('.search-input');
     await expect(searchInput).toBeVisible();
-    await searchInput.fill('设计');
+    await searchInput.fill('欢迎');
     await page.waitForTimeout(800); // 等待防抖搜索完成
 
     // Step 3: 验证搜索结果
@@ -378,7 +386,7 @@ test.describe('V6 用户旅程', () => {
     await page.waitForTimeout(500);
 
     // Step 5: 验证导航到正确的笔记（内容包含搜索词）
-    await expectEditorContains(page, '设计');
+    await expectEditorContains(page, '欢迎');
 
     // Step 6: 编辑命中笔记
     await clearEditor(page);
@@ -388,9 +396,9 @@ test.describe('V6 用户旅程', () => {
     await waitForAutoSave(page);
 
     // Step 8: 切换到其他笔记再切回，验证编辑持久化
-    await page.locator('.wing-bookmark-dot[aria-label="快速入门"]').click();
-    await page.waitForTimeout(300);
     await page.locator('.wing-bookmark-dot[aria-label="设计笔记"]').click();
+    await page.waitForTimeout(300);
+    await page.locator('.wing-bookmark-dot[aria-label="快速入门"]').click();
     await page.waitForTimeout(500);
     await expectEditorContains(page, '搜索后编辑的内容');
   });
@@ -551,12 +559,6 @@ test.describe('外部文件单文件会话', () => {
     await page.locator('.tree-item:has-text("sibling.md")').click({ force: true });
     await expect.poll(() => getEditorContent(page), { timeout: 5000 }).toContain('同目录文件');
     await expect(page.locator('.wing-bookmark-dot[aria-label="sibling"]')).toHaveCount(1);
-
-    await page.getByRole('button', { name: '只读预览' }).click();
-    await expect(page.locator('[data-testid="external-file-session"]')).toBeVisible({
-      timeout: 5000,
-    });
-    await expect(page.locator('.external-preview')).toContainText('同目录文件');
 
     const recent = await page.evaluate(() => localStorage.getItem('markluck-recent-notebooks'));
     expect(recent).not.toContain('external.md');

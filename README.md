@@ -34,8 +34,7 @@ this machine.
 - Image paste/drop/file upload into notebook `assets/`.
 - Export to PDF, DOCX, XLSX, CSV, TXT, and HTML.
 - Single-line offline ghost text completion with Tab acceptance.
-- Paper theme, dark mode, Theme Pack v1 local imports, responsive dialogs, and
-  keyboard-accessible switches.
+- Paper layout, responsive dialogs, and keyboard-accessible switches.
 - Tauri desktop build with real filesystem IPC and file watching.
 
 ## Install And Run

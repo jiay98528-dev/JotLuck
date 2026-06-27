@@ -42,6 +42,9 @@
     <div v-if="region.layout === 'research-stack'" class="wing-index-count" aria-hidden="true">
       {{ notes.length }}
     </div>
+    <div v-else-if="region.layout === 'navigator'" class="wing-panel-kicker" aria-hidden="true">
+      Recent
+    </div>
     <div v-else-if="region.layout === 'studio-rail'" class="wing-rail-groove" aria-hidden="true" />
 
     <nav ref="bookmarkList" class="wing-bookmarks" aria-label="最近笔记">
@@ -58,8 +61,14 @@
       >
         <span class="dot-core" />
         <span v-if="note.path === activePath" class="dot-ring" />
-        <span v-if="region.layout === 'research-stack'" class="wing-bookmark-title">
-          {{ note.title }}
+        <span
+          v-if="region.layout === 'research-stack' || region.layout === 'navigator'"
+          class="wing-bookmark-title"
+        >
+          <span class="wing-bookmark-name">{{ note.title }}</span>
+          <span v-if="region.layout === 'navigator'" class="wing-bookmark-path">
+            {{ normalizeBookmarkPath(note.path) }}
+          </span>
         </span>
       </button>
 
@@ -107,13 +116,17 @@ defineEmits<{
 }>();
 
 const dotPalette = Array.from({ length: 8 }, (_, i) => `var(--dot-${i})`);
-const bottomActionIds = new Set(['settings', 'theme-toggle']);
+const bottomActionIds = new Set(['settings']);
 const topActions = computed(() =>
   props.actions.filter((action) => !bottomActionIds.has(action.id)),
 );
 const bottomActions = computed(() =>
   props.actions.filter((action) => bottomActionIds.has(action.id)),
 );
+
+function normalizeBookmarkPath(path: string): string {
+  return path.replace(/^\/+/, '') || 'home';
+}
 </script>
 
 <style scoped>
@@ -149,6 +162,19 @@ const bottomActions = computed(() =>
       90deg,
       color-mix(in oklch, var(--accent-soft) 52%, transparent) 0 4px,
       transparent 4px
+    ),
+    var(--paper-left);
+}
+
+.left-wing--layout-navigator {
+  align-items: stretch;
+  padding-inline: var(--space-10);
+  border-right: var(--border-thin) solid color-mix(in oklch, var(--rule) 82%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--accent-soft) 34%, transparent),
+      transparent 30%
     ),
     var(--paper-left);
 }
@@ -206,6 +232,15 @@ const bottomActions = computed(() =>
   font-variant-numeric: tabular-nums;
 }
 
+.wing-panel-kicker {
+  margin-bottom: var(--space-10);
+  color: var(--ink-muted);
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+}
+
 .wing-rail-groove {
   width: 4px;
   min-height: 36px;
@@ -246,6 +281,12 @@ const bottomActions = computed(() =>
   padding-inline: var(--space-6);
 }
 
+.left-wing--layout-navigator .wing-bookmarks {
+  align-items: stretch;
+  gap: var(--space-6);
+  padding-inline: 0;
+}
+
 .left-wing--layout-research-stack .wing-bookmark-dot {
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr);
@@ -258,9 +299,29 @@ const bottomActions = computed(() =>
   border-radius: var(--radius);
 }
 
+.left-wing--layout-navigator .wing-bookmark-dot {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-8);
+  width: 100%;
+  height: auto;
+  min-height: 42px;
+  padding: var(--space-6) var(--space-8);
+  border: var(--border-thin) solid color-mix(in oklch, var(--rule) 88%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--paper-raised) 86%, transparent);
+  color: var(--dot-color);
+}
+
 .left-wing--layout-research-stack .wing-bookmark-dot.active {
   border-color: color-mix(in oklch, var(--accent) 42%, transparent);
   background: color-mix(in oklch, var(--accent-soft) 48%, transparent);
+}
+
+.left-wing--layout-navigator .wing-bookmark-dot.active {
+  border-color: color-mix(in oklch, var(--accent) 44%, transparent);
+  background: color-mix(in oklch, var(--accent-soft) 54%, transparent);
 }
 
 .left-wing--layout-quiet-bookmarks .wing-bookmark-dot:not(.active) {
@@ -276,6 +337,12 @@ const bottomActions = computed(() =>
 }
 
 .left-wing--layout-research-stack .dot-core {
+  position: static;
+  width: 8px;
+  height: 8px;
+}
+
+.left-wing--layout-navigator .dot-core {
   position: static;
   width: 8px;
   height: 8px;
@@ -298,13 +365,31 @@ const bottomActions = computed(() =>
 
 .wing-bookmark-title {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   overflow: hidden;
   color: var(--ink-secondary);
-  font-size: 10px;
-  line-height: var(--lh-ui);
   text-align: left;
+}
+
+.wing-bookmark-name,
+.wing-bookmark-path {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.wing-bookmark-name {
+  color: var(--ink-primary);
+  font-size: var(--text-xs);
+  line-height: var(--lh-ui);
+}
+
+.wing-bookmark-path {
+  color: var(--ink-muted);
+  font-size: 10px;
+  line-height: var(--lh-ui);
 }
 
 .wing-empty {

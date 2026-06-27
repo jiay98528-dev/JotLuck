@@ -35,6 +35,7 @@ const props = withDefaults(
     livePreview?: boolean;
     sourceOnly?: boolean;
     pendingFormat?: FormatAction | null;
+    placeholder?: string;
     enableAutocomplete?: boolean;
     completionSettings?: CompletionSettings;
     onLivePreviewExternalLinkClick?: (href: string) => void;
@@ -53,6 +54,7 @@ const props = withDefaults(
     livePreview: false,
     sourceOnly: false,
     pendingFormat: null,
+    placeholder: '开始书写…',
     enableAutocomplete: true,
     completionSettings: undefined,
     onLivePreviewExternalLinkClick: undefined,
@@ -123,7 +125,7 @@ function createState(doc: string) {
       // is intercepted for ghost text acceptance before indentation logic.
       autocompleteCompartment.of(autocompleteExtensions()),
       keymap.of([{ key: 'Enter', run: handlePendingFormatEnter }]),
-      ...markluckExtensions('开始书写…', props.sourceOnly),
+      ...markluckExtensions(props.placeholder, props.sourceOnly),
       lineNumberCompartment.of(props.showLineNumbers ? lineNumbers() : []),
       livePreviewCompartment.of(
         props.livePreview

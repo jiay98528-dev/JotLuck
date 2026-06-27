@@ -1,51 +1,28 @@
-/**
- * useThemeStore — Theme Pack runtime state.
- *
- * Keeps the legacy light/dark storage key as a compatibility mirror while
- * moving active theme and layout preset to the v2 state object.
- *
- * @see spec/frontend/theme-packs.md
- */
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import type {
-  ColorScheme,
   InstalledThemePack,
-  OfficialThemeProfile,
   ThemeChromeState,
   ThemeLayoutPreset,
-  ThemePerformanceBadge,
+  ThemePackageInput,
+  ThemeValidationIssue,
+  ThemeUxRecipeMap,
 } from '@/types/theme-pack';
-import { installThemePack } from '@/services/ThemePackInstaller';
 import {
   ACTIVE_THEME_STYLE_ID,
   DEFAULT_THEME_ID,
-  LEGACY_THEME_STORAGE_KEY,
-  THEME_STATE_STORAGE_KEY,
-  getBuiltInThemePacks,
-  getThemePerformanceBadge,
+  getAllRegistryThemePacks,
+} from '@/services/ThemeRegistry';
+import {
+  authorizeTrustedCodeTheme,
+  installLocalThemePackage,
+  isTrustedCodeThemeAuthorized,
   loadInstalledThemePacks,
   removeInstalledThemePack,
-} from '@/services/ThemeRegistry';
+  validateThemePackage,
+} from '@/services/ThemePackInstaller';
 
-interface PersistedThemeState {
-  activeThemeId?: string;
-  colorScheme?: ColorScheme;
-}
-
-export interface ThemeViewModel {
-  pack: InstalledThemePack;
-  id: string;
-  name: string;
-  description: string;
-  sourceLabel: string;
-  active: boolean;
-  readonly: boolean;
-  officialProfile?: OfficialThemeProfile;
-  performanceBadge?: ThemePerformanceBadge;
-}
-
-export type { ColorScheme };
+const THEME_STATE_KEY = 'markluck:theme-state:v2';
 
 const SAFE_LOCAL_CHROME_STATE: ThemeChromeState = {
   official: false,
@@ -76,141 +53,141 @@ const SAFE_LOCAL_CHROME_STATE: ThemeChromeState = {
     template: 'editor-control',
     export: 'topbar-right',
     share: 'topbar-right',
+    theme: 'topbar-right',
     settings: 'left-wing',
-    'theme-toggle': 'topbar-right',
     'view-toggle': 'editor-control',
   },
 };
 
-function cloneChromeState(state: ThemeChromeState): ThemeChromeState {
+function cloneChromeState(chrome: ThemeChromeState): ThemeChromeState {
   return {
-    ...state,
-    rightWingSections: [...state.rightWingSections],
-    defaultOpenSections: [...state.defaultOpenSections],
-    actionPlacements: { ...state.actionPlacements },
+    ...chrome,
+    rightWingSections: [...chrome.rightWingSections],
+    defaultOpenSections: [...chrome.defaultOpenSections],
+    actionPlacements: { ...chrome.actionPlacements },
   };
 }
 
 function chromeStateFromPack(pack: InstalledThemePack): ThemeChromeState {
-  // v2: 优先从声明式主题模块的 recipe 直接读取
-  if (pack.module) {
-    const recipe = pack.module.recipe;
-    const profile = pack.module.meta;
-    return {
-      official: true,
-      layoutPreset: recipe.layoutPreset,
-      role: profile.role,
-      topBarVariant: recipe.topBar.variant,
-      leftWingMode: recipe.leftWing.mode,
-      rightWingMode: recipe.rightWing.mode,
-      toolbarDensity: recipe.editorControl.density,
-      statusDensity: recipe.statusBar.density,
-      drawerEmphasis: recipe.drawerEmphasis,
-      readingWidth: recipe.readingWidth,
-      effectProfile: profile.effectProfile,
-      motionIntensity: recipe.motionIntensity,
-      rightWingSections: [...recipe.rightWing.sections],
-      defaultOpenSections: [...recipe.rightWing.defaultOpenSections],
-      workspaceIntent: recipe.workspaceIntent,
-      defaultViewMode: recipe.defaultViewMode,
-      topBarLayout: recipe.topBar.layout,
-      leftWingLayout: recipe.leftWing.layout,
-      editorControlLayout: recipe.editorControl.layout,
-      statusLayout: recipe.statusBar.layout,
-      rightWingPolicy: recipe.rightWing.policy,
-      actionPlacements: { ...recipe.actionPlacements },
-    };
+  if (!pack.module) {
+    return cloneChromeState({
+      ...SAFE_LOCAL_CHROME_STATE,
+      layoutPreset: pack.manifest.layoutPreset,
+    });
   }
-  // v1 fallback: 导入/本地主题（无 module）
-  return cloneChromeState(SAFE_LOCAL_CHROME_STATE);
+
+  const recipe = pack.module.recipe;
+  const profile = pack.module.meta;
+
+  return {
+    official: true,
+    layoutPreset: recipe.layoutPreset,
+    role: profile.role,
+    topBarVariant: recipe.topBar.variant,
+    leftWingMode: recipe.leftWing.mode,
+    rightWingMode: recipe.rightWing.mode,
+    toolbarDensity: recipe.editorControl.density,
+    statusDensity: recipe.statusBar.density,
+    drawerEmphasis: recipe.drawerEmphasis,
+    readingWidth: recipe.readingWidth,
+    effectProfile: profile.effectProfile,
+    motionIntensity: recipe.motionIntensity,
+    rightWingSections: [...recipe.rightWing.sections],
+    defaultOpenSections: [...recipe.rightWing.defaultOpenSections],
+    workspaceIntent: recipe.workspaceIntent,
+    defaultViewMode: recipe.defaultViewMode,
+    topBarLayout: recipe.topBar.layout,
+    leftWingLayout: recipe.leftWing.layout,
+    editorControlLayout: recipe.editorControl.layout,
+    statusLayout: recipe.statusBar.layout,
+    rightWingPolicy: recipe.rightWing.policy,
+    actionPlacements: { ...recipe.actionPlacements },
+  };
+}
+
+function uniqueThemes(packs: InstalledThemePack[]): InstalledThemePack[] {
+  const byId = new Map<string, InstalledThemePack>();
+  for (const pack of packs) {
+    byId.set(pack.manifest.id, pack);
+  }
+  return Array.from(byId.values());
+}
+
+function readPersistedThemeId(): string | null {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(THEME_STATE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { activeThemeId?: string };
+    return typeof parsed.activeThemeId === 'string' ? parsed.activeThemeId : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistThemeId(themeId: string): void {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(THEME_STATE_KEY, JSON.stringify({ activeThemeId: themeId }));
 }
 
 export const useThemeStore = defineStore('theme', () => {
-  const colorScheme = ref<ColorScheme>('light');
   const activeThemeId = ref(DEFAULT_THEME_ID);
+  const previewThemeId = ref<string | null>(null);
   const activeLayoutPreset = ref<ThemeLayoutPreset>('winged');
-  const installedThemes = ref<InstalledThemePack[]>([]);
   const initialized = ref(false);
+  const registryThemes = ref<InstalledThemePack[]>(getAllRegistryThemePacks());
+  const installedThemes = ref<InstalledThemePack[]>([]);
 
-  const themes = computed(() => {
-    const byId = new Map<string, InstalledThemePack>();
-    for (const pack of getBuiltInThemePacks()) byId.set(pack.manifest.id, pack);
-    for (const pack of installedThemes.value) byId.set(pack.manifest.id, pack);
-    return [...byId.values()];
-  });
+  const themes = computed(() => uniqueThemes([...registryThemes.value, ...installedThemes.value]));
+  const marketThemes = computed(() => themes.value.filter((pack) => pack.source === 'market'));
+  const importedThemes = computed(() => themes.value.filter((pack) => pack.source === 'imported'));
 
-  const activeTheme = computed(
-    () =>
+  const activeTheme = computed(() => {
+    return (
       themes.value.find((pack) => pack.manifest.id === activeThemeId.value) ??
-      themes.value.find((pack) => pack.manifest.id === DEFAULT_THEME_ID)!,
-  );
-
-  const officialThemes = computed(() => themes.value.filter((pack) => pack.officialProfile));
-  const activeOfficialProfile = computed(() => activeTheme.value.officialProfile);
-  const activeChromeState = computed<ThemeChromeState>(() =>
-    chromeStateFromPack(activeTheme.value),
-  );
-  const activePerformanceBadge = computed(() => {
-    const profile = activeOfficialProfile.value;
-    return profile ? getThemePerformanceBadge(profile.performanceLevel) : undefined;
+      themes.value.find((pack) => pack.manifest.id === DEFAULT_THEME_ID) ??
+      themes.value[0]!
+    );
   });
-  const themeViewModels = computed<ThemeViewModel[]>(() =>
-    themes.value.map((pack) => {
-      const officialProfile = pack.officialProfile;
-      return {
-        pack,
-        id: pack.manifest.id,
-        name: pack.manifest.name,
-        description: pack.manifest.description || '本地主题包',
-        sourceLabel: pack.source === 'builtin' ? '官方' : '本地',
-        active: pack.manifest.id === activeThemeId.value,
-        readonly: pack.readonly === true,
-        officialProfile,
-        performanceBadge: officialProfile
-          ? getThemePerformanceBadge(officialProfile.performanceLevel)
-          : undefined,
-      };
-    }),
-  );
 
-  const schemeLabel = computed(() => (colorScheme.value === 'light' ? '亮色' : '暗色'));
+  const previewTheme = computed(() => {
+    if (!previewThemeId.value) return null;
+    return themes.value.find((pack) => pack.manifest.id === previewThemeId.value) ?? null;
+  });
+
+  const renderedTheme = computed(() => previewTheme.value ?? activeTheme.value);
   const activeThemeLabel = computed(() => activeTheme.value.manifest.name);
+  const activeChromeState = computed<ThemeChromeState>(() =>
+    chromeStateFromPack(renderedTheme.value),
+  );
+  const activeUxRecipes = computed<ThemeUxRecipeMap>(() => renderedTheme.value.ux ?? {});
+
+  function refreshRegistry(): void {
+    registryThemes.value = getAllRegistryThemePacks();
+    installedThemes.value = loadInstalledThemePacks();
+  }
 
   function init(): void {
     if (initialized.value) return;
-    installedThemes.value = loadInstalledThemePacks();
-
-    const persisted = readPersistedState();
-    if (persisted?.colorScheme) colorScheme.value = persisted.colorScheme;
-    if (persisted?.activeThemeId) activeThemeId.value = persisted.activeThemeId;
-
-    if (!persisted?.colorScheme) {
-      const legacyScheme = readLegacyColorScheme();
-      if (legacyScheme) {
-        colorScheme.value = legacyScheme;
-      } else if (typeof window !== 'undefined') {
-        const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
-        if (mq?.matches) colorScheme.value = 'dark';
-      }
-    }
-
-    if (!themes.value.some((pack) => pack.manifest.id === activeThemeId.value)) {
-      activeThemeId.value = DEFAULT_THEME_ID;
-    }
-
+    refreshRegistry();
+    const persisted = readPersistedThemeId();
+    activeThemeId.value = themes.value.some((pack) => pack.manifest.id === persisted)
+      ? persisted!
+      : DEFAULT_THEME_ID;
     apply();
     initialized.value = true;
   }
 
   function apply(): void {
-    const pack = activeTheme.value;
+    const pack = renderedTheme.value;
     const chrome = activeChromeState.value;
     activeLayoutPreset.value = chrome.layoutPreset;
 
     if (typeof document !== 'undefined') {
       const html = document.documentElement;
-      html.setAttribute('data-color-scheme', colorScheme.value);
       html.setAttribute('data-theme-id', pack.manifest.id);
+      html.setAttribute('data-active-theme-id', activeTheme.value.manifest.id);
+      html.setAttribute('data-theme-runtime', pack.manifest.runtime);
       html.setAttribute('data-layout-preset', chrome.layoutPreset);
       html.setAttribute('data-chrome-topbar', chrome.topBarVariant);
       html.setAttribute('data-chrome-left-wing', chrome.leftWingMode);
@@ -225,116 +202,89 @@ export const useThemeStore = defineStore('theme', () => {
       html.setAttribute('data-editor-control-layout', chrome.editorControlLayout);
       html.setAttribute('data-status-layout', chrome.statusLayout);
       html.setAttribute('data-right-wing-policy', chrome.rightWingPolicy);
-      if (pack.officialProfile) {
-        html.setAttribute('data-theme-role', pack.officialProfile.role);
-        html.setAttribute('data-effect-profile', chrome.effectProfile);
-        html.setAttribute('data-theme-performance', String(pack.officialProfile.performanceLevel));
-      } else {
-        html.removeAttribute('data-theme-role');
-        html.removeAttribute('data-effect-profile');
-        html.removeAttribute('data-theme-performance');
+      html.setAttribute('data-theme-role', pack.officialProfile?.role ?? 'baseline');
+      html.setAttribute(
+        'data-theme-performance',
+        String(pack.officialProfile?.performanceLevel ?? 1),
+      );
+      html.removeAttribute('data-effect-profile');
+      for (const attribute of Array.from(html.attributes)) {
+        if (attribute.name.startsWith('data-color-')) {
+          html.removeAttribute(attribute.name);
+        }
       }
       applyThemeStyle(pack.css);
     }
-
-    persistState();
   }
 
-  function setColorScheme(c: ColorScheme): void {
-    colorScheme.value = c;
-    apply();
+  function assertActivatable(pack: InstalledThemePack): void {
+    if (pack.manifest.runtime !== 'trusted-code') return;
+    if (pack.trustedCodeAuthorized || isTrustedCodeThemeAuthorized(pack.manifest.id)) return;
+    throw new Error(`主题 ${pack.manifest.name} 包含可信代码，启用前需要授权`);
   }
 
-  function toggleColorScheme(): void {
-    colorScheme.value = colorScheme.value === 'light' ? 'dark' : 'light';
+  function activateTheme(themeId: string): void {
+    const pack = themes.value.find((item) => item.manifest.id === themeId);
+    if (!pack) throw new Error(`主题不存在: ${themeId}`);
+    assertActivatable(pack);
+    activeThemeId.value = themeId;
+    previewThemeId.value = null;
+    persistThemeId(themeId);
     apply();
   }
 
   function setTheme(themeId: string): void {
+    activateTheme(themeId);
+  }
+
+  function previewThemeById(themeId: string): void {
     if (!themes.value.some((pack) => pack.manifest.id === themeId)) {
       throw new Error(`主题不存在: ${themeId}`);
     }
-    activeThemeId.value = themeId;
+    previewThemeId.value = themeId;
     apply();
   }
 
-  async function installThemeFromFile(
-    file: Blob | ArrayBuffer | Uint8Array,
-  ): Promise<InstalledThemePack> {
-    const result = await installThemePack(file);
-    installedThemes.value = loadInstalledThemePacks();
-    activeThemeId.value = result.pack.manifest.id;
+  function clearPreview(): void {
+    previewThemeId.value = null;
     apply();
-    return result.pack;
+  }
+
+  function installTheme(input: ThemePackageInput): ThemeValidationIssue[] {
+    installLocalThemePackage(input);
+    refreshRegistry();
+    return [];
   }
 
   function uninstallTheme(themeId: string): void {
-    if (themeId === DEFAULT_THEME_ID) return;
-    installedThemes.value = removeInstalledThemePack(themeId);
+    const pack = themes.value.find((item) => item.manifest.id === themeId);
+    if (!pack) return;
+    if (pack.readonly) throw new Error(`内置主题不可卸载: ${themeId}`);
+    removeInstalledThemePack(themeId);
+    refreshRegistry();
     if (activeThemeId.value === themeId) {
       activeThemeId.value = DEFAULT_THEME_ID;
+      persistThemeId(DEFAULT_THEME_ID);
     }
+    if (previewThemeId.value === themeId) previewThemeId.value = null;
     apply();
+  }
+
+  function authorizeTrustedCode(themeId: string): void {
+    authorizeTrustedCodeTheme(themeId);
+    refreshRegistry();
+  }
+
+  function validateTheme(input: ThemePackageInput): ThemeValidationIssue[] {
+    return validateThemePackage(input);
   }
 
   function resetTheme(): void {
     activeThemeId.value = DEFAULT_THEME_ID;
+    previewThemeId.value = null;
     activeLayoutPreset.value = 'winged';
+    persistThemeId(DEFAULT_THEME_ID);
     apply();
-  }
-
-  function refreshInstalledThemes(): void {
-    installedThemes.value = loadInstalledThemePacks();
-    if (!themes.value.some((pack) => pack.manifest.id === activeThemeId.value)) {
-      activeThemeId.value = DEFAULT_THEME_ID;
-    }
-    apply();
-  }
-
-  function readPersistedState(): PersistedThemeState | null {
-    if (typeof window === 'undefined') return null;
-    try {
-      const raw = window.localStorage.getItem(THEME_STATE_STORAGE_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw) as PersistedThemeState;
-      return {
-        colorScheme:
-          parsed.colorScheme === 'dark' || parsed.colorScheme === 'light'
-            ? parsed.colorScheme
-            : undefined,
-        activeThemeId: typeof parsed.activeThemeId === 'string' ? parsed.activeThemeId : undefined,
-      };
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.warn('[themeStore] v2 state parse failed', error);
-      return null;
-    }
-  }
-
-  function readLegacyColorScheme(): ColorScheme | null {
-    if (typeof window === 'undefined') return null;
-    try {
-      const saved = window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
-      if (saved === 'light' || saved === 'dark') return saved;
-      if (!saved) return null;
-      const parsed = JSON.parse(saved) as { c?: string };
-      if (parsed.c === 'light' || parsed.c === 'dark') return parsed.c;
-    } catch {
-      return null;
-    }
-    return null;
-  }
-
-  function persistState(): void {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(LEGACY_THEME_STORAGE_KEY, colorScheme.value);
-    window.localStorage.setItem(
-      THEME_STATE_STORAGE_KEY,
-      JSON.stringify({
-        activeThemeId: activeThemeId.value,
-        colorScheme: colorScheme.value,
-      }),
-    );
   }
 
   function applyThemeStyle(css: string): void {
@@ -348,28 +298,31 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   return {
-    colorScheme,
     activeThemeId,
+    previewThemeId,
     activeLayoutPreset,
+    registryThemes,
     installedThemes,
     themes,
-    officialThemes,
+    marketThemes,
+    importedThemes,
     activeTheme,
+    previewTheme,
+    renderedTheme,
     activeThemeLabel,
-    activeOfficialProfile,
     activeChromeState,
-    activePerformanceBadge,
-    themeViewModels,
-    schemeLabel,
+    activeUxRecipes,
     initialized,
     init,
     apply,
-    setColorScheme,
-    toggleColorScheme,
     setTheme,
-    installThemeFromFile,
+    activateTheme,
+    previewThemeById,
+    clearPreview,
+    installTheme,
     uninstallTheme,
+    authorizeTrustedCode,
+    validateTheme,
     resetTheme,
-    refreshInstalledThemes,
   };
 });

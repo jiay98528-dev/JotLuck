@@ -1,10 +1,16 @@
 import { test, expect } from '@playwright/test';
-import { getEditorContent, waitForAppReady, waitForAutoSave } from '../helpers/test-utils';
+import {
+  ensureEditorReady,
+  getEditorContent,
+  waitForAppReady,
+  waitForAutoSave,
+} from '../helpers/test-utils';
 
 async function replaceEditorText(
   page: import('@playwright/test').Page,
   text: string,
 ): Promise<void> {
+  await ensureEditorReady(page);
   const editor = page.locator('.cm-content');
   await editor.click();
   await page.keyboard.press('Control+a');
@@ -41,6 +47,7 @@ test.describe('offline autocomplete user journeys', () => {
       localStorage.setItem('markluck:autocomplete:enabled', 'true');
     });
     await waitForAppReady(page);
+    await ensureEditorReady(page);
     await seedAsciiProbe(page);
   });
 
@@ -76,7 +83,7 @@ test.describe('offline autocomplete user journeys', () => {
 
     await page.locator('.wing-settings-btn').click();
     await expect(page.locator('.modal-overlay')).toBeVisible({ timeout: 3000 });
-    await page.locator('.settings-nav .nav-item').nth(3).click();
+    await page.getByRole('button', { name: '文字补全' }).click();
     await expect(page.locator('.section:visible .section-title')).toHaveText('文字补全');
     const completionSwitch = page.getByRole('switch', { name: '启用幽灵文本补全' });
     await expect(completionSwitch).toHaveAttribute('aria-checked', 'true');
@@ -104,7 +111,7 @@ test.describe('offline autocomplete user journeys', () => {
 
     await page.locator('.wing-settings-btn').click();
     await expect(page.locator('.modal-overlay')).toBeVisible({ timeout: 3000 });
-    await page.locator('.settings-nav .nav-item').nth(3).click();
+    await page.getByRole('button', { name: '文字补全' }).click();
     const switchControl = page.getByRole('switch').first();
     await switchControl.focus();
     await expect(switchControl).toBeFocused();

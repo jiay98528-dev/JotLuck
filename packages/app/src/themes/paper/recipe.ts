@@ -31,8 +31,8 @@ export const recipe: ShellRecipe = {
     template: 'editor-control',
     export: 'topbar-right',
     share: 'topbar-right',
+    theme: 'topbar-right',
     settings: 'left-wing',
-    'theme-toggle': 'topbar-right',
     'view-toggle': 'editor-control',
   },
 };

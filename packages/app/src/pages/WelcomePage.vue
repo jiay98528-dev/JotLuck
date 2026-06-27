@@ -3,13 +3,11 @@
     <Transition name="welcome-overlay">
       <div v-if="visible" class="welcome-overlay" @click.self="close">
         <div class="welcome-card">
-          <!-- Brand -->
           <div class="welcome-brand">
             <h1 class="welcome-brand-name">MarkLuck</h1>
             <p class="welcome-brand-sub">轻量、本地、离线</p>
           </div>
 
-          <!-- Step Indicator -->
           <div class="welcome-steps" role="tablist" aria-label="引导进度">
             <template v-for="i in TOTAL_STEPS" :key="i">
               <span
@@ -27,62 +25,36 @@
             </template>
           </div>
 
-          <!-- Content Area -->
           <div class="welcome-content">
             <Transition name="step-slide" mode="out-in">
-              <!-- Step 1 -->
               <div v-if="currentStep === 1" class="welcome-step-body">
-                <h2 class="welcome-step-title">不绑定工具，你的笔记永远属于你</h2>
+                <h2 class="welcome-step-title">你的笔记就是纯文本文件</h2>
                 <p class="welcome-step-text">
-                  每一条笔记就是一个 .md 纯文本文件。文件夹就是笔记本。<br />
-                  用 Git 管理版本，用任何编辑器打开，用 OneDrive 同步，用 Everything 搜索。<br />
-                  MarkLuck 只提供随心好用的编辑体验。
+                  每一条笔记都是本地 Markdown 或文本文件。文件夹就是笔记本，数据不被数据库锁住。
                 </p>
               </div>
 
-              <!-- Step 2 -->
               <div v-else-if="currentStep === 2" class="welcome-step-body">
-                <h2 class="welcome-step-title">你的隐私永远是底线</h2>
+                <h2 class="welcome-step-title">默认工作台是羽翼布局</h2>
                 <p class="welcome-step-text">
-                  完全离线，基于算法的文字补全。<br />
-                  无需担心隐私泄露，也不受运行环境波动影响。<br />
-                  它会学习你的习惯，越用越好用。
+                  左侧管理最近笔记，中间专注编辑，右侧保留大纲、反链和标签。当前版本只保留这一套稳定布局。
                 </p>
               </div>
 
-              <!-- Step 3 -->
               <div v-else-if="currentStep === 3" class="welcome-step-body">
-                <h2 class="welcome-step-title">先选一张写作桌</h2>
+                <h2 class="welcome-step-title">核心工作流已经就绪</h2>
                 <p class="welcome-step-text">
-                  首发内置 5 个官方主题：2 个视觉收藏主题，3 个工作流主题。<br />
-                  点击主题先看预览、适用场景和性能等级，再决定是否启用。
+                  支持即时预览、Wiki-link、模板、搜索、导出与本地自动补全，不依赖网络。
                 </p>
-                <ThemeGallery
-                  :items="welcomeThemeItems"
-                  variant="welcome"
-                  :show-role="true"
-                  @preview="openThemePreview"
-                />
               </div>
 
-              <!-- Step 4 -->
               <div v-else-if="currentStep === 4" class="welcome-step-body">
-                <h2 class="welcome-step-title">MarkLuck 能为你做什么？</h2>
-                <p class="welcome-step-text">
-                  Markdown 即时渲染，所见即所得。<br />
-                  支持 [[Wiki-link]] 笔记互联、模板创建、全文搜索，沉浸写作不被打扰。<br />
-                  一键导出多格式，全链路掌控你的笔记。
-                </p>
-              </div>
-
-              <!-- Step 5 -->
-              <div v-else-if="currentStep === 5" class="welcome-step-body">
                 <h2 class="welcome-step-title">把我设为默认编辑器？</h2>
                 <p class="welcome-step-text">
-                  安装器会把 MarkLuck 注册为 .md/.markdown/.mdx 的可选打开程序。<br />
-                  Windows 仍要求你在系统设置中手动选择默认应用。
+                  安装版可打开 Windows 默认应用设置，由你手动把 `.md`、`.markdown`、`.mdx` 关联到
+                  MarkLuck。
                 </p>
-                <div class="welcome-step-4-actions">
+                <div class="welcome-actions">
                   <Button variant="default" size="md" @click="onSetDefaultEditor">
                     打开系统设置
                   </Button>
@@ -93,11 +65,8 @@
                 </p>
               </div>
 
-              <!-- Step 6 -->
-              <div v-else-if="currentStep === 6" class="welcome-step-body">
-                <h2 class="welcome-step-title">需要我保持最新版本么？</h2>
-
-                <!-- Auto-check toggle -->
+              <div v-else-if="currentStep === 5" class="welcome-step-body">
+                <h2 class="welcome-step-title">需要自动检查新版本吗？</h2>
                 <div class="welcome-setting-row">
                   <div class="welcome-setting-info">
                     <span class="welcome-setting-label">自动检查可用更新</span>
@@ -109,40 +78,19 @@
                       <span class="toggle-thumb" />
                     </span>
                   </div>
-                  <p class="welcome-setting-desc">
-                    仅查询 GitHub 公开版本号，不上传任何数据。随时可在设置中关闭。
-                  </p>
+                  <p class="welcome-setting-desc">仅查询 GitHub 公开版本号，不上传任何笔记内容。</p>
                 </div>
+              </div>
 
-                <!-- Sub-options (visible when toggle ON) -->
-                <Transition name="expand">
-                  <div v-if="autoCheckEnabled" class="welcome-sub-options">
-                    <label class="welcome-radio-row">
-                      <span class="welcome-radio" :class="{ checked: !autoInstallEnabled }">
-                        <span v-if="!autoInstallEnabled" class="welcome-radio-dot" />
-                      </span>
-                      <span class="welcome-radio-label">仅提醒新版本可用</span>
-                    </label>
-
-                    <label class="welcome-radio-row welcome-radio-row--locked">
-                      <span class="welcome-radio locked">
-                        <span class="welcome-lock-icon">&#128274;</span>
-                      </span>
-                      <span class="welcome-radio-label">
-                        自动下载并安装
-                        <span class="welcome-radio-muted">（暂不可用）</span>
-                      </span>
-                    </label>
-                    <p class="welcome-lock-explanation">
-                      当前为先行版，暂未获得代码签名证书。证书就位后开放。
-                    </p>
-                  </div>
-                </Transition>
+              <div v-else class="welcome-step-body">
+                <h2 class="welcome-step-title">可以开始了</h2>
+                <p class="welcome-step-text">
+                  打开一个本地文件夹，继续写作。后续所有设置都可以在应用内调整。
+                </p>
               </div>
             </Transition>
           </div>
 
-          <!-- Bottom Action Bar -->
           <div class="welcome-footer">
             <button v-if="currentStep < TOTAL_STEPS" class="welcome-skip-link" @click="skip">
               跳过
@@ -157,29 +105,16 @@
       </div>
     </Transition>
   </Teleport>
-
-  <ThemePreviewDrawer
-    :visible="themePreviewVisible"
-    :item="selectedTheme"
-    @close="themePreviewVisible = false"
-    @apply="applyThemeFromPreview"
-    @restore-default="resetThemeFromPreview"
-  />
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue';
+import { onMounted, ref } from 'vue';
 import { open as openExternal } from '@tauri-apps/plugin-shell';
 import Button from '@/components/common/Button.vue';
-import ThemeGallery from '@/components/theme/ThemeGallery.vue';
-import ThemePreviewDrawer from '@/components/theme/ThemePreviewDrawer.vue';
-import { useThemeStore, type ThemeViewModel } from '@/stores/theme';
 
-// ── Props / Emits ──────────────────────────────────────────
 defineProps<{ visible: boolean }>();
 const emit = defineEmits<{ 'update:visible': [boolean]; complete: [] }>();
 
-// ── State ──────────────────────────────────────────────────
 const WELCOME_KEY = 'markluck:welcome:completed';
 const AUTO_CHECK_KEY = 'markluck:version:autoCheck';
 const AUTO_INSTALL_KEY = 'markluck:version:autoInstall';
@@ -188,47 +123,20 @@ const TOTAL_STEPS = 6;
 
 const currentStep = ref(1);
 const autoCheckEnabled = ref(localStorage.getItem(AUTO_CHECK_KEY) === 'true');
-const autoInstallEnabled = ref(localStorage.getItem(AUTO_INSTALL_KEY) === 'true');
 const defaultEditorNotice = ref('');
-const theme = useThemeStore();
-const themePreviewVisible = ref(false);
-const selectedTheme = ref<ThemeViewModel | null>(null);
-const welcomeThemeItems = computed(() =>
-  theme.themeViewModels.filter((item) => item.officialProfile),
-);
 
-// ── Lifecycle ──────────────────────────────────────────────
 onMounted(() => {
-  theme.init();
   if (localStorage.getItem(WELCOME_KEY) === '1') {
     emit('update:visible', false);
   }
 });
 
-// ── Actions ────────────────────────────────────────────────
 function nextStep(): void {
   if (currentStep.value < TOTAL_STEPS) {
-    currentStep.value++;
+    currentStep.value += 1;
     return;
   }
   complete();
-}
-
-function openThemePreview(item: ThemeViewModel): void {
-  selectedTheme.value = item;
-  themePreviewVisible.value = true;
-}
-
-function applyThemeFromPreview(themeId: string): void {
-  theme.setTheme(themeId);
-  selectedTheme.value =
-    theme.themeViewModels.find((item) => item.id === themeId) ?? selectedTheme.value;
-}
-
-function resetThemeFromPreview(): void {
-  theme.resetTheme();
-  selectedTheme.value =
-    theme.themeViewModels.find((item) => item.id === theme.activeThemeId) ?? selectedTheme.value;
 }
 
 function skip(): void {
@@ -236,7 +144,6 @@ function skip(): void {
 }
 
 function close(): void {
-  // Overlay click closes only if already completed
   if (localStorage.getItem(WELCOME_KEY) === '1') {
     emit('update:visible', false);
   }
@@ -245,390 +152,155 @@ function close(): void {
 function complete(): void {
   localStorage.setItem(WELCOME_KEY, '1');
   localStorage.setItem(AUTO_CHECK_KEY, String(autoCheckEnabled.value));
-  localStorage.setItem(AUTO_INSTALL_KEY, String(autoInstallEnabled.value));
+  localStorage.setItem(AUTO_INSTALL_KEY, 'false');
   emit('complete');
 }
 
 async function onSetDefaultEditor(): Promise<void> {
   localStorage.setItem(DEFAULT_EDITOR_PROMPT_KEY, '1');
-  defaultEditorNotice.value =
-    '已为你打开 Windows 默认应用设置。请搜索 .md、.markdown 或 .mdx，并选择 MarkLuck 作为默认应用。';
 
   if (!window.__TAURI__) {
     defaultEditorNotice.value =
-      '当前是 Web 预览环境。安装版会打开 Windows 默认应用设置，默认应用需要你手动选择 MarkLuck。';
+      '当前是 Web 预览环境。安装版会尝试打开 Windows 默认应用设置，最终仍需你手动选择 MarkLuck。';
     return;
   }
 
   try {
     await openExternal('ms-settings:defaultapps');
-  } catch (e) {
     defaultEditorNotice.value =
-      '无法自动打开系统设置。请手动进入 Windows 设置 > 应用 > 默认应用，搜索 .md、.markdown 或 .mdx 后选择 MarkLuck。';
-    // eslint-disable-next-line no-console
-    console.warn('[WelcomePage] 打开 Windows 默认应用设置失败:', e);
+      '已打开 Windows 默认应用设置。请搜索 .md、.markdown 或 .mdx，并选择 MarkLuck。';
+  } catch {
+    defaultEditorNotice.value =
+      '无法自动打开系统设置。请手动进入 Windows 设置 > 应用 > 默认应用，并关联 Markdown 文件。';
   }
 }
 </script>
 
 <style scoped>
-/* ============================================================
- * WelcomePage — Onboarding Wizard (Paper Metaphor)
- *
- * Teleported modal overlay with 5-step guided setup.
- * All colors via CSS variables (tokens.css + paper.css).
- * ============================================================ */
-
-/* ===== Overlay ===== */
 .welcome-overlay {
   position: fixed;
   inset: 0;
   z-index: var(--z-modal);
-  background: var(--overlay);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
+  padding: var(--space-20);
+  background: color-mix(in oklch, var(--overlay) 92%, transparent);
 }
 
-/* ===== Overlay Transition ===== */
-.welcome-overlay-enter-active {
-  transition: opacity var(--dur-page) var(--ease-fade);
-}
-
-.welcome-overlay-leave-active {
-  transition: opacity var(--dur-collapse) var(--ease-exit);
-}
-
-.welcome-overlay-enter-from,
-.welcome-overlay-leave-to {
-  opacity: 0;
-}
-
-/* ===== Card ===== */
 .welcome-card {
-  width: min(760px, calc(100vw - var(--space-32)));
-  max-width: calc(100vw - var(--space-32));
-  max-height: 85vh;
-  background: var(--paper-raised);
-  border: var(--border-thin) solid var(--rule);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-wing-float);
+  width: min(720px, calc(100vw - 32px));
   display: flex;
   flex-direction: column;
-  animation: welcome-card-in var(--dur-page) var(--ease-enter);
+  gap: var(--space-20);
+  padding: clamp(var(--space-24), 4vw, var(--space-36));
+  border: var(--border-thin) solid var(--rule);
+  border-radius: calc(var(--radius) * 1.5);
+  background: var(--paper-raised);
+  box-shadow: var(--shadow-float);
 }
 
-@keyframes welcome-card-in {
-  from {
-    opacity: 0;
-    transform: scale(0.95) translateY(8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-/* ===== Brand ===== */
 .welcome-brand {
-  text-align: center;
-  padding: var(--space-32) var(--space-24) var(--space-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
 }
 
 .welcome-brand-name {
-  font-size: var(--text-2xl);
-  font-weight: var(--fw-bold);
-  color: var(--ink-primary);
-  margin: 0 0 var(--space-4);
-  letter-spacing: var(--ls-tight);
-  line-height: var(--lh-heading);
-}
-
-.welcome-brand-sub {
-  font-size: var(--text-sm);
-  color: var(--ink-muted);
   margin: 0;
-  line-height: var(--lh-ui);
+  font-size: clamp(2rem, 4vw, 2.6rem);
+  line-height: 1;
 }
 
-/* ===== Step Indicator ===== */
+.welcome-brand-sub,
+.welcome-step-text,
+.welcome-setting-desc,
+.welcome-setting-note {
+  margin: 0;
+  color: var(--ink-secondary);
+  line-height: var(--lh-body);
+}
+
 .welcome-steps {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0;
-  padding: 0 var(--space-24) var(--space-20);
+  gap: var(--space-8);
 }
 
 .welcome-step-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full);
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
   background: var(--rule);
-  flex-shrink: 0;
-  transition:
-    background var(--dur-expand) var(--ease-enter),
-    transform var(--dur-expand) var(--ease-enter);
 }
 
 .welcome-step-dot.active {
   background: var(--accent);
-  transform: scale(1.25);
 }
 
 .welcome-step-line {
-  width: 32px;
-  height: 2px;
+  flex: 1;
+  height: 1px;
   background: var(--rule);
-  flex-shrink: 0;
-  transition: background var(--dur-expand) var(--ease-enter);
 }
 
 .welcome-step-line.active {
   background: var(--accent);
 }
 
-/* ===== Content Area ===== */
 .welcome-content {
-  flex: 1;
-  min-height: 280px;
-  padding: 0 var(--space-24);
-  overflow-y: auto;
+  min-height: 200px;
 }
 
-/* ===== Step Transition: slide + fade ===== */
-.step-slide-enter-active {
-  transition:
-    opacity var(--dur-page) var(--ease-enter),
-    transform var(--dur-page) var(--ease-enter);
-}
-
-.step-slide-leave-active {
-  transition:
-    opacity var(--dur-collapse) var(--ease-exit),
-    transform var(--dur-collapse) var(--ease-exit);
-  position: absolute;
-}
-
-.step-slide-enter-from {
-  opacity: 0;
-  transform: translateX(24px);
-}
-
-.step-slide-leave-to {
-  opacity: 0;
-  transform: translateX(-24px);
-}
-
-/* ===== Step Body ===== */
 .welcome-step-body {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: var(--space-12);
+  gap: var(--space-16);
 }
 
 .welcome-step-title {
-  font-size: var(--text-lg);
-  font-weight: var(--fw-semibold);
-  color: var(--ink-primary);
   margin: 0;
+  font-size: var(--text-2xl);
   line-height: var(--lh-heading);
 }
 
-.welcome-step-text {
-  font-size: var(--text-sm);
-  color: var(--ink-secondary);
-  margin: 0;
-  line-height: var(--lh-body);
-  max-width: 400px;
-}
-
-.welcome-step-body :deep(.theme-gallery) {
-  width: 100%;
-  margin-top: var(--space-8);
-}
-
-.welcome-step-body :deep(.theme-card) {
-  min-height: 168px;
-}
-
-/* ===== Step 4: Action Buttons ===== */
-.welcome-step-4-actions {
+.welcome-actions,
+.welcome-footer {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-12);
-  margin-top: var(--space-8);
 }
 
-.welcome-link-btn {
-  background: none;
-  border: none;
-  color: var(--ink-muted);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  padding: var(--space-4) var(--space-8);
-  border-radius: var(--radius);
-  transition:
-    color var(--dur-micro) var(--ease-fade),
-    background var(--dur-micro) var(--ease-fade);
-}
-
-.welcome-link-btn:hover {
-  color: var(--ink-primary);
-  background: var(--surface-hover);
-}
-
-.welcome-setting-note {
-  max-width: 400px;
-  margin: var(--space-8) 0 0;
-  color: var(--ink-secondary);
-  font-size: var(--text-xs);
-  line-height: var(--lh-body);
-}
-
-/* ===== Step 5: Version Settings ===== */
 .welcome-setting-row {
-  width: 100%;
-  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  padding: var(--space-16);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-surface);
 }
 
 .welcome-setting-info {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-8) 0;
+  gap: var(--space-12);
 }
 
 .welcome-setting-label {
-  font-size: var(--text-sm);
   color: var(--ink-primary);
-  line-height: var(--lh-ui);
+  font-weight: var(--fw-medium);
 }
 
-.welcome-setting-desc {
-  font-size: var(--text-xs);
-  color: var(--ink-muted);
-  margin: 0;
-  line-height: var(--lh-ui);
-}
-
-/* ===== Sub-options Expand Transition ===== */
-.expand-enter-active {
-  transition:
-    opacity var(--dur-expand) var(--ease-enter),
-    max-height var(--dur-expand) var(--ease-enter);
-  overflow: hidden;
-}
-
-.expand-leave-active {
-  transition:
-    opacity var(--dur-collapse) var(--ease-exit),
-    max-height var(--dur-collapse) var(--ease-exit);
-  overflow: hidden;
-}
-
-.expand-enter-from,
-.expand-leave-to {
-  opacity: 0;
-  max-height: 0;
-}
-
-.expand-enter-to,
-.expand-leave-from {
-  opacity: 1;
-  max-height: 200px;
-}
-
-.welcome-sub-options {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-8);
-  padding: var(--space-12) 0 0 var(--space-4);
-  border-top: var(--border-thin) solid var(--rule);
-  margin-top: var(--space-8);
-}
-
-/* ===== Radio Rows ===== */
-.welcome-radio-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  cursor: pointer;
-  padding: var(--space-4) 0;
-}
-
-.welcome-radio-row--locked {
-  cursor: not-allowed;
-  opacity: var(--opacity-disabled);
-}
-
-.welcome-radio {
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-full);
-  border: 2px solid var(--rule);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: border-color var(--dur-micro) var(--ease-fade);
-}
-
-.welcome-radio.checked {
-  border-color: var(--accent);
-}
-
-.welcome-radio.locked {
-  border-color: var(--rule);
-  background: var(--surface-hover);
-}
-
-.welcome-radio-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full);
-  background: var(--accent);
-}
-
-.welcome-lock-icon {
-  font-size: 10px;
-  line-height: 1;
-}
-
-.welcome-radio-label {
-  font-size: var(--text-sm);
-  color: var(--ink-primary);
-  line-height: var(--lh-ui);
-}
-
-.welcome-radio-muted {
-  color: var(--ink-muted);
-  font-size: var(--text-xs);
-}
-
-.welcome-lock-explanation {
-  font-size: var(--text-xs);
-  color: var(--ink-muted);
-  margin: 0;
-  line-height: var(--lh-ui);
-  font-style: italic;
-}
-
-/* ===== Toggle Switch (matches SettingsDialog.vue) ===== */
 .toggle-track {
-  display: inline-flex;
-  align-items: center;
-  width: 38px;
-  height: 20px;
-  border-radius: var(--radius-full);
-  background: var(--rule);
-  cursor: pointer;
   position: relative;
-  transition: background var(--dur-micro) var(--ease-fade);
-  flex-shrink: 0;
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--rule-strong);
+  cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-fade);
 }
 
 .toggle-track.active {
@@ -636,70 +308,49 @@ async function onSetDefaultEditor(): Promise<void> {
 }
 
 .toggle-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: var(--radius-full);
-  background: var(--paper-raised);
-  box-shadow: var(--shadow-sheet);
   position: absolute;
   top: 2px;
   left: 2px;
-  transition: transform var(--dur-micro) var(--ease-press);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--paper-raised);
+  transition: transform var(--dur-micro) var(--ease-fade);
 }
 
 .toggle-track.active .toggle-thumb {
-  transform: translateX(18px);
+  transform: translateX(20px);
 }
 
-/* ===== Footer ===== */
-.welcome-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-16) var(--space-24) var(--space-20);
-  border-top: var(--border-thin) solid var(--rule);
-  flex-shrink: 0;
-}
-
+.welcome-link-btn,
 .welcome-skip-link {
-  background: none;
   border: none;
-  color: var(--ink-muted);
-  font-size: var(--text-sm);
+  padding: 0;
+  background: none;
+  color: var(--ink-secondary);
   cursor: pointer;
-  padding: var(--space-4) var(--space-8);
-  border-radius: var(--radius);
-  transition:
-    color var(--dur-micro) var(--ease-fade),
-    background var(--dur-micro) var(--ease-fade);
 }
 
+.welcome-link-btn:hover,
 .welcome-skip-link:hover {
-  color: var(--ink-primary);
-  background: var(--surface-hover);
+  color: var(--accent);
 }
 
 .welcome-footer-spacer {
   flex: 1;
 }
 
-/* ===== Reduced Motion ===== */
-@media (prefers-reduced-motion: reduce) {
+@media (width <= 720px) {
   .welcome-card {
-    animation: none;
+    width: calc(100vw - 24px);
+    padding: var(--space-20);
   }
 
-  .welcome-overlay-enter-active,
-  .welcome-overlay-leave-active,
-  .step-slide-enter-active,
-  .step-slide-leave-active,
-  .expand-enter-active,
-  .expand-leave-active {
-    transition-duration: 0.01ms !important;
-  }
-
-  .toggle-thumb {
-    transition-duration: 0.01ms !important;
+  .welcome-actions,
+  .welcome-footer,
+  .welcome-setting-info {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 </style>

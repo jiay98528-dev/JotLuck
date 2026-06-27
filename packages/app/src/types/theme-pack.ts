@@ -1,14 +1,23 @@
-export type ColorScheme = 'light' | 'dark';
+export type ThemeRuntime = 'declarative' | 'official-code' | 'trusted-code';
 
-export type ThemeRuntime = 'css-v1' | 'sandboxed-plugin-v2';
+export type ThemePermission =
+  | 'shell-layout'
+  | 'component-replace'
+  | 'visual-effects'
+  | 'theme-storage'
+  | 'network'
+  | 'filesystem-read'
+  | 'filesystem-write';
 
-export type ThemeLayoutPreset = 'winged' | 'focus' | 'archive' | 'reader' | 'studio';
+export type ThemeLayoutPreset = 'winged' | 'focus' | 'archive' | 'reader' | 'studio' | 'atelier';
 
 export type ThemeCapability =
   | 'tokens'
   | 'assets'
   | 'animations'
   | 'layout-preset'
+  | 'ux-components'
+  | 'trusted-code'
   | 'markdown'
   | 'codemirror';
 
@@ -20,11 +29,17 @@ export type ThemeEffectProfile = 'none' | 'subtle' | 'ambient' | 'immersive';
 
 export type ThemePerformanceLevel = 1 | 2 | 3 | 4 | 5;
 
-export type ThemeTopBarVariant = 'balanced' | 'writing' | 'archive' | 'reader' | 'studio';
+export type ThemeTopBarVariant =
+  | 'balanced'
+  | 'writing'
+  | 'archive'
+  | 'reader'
+  | 'studio'
+  | 'atelier';
 
-export type ThemeLeftWingMode = 'default' | 'research' | 'quiet' | 'rail';
+export type ThemeLeftWingMode = 'default' | 'research' | 'quiet' | 'rail' | 'navigator';
 
-export type ThemeRightWingMode = 'balanced' | 'research' | 'quiet' | 'rail';
+export type ThemeRightWingMode = 'balanced' | 'research' | 'quiet' | 'rail' | 'atlas';
 
 export type ThemeSidebarMode = 'balanced' | 'research' | 'quiet' | 'rail';
 
@@ -32,23 +47,41 @@ export type ThemeToolbarDensity = 'calm' | 'compact' | 'productive';
 
 export type ThemeReferenceSection = 'outline' | 'backlinks' | 'tags';
 
-export type ThemeWorkspaceIntent = 'baseline' | 'writing' | 'archive' | 'reader' | 'studio';
+export type ThemeWorkspaceIntent =
+  | 'baseline'
+  | 'writing'
+  | 'archive'
+  | 'reader'
+  | 'studio'
+  | 'atelier';
 
 export type ThemeViewMode = 'live' | 'split' | 'read';
 
-export type ThemeTopBarLayout = 'classic' | 'title-first' | 'search-first' | 'reader' | 'compact';
+export type ThemeTopBarLayout =
+  | 'classic'
+  | 'title-first'
+  | 'search-first'
+  | 'reader'
+  | 'compact'
+  | 'workbench';
 
 export type ThemeLeftWingLayout =
   | 'bookmarks'
   | 'quiet-bookmarks'
   | 'research-stack'
-  | 'studio-rail';
+  | 'studio-rail'
+  | 'navigator';
 
-export type ThemeEditorControlLayout = 'toolbar' | 'writing-strip' | 'hidden' | 'studio-rail';
+export type ThemeEditorControlLayout =
+  | 'toolbar'
+  | 'writing-strip'
+  | 'hidden'
+  | 'studio-rail'
+  | 'stacked';
 
-export type ThemeStatusLayout = 'full' | 'quiet' | 'save-only' | 'compact';
+export type ThemeStatusLayout = 'full' | 'quiet' | 'save-only' | 'compact' | 'dashboard';
 
-export type ThemeRightWingPolicy = 'outline' | 'research' | 'collapsed' | 'production';
+export type ThemeRightWingPolicy = 'outline' | 'research' | 'collapsed' | 'production' | 'atlas';
 
 export type ThemeActionId =
   | 'new-note'
@@ -57,8 +90,8 @@ export type ThemeActionId =
   | 'template'
   | 'export'
   | 'share'
+  | 'theme'
   | 'settings'
-  | 'theme-toggle'
   | 'view-toggle';
 
 export type ThemeActionRegion =
@@ -69,9 +102,89 @@ export type ThemeActionRegion =
   | 'editor-control'
   | 'studio-rail'
   | 'reader-bar'
+  | 'status-right'
   | 'hidden';
 
 export type ThemeActionPlacements = Record<ThemeActionId, ThemeActionRegion>;
+
+export type ThemeSlotId =
+  | 'app-shell'
+  | 'topbar'
+  | 'left-wing'
+  | 'right-wing'
+  | 'editor-control'
+  | 'status-bar'
+  | 'home'
+  | 'scratch'
+  | 'dialogs.theme';
+
+export type ThemePrimitiveType =
+  | 'Stack'
+  | 'Grid'
+  | 'Panel'
+  | 'Text'
+  | 'ActionList'
+  | 'ActionButton'
+  | 'NoteList'
+  | 'HeadingTree'
+  | 'TagCloud'
+  | 'EditorStatus'
+  | 'ThemePreview'
+  | 'Slot';
+
+export interface ThemeActionBinding {
+  actionId: ThemeActionId;
+  label?: string;
+  icon?: ThemeActionId;
+}
+
+export interface ThemePrimitiveNode {
+  type: ThemePrimitiveType;
+  id?: string;
+  className?: string;
+  text?: string;
+  action?: ThemeActionBinding;
+  props?: Record<string, string | number | boolean | undefined>;
+  children?: ThemePrimitiveNode[];
+}
+
+export interface UxComponentRecipe {
+  slot: ThemeSlotId;
+  name?: string;
+  root: ThemePrimitiveNode;
+}
+
+export type ThemeUxRecipeMap = Partial<Record<ThemeSlotId, UxComponentRecipe>>;
+
+export interface ThemeCodeEntrypoint {
+  slot: ThemeSlotId;
+  module: string;
+  exportName?: string;
+  checksum: string;
+}
+
+export interface ThemeManifestV2 {
+  id: string;
+  version: string;
+  themeApi: 2;
+  runtime: ThemeRuntime;
+  minAppVersion: string;
+  name: string;
+  author: string;
+  description?: string;
+  homepage?: string;
+  license?: string;
+  capabilities: ThemeCapability[];
+  permissions: ThemePermission[];
+  layoutPreset: ThemeLayoutPreset;
+  checksums: Record<string, string>;
+  entrypoints?: ThemeCodeEntrypoint[];
+  slots?: ThemeSlotId[];
+  previewImages?: string[];
+  category?: string;
+  tags?: string[];
+  price?: string;
+}
 
 export interface ShellAction {
   id: ThemeActionId;
@@ -142,7 +255,7 @@ export interface OfficialThemeProfile {
 export interface ThemePackManifest {
   id: string;
   version: string;
-  themeApi: 1;
+  themeApi: 1 | 2;
   runtime: ThemeRuntime;
   minAppVersion: string;
   name: string;
@@ -157,6 +270,9 @@ export interface ThemePackManifest {
   category?: string;
   tags?: string[];
   price?: string;
+  permissions?: ThemePermission[];
+  entrypoints?: ThemeCodeEntrypoint[];
+  slots?: ThemeSlotId[];
 }
 
 export interface InstalledThemePack {
@@ -169,7 +285,10 @@ export interface InstalledThemePack {
   officialProfile?: OfficialThemeProfile;
   /** v2: 关联的声明式主题模块（仅 officialTheme 填充） */
   module?: OfficialThemeModule;
+  ux?: ThemeUxRecipeMap;
+  codeBundles?: Record<string, string>;
   readonly?: boolean;
+  trustedCodeAuthorized?: boolean;
 }
 
 export interface ThemeValidationIssue {
@@ -183,6 +302,13 @@ export interface ThemePackInstallResult {
   warnings: ThemeValidationIssue[];
 }
 
+export interface ThemePackageInput {
+  manifest: ThemeManifestV2;
+  css?: string;
+  ux?: ThemeUxRecipeMap;
+  codeBundles?: Record<string, string>;
+}
+
 export const THEME_API_VERSION = 1;
 
 export const THEME_LAYOUT_PRESETS: ThemeLayoutPreset[] = [
@@ -191,6 +317,7 @@ export const THEME_LAYOUT_PRESETS: ThemeLayoutPreset[] = [
   'archive',
   'reader',
   'studio',
+  'atelier',
 ];
 
 export const THEME_CAPABILITIES: ThemeCapability[] = [
@@ -198,8 +325,17 @@ export const THEME_CAPABILITIES: ThemeCapability[] = [
   'assets',
   'animations',
   'layout-preset',
+  'ux-components',
+  'trusted-code',
   'markdown',
   'codemirror',
+];
+
+export const THEME_DEFAULT_ALLOWED_PERMISSIONS: ThemePermission[] = [
+  'shell-layout',
+  'component-replace',
+  'visual-effects',
+  'theme-storage',
 ];
 
 // ── v2 Declarative Theme Module Types ──────────────────────
@@ -246,13 +382,11 @@ export interface ShellRecipe {
   drawerEmphasis: OfficialThemeUiProfile['drawerEmphasis'];
   motionIntensity: OfficialThemeUiProfile['motionIntensity'];
   actionPlacements: ThemeActionPlacements;
+  ux?: ThemeUxRecipeMap;
 }
 
-/** 每个主题声明 light + dark 两套 OKLCH CSS 自定义属性覆盖 */
-export interface ThemeTokenSet {
-  light: Record<string, string>;
-  dark: Record<string, string>;
-}
+/** 单主题 token 覆盖 */
+export type ThemeTokenSet = Record<string, string>;
 
 export interface ThemeAssetMap {
   background?: string;
@@ -265,9 +399,9 @@ export interface ThemeAssetMap {
  * 一个模块声明了 meta（品牌信息）、recipe（布局装配）、tokens（色值）和可选 CSS/资产。
  */
 export interface OfficialThemeModule {
-  /** 全局唯一标识（如 'markluck.ink-study'） */
+  /** 全局唯一标识 */
   id: string;
-  /** 用户可见名称（如 '墨线书房'） */
+  /** 用户可见名称 */
   name: string;
   /** 分类标签 */
   tags: string[];
@@ -277,8 +411,10 @@ export interface OfficialThemeModule {
   meta: OfficialThemeProfile;
   /** 布局装配配方 */
   recipe: ShellRecipe;
-  /** light + dark 两套 OKLCH 色值 */
+  /** Token 覆盖 */
   tokens: ThemeTokenSet;
+  /** 可替换 UX 组件 recipe */
+  ux?: ThemeUxRecipeMap;
   /** 超出 Token 可表达的附加 CSS */
   css?: string;
   /** 静态资产 */

@@ -20,11 +20,10 @@ export type {
   FormatAction,
 } from './editor';
 
-export type { ColorScheme } from './editor';
-
 // --- theme-pack.ts ---
 export type {
   ThemeRuntime,
+  ThemePermission,
   ThemeLayoutPreset,
   ThemeCapability,
   ThemePackSource,
@@ -47,6 +46,15 @@ export type {
   ThemeActionId,
   ThemeActionRegion,
   ThemeActionPlacements,
+  ThemeSlotId,
+  ThemePrimitiveType,
+  ThemeActionBinding,
+  ThemePrimitiveNode,
+  UxComponentRecipe,
+  ThemeUxRecipeMap,
+  ThemeCodeEntrypoint,
+  ThemeManifestV2,
+  ThemePackageInput,
   ShellAction,
   ThemePerformanceBadge,
   OfficialThemeUiProfile,

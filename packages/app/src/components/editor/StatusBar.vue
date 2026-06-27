@@ -18,6 +18,34 @@
       </span>
     </template>
 
+    <template v-else-if="region.layout === 'dashboard'">
+      <span class="status-left status-left--dashboard">
+        <strong>{{ lineCount }} 行</strong>
+        <span>{{ charCount }} 字 &middot; {{ wordCount }} 词</span>
+      </span>
+      <span class="status-center status-center--dashboard">
+        <template v-if="cursorLine !== null">Ln {{ cursorLine }}, Col {{ cursorCol }}</template>
+        <template v-else>Ready</template>
+      </span>
+      <span class="status-dashboard-actions">
+        <ShellActionButton
+          v-for="action in actions"
+          :key="action.id"
+          :action="action"
+          label-mode="short"
+          size="sm"
+        />
+        <span class="status-right">
+          <span v-if="saveError" class="status-error" :title="saveError"
+            >&#9888; {{ saveError }}</span
+          >
+          <span v-else-if="isSaving" class="status-saving">&#9203; 保存中...</span>
+          <span v-else-if="isDirty" class="status-dirty">&#9679; 未保存</span>
+          <span v-else class="status-saved" :class="{ ripple: showRipple }">&#10003; 已保存</span>
+        </span>
+      </span>
+    </template>
+
     <template v-else>
       <span class="status-left">
         <template v-if="cursorLine !== null">Ln {{ cursorLine }}, Col {{ cursorCol }}</template>
@@ -43,7 +71,8 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import type { StatusBarRegion } from '@/types/theme-pack';
+import ShellActionButton from '@/components/layout/ShellActionButton.vue';
+import type { ShellAction, StatusBarRegion } from '@/types/theme-pack';
 
 const props = withDefaults(
   defineProps<{
@@ -57,6 +86,7 @@ const props = withDefaults(
     saveError?: string | null;
     lastSavedAt?: number | null;
     region?: StatusBarRegion;
+    actions?: ShellAction[];
   }>(),
   {
     charCount: 0,
@@ -69,6 +99,7 @@ const props = withDefaults(
     saveError: null,
     lastSavedAt: null,
     region: () => ({ layout: 'full' as const, density: 'calm' as const }),
+    actions: () => [],
   },
 );
 
@@ -125,6 +156,19 @@ watch(
   background: color-mix(in oklch, var(--paper-surface) 86%, transparent);
 }
 
+.status-bar--layout-dashboard {
+  gap: var(--space-12);
+  height: calc(var(--statusbar-height) + 4px);
+  border-top-color: color-mix(in oklch, var(--rule-strong) 88%, transparent);
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--accent-soft) 24%, transparent),
+      transparent 28%
+    ),
+    var(--paper-raised);
+}
+
 .status-left,
 .status-center,
 .status-right,
@@ -151,6 +195,33 @@ watch(
 
 .status-reader-save {
   color: var(--ink-muted);
+}
+
+.status-left--dashboard {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.status-left--dashboard strong {
+  color: var(--ink-primary);
+  font-weight: var(--fw-semibold);
+}
+
+.status-center--dashboard {
+  color: var(--ink-secondary);
+}
+
+.status-dashboard-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-width: 0;
+  margin-left: auto;
+}
+
+.status-dashboard-actions :deep(.shell-action) {
+  flex: 0 0 auto;
 }
 
 .status-hint {
@@ -210,6 +281,19 @@ watch(
   .status-hint,
   .ripple {
     animation: none;
+  }
+}
+
+@media (width <= 760px) {
+  .status-bar--layout-dashboard {
+    flex-wrap: wrap;
+    height: auto;
+    padding-block: var(--space-6);
+  }
+
+  .status-dashboard-actions {
+    width: 100%;
+    justify-content: space-between;
   }
 }
 </style>

@@ -18,6 +18,7 @@
  */
 import { test, expect } from '@playwright/test';
 import {
+  ensureEditorReady,
   waitForAppReady,
   getEditorContent,
   typeInEditor,
@@ -86,6 +87,7 @@ async function moveCursorOffRenderedBlock(page: any): Promise<void> {
 test.describe('即时模式 (Live Preview)', () => {
   test.beforeEach(async ({ page }) => {
     await waitForAppReady(page);
+    await ensureEditorReady(page);
     // 默认已是即時模式，但显式切换以确保
     await switchToLiveMode(page);
   });

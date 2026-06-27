@@ -7,18 +7,8 @@
 import type { OfficialThemeModule } from '@/types/theme-pack';
 
 import paperModule from './paper';
-import inkStudyModule from './ink-study';
-import archiveModule from './archive';
-import readerNocturneModule from './reader-nocturne';
-import studioModule from './studio';
 
-const ALL_MODULES: OfficialThemeModule[] = [
-  paperModule,
-  inkStudyModule,
-  archiveModule,
-  readerNocturneModule,
-  studioModule,
-];
+const ALL_MODULES: OfficialThemeModule[] = [paperModule];
 
 const BY_ID = new Map<string, OfficialThemeModule>(ALL_MODULES.map((mod) => [mod.id, mod]));
 

@@ -231,7 +231,11 @@ export const HeadingTreeNode: ReturnType<typeof defineComponent> = defineCompone
  */
 import { ref, computed, watch } from 'vue';
 import type { BacklinkEntry, TagEntry } from '@/types';
-import type { RightWingRegion, ThemeReferenceSection, ThemeRightWingPolicy } from '@/types/theme-pack';
+import type {
+  RightWingRegion,
+  ThemeReferenceSection,
+  ThemeRightWingPolicy,
+} from '@/types/theme-pack';
 
 // ============================================================
 // Props
@@ -284,13 +288,6 @@ const orderedSections = computed<SectionKey[]>(() => {
 });
 
 const openSections = ref<Set<SectionKey>>(new Set(props.region.defaultOpenSections));
-
-watch(
-  () => props.region.defaultOpenSections,
-  (sections) => {
-    openSections.value = new Set(sections);
-  },
-);
 
 watch(
   () => props.region.policy,
@@ -363,6 +360,7 @@ function handleResizeStart(e: MouseEvent) {
 function widthForPolicy(policy: ThemeRightWingPolicy): number {
   if (policy === 'research') return 360;
   if (policy === 'production') return 320;
+  if (policy === 'atlas') return 344;
   return 240;
 }
 
@@ -428,6 +426,17 @@ function onNavigateHeading(headingId: string, lineNumber: number) {
 .right-wing[data-policy='production'] {
   border-left: var(--border-thin) solid var(--rule-strong);
   background: var(--paper-raised);
+}
+
+.right-wing[data-policy='atlas'] {
+  border-left: var(--border-thin) solid color-mix(in oklch, var(--accent) 32%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--accent-soft) 30%, transparent),
+      transparent 26%
+    ),
+    var(--paper-right);
 }
 
 /* ============================================================
@@ -498,6 +507,10 @@ function onNavigateHeading(headingId: string, lineNumber: number) {
   padding-block: var(--space-8);
 }
 
+.wing-content[data-mode='atlas'] {
+  padding-top: var(--space-10);
+}
+
 /* ============================================================
  * Sections
  * ============================================================ */
@@ -545,9 +558,18 @@ function onNavigateHeading(headingId: string, lineNumber: number) {
   min-height: 34px;
 }
 
+.wing-content[data-mode='atlas'] .section-header {
+  padding-inline: var(--space-14);
+}
+
 .wing-content[data-mode='research'] .wing-section:first-child .section-header {
   border-block: var(--border-thin) solid var(--rule);
   background: var(--paper-raised);
+}
+
+.wing-content[data-mode='atlas'] .wing-section:first-child .section-header {
+  border-block: var(--border-thin) solid color-mix(in oklch, var(--rule) 82%, transparent);
+  background: color-mix(in oklch, var(--paper-raised) 86%, transparent);
 }
 
 .section-icon {
@@ -679,6 +701,67 @@ function onNavigateHeading(headingId: string, lineNumber: number) {
 }
 
 .heading-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.section-body--outline :deep(.heading-tree) {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.section-body--outline :deep(.heading-node) {
+  margin: 0;
+  padding: 0;
+}
+
+.section-body--outline :deep(.heading-link) {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: 100%;
+  min-height: 28px;
+  padding-block: var(--space-4);
+  padding-inline-end: var(--space-12);
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-secondary);
+  font-family: var(--ff-body);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-ui);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.section-body--outline :deep(.heading-link:hover) {
+  background: var(--surface-hover);
+  color: var(--ink-primary);
+}
+
+.section-body--outline :deep(.heading-node.active > .heading-link) {
+  background: var(--accent-soft);
+  color: var(--ink-primary);
+}
+
+.section-body--outline :deep(.heading-accent) {
+  flex: 0 0 2px;
+  width: 2px;
+  height: 14px;
+  border-radius: var(--radius-full);
+  background: transparent;
+}
+
+.section-body--outline :deep(.heading-node.active > .heading-link .heading-accent) {
+  background: var(--accent);
+}
+
+.section-body--outline :deep(.heading-text) {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

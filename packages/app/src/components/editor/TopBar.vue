@@ -73,6 +73,44 @@
       </div>
     </div>
 
+    <div v-else-if="region.layout === 'workbench'" class="topbar-inner topbar-inner--workbench">
+      <div class="topbar-identity">
+        <div class="topbar-identity-actions">
+          <ShellActionButton
+            v-for="action in leftActions"
+            :key="action.id"
+            :action="action"
+            label-mode="icon"
+          />
+        </div>
+        <div class="topbar-identity-copy">
+          <span class="topbar-notebook topbar-notebook--caps" :title="notebookName">
+            {{ notebookName }}
+          </span>
+          <span class="topbar-title topbar-title--workbench" :title="titleText">
+            {{ titleText }}
+          </span>
+        </div>
+      </div>
+      <div class="topbar-command-zone topbar-command-zone--workbench">
+        <ShellActionButton
+          v-for="action in centerActions"
+          :key="action.id"
+          :action="action"
+          :label-mode="action.id === 'search' ? 'full' : 'short'"
+          size="sm"
+        />
+      </div>
+      <div class="topbar-right topbar-right--workbench">
+        <ShellActionButton
+          v-for="action in rightActions"
+          :key="action.id"
+          :action="action"
+          label-mode="icon"
+        />
+      </div>
+    </div>
+
     <div
       v-else
       class="topbar-inner"
@@ -164,6 +202,12 @@ const titleText = computed(() => props.noteTitle || '无标题');
   grid-template-columns: minmax(180px, 1fr) auto;
 }
 
+.topbar-inner--workbench {
+  grid-template-columns: minmax(220px, 1fr) minmax(240px, 1.1fr) auto;
+  gap: var(--space-12);
+  padding-inline: var(--space-16);
+}
+
 .topbar-left,
 .topbar-center,
 .topbar-right,
@@ -192,6 +236,36 @@ const titleText = computed(() => props.noteTitle || '无标题');
   width: min(100%, 360px);
 }
 
+.topbar-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  min-width: 0;
+}
+
+.topbar-identity-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex: 0 0 auto;
+}
+
+.topbar-identity-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.topbar-command-zone--workbench {
+  justify-content: flex-start;
+  gap: var(--space-6);
+  overflow: hidden;
+}
+
+.topbar-right--workbench {
+  gap: var(--space-6);
+}
+
 .topbar-notebook,
 .topbar-title {
   min-width: 0;
@@ -218,6 +292,15 @@ const titleText = computed(() => props.noteTitle || '无标题');
   font-weight: var(--fw-regular);
 }
 
+.topbar-notebook--caps {
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+}
+
+.topbar-title--workbench {
+  font-size: var(--text-base);
+}
+
 .topbar--layout-reader {
   height: 44px;
   background: color-mix(in oklch, var(--paper-bg) 82%, transparent);
@@ -235,18 +318,37 @@ const titleText = computed(() => props.noteTitle || '无标题');
   font-size: var(--text-base);
 }
 
+.topbar--layout-workbench {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--accent-soft) 28%, transparent),
+      transparent 32%
+    ),
+    color-mix(in oklch, var(--paper-surface) 90%, transparent);
+}
+
 @media (width <= 760px) {
   .topbar-inner,
   .topbar-inner--title-first,
   .topbar-inner--search-first,
   .topbar-inner--reader,
-  .topbar-inner--compact {
+  .topbar-inner--compact,
+  .topbar-inner--workbench {
     grid-template-columns: auto 1fr auto;
   }
 
   .topbar-notebook,
   .topbar-title--archive {
     display: none;
+  }
+
+  .topbar-identity-copy .topbar-title--workbench {
+    display: block;
+  }
+
+  .topbar-command-zone--workbench {
+    justify-content: center;
   }
 }
 </style>

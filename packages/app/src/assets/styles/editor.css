@@ -438,6 +438,6 @@
   user-select: none;
 }
 
-[data-color-scheme='dark'] .cm-ghost-text {
+.cm-ghost-text {
   color: oklch(from var(--ink-muted) l c h / 0.35);
 }

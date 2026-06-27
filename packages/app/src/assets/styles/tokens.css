@@ -1,7 +1,7 @@
 /* ===== MarkLuck Design Tokens =====
  * Winged Editor — Open Book Metaphor
  *
- * Shared tokens that do not change between light/dark modes.
+ * Shared tokens that do not change across the current paper layout.
  * Color tokens are in themes/paper.css
  *
  * Metaphor: 一本摊开的书。
@@ -180,7 +180,7 @@
   --lift-hover: translateY(-1px);
   --lift-active: translateY(0) scale(0.96);
 
-  /* === Theme Pack Hooks === */
+  /* === App Shell Hooks === */
   --theme-bg-image: none;
   --theme-bg-size: cover;
   --theme-bg-position: center;

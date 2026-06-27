@@ -97,6 +97,25 @@
         <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
       </svg>
       <svg
+        v-else-if="action.icon === 'theme'"
+        class="shell-action__theme-icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M4 5.5h16" />
+        <path d="M6.5 5.5v13" />
+        <path d="M17.5 5.5v13" />
+        <path d="M8 18.5h8" />
+        <path d="M9 9.5h6" />
+        <path d="M9 13h4" />
+        <circle cx="18" cy="18" r="2.2" />
+      </svg>
+      <svg
         v-else-if="action.icon === 'settings'"
         viewBox="0 0 24 24"
         fill="none"
@@ -110,25 +129,6 @@
         <path
           d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
         />
-      </svg>
-      <svg
-        v-else-if="action.icon === 'theme-toggle'"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        aria-hidden="true"
-      >
-        <circle cx="12" cy="12" r="5" />
-        <line x1="12" y1="1" x2="12" y2="3" />
-        <line x1="12" y1="21" x2="12" y2="23" />
-        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-        <line x1="1" y1="12" x2="3" y2="12" />
-        <line x1="21" y1="12" x2="23" y2="12" />
-        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
       </svg>
       <svg
         v-else
@@ -174,6 +174,11 @@ const buttonSize = computed<ButtonSize>(() => {
 
 const legacyActionClass = computed(() => {
   if (props.action.id === 'new-note') return 'wing-new-btn';
+  if (props.action.id === 'file-drawer') return 'topbar-btn--menu';
+  if (props.action.id === 'search') return 'topbar-search-hint';
+  if (props.action.id === 'export') return 'topbar-btn--export';
+  if (props.action.id === 'share') return 'topbar-btn--share';
+  if (props.action.id === 'theme') return 'topbar-btn--theme';
   if (props.action.id === 'settings') return 'wing-settings-btn';
   if (props.action.id === 'view-toggle') return 'view-mode-toggle';
   return undefined;
@@ -200,10 +205,24 @@ const legacyActionClass = computed(() => {
 
 .shell-action--export.is-active,
 .shell-action--view-toggle.is-active,
-.shell-action--search.is-active {
+.shell-action--search.is-active,
+.shell-action--theme.is-active {
   color: var(--accent);
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+
+.shell-action--theme {
+  min-width: 40px;
+  height: 40px;
+  color: color-mix(in oklch, var(--accent) 58%, var(--ink-secondary));
+}
+
+.shell-action--theme :deep(.mk-btn__icon),
+.shell-action--theme :deep(.mk-btn__icon svg),
+.shell-action__theme-icon {
+  width: 25px !important;
+  height: 25px !important;
 }
 
 .shell-action__label {

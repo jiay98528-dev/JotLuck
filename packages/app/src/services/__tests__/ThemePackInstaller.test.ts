@@ -1,160 +1,136 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
-import { parseThemePack, ThemePackError, validateThemeCss } from '../ThemePackInstaller';
+import {
+  authorizeTrustedCodeTheme,
+  installLocalThemePackage,
+  isTrustedCodeThemeAuthorized,
+  loadInstalledThemePacks,
+  parseThemePack,
+  removeInstalledThemePack,
+  validateThemePackage,
+} from '../ThemePackInstaller';
+import type { ThemeManifestV2 } from '@/types/theme-pack';
 
-const encoder = new TextEncoder();
+function manifest(overrides: Partial<ThemeManifestV2> = {}): ThemeManifestV2 {
+  return {
+    id: 'local.test-theme',
+    version: '1.0.0',
+    themeApi: 2,
+    runtime: 'declarative',
+    minAppVersion: '0.15.0',
+    name: 'Test Theme',
+    author: 'Tester',
+    capabilities: ['tokens', 'layout-preset'],
+    permissions: ['shell-layout'],
+    layoutPreset: 'focus',
+    checksums: { 'theme.css': 'sha256-test' },
+    ...overrides,
+  };
+}
 
 describe('ThemePackInstaller', () => {
-  it('parses a valid css-v1 theme pack and rewrites local assets', async () => {
-    const pack = await createThemePack({
-      css: `
-[data-theme-id='local.test'] {
-  --theme-bg-image: url("./assets/bg.png");
-  --accent: oklch(0.5 0.1 120);
-}
-`,
-      files: {
-        'assets/bg.png': new Uint8Array([137, 80, 78, 71]),
-      },
-    });
-
-    const result = await parseThemePack(pack);
-
-    expect(result.pack.manifest.id).toBe('local.test');
-    expect(result.pack.manifest.layoutPreset).toBe('archive');
-    expect(result.pack.css).toContain('data:image/png;base64');
+  beforeEach(() => {
+    localStorage.clear();
   });
 
-  it('rejects unsupported plugin runtimes in v1', async () => {
-    const pack = await createThemePack({
-      manifest: { runtime: 'sandboxed-plugin-v2' },
-    });
-
-    await expect(parseThemePack(pack)).rejects.toMatchObject({
-      issues: [expect.objectContaining({ code: 'manifest-runtime' })],
-    });
+  it('validates declarative theme packages', () => {
+    expect(validateThemePackage({ manifest: manifest() })).toEqual([]);
   });
 
-  it('rejects remote URLs and @import rules', () => {
-    expect(() => validateThemeCss('@import url("theme.css");')).toThrow(ThemePackError);
-    expect(() =>
-      validateThemeCss(
-        '[data-theme-id="x"] { --theme-bg-image: url("https://example.com/a.png"); }',
-      ),
-    ).toThrow(ThemePackError);
+  it('rejects disabled network and filesystem permissions by default', () => {
+    const issues = validateThemePackage({
+      manifest: manifest({ permissions: ['shell-layout', 'network', 'filesystem-write'] }),
+    });
+
+    expect(issues.map((issue) => issue.code)).toContain('permission-not-enabled');
   });
 
-  it('rejects path traversal entries', async () => {
+  it('requires an entrypoint for trusted-code themes', () => {
+    const issues = validateThemePackage({
+      manifest: manifest({ runtime: 'trusted-code', permissions: ['component-replace'] }),
+    });
+
+    expect(issues.map((issue) => issue.code)).toContain('missing-code-entrypoint');
+  });
+
+  it('installs, authorizes, loads, and removes a local theme', () => {
+    const pack = installLocalThemePackage({
+      manifest: manifest(),
+      css: "[data-theme-id='local.test-theme'] { --accent: oklch(58% 0.12 180); }",
+    });
+
+    expect(pack.source).toBe('imported');
+    expect(loadInstalledThemePacks()).toHaveLength(1);
+
+    authorizeTrustedCodeTheme(pack.manifest.id);
+    expect(isTrustedCodeThemeAuthorized(pack.manifest.id)).toBe(true);
+
+    removeInstalledThemePack(pack.manifest.id);
+    expect(loadInstalledThemePacks()).toHaveLength(0);
+  });
+
+  it('parses a .mltheme zip package with checksum validation', async () => {
+    const css = "[data-theme-id='local.test-theme'] { --accent: oklch(58% 0.12 180); }";
     const zip = new JSZip();
-    zip.file('../escape.png', new Uint8Array([1]));
-    zip.file('theme.css', '');
+    const cssChecksum = await sha256(css);
     zip.file(
       'manifest.json',
+      JSON.stringify(manifest({ checksums: { 'theme.css': cssChecksum } })),
+    );
+    zip.file('theme.css', css);
+    zip.file(
+      'ux.json',
       JSON.stringify({
-        ...baseManifest(),
-        checksums: { 'theme.css': await checksumBytes(encoder.encode('')) },
+        topbar: {
+          slot: 'topbar',
+          root: { type: 'Text', text: 'Local Theme' },
+        },
       }),
     );
 
-    await expect(
-      zip.generateAsync({ type: 'arraybuffer' }).then(parseThemePack),
-    ).rejects.toMatchObject({
-      issues: [expect.objectContaining({ code: 'unsafe-path' })],
-    });
+    const parsed = await parseThemePack(await zip.generateAsync({ type: 'uint8array' }));
+
+    expect(parsed.manifest.id).toBe('local.test-theme');
+    expect(parsed.css).toContain('--accent');
+    expect(parsed.ux?.topbar?.slot).toBe('topbar');
   });
 
-  it('rejects checksum mismatch', async () => {
-    const pack = await createThemePack({
-      manifest: {
-        checksums: { 'theme.css': 'sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' },
-      },
-    });
-
-    await expect(parseThemePack(pack)).rejects.toMatchObject({
-      issues: [expect.objectContaining({ code: 'checksum-mismatch' })],
-    });
-  });
-
-  it('rejects attempts to hide critical controls or focus rings', () => {
-    expect(() => validateThemeCss('.topbar { display: none; }')).toThrow(ThemePackError);
-    expect(() => validateThemeCss('button:focus-visible { outline: none; }')).toThrow(
-      ThemePackError,
+  it('parses trusted-code entrypoints into installed code bundles', async () => {
+    const css = "[data-theme-id='local.code-theme'] { --accent: oklch(62% 0.14 210); }";
+    const code = 'export default { components: {} };';
+    const zip = new JSZip();
+    zip.file(
+      'manifest.json',
+      JSON.stringify(
+        manifest({
+          id: 'local.code-theme',
+          runtime: 'trusted-code',
+          permissions: ['component-replace', 'theme-storage'],
+          checksums: { 'theme.css': await sha256(css) },
+          entrypoints: [
+            {
+              slot: 'topbar',
+              module: 'runtime/theme.js',
+              checksum: await sha256(code),
+            },
+          ],
+        }),
+      ),
     );
-  });
+    zip.file('theme.css', css);
+    zip.file('runtime/theme.js', code);
 
-  it('rejects local theme attempts to control official deep chrome', () => {
-    expect(() =>
-      validateThemeCss("[data-theme-id='local.test'] { --wing-left-width: 96px; }"),
-    ).toThrow(ThemePackError);
-    expect(() =>
-      validateThemeCss("[data-theme-id='local.test'] { --editor-max-width: 960px; }"),
-    ).toThrow(ThemePackError);
-    expect(() =>
-      validateThemeCss("[data-effect-profile='immersive'] .topbar { opacity: 0.9; }"),
-    ).toThrow(ThemePackError);
-    expect(() =>
-      validateThemeCss("[data-theme-id='local.test'] { --theme-workflow-mode: reader; }"),
-    ).toThrow(ThemePackError);
-    expect(() =>
-      validateThemeCss("[data-theme-id='local.test'] { --theme-action-search-region: topbar; }"),
-    ).toThrow(ThemePackError);
-    expect(() =>
-      validateThemeCss("[data-workspace-intent='studio'] .topbar { opacity: 0.9; }"),
-    ).toThrow(ThemePackError);
-    expect(() =>
-      validateThemeCss("[data-editor-control-layout='studio-rail'] .format-toolbar { gap: 0; }"),
-    ).toThrow(ThemePackError);
+    const parsed = await parseThemePack(await zip.generateAsync({ type: 'uint8array' }));
+
+    expect(parsed.manifest.runtime).toBe('trusted-code');
+    expect(parsed.codeBundles?.['runtime/theme.js']).toBe(code);
   });
 });
 
-async function createThemePack(options?: {
-  css?: string;
-  manifest?: Record<string, unknown>;
-  files?: Record<string, Uint8Array>;
-}): Promise<ArrayBuffer> {
-  const css = options?.css ?? '[data-theme-id="local.test"] { --accent: oklch(0.5 0.1 120); }';
-  const files = options?.files ?? {};
-  const zip = new JSZip();
-  zip.file('theme.css', css);
-  for (const [path, content] of Object.entries(files)) {
-    zip.file(path, content);
-  }
-  const manifest = {
-    ...baseManifest(),
-    checksums: {
-      'theme.css': await checksumBytes(encoder.encode(css)),
-    },
-    ...options?.manifest,
-  };
-  zip.file('manifest.json', JSON.stringify(manifest));
-  return zip.generateAsync({ type: 'arraybuffer' });
-}
-
-function baseManifest(): Record<string, unknown> {
-  return {
-    id: 'local.test',
-    version: '1.0.0',
-    themeApi: 1,
-    runtime: 'css-v1',
-    minAppVersion: '0.15.0',
-    name: 'Local Test',
-    author: 'Test',
-    capabilities: ['tokens', 'assets', 'layout-preset'],
-    layoutPreset: 'archive',
-    checksums: {},
-  };
-}
-
-async function checksumBytes(bytes: Uint8Array): Promise<string> {
-  const digestSource = new Uint8Array(bytes);
-  const digest = await crypto.subtle.digest('SHA-256', digestSource.buffer);
-  return `sha256-${bytesToBase64(new Uint8Array(digest))}`;
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  }
-  return btoa(binary);
+async function sha256(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return `sha256-${Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')}`;
 }

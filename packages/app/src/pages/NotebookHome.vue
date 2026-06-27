@@ -92,26 +92,20 @@
       @toggle-right-wing="showRightWing = !showRightWing"
     >
       <template #editor>
-        <div v-if="showHomeThemeShowcase" class="home-theme-showcase">
-          <section class="home-theme-copy">
-            <span class="home-theme-kicker">主题系统</span>
-            <h1>选择你的写作桌</h1>
-            <p>
-              首发内置 5
-              个官方深度主题。它们不只是换色，还会调整布局密度、侧栏权重、阅读版心和动效层级。
-            </p>
-            <div class="home-theme-actions">
-              <button class="btn btn--primary" @click="onShellCreateNote">新建笔记</button>
-              <button class="btn btn--secondary" @click="showLeftDrawer = true">
-                打开文件抽屉
-              </button>
-            </div>
-          </section>
-          <ThemeGallery
-            :items="homeThemeItems"
-            variant="home"
-            :show-role="true"
-            @preview="openThemePreview"
+        <div v-if="isScratchSession" class="scratch-canvas">
+          <MarkdownEditor
+            ref="editorRef"
+            key="scratch"
+            :model-value="currentContent"
+            placeholder="开始输入文字"
+            :show-line-numbers="false"
+            :live-preview="true"
+            :pending-format="pendingFormatAction"
+            :completion-settings="completionSettings"
+            :enable-autocomplete="true"
+            @update:model-value="onEditorContentUpdate"
+            @selection-change="onSelectionChange"
+            @pending-format-ended="pendingFormatAction = null"
           />
         </div>
 
@@ -277,6 +271,8 @@
     @update-external-scan-root="onUpdateExternalScanRootTextFiles"
   />
 
+  <ThemeDialog :visible="showThemeDialog" @update:visible="showThemeDialog = $event" />
+
   <!-- Share Dialog -->
   <ShareDialog
     :visible="showShare"
@@ -300,14 +296,6 @@
 
   <!-- Markdown Cheat Sheet -->
   <MarkdownCheatSheet />
-
-  <ThemePreviewDrawer
-    :visible="themePreviewVisible"
-    :item="selectedTheme"
-    @close="themePreviewVisible = false"
-    @apply="applyThemeFromPreview"
-    @restore-default="resetThemeFromPreview"
-  />
 
   <!-- New File Dialog -->
   <Teleport to="body">
@@ -403,6 +391,33 @@
       </div>
     </div>
   </Teleport>
+
+  <!-- Scratch Exit Confirm Dialog -->
+  <Teleport to="body">
+    <div v-if="showScratchExitDialog" class="modal-overlay">
+      <div
+        class="modal-card"
+        style="width: 420px"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="scratch-exit-title"
+      >
+        <div class="modal-header">
+          <h2 id="scratch-exit-title">保存临时草稿？</h2>
+        </div>
+        <div class="modal-body">
+          <p class="delete-confirm-text">
+            当前草稿还没有保存为文件。可以选择保存位置，或放弃这次临时内容。
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn--secondary" @click="cancelScratchExit">取消</button>
+          <button class="btn btn--secondary" @click="discardScratchAndClose">不保存</button>
+          <button class="btn btn--primary" @click="saveScratchAndClose">保存</button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -425,12 +440,15 @@ import {
 } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { save as saveDialog } from '@tauri-apps/plugin-dialog';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import AppShell from '@/components/layout/AppShell.vue';
 import ShellActionButton from '@/components/layout/ShellActionButton.vue';
 import MarkdownEditor from '@/components/editor/MarkdownEditor.vue';
 import FormatBubble from '@/components/editor/FormatBubble.vue';
 import EditorControlStrip from '@/components/editor/EditorControlStrip.vue';
 import StudioRail from '@/components/editor/StudioRail.vue';
+import ThemeDialog from '@/components/theme/ThemeDialog.vue';
 import FileDrawer from '@/components/overlays/FileDrawer.vue';
 import ToastContainer, { useToast } from '@/components/common/Toast.vue';
 import { MockFSService } from '@/services/MockFSService';
@@ -450,8 +468,6 @@ import type {
 } from '@/types';
 import UpdateNotification from '@/components/overlays/UpdateNotification.vue';
 import MarkdownCheatSheet from '@/components/overlays/MarkdownCheatSheet.vue';
-import ThemeGallery from '@/components/theme/ThemeGallery.vue';
-import ThemePreviewDrawer from '@/components/theme/ThemePreviewDrawer.vue';
 import { useVersionCheck } from '@/composables/useVersionCheck';
 import { useImageUpload } from '@/composables/useImageUpload';
 import { normalizeUrl } from '@/utils/urlUtils';
@@ -479,13 +495,7 @@ import {
   stripSupportedNoteExtension,
   supportedNoteExtensionsLabel,
 } from '@/utils/note-files';
-import type { ThemeViewModel } from '@/stores/theme';
-import type {
-  ShellAction,
-  ThemeActionId,
-  ThemeActionRegion,
-  ThemeViewMode,
-} from '@/types/theme-pack';
+import type { ShellAction, ThemeActionRegion, ThemeViewMode } from '@/types/theme-pack';
 
 const CommandPalette = defineAsyncComponent(
   () => import('@/components/overlays/CommandPalette.vue'),
@@ -512,10 +522,6 @@ interface OpenedFilePayload {
 
 type ExternalSessionMode = 'none' | 'readonly' | 'edit-shell' | 'folder-indexed';
 
-type DesktopFileSystem = IFileSystemService & {
-  openDefaultNotebook?: () => Promise<{ rootPath: string; name?: string }>;
-};
-
 const files = ref<DirEntry[]>([]);
 const currentContent = ref('');
 const activePath = ref('');
@@ -527,10 +533,6 @@ const currentDir = ref('/');
 const theme = useThemeStore();
 // 便捷别名：主题 ChromeState（布局 recipe 的运行时镜像）
 const chrome = computed(() => theme.activeChromeState);
-const themePreviewVisible = ref(false);
-const selectedTheme = ref<ThemeViewModel | null>(null);
-const homeThemeItems = computed(() => theme.themeViewModels.filter((item) => item.officialProfile));
-
 // --- Index & Search ---
 const indexStore = useIndexStore();
 const searchStore = useSearchStore();
@@ -558,7 +560,10 @@ const showTemplate = ref(false);
 const showNewFileDialog = ref(false);
 const newFileName = ref('新笔记.md');
 const showSettings = ref(false);
+const showThemeDialog = ref(false);
 const showShare = ref(false);
+const isScratchSession = ref(false);
+const showScratchExitDialog = ref(false);
 const pendingDeletePath = ref<string | null>(null);
 const notebookName = ref('未打开笔记本');
 const completionSettings = ref<CompletionSettings>(getCompletionSettings());
@@ -567,7 +572,9 @@ let unsubscribeCompletionSettings: (() => void) | null = null;
 let unsubscribeTrainingMeta: (() => void) | null = null;
 let completionTrainer: CompletionTrainingService | null = null;
 let unlistenOpenedFile: (() => void) | null = null;
+let unlistenWindowClose: (() => void) | null = null;
 let startupOpenedFileConsumed = false;
+let allowWindowClose = false;
 const MAX_FILE_TREE_ENTRIES = 5000;
 
 const externalSessionMode = ref<ExternalSessionMode>('none');
@@ -602,8 +609,12 @@ const externalReadStats = computed(() => {
   return `${chars} 字符 · ${lines} 行`;
 });
 
-function actionRegion(id: ThemeActionId): ThemeActionRegion {
-  return chrome.value.actionPlacements[id] ?? 'hidden';
+function actionRegion(id: ShellAction['id']): ThemeActionRegion {
+  const preferred = chrome.value.actionPlacements[id] ?? 'hidden';
+  if (id === 'view-toggle' && preferred === 'reader-bar' && viewMode.value !== 'read') {
+    return 'topbar-right';
+  }
+  return preferred;
 }
 
 const shellActions = computed<ShellAction[]>(() => [
@@ -619,7 +630,7 @@ const shellActions = computed<ShellAction[]>(() => [
   {
     id: 'file-drawer',
     region: actionRegion('file-drawer'),
-    label: '文件抽屉',
+    label: '切换左侧书签栏',
     shortLabel: '文件',
     title: '打开文件抽屉',
     icon: 'file-drawer',
@@ -649,7 +660,7 @@ const shellActions = computed<ShellAction[]>(() => [
   {
     id: 'export',
     region: actionRegion('export'),
-    label: '导出',
+    label: '导出笔记',
     shortLabel: '导出',
     title: '导出笔记',
     icon: 'export',
@@ -661,7 +672,7 @@ const shellActions = computed<ShellAction[]>(() => [
   {
     id: 'share',
     region: actionRegion('share'),
-    label: '分享',
+    label: '分享笔记',
     shortLabel: '分享',
     title: '分享笔记',
     icon: 'share',
@@ -669,6 +680,18 @@ const shellActions = computed<ShellAction[]>(() => [
       showShare.value = true;
     },
     active: showShare.value,
+  },
+  {
+    id: 'theme',
+    region: actionRegion('theme'),
+    label: '主题',
+    shortLabel: '主题',
+    title: '打开主题窗口',
+    icon: 'theme',
+    run: () => {
+      showThemeDialog.value = true;
+    },
+    active: showThemeDialog.value,
   },
   {
     id: 'settings',
@@ -681,15 +704,6 @@ const shellActions = computed<ShellAction[]>(() => [
       showSettings.value = true;
     },
     active: showSettings.value,
-  },
-  {
-    id: 'theme-toggle',
-    region: actionRegion('theme-toggle'),
-    label: '明暗',
-    shortLabel: '明暗',
-    title: '切换明暗主题',
-    icon: 'theme-toggle',
-    run: theme.toggleColorScheme,
   },
   {
     id: 'view-toggle',
@@ -715,21 +729,26 @@ const pendingFormatAction = ref<FormatAction | null>(null);
 const editorRef = ref<InstanceType<typeof MarkdownEditor> | null>(null);
 
 // --- View Mode ---
-const viewModeLabels: Record<ViewMode, string> = { split: '分栏', live: '即时' };
+const viewModeLabels: Record<string, string> = {
+  split: '分栏',
+  live: '即时',
+  read: '阅读',
+};
 const viewModeLabel = computed(() => viewModeLabels[viewMode.value]);
 const resolvedViewModeLabel = computed(() => viewModeLabel.value ?? '阅读');
 
 function cycleViewMode(): void {
   pendingFormatAction.value = null;
-  const modes: ViewMode[] = ['split', 'live'];
+  const modes: ViewMode[] =
+    chrome.value.defaultViewMode === 'read' ? ['read', 'live', 'split'] : ['split', 'live'];
   const idx = modes.indexOf(viewMode.value);
-  viewMode.value = modes[(idx + 1) % 2]!;
-  if (viewMode.value === 'split') {
+  viewMode.value = modes[(idx + 1 + modes.length) % modes.length]!;
+  if (viewMode.value === 'split' || viewMode.value === 'read') {
     updateSplitPreview();
   }
 }
 
-function applyThemeWorkflowDefaults(): void {
+function applyInitialThemeWorkflowDefaults(): void {
   pendingFormatAction.value = null;
   viewMode.value = chrome.value.defaultViewMode;
   showRightWing.value = chrome.value.rightWingPolicy !== 'collapsed';
@@ -737,14 +756,6 @@ function applyThemeWorkflowDefaults(): void {
     updateSplitPreview();
   }
 }
-
-watch(
-  () => theme.activeThemeId,
-  () => {
-    applyThemeWorkflowDefaults();
-  },
-  { flush: 'post' },
-);
 
 // --- Split Pane ---
 function onSplitContentUpdate(content: string): void {
@@ -831,10 +842,12 @@ const shellActivePath = computed(() =>
   isExternalEditing.value ? externalRelativePath.value : activePath.value,
 );
 const shellNoteTitle = computed(() => {
+  if (isScratchSession.value) return '临时草稿';
   if (isExternalSession.value) return stripSupportedNoteExtension(externalFileName.value);
   return noteTitle.value;
 });
 const shellNotebookName = computed(() => {
+  if (isScratchSession.value) return '临时草稿';
   if (!isExternalSession.value) return notebookName.value;
   const root = externalFile.value?.notebookRoot;
   return root ? `外部文件 · ${displayNameFromPath(root)}` : '外部文件';
@@ -867,31 +880,10 @@ const externalRecentNotesWithColors = computed(() =>
 const shellRecentNotesWithColors = computed(() =>
   isExternalEditing.value ? externalRecentNotesWithColors.value : recentNotesWithColors.value,
 );
-const showHomeThemeShowcase = computed(
-  () => !loading.value && !isExternalSession.value && !shellActivePath.value,
-);
-
 function hashString(s: string): number {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
   return Math.abs(h);
-}
-
-function openThemePreview(item: ThemeViewModel): void {
-  selectedTheme.value = item;
-  themePreviewVisible.value = true;
-}
-
-function applyThemeFromPreview(themeId: string): void {
-  theme.setTheme(themeId);
-  selectedTheme.value =
-    theme.themeViewModels.find((item) => item.id === themeId) ?? selectedTheme.value;
-}
-
-function resetThemeFromPreview(): void {
-  theme.resetTheme();
-  selectedTheme.value =
-    theme.themeViewModels.find((item) => item.id === theme.activeThemeId) ?? selectedTheme.value;
 }
 
 // Debug watcher — log recentNotes population
@@ -978,36 +970,50 @@ async function getPendingOpenedFile(): Promise<OpenedFilePayload | null> {
 }
 
 async function openNotebookRoot(rootPath: string): Promise<void> {
+  isScratchSession.value = false;
   const handle = await fs.openNotebookAt(rootPath);
   notebookName.value = handle.name || displayNameFromPath(handle.rootPath);
 }
 
-async function openInitialNotebook(): Promise<void> {
+async function openInitialNotebook(): Promise<boolean> {
   if (!window.__TAURI__) {
-    const handle = await fs.openNotebook();
-    notebookName.value = handle.name || displayNameFromPath(handle.rootPath);
-    return;
+    return false;
   }
 
   const recent = await fs.getRecentNotebooks();
   for (const root of recent) {
     try {
       await openNotebookRoot(root);
-      return;
+      return true;
     } catch (e) {
       // eslint-disable-next-line no-console
       console.warn('[NotebookHome] 最近笔记本不可用，尝试下一个:', root, e);
     }
   }
 
-  const desktopFs = fs as DesktopFileSystem;
-  if (desktopFs.openDefaultNotebook) {
-    const handle = await desktopFs.openDefaultNotebook();
-    notebookName.value = handle.name || displayNameFromPath(handle.rootPath);
-    return;
-  }
+  return false;
+}
 
-  throw new Error('未打开笔记本');
+function enterScratchSession(): void {
+  isScratchSession.value = true;
+  externalSessionMode.value = 'none';
+  externalFile.value = null;
+  externalError.value = '';
+  activePath.value = '';
+  currentContent.value = '';
+  files.value = [];
+  currentDir.value = '/';
+  notebookName.value = '临时草稿';
+  errorMessage.value = '';
+  isDirty.value = false;
+  isSaving.value = false;
+  saveError.value = null;
+  lastSavedAt.value = null;
+  showLeftDrawer.value = false;
+  showRightWing.value = true;
+  updateHeadings('');
+  updateEditorStats('');
+  updateSplitPreview();
 }
 
 async function readExternalMarkdownFile(absolutePath: string): Promise<string> {
@@ -1041,6 +1047,70 @@ async function writeExternalNoteFile(absolutePath: string, content: string): Pro
   window.__markluck_externalFiles[absolutePath] = content;
   window.__markluck_externalWrites = window.__markluck_externalWrites ?? [];
   window.__markluck_externalWrites.push({ absolutePath, content, time: Date.now() });
+}
+
+function ensureMarkdownExtension(path: string): string {
+  return /\.[^\\/]+$/.test(path) ? path : `${path}.md`;
+}
+
+function splitAbsoluteFilePath(path: string): { root: string; relativePath: string } {
+  const normalized = normalizeOsPath(path);
+  const slash = normalized.lastIndexOf('/');
+  if (slash < 0) return { root: '/', relativePath: `/${normalized}` };
+  const root = normalizeOsPath(normalized.slice(0, slash) || '/');
+  return { root, relativePath: `/${normalized.slice(slash + 1)}` };
+}
+
+function downloadScratchAsMarkdown(): void {
+  const blob = new Blob([currentContent.value], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = '临时草稿.md';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  toast.show('Web 预览已下载草稿；当前仍停留在临时草稿。', 'info', 3500);
+}
+
+async function enterNotebookFromSavedScratch(absolutePath: string): Promise<void> {
+  const { root, relativePath } = splitAbsoluteFilePath(absolutePath);
+  isScratchSession.value = false;
+  activePath.value = '';
+  await openNotebookRoot(root);
+  await loadDirectory('/');
+  await indexStore.initialize(fs, true);
+  wikiLinkRevision.value++;
+  await onSelectNote(relativePath);
+}
+
+async function saveScratchAs(): Promise<boolean> {
+  if (!isScratchSession.value || !currentContent.value.trim()) return false;
+
+  if (!window.__TAURI__) {
+    downloadScratchAsMarkdown();
+    isDirty.value = false;
+    return true;
+  }
+
+  const selected = await saveDialog({
+    title: '保存临时草稿',
+    defaultPath: '临时草稿.md',
+    filters: [
+      {
+        name: 'Markdown',
+        extensions: ['md', 'markdown', 'mdx', 'txt'],
+      },
+    ],
+  });
+  if (!selected) return false;
+
+  const absolutePath = ensureMarkdownExtension(String(selected));
+  await writeExternalNoteFile(absolutePath, currentContent.value);
+  await enterNotebookFromSavedScratch(absolutePath);
+  toast.show('草稿已保存为笔记。', 'success', 2500);
+  return true;
 }
 
 function externalAbsoluteFromRelative(relativePath: string): string {
@@ -1149,6 +1219,7 @@ async function enterExternalFileSession(
 ): Promise<void> {
   await flushPendingCurrentSave();
 
+  isScratchSession.value = false;
   const shouldSetLoading = options.setLoading ?? true;
   if (shouldSetLoading) loading.value = true;
   externalError.value = '';
@@ -1215,13 +1286,17 @@ async function initNotebook(): Promise<void> {
       notebookReady = false;
       return;
     } else {
-      await openInitialNotebook();
+      notebookReady = await openInitialNotebook();
+      if (!notebookReady) {
+        enterScratchSession();
+        return;
+      }
     }
     await loadDirectory('/');
-    notebookReady = true;
   } catch (e) {
     errorMessage.value = String(e);
     notebookName.value = '未打开笔记本';
+    enterScratchSession();
   } finally {
     loading.value = false;
   }
@@ -1363,6 +1438,7 @@ async function onSelectNote(path: string): Promise<void> {
   }
 
   // Now set reactive state — editor mounts with content already available
+  isScratchSession.value = false;
   activePath.value = path;
   currentContent.value = content;
 
@@ -1793,6 +1869,12 @@ function onContentUpdate(content: string): void {
   currentContent.value = content;
   updateHeadings(content);
   updateEditorStats(content);
+  if (isScratchSession.value) {
+    isDirty.value = content.trim().length > 0;
+    saveError.value = null;
+    updateSplitPreview();
+    return;
+  }
   if (activePath.value) {
     isDirty.value = true;
     saveError.value = null;
@@ -2073,8 +2155,18 @@ async function onCreateBlank(): Promise<void> {
 
 // --- Keyboard ---
 function onGlobalKeydown(e: KeyboardEvent): void {
-  if (isExternalSession.value && !isExternalFolderIndexed.value) return;
   const key = e.key.toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && key === 's') {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isScratchSession.value) {
+      void saveScratchAs();
+    } else {
+      void flushPendingCurrentSave();
+    }
+    return;
+  }
+  if (isExternalSession.value && !isExternalFolderIndexed.value) return;
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'p') {
     e.preventDefault();
     e.stopPropagation();
@@ -2153,6 +2245,43 @@ function onUpdateExternalScanRootTextFiles(value: boolean): void {
   }
 }
 
+function hasUnsavedScratch(): boolean {
+  return isScratchSession.value && currentContent.value.trim().length > 0 && isDirty.value;
+}
+
+function onBeforeUnload(e: BeforeUnloadEvent): void {
+  if (!hasUnsavedScratch()) return;
+  e.preventDefault();
+  e.returnValue = '';
+}
+
+async function closeCurrentWindow(): Promise<void> {
+  allowWindowClose = true;
+  if (window.__TAURI__) {
+    await getCurrentWindow().close();
+  } else {
+    window.close();
+  }
+}
+
+function cancelScratchExit(): void {
+  showScratchExitDialog.value = false;
+}
+
+async function discardScratchAndClose(): Promise<void> {
+  currentContent.value = '';
+  isDirty.value = false;
+  showScratchExitDialog.value = false;
+  await closeCurrentWindow();
+}
+
+async function saveScratchAndClose(): Promise<void> {
+  const saved = await saveScratchAs();
+  if (!saved) return;
+  showScratchExitDialog.value = false;
+  await closeCurrentWindow();
+}
+
 // Reconnect predictor when editor remounts due to :key changes (view-mode / note switch).
 watch([activePath, viewMode], async () => {
   await nextTick();
@@ -2180,9 +2309,15 @@ function shouldRunBackgroundVersionCheck(): boolean {
 
 onMounted(async () => {
   theme.init();
-  applyThemeWorkflowDefaults();
+  applyInitialThemeWorkflowDefaults();
   window.addEventListener('keydown', onGlobalKeydown, { capture: true });
+  window.addEventListener('beforeunload', onBeforeUnload);
   if (window.__TAURI__) {
+    unlistenWindowClose = await getCurrentWindow().onCloseRequested((event) => {
+      if (allowWindowClose || !hasUnsavedScratch()) return;
+      event.preventDefault();
+      showScratchExitDialog.value = true;
+    });
     unlistenOpenedFile = await listen<OpenedFilePayload | string>('opened-file', (event) => {
       void handleOpenedFile(event.payload);
     });
@@ -2212,6 +2347,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onGlobalKeydown, { capture: true });
+  window.removeEventListener('beforeunload', onBeforeUnload);
   if (saveTimer) clearTimeout(saveTimer);
   if (splitDebounceTimer) clearTimeout(splitDebounceTimer);
   if (previewRenderTimer) clearTimeout(previewRenderTimer);
@@ -2220,6 +2356,7 @@ onUnmounted(() => {
   unsubscribeCompletionSettings?.();
   unsubscribeTrainingMeta?.();
   unlistenOpenedFile?.();
+  unlistenWindowClose?.();
 });
 
 function onDismissVersion(version: string) {
@@ -2447,67 +2584,11 @@ function onDismissVersion(version: string) {
   }
 }
 
-/* ===== Home Theme Showcase ===== */
-.home-theme-showcase {
-  display: grid;
-  grid-template-columns: minmax(260px, 0.58fr) minmax(320px, 1fr);
-  gap: clamp(var(--space-24), 4vw, var(--space-48));
+/* ===== Scratch Canvas ===== */
+.scratch-canvas {
   height: 100%;
   min-height: 0;
-  padding: clamp(var(--space-40), 7vh, var(--space-72)) clamp(var(--space-24), 5vw, var(--space-64));
-  overflow: auto;
-  background:
-    linear-gradient(90deg, color-mix(in oklch, var(--paper-left) 42%, transparent), transparent),
-    var(--paper-bg);
-}
-
-.home-theme-copy {
-  align-self: start;
-  max-width: 46ch;
-  padding-top: var(--space-8);
-}
-
-.home-theme-kicker {
-  display: block;
-  margin-bottom: var(--space-10);
-  color: var(--ink-muted);
-  font-size: var(--text-xs);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--ls-wide);
-  line-height: var(--lh-ui);
-  text-transform: uppercase;
-}
-
-.home-theme-copy h1 {
-  margin: 0;
-  color: var(--ink-primary);
-  font-size: var(--text-2xl);
-  font-weight: var(--fw-bold);
-  line-height: var(--lh-heading);
-}
-
-.home-theme-copy p {
-  margin: var(--space-12) 0 0;
-  color: var(--ink-secondary);
-  font-size: var(--text-sm);
-  line-height: var(--lh-body);
-}
-
-.home-theme-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-10);
-  margin-top: var(--space-20);
-}
-
-.home-theme-showcase :deep(.theme-gallery) {
-  align-self: start;
-}
-
-@media (width <= 900px) {
-  .home-theme-showcase {
-    grid-template-columns: 1fr;
-  }
+  background: var(--paper-surface);
 }
 
 /* ===== Workflow Canvas ===== */
@@ -2580,6 +2661,42 @@ function onDismissVersion(version: string) {
       transparent 28%
     ),
     var(--paper-surface);
+}
+
+.workflow-canvas[data-workspace-intent='atelier'] {
+  padding: var(--space-18);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--accent-soft) 20%, transparent),
+      transparent 18%
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--paper-left) 88%, transparent) 0 22%,
+      transparent 22%
+    ),
+    var(--paper-bg);
+}
+
+.workflow-canvas[data-workspace-intent='atelier'] .workflow-canvas__main {
+  min-height: 100%;
+  border: var(--border-thin) solid color-mix(in oklch, var(--rule) 78%, transparent);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--paper-raised) 54%, transparent),
+      transparent 18%
+    ),
+    color-mix(in oklch, var(--paper-surface) 94%, transparent);
+  box-shadow:
+    0 24px 56px oklch(0.2 0.02 240 / 0.12),
+    inset 0 0 0 1px color-mix(in oklch, var(--paper-raised) 82%, transparent);
+}
+
+.workflow-canvas[data-workspace-intent='atelier'] :deep(.editor-control-strip--stacked) {
+  border-bottom-color: color-mix(in oklch, var(--accent) 18%, var(--rule));
 }
 
 .workflow-canvas[data-workspace-intent='reader'] {
@@ -2671,6 +2788,10 @@ function onDismissVersion(version: string) {
 .workflow-canvas[data-workspace-intent='archive'] .split-pane,
 .workflow-canvas[data-workspace-intent='studio'] .split-pane {
   padding-top: var(--space-16);
+}
+
+.workflow-canvas[data-workspace-intent='atelier'] .split-pane {
+  padding-top: var(--space-18);
 }
 
 .split-left,

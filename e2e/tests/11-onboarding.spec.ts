@@ -1,7 +1,7 @@
 /**
  * 11-onboarding.spec.ts — 首次使用向导 E2E 测试
  *
- * 覆盖：5步向导流程、跳过、完成标记持久化
+ * 覆盖：6步向导流程、跳过、完成标记持久化
  * 注意：需要清除 localStorage 来触发向导
  */
 import { test, expect } from '@playwright/test';
@@ -9,12 +9,11 @@ import { test, expect } from '@playwright/test';
 test.describe('首次使用向导', () => {
   test.beforeEach(async ({ page }) => {
     // 清除向导完成标记以触发欢迎页
-    await page.goto('http://localhost:5173');
+    await page.goto('http://localhost:5173', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => {
       localStorage.removeItem('markluck:welcome:completed');
     });
-    await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
   });
 
@@ -27,11 +26,11 @@ test.describe('首次使用向导', () => {
     await expect(page.locator('.welcome-brand-name')).toContainText('MarkLuck');
   });
 
-  test('03-向导显示5个步骤指示器', async ({ page }) => {
+  test('03-向导显示6个步骤指示器', async ({ page }) => {
     const dots = page.locator('.welcome-step-dot');
     await expect(dots.first()).toBeVisible({ timeout: 3000 });
     const count = await dots.count();
-    expect(count).toBe(5);
+    expect(count).toBe(6);
   });
 
   test('04-第一步显示"下一步"按钮', async ({ page }) => {
@@ -53,21 +52,22 @@ test.describe('首次使用向导', () => {
     await expect(secondDot).toHaveClass(/active/);
   });
 
-  test('07-可以一路点击到第五步', async ({ page }) => {
-    // 点击 4 次"下一步"到达第 5 步
-    for (let i = 0; i < 4; i++) {
+  test('07-可以一路点击到第六步', async ({ page }) => {
+    // 点击 5 次"下一步"到达第 6 步
+    for (let i = 0; i < 5; i++) {
       await page.locator('.welcome-next-btn').click();
       await page.waitForTimeout(300);
     }
 
-    // 第 5 步按钮变为"完成设置"
+    // 第 6 步按钮变为"完成设置"
     const nextBtn = page.locator('.welcome-next-btn');
     await expect(nextBtn).toBeVisible();
+    await expect(nextBtn).toContainText('完成设置');
   });
 
   test('08-点击"完成设置"关闭向导', async ({ page }) => {
-    // 快速到达第 5 步
-    for (let i = 0; i < 4; i++) {
+    // 快速到达第 6 步
+    for (let i = 0; i < 5; i++) {
       await page.locator('.welcome-next-btn').click();
       await page.waitForTimeout(200);
     }
@@ -79,13 +79,14 @@ test.describe('首次使用向导', () => {
     // 向导应该关闭
     await expect(page.locator('.welcome-overlay')).not.toBeVisible({ timeout: 3000 });
 
-    // 编辑器应该可见
-    await expect(page.locator('.cm-content')).toBeVisible({ timeout: 5000 });
+    // 首屏应该回到应用壳层与主题展柜
+    await expect(page.locator('.app-shell')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.home-shell-welcome')).toBeVisible({ timeout: 5000 });
   });
 
   test('09-完成向导后标记持久化', async ({ page }) => {
     // 完成向导
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 5; i++) {
       await page.locator('.welcome-next-btn').click();
       await page.waitForTimeout(200);
     }
@@ -97,8 +98,7 @@ test.describe('首次使用向导', () => {
     expect(flag).toBe('1');
 
     // 刷新后向导不再显示
-    await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
 
     await expect(page.locator('.welcome-overlay')).not.toBeVisible({ timeout: 3000 });
@@ -110,7 +110,8 @@ test.describe('首次使用向导', () => {
 
     // 向导应该关闭，应用正常加载
     await expect(page.locator('.welcome-overlay')).not.toBeVisible({ timeout: 3000 });
-    await expect(page.locator('.cm-content')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.app-shell')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.home-shell-welcome')).toBeVisible({ timeout: 5000 });
   });
 
   test('11-向导步骤1显示隐私说明', async ({ page }) => {
