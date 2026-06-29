@@ -16,7 +16,7 @@ export async function getEditorContent(page: Page): Promise<string> {
   await ensureEditorReady(page);
   return page.evaluate(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const content = (window as any).__markluck_getEditorContent?.();
+    const content = (window as any).__markluck_e2e?.editor?.getContent?.();
     if (typeof content === 'string') return content;
 
     const lines = Array.from(document.querySelectorAll('.cm-content .cm-line')).map(

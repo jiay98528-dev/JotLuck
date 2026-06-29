@@ -43,6 +43,9 @@ jobs:
       - name: Format check
         run: pnpm format
 
+      - name: Stylelint
+        run: pnpm --filter @markluck/app lint:style
+
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
@@ -68,6 +71,12 @@ jobs:
 
       - name: Run unit tests
         run: pnpm test
+
+      - name: Run coverage
+        run: pnpm test:coverage
+
+      - name: Build app
+        run: pnpm --filter @markluck/app build
 
   e2e:
     name: E2E Tests
@@ -102,4 +111,4 @@ jobs:
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
       - name: Run E2E tests
-        run: cd packages/app && npx playwright test --project=${{ matrix.browser }}
+        run: pnpm --filter @markluck/app exec playwright test --project=${{ matrix.browser }} --workers=1

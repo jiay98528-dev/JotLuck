@@ -667,6 +667,7 @@ import {
   supportedNoteExtensionsLabel,
 } from '@/utils/note-files';
 import { getDraftMarkdownFileName } from '@/utils/draft-file-name';
+import { getMarkluckE2EBridge, peekMarkluckE2EBridge } from '@/utils/e2e-bridge';
 import type {
   ShellAction,
   ThemeActionRegion,
@@ -694,6 +695,8 @@ const MOCK_FS_STORAGE_KEY = 'markluck-mockfs';
 const LARGE_DOCUMENT_PREVIEW_DELAY_THRESHOLD_CHARS = 120_000;
 const LARGE_DOCUMENT_PREVIEW_DELAY_THRESHOLD_LINES = 3_000;
 const LARGE_DOCUMENT_DEFERRED_WORK_DELAY_MS = 1800;
+const LARGE_DOCUMENT_PREVIEW_PENDING_HTML =
+  '<p class="large-doc-preview-pending">正在渲染大文档预览...</p>';
 
 interface OpenedFilePayload {
   absolutePath: string;
@@ -1379,7 +1382,7 @@ function normalizeOpenedFilePayload(payload: unknown): OpenedFilePayload | null 
 
 async function getPendingOpenedFile(): Promise<OpenedFilePayload | null> {
   if (startupOpenedFileConsumed) return null;
-  const mockOpenedFile = normalizeOpenedFilePayload(window.__markluck_mockOpenedFile);
+  const mockOpenedFile = normalizeOpenedFilePayload(peekMarkluckE2EBridge()?.mockOpenedFile);
   if (mockOpenedFile) {
     startupOpenedFileConsumed = true;
     return mockOpenedFile;
@@ -1479,7 +1482,7 @@ async function readExternalMarkdownFile(absolutePath: string): Promise<string> {
   if (window.__TAURI__) {
     return invoke<string>('read_external_markdown_file', { absolutePath });
   }
-  const filesByPath = window.__markluck_externalFiles ?? {};
+  const filesByPath = peekMarkluckE2EBridge()?.externalFiles ?? {};
   if (Object.prototype.hasOwnProperty.call(filesByPath, absolutePath)) {
     return filesByPath[absolutePath] ?? '';
   }
@@ -1490,7 +1493,7 @@ async function readExternalNoteFile(absolutePath: string): Promise<string> {
   if (window.__TAURI__) {
     return invoke<string>('read_external_note_file', { absolutePath });
   }
-  const filesByPath = window.__markluck_externalFiles ?? {};
+  const filesByPath = peekMarkluckE2EBridge()?.externalFiles ?? {};
   if (Object.prototype.hasOwnProperty.call(filesByPath, absolutePath)) {
     return filesByPath[absolutePath] ?? '';
   }
@@ -1502,10 +1505,12 @@ async function writeExternalNoteFile(absolutePath: string, content: string): Pro
     await invoke('write_external_note_file', { absolutePath, content });
     return;
   }
-  window.__markluck_externalFiles = window.__markluck_externalFiles ?? {};
-  window.__markluck_externalFiles[absolutePath] = content;
-  window.__markluck_externalWrites = window.__markluck_externalWrites ?? [];
-  window.__markluck_externalWrites.push({ absolutePath, content, time: Date.now() });
+  const e2eBridge = getMarkluckE2EBridge();
+  if (!e2eBridge) throw new Error('Web external file writes are available only in E2E mode');
+  e2eBridge.externalFiles = e2eBridge.externalFiles ?? {};
+  e2eBridge.externalFiles[absolutePath] = content;
+  e2eBridge.externalWrites = e2eBridge.externalWrites ?? [];
+  e2eBridge.externalWrites.push({ absolutePath, content, time: Date.now() });
 }
 
 function ensureMarkdownExtension(path: string): string {
@@ -1627,7 +1632,7 @@ async function listExternalNoteDirectory(relativePath = '/'): Promise<DirEntry[]
     }));
   }
 
-  const filesByPath = window.__markluck_externalFiles ?? {};
+  const filesByPath = peekMarkluckE2EBridge()?.externalFiles ?? {};
   const normalizedRoot = normalizeOsPath(rootPath).replace(/\/+$/, '');
   const normalizedDir = normalizePath(relativePath);
   const dirPrefix = normalizedDir === '/' ? '/' : `${normalizedDir}/`;
@@ -2248,6 +2253,9 @@ function updateSplitPreview(): void {
     lineCount > LARGE_DOCUMENT_PREVIEW_DELAY_THRESHOLD_LINES
       ? LARGE_DOCUMENT_DEFERRED_WORK_DELAY_MS
       : 50;
+  if (renderDelay > 50) {
+    splitPreviewHtml.value = LARGE_DOCUMENT_PREVIEW_PENDING_HTML;
+  }
   previewRenderTimer = setTimeout(() => {
     try {
       splitPreviewHtml.value = renderMarkdown(content, { wikiLinkExists });

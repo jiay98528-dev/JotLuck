@@ -502,18 +502,20 @@ test.describe('外部文件单文件会话', () => {
         'markluck-recent-notebooks',
         JSON.stringify(['C:/Users/alice/Desktop', 'D:/Notes/RealNotebook']),
       );
-      (window as any).__markluck_mockOpenedFile = { absolutePath: path };
-      (window as any).__markluck_externalFiles = {
-        [path]: [
-          '# 外部文档',
-          '',
-          '| 维度 | 评分 |',
-          '| --- | ---: |',
-          '| 前端 | 85 |',
-          '',
-          '只读打开。',
-        ].join('\n'),
-        [sibling]: '# 同目录文件\n\n需要点击后才读取。',
+      (window as any).__markluck_e2e = {
+        mockOpenedFile: { absolutePath: path },
+        externalFiles: {
+          [path]: [
+            '# 外部文档',
+            '',
+            '| 维度 | 评分 |',
+            '| --- | ---: |',
+            '| 前端 | 85 |',
+            '',
+            '只读打开。',
+          ].join('\n'),
+          [sibling]: '# 同目录文件\n\n需要点击后才读取。',
+        },
       };
     }, externalPath);
 
@@ -545,7 +547,7 @@ test.describe('外部文件单文件会话', () => {
       .poll(
         () =>
           page.evaluate(
-            (path) => (window as any).__markluck_externalFiles?.[path] ?? '',
+            (path) => (window as any).__markluck_e2e?.externalFiles?.[path] ?? '',
             externalPath,
           ),
         { timeout: 10000 },
@@ -564,7 +566,10 @@ test.describe('外部文件单文件会话', () => {
     expect(recent).not.toContain('external.md');
     expect(recent).not.toContain('sibling.md');
     expect(
-      await page.evaluate((path) => (window as any).__markluck_externalFiles?.[path], siblingPath),
+      await page.evaluate(
+        (path) => (window as any).__markluck_e2e?.externalFiles?.[path],
+        siblingPath,
+      ),
     ).toContain('同目录文件');
   });
 });

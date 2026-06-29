@@ -184,31 +184,8 @@ test.describe('即时模式 (Live Preview)', () => {
     const anchorAttr = await wikiLink.first().getAttribute('data-anchor');
     expect(anchorAttr).toBe('');
 
-    // Step 6: 通过 JS 触发 wiki-link 导航（CM6 decoration.replace 会拦截浏览器原生 click）
-    // 使用 page.evaluate 直接调用 onLivePreviewWikiLinkClick 的等效逻辑
-    const navigated = await page.evaluate(async () => {
-      const noteToFind = '项目规划';
-      // 模仿 onLivePreviewWikiLinkClick 的查找逻辑
-      const appEl = document.querySelector('#app');
-      if (!appEl || !(appEl as any).__vue_app__) return false;
-
-      // 通过 Vue 组件树获取 indexStore
-      const vm = (appEl as any).__vue_app__._instance?.proxy;
-      if (!vm) return false;
-
-      // 使用 bookmark dots 进行导航（等价于 wiki-link 点击后的跳转）
-      const dots = document.querySelectorAll('.wing-bookmark-dot');
-      let found = false;
-      dots.forEach((dot) => {
-        const label = dot.getAttribute('aria-label');
-        if (label === noteToFind) {
-          (dot as HTMLElement).click();
-          found = true;
-        }
-      });
-      return found;
-    });
-    expect(navigated).toBe(true);
+    // Step 6: 点击真实 Wiki-link，验证 live preview 的 pointerdown/click 链路。
+    await wikiLink.first().click({ force: true });
 
     // 等待导航完成
     await page.waitForTimeout(1500);

@@ -16,7 +16,7 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view';
-import { StateEffect, StateField, type Extension } from '@codemirror/state';
+import { Prec, StateEffect, StateField, type Extension } from '@codemirror/state';
 import type { MarkdownPredictor } from '@/services/MarkdownPredictor';
 import type { CompletionSettings } from '@/services/CompletionSettings';
 
@@ -82,7 +82,9 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
       currentGhostText: string = '';
       private currentPredictionSource: 'ngram' | 'structured' | null = null;
       private currentContext = '';
+      private currentPredictionCursor: number | null = null;
       private acceptingGhost = false;
+      private editorInteractionActive = false;
       /** True during IME composition — skip prediction scheduling */
       private isComposing = false;
       private editorView: EditorView | null = null;
@@ -92,6 +94,10 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
       private __compEnd: ((e: Event) => void) | null = null;
       private __focus: ((e: FocusEvent) => void) | null = null;
       private __blur: ((e: FocusEvent) => void) | null = null;
+      private __keydown: ((e: KeyboardEvent) => void) | null = null;
+      private __rootKeydown: ((e: Event) => void) | null = null;
+      private __rootPointerdown: ((e: Event) => void) | null = null;
+      private __editorPointerdown: ((e: PointerEvent) => void) | null = null;
 
       constructor(view: EditorView) {
         this.editorView = view;
@@ -100,7 +106,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         const onCompStart = () => {
           this.isComposing = true;
           this.clearPendingTimers();
-          this.clearGhost(view);
+          this.clearGhost(view, true, true);
         };
         const onCompEnd = () => {
           this.isComposing = false;
@@ -112,17 +118,66 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         this.__compEnd = onCompEnd;
 
         const onFocus = () => {
+          this.editorInteractionActive = true;
           if (this.isImeActive(view)) return;
           this.schedulePredict(view);
         };
         const onBlur = () => {
           this.clearPendingTimers();
+          if (this.currentGhostText && this.editorInteractionActive) {
+            if (this.acceptGhost(view, view.contentDOM)) return;
+          }
           this.clearGhost(view);
         };
         view.contentDOM.addEventListener('focus', onFocus);
         view.contentDOM.addEventListener('blur', onBlur);
         this.__focus = onFocus;
         this.__blur = onBlur;
+
+        const onEditorPointerDown = () => {
+          this.editorInteractionActive = true;
+        };
+        view.dom.addEventListener('pointerdown', onEditorPointerDown);
+        this.__editorPointerdown = onEditorPointerDown;
+
+        const onKeyDown = (event: KeyboardEvent) => {
+          if (view.composing || view.compositionStarted || event.defaultPrevented) return;
+          if (event.key === 'Tab' && this.canAcceptGhost(view, event.target)) {
+            event.preventDefault();
+            this.acceptGhost(view, event.target);
+          }
+          if (event.key === 'Escape' && this.currentGhostText) {
+            event.preventDefault();
+            this.rejectGhost(view);
+          }
+        };
+        view.dom.addEventListener('keydown', onKeyDown, { capture: true });
+        this.__keydown = onKeyDown;
+
+        const onRootPointerDown = (event: Event) => {
+          const target = event.target;
+          if (target instanceof Node && view.dom.contains(target)) return;
+          this.editorInteractionActive = false;
+          this.clearPendingTimers();
+          this.clearGhost(view, true, true);
+        };
+        (view.root as unknown as EventTarget).addEventListener('pointerdown', onRootPointerDown, {
+          capture: true,
+        });
+        this.__rootPointerdown = onRootPointerDown;
+
+        const onRootKeyDown = (event: Event) => {
+          if (!(event instanceof KeyboardEvent)) return;
+          if (view.composing || view.compositionStarted || event.defaultPrevented) return;
+          if (event.key === 'Tab' && this.canAcceptGhost(view, event.target)) {
+            event.preventDefault();
+            this.acceptGhost(view, event.target);
+          }
+        };
+        (view.root as unknown as EventTarget).addEventListener('keydown', onRootKeyDown, {
+          capture: true,
+        });
+        this.__rootKeydown = onRootKeyDown;
 
         this.schedulePredict(view);
       }
@@ -134,7 +189,20 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           this.clearGhost(update.view, false);
           return;
         }
-        if (update.docChanged || update.selectionSet) {
+        if (
+          !update.docChanged &&
+          update.focusChanged &&
+          !update.view.hasFocus &&
+          this.currentGhostText &&
+          this.editorInteractionActive
+        ) {
+          return;
+        }
+        const mainSelection = update.view.state.selection.main;
+        const selectionInvalidatesGhost =
+          update.selectionSet &&
+          (!mainSelection.empty || mainSelection.head !== this.currentPredictionCursor);
+        if (update.docChanged || selectionInvalidatesGhost) {
           // Backspace immediately after compositionend must cancel both the
           // normal debounce and the delayed composition prediction. Otherwise
           // two predictions race and reinsert/flicker a stale widget.
@@ -142,12 +210,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
 
           // 如果文档或选区变化 → 清除当前 ghost text
           this.recordMismatch(update);
-          if (this.currentGhostText) {
-            this.currentGhostText = '';
-            this.currentPredictionSource = null;
-            this.currentContext = '';
-            update.view.dispatch({ effects: setGhostDecorations.of(Decoration.none) });
-          }
+          this.clearGhost(update.view);
 
           // 150ms 防抖后重新预测
           this.schedulePredict(update.view);
@@ -197,6 +260,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           this.currentGhostText = result.text;
           this.currentPredictionSource = result.source ?? 'ngram';
           this.currentContext = doc.slice(Math.max(0, cursor - 4), cursor);
+          this.currentPredictionCursor = cursor;
           view.dispatch({
             effects: setGhostDecorations.of(
               Decoration.set([
@@ -212,12 +276,18 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         }
       }
 
-      clearGhost(view: EditorView, shouldDispatch = true) {
-        if (this.currentGhostText) {
-          this.currentGhostText = '';
-          this.currentPredictionSource = null;
-          this.currentContext = '';
-          if (shouldDispatch) view.dispatch({ effects: setGhostDecorations.of(Decoration.none) });
+      clearGhost(view: EditorView, shouldDispatch = true, forceDispatch = false) {
+        const currentDecorations = view.state.field(ghostDecorationField, false);
+        const hasRenderedGhost = Boolean(currentDecorations?.size);
+        const shouldClearDecorations = forceDispatch || this.currentGhostText || hasRenderedGhost;
+
+        this.currentGhostText = '';
+        this.currentPredictionSource = null;
+        this.currentContext = '';
+        this.currentPredictionCursor = null;
+
+        if (shouldDispatch && shouldClearDecorations) {
+          view.dispatch({ effects: setGhostDecorations.of(Decoration.none) });
         }
       }
 
@@ -226,7 +296,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         return this.isComposing || view.composing || view.compositionStarted;
       }
 
-      canAcceptGhost(view: EditorView): boolean {
+      canAcceptGhost(view: EditorView, eventTarget?: EventTarget | null): boolean {
         if (!this.currentGhostText) return false;
         if (this.isImeActive(view)) return false;
         if (!view.state.selection.main.empty) return false;
@@ -235,7 +305,12 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         const editorHasDomFocus =
           activeElement === view.contentDOM ||
           (activeElement instanceof Node && view.contentDOM.contains(activeElement));
-        return view.hasFocus || editorHasDomFocus;
+        const eventCameFromEditor =
+          eventTarget instanceof Node && view.contentDOM.contains(eventTarget);
+        const activeElementInModal =
+          activeElement instanceof Element && !!activeElement.closest('.modal-overlay');
+        const editorWasLastActive = this.editorInteractionActive && !activeElementInModal;
+        return view.hasFocus || editorHasDomFocus || eventCameFromEditor || editorWasLastActive;
       }
 
       private clearPendingTimers(): void {
@@ -259,8 +334,8 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
       }
 
       /** 接受当前 ghost text */
-      acceptGhost(view: EditorView): boolean {
-        if (!this.canAcceptGhost(view)) return false;
+      acceptGhost(view: EditorView, eventTarget?: EventTarget | null): boolean {
+        if (!this.canAcceptGhost(view, eventTarget)) return false;
 
         const cursor = view.state.selection.main.head;
         const text = this.currentGhostText;
@@ -329,11 +404,36 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
       destroy() {
         this.clearPendingTimers();
         if (this.editorView) {
+          this.clearGhost(this.editorView, true, true);
           const dom = this.editorView.contentDOM;
           if (this.__compStart) dom.removeEventListener('compositionstart', this.__compStart);
           if (this.__compEnd) dom.removeEventListener('compositionend', this.__compEnd);
           if (this.__focus) dom.removeEventListener('focus', this.__focus);
           if (this.__blur) dom.removeEventListener('blur', this.__blur);
+          if (this.__editorPointerdown) {
+            this.editorView.dom.removeEventListener('pointerdown', this.__editorPointerdown);
+          }
+          if (this.__keydown) {
+            this.editorView.dom.removeEventListener('keydown', this.__keydown, { capture: true });
+          }
+          if (this.__rootPointerdown) {
+            (this.editorView.root as unknown as EventTarget).removeEventListener(
+              'pointerdown',
+              this.__rootPointerdown,
+              {
+                capture: true,
+              },
+            );
+          }
+          if (this.__rootKeydown) {
+            (this.editorView.root as unknown as EventTarget).removeEventListener(
+              'keydown',
+              this.__rootKeydown,
+              {
+                capture: true,
+              },
+            );
+          }
           this.editorView = null;
         }
       }
@@ -344,35 +444,37 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
 // ---- Tab / Escape keymap ----
 
 function ghostTextKeymap(pluginSpec: ReturnType<typeof createGhostTextPlugin>) {
-  return keymap.of([
-    {
-      key: 'Tab',
-      run: (view) => {
-        if (view.composing || view.compositionStarted) return false;
-        const plugin = view.plugin(pluginSpec);
-        if (!plugin) return false;
-        // Accept Tab only when the editor owns focus and the current cursor has
-        // a visible ghost text. Otherwise native focus navigation must win.
-        if (plugin.canAcceptGhost(view)) {
-          return plugin.acceptGhost(view);
-        }
-        // 否则回退默认行为
-        return false;
+  return Prec.highest(
+    keymap.of([
+      {
+        key: 'Tab',
+        run: (view) => {
+          if (view.composing || view.compositionStarted) return false;
+          const plugin = view.plugin(pluginSpec);
+          if (!plugin) return false;
+          // Accept Tab only when the editor owns focus and the current cursor has
+          // a visible ghost text. Otherwise native focus navigation must win.
+          if (plugin.canAcceptGhost(view)) {
+            return plugin.acceptGhost(view);
+          }
+          // 否则回退默认行为
+          return false;
+        },
       },
-    },
-    {
-      key: 'Escape',
-      run: (view) => {
-        if (view.composing || view.compositionStarted) return false;
-        const plugin = view.plugin(pluginSpec);
-        if (!plugin) return false;
-        if (plugin.currentGhostText) {
-          return plugin.rejectGhost(view);
-        }
-        return false;
+      {
+        key: 'Escape',
+        run: (view) => {
+          if (view.composing || view.compositionStarted) return false;
+          const plugin = view.plugin(pluginSpec);
+          if (!plugin) return false;
+          if (plugin.currentGhostText) {
+            return plugin.rejectGhost(view);
+          }
+          return false;
+        },
       },
-    },
-  ]);
+    ]),
+  );
 }
 
 // ---- 导出 ----
@@ -401,11 +503,11 @@ export function ghostTextPlugin(
         if (view.composing || view.compositionStarted) {
           return false;
         }
-        if (event.key === 'Tab' && p.canAcceptGhost(view)) {
+        if (event.key === 'Tab' && p.canAcceptGhost(view, event.target)) {
           const target = event.target;
           if (target instanceof Node && !view.contentDOM.contains(target)) return false;
           event.preventDefault();
-          return p.acceptGhost(view);
+          return p.acceptGhost(view, event.target);
         }
         if (event.key === 'Escape' && p.currentGhostText) {
           event.preventDefault();

@@ -21,7 +21,7 @@ async function replaceEditorText(
 test.describe('offline autocomplete user journeys', () => {
   async function seedAsciiProbe(page: import('@playwright/test').Page): Promise<void> {
     await page.evaluate(() => {
-      window.__markluck_predictor?.ingestExcerpts([
+      (window as any).__markluck_e2e?.editor?.seedCompletionCorpus([
         'Alpha beta gamma delta. Alpha beta gamma delta. Alpha beta gamma delta.',
       ]);
     });
@@ -128,7 +128,10 @@ test.describe('offline autocomplete user journeys', () => {
     await page.locator('.cm-content').click();
     await expect(page.locator('.cm-ghost-text')).toBeVisible({ timeout: 3000 });
     const suggestion = (await page.locator('.cm-ghost-text').textContent()) ?? '';
-    await page.locator('.cm-content').press('Tab');
+    // WebKit routes locator.press('Tab') through an element-level synthetic path
+    // that can bypass CodeMirror's contenteditable keydown flow. After an
+    // explicit editor click, page.keyboard.press mirrors the real user gesture.
+    await page.keyboard.press('Tab');
     await expect.poll(() => getEditorContent(page)).toContain(`${probe}${suggestion}`);
   });
 });

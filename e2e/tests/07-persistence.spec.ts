@@ -27,7 +27,6 @@ async function waitForAnyMockFileContent(page: Page, expected: string) {
 
 test.describe('Persistence', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
     await waitForAppReady(page);
   });
 

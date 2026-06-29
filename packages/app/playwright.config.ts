@@ -33,9 +33,10 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'pnpm.cmd --filter @markluck/app dev',
+    command:
+      'pnpm --filter @markluck/app build:e2e && pnpm --filter @markluck/app preview --host 127.0.0.1 --port 5173',
     url: 'http://localhost:5173',
-    reuseExistingServer: true,
+    reuseExistingServer: process.env.MARKLUCK_E2E_REUSE === '1',
     timeout: 60000,
   },
 });

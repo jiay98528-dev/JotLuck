@@ -25,6 +25,7 @@ import {
   getInlineMarkers,
   isInlineFormatAction,
 } from '@/utils/markdown-formatting';
+import { getMarkluckE2EBridge } from '@/utils/e2e-bridge';
 
 const props = withDefaults(
   defineProps<{
@@ -106,16 +107,7 @@ function autocompleteExtensions() {
 // runs setup before old component's onUnmounted, causing old unmount to delete new registration.
 // @see BUG-027, memory/bug_log.md
 const getEditorContentFn = () => view?.state.doc.toString() ?? '';
-const getEditorViewFn = () => view;
-
-// Lifecycle tracer for BUG-027 diagnosis
 const INSTANCE_ID = Math.random().toString(36).slice(2, 8);
-window.__markluck_lifecycleLog = window.__markluck_lifecycleLog || [];
-window.__markluck_lifecycleLog!.push({
-  event: 'setup',
-  id: INSTANCE_ID,
-  t: performance.now(),
-});
 
 function createState(doc: string) {
   return EditorState.create({
@@ -309,7 +301,6 @@ onMounted(() => {
   (EditorView as any).EDIT_CONTEXT = false;
 
   // E2E diagnostic: log modelValue at editor creation time
-  window.__markluck_editorInitValue = props.modelValue;
   view = new EditorView({
     state: createState(props.modelValue),
     parent: editorHost.value,
@@ -317,16 +308,14 @@ onMounted(() => {
   if (props.pendingFormat) applyPendingFormat(props.pendingFormat);
   // Register E2E helpers AFTER view creation and AFTER old component's onUnmounted cleanup.
   // Must be in onMounted, not setup: Vue 3 :key patching runs setup BEFORE old unmount.
-  window.__markluck_getEditorContent = getEditorContentFn;
-  window.__markluck_getEditorView = getEditorViewFn;
-  window.__markluck_lifecycleLog!.push({
-    event: 'mounted',
-    id: INSTANCE_ID,
-    docLen: view.state.doc.length,
-    t: performance.now(),
-  });
-
-  window.__markluck_predictor = predictor;
+  const e2eBridge = getMarkluckE2EBridge();
+  if (e2eBridge) {
+    e2eBridge.editor = {
+      id: INSTANCE_ID,
+      getContent: getEditorContentFn,
+      seedCompletionCorpus: (excerpts) => predictor.ingestExcerpts(excerpts),
+    };
+  }
 
   // Fire-and-forget predictor init (BUG-027 fix: 消除 async onMounted 导致的 view=null 窗口期).
   // predict.initialize() 下载 429KB baseline 文件可能耗时 200-500ms，
@@ -363,17 +352,8 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  window.__markluck_lifecycleLog!.push({
-    event: 'unmounting',
-    id: INSTANCE_ID,
-    hasView: !!view,
-    docLen: view?.state?.doc?.length,
-    t: performance.now(),
-  });
-  delete window.__markluck_getEditorContent;
-  delete window.__markluck_getEditorView;
-  delete window.__markluck_editorInitValue;
-  delete window.__markluck_modelOverwrites;
+  const e2eBridge = getMarkluckE2EBridge();
+  if (e2eBridge?.editor?.id === INSTANCE_ID) delete e2eBridge.editor;
   document.removeEventListener('selectionchange', onSelectionChange);
   if (view) {
     view.contentDOM.removeEventListener('compositionend', onCompositionEndApplyDeferred);
@@ -384,11 +364,6 @@ onUnmounted(() => {
   // Persist L1→L2 before component is destroyed.
   // Without this, L2 never accumulates and ghost text always cold-starts.
   predictor.closeDocument();
-  window.__markluck_lifecycleLog!.push({
-    event: 'unmounted',
-    id: INSTANCE_ID,
-    t: performance.now(),
-  });
 });
 
 // External modelValue change → sync to editor (suppress feedback to avoid re-dirtying)
@@ -400,15 +375,6 @@ watch(
     // the next punctuation transaction; replaying it would swallow that input.
     if (internallyEmittedValues.delete(val)) return;
     if (view && val !== view.state.doc.toString()) {
-      // E2E diagnostic: log modelValue overwrites
-      window.__markluck_modelOverwrites = window.__markluck_modelOverwrites || [];
-      window.__markluck_modelOverwrites.push({
-        fromLen: view.state.doc.length,
-        toLen: val.length,
-        fromStart: view.state.doc.toString().substring(0, 40),
-        toStart: val.substring(0, 40),
-        time: Date.now(),
-      });
       suppressSync = true;
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: val },

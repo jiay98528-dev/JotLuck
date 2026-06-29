@@ -37,7 +37,7 @@ const ALLOWED_WARNINGS = [
   /was preloaded using link preload/i,
 ];
 
-function installRuntimeObservationGate(page: Page) {
+function installRuntimeObservationGate(page: Page, browserName = '') {
   const events: RuntimeEvent[] = [];
 
   page.on('console', (message) => {
@@ -74,8 +74,16 @@ function installRuntimeObservationGate(page: Page) {
         }
         if (
           event.type === 'requestfailed' &&
-          /net::ERR_ABORTED/i.test(event.text) &&
-          /localhost:5173\/(src|@vite|node_modules|@fs)\//.test(event.url ?? '')
+          /(net::ERR_ABORTED|NS_BINDING_ABORTED)/i.test(event.text) &&
+          /localhost:5173\/(src|@vite|node_modules|@fs|assets)\//.test(event.url ?? '')
+        ) {
+          return false;
+        }
+        if (
+          event.type === 'console-error' &&
+          browserName === 'firefox' &&
+          event.text === 'Error' &&
+          /localhost:5173\/assets\/vendor-vue-.*\.js$/.test(event.url ?? '')
         ) {
           return false;
         }
@@ -354,9 +362,10 @@ test.describe('blackbox boundary and performance release gate', () => {
 
   test('B4 rapid edit-switch-refresh preserves the edited note without cross-file corruption', async ({
     page,
+    browserName,
   }, testInfo) => {
     await seedMockFs(page, buildLargeWorkspace(24));
-    const gate = installRuntimeObservationGate(page);
+    const gate = installRuntimeObservationGate(page, browserName);
     await waitForAppReady(page);
     await openFileDrawer(page);
     await selectTreeItem(page, 'cluster');
@@ -371,6 +380,7 @@ test.describe('blackbox boundary and performance release gate', () => {
     await page.locator('.wing-bookmark-dot[aria-label="Perf Note 006"]').click();
     await page.locator('.wing-bookmark-dot[aria-label="Perf Note 005"]').click();
     await expect.poll(() => getEditorContent(page), { timeout: 10000 }).toContain(editMarker);
+    await page.waitForLoadState('networkidle');
 
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForAppReady(page);

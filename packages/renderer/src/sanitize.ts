@@ -1,17 +1,11 @@
 /**
- * DOMPurify 安全清洗配置
- *
- * 渲染管线第二步：marked 输出 → DOMPurify.sanitize → 安全 HTML
- * 阻断所有已知 XSS 攻击向量。
- *
- * @module sanitize
- * @see TAD.md §4.3
+ * DOMPurify security configuration for rendered Markdown.
  */
+import createDOMPurify from 'dompurify';
 
-import DOMPurify from 'dompurify';
+let purifierInstance: ReturnType<typeof createDOMPurify> | null = null;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const purifyConfig: Record<string, any> = {
+const purifyConfig = {
   ALLOWED_TAGS: [
     'h1',
     'h2',
@@ -40,13 +34,13 @@ const purifyConfig: Record<string, any> = {
     'tr',
     'th',
     'td',
-    'input', // 任务列表 checkbox
+    'input',
     'span',
     'div',
     'sup',
-    'sub', // 上下标 / 脚注
+    'sub',
     'details',
-    'summary', // 折叠块
+    'summary',
   ],
   ALLOWED_ATTR: [
     'href',
@@ -56,10 +50,10 @@ const purifyConfig: Record<string, any> = {
     'id',
     'data-note',
     'data-anchor',
-    'data-tag', // MarkLuck 自定义属性
+    'data-tag',
     'type',
     'checked',
-    'disabled', // 任务列表
+    'disabled',
     'target',
     'rel',
   ],
@@ -68,18 +62,27 @@ const purifyConfig: Record<string, any> = {
   FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur'],
 };
 
-// Remove `disabled` from checkboxes so they are interactive in live preview.
-// Marked's GFM renderer adds disabled="" to all task list checkboxes.
-DOMPurify.addHook('beforeSanitizeElements', (node) => {
-  if (node.nodeName === 'INPUT' && (node as Element).getAttribute('type') === 'checkbox') {
-    (node as Element).removeAttribute('disabled');
+function getPurifier(): ReturnType<typeof createDOMPurify> {
+  if (purifierInstance) {
+    return purifierInstance;
   }
-});
 
-/**
- * 清洗 HTML 字符串，移除所有恶意代码。
- * 必须在 marked 输出之后、DOM 插入之前执行。
- */
+  if (typeof window === 'undefined') {
+    throw new Error('DOMPurify requires a browser DOM window.');
+  }
+
+  purifierInstance = createDOMPurify(window);
+  // Marked's GFM renderer adds disabled="" to all task list checkboxes.
+  // Remove it during sanitization so live preview task boxes can stay interactive.
+  purifierInstance.addHook('beforeSanitizeElements', (node) => {
+    if (node.nodeName === 'INPUT' && (node as Element).getAttribute('type') === 'checkbox') {
+      (node as Element).removeAttribute('disabled');
+    }
+  });
+
+  return purifierInstance;
+}
+
 export function sanitize(html: string): string {
-  return DOMPurify.sanitize(html, purifyConfig) as unknown as string;
+  return getPurifier().sanitize(html, purifyConfig);
 }

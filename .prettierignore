@@ -4,3 +4,12 @@ build/
 打包/
 coverage/
 pnpm-lock.yaml
+eslint_output.json
+test-results/
+playwright-report/
+e2e/report/
+e2e/artifacts/
+packages/app/test-results/
+packages/app/playwright-report/
+packages/app/src-tauri/target/
+packages/app/src-tauri/gen/schemas/

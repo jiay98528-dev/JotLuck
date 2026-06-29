@@ -234,16 +234,25 @@ test.describe('边界与压力测试', () => {
       }
       await page.waitForTimeout(200);
     }
+    // Allow the intentionally queued rapid switches to settle before verifying
+    // the editor can accept new input. Otherwise a late note selection can race
+    // with the post-stress typing assertion and make the test observe a
+    // different, still-valid active note.
+    await page.waitForTimeout(1000);
 
     // Verify app is still functional after rapid switching
     await expect(page.locator('.cm-content')).toBeVisible({ timeout: 5000 });
     await expect(page.locator('.app-shell')).toBeVisible();
-    await page.locator('.wing-bookmark-dot').first().click();
+    const stableNote = page.locator('.wing-bookmark-dot[aria-label="快速入门"]');
+    await expect(stableNote).toBeVisible({ timeout: 5000 });
+    await stableNote.click();
+    await expect
+      .poll(() => getEditorContent(page), { timeout: 10000 })
+      .toContain('欢迎使用 MarkLuck');
     await expect(page.locator('.status-saved')).toBeVisible({ timeout: 10000 });
 
     // Should be able to type after switching
-    await page.locator('.cm-content').click();
-    await page.keyboard.insertText(' Rapid switch survived!');
+    await appendInEditor(page, '\nRapid switch survived!');
     await expect
       .poll(() => getEditorContent(page), { timeout: 5000 })
       .toContain('Rapid switch survived');

@@ -10,8 +10,10 @@
     "preview": "pnpm --filter @markluck/app preview",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --check \"**/*.{ts,vue,css,json,md,yaml}\"",
-    "format:fix": "prettier --write \"**/*.{ts,vue,css,json,md,yaml}\"",
+    "format": "prettier --check \"*.json\" \".github/**/*.yml\" \"AGENTS.md\" \"tool.md\" \"doc/**/*.md\" \"spec/**/*.md\" \"memory/**/*.md\" \"e2e/**/*.ts\" \"packages/**/*.{ts,vue,css,json,md,yaml}\"",
+    "format:fix": "prettier --write \"*.json\" \".github/**/*.yml\" \"AGENTS.md\" \"tool.md\" \"doc/**/*.md\" \"spec/**/*.md\" \"memory/**/*.md\" \"e2e/**/*.ts\" \"packages/**/*.{ts,vue,css,json,md,yaml}\"",
+    "test": "pnpm --filter @markluck/app test",
+    "test:coverage": "pnpm --filter @markluck/app test:coverage",
     "typecheck": "pnpm --filter @markluck/app typecheck",
     "prepare": "husky"
   },
