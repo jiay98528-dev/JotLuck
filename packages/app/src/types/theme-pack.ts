@@ -9,7 +9,14 @@ export type ThemePermission =
   | 'filesystem-read'
   | 'filesystem-write';
 
-export type ThemeLayoutPreset = 'winged' | 'focus' | 'archive' | 'reader' | 'studio' | 'atelier';
+export type ThemeLayoutPreset =
+  | 'winged'
+  | 'focus'
+  | 'archive'
+  | 'reader'
+  | 'studio'
+  | 'atelier'
+  | 'single-page';
 
 export type ThemeCapability =
   | 'tokens'
@@ -107,6 +114,24 @@ export type ThemeActionRegion =
 
 export type ThemeActionPlacements = Record<ThemeActionId, ThemeActionRegion>;
 
+export type ThemeDrawerSide = 'left' | 'right' | 'bottom';
+
+export interface ThemeDrawerRegionRecipe {
+  side: ThemeDrawerSide;
+  slot: ThemeSlotId;
+  label: string;
+  size: number;
+  minSize?: number;
+  maxSize?: number;
+  defaultPinned?: boolean;
+}
+
+export interface ThemeDrawerShellRecipe {
+  left: ThemeDrawerRegionRecipe;
+  right: ThemeDrawerRegionRecipe;
+  bottom: ThemeDrawerRegionRecipe;
+}
+
 export type ThemeSlotId =
   | 'app-shell'
   | 'topbar'
@@ -115,8 +140,115 @@ export type ThemeSlotId =
   | 'editor-control'
   | 'status-bar'
   | 'home'
-  | 'scratch'
+  | 'workflow-canvas'
+  | 'editor-surface'
+  | 'reader-workbench'
+  | 'file-drawer'
+  | 'command-palette'
+  | 'export-dialog'
+  | 'template-dialog'
+  | 'settings-dialog'
+  | 'share-dialog'
+  | 'new-file-dialog'
+  | 'delete-confirm-dialog'
+  | 'external-edit-dialog'
+  | 'scratch-exit-dialog'
+  | 'external-reader'
+  | 'markdown-cheat-sheet'
+  | 'toast-container'
+  | 'update-notification'
   | 'dialogs.theme';
+
+export type ThemeCatalogChannel = 'builtin' | 'local-market' | 'remote-market' | 'imported';
+
+export type ThemeCatalogVisibility = 'public' | 'developer';
+
+export type ThemeLicenseKind = 'free' | 'included' | 'paid' | 'supporter' | 'team' | 'unknown';
+
+export type ThemeEntitlementState =
+  | 'included'
+  | 'free'
+  | 'owned'
+  | 'trial'
+  | 'purchase-required'
+  | 'offline-unknown'
+  | 'invalid';
+
+export interface ThemePublisherInfo {
+  id: string;
+  name: string;
+  url?: string;
+  verified?: boolean;
+}
+
+export interface ThemeCompatibilityInfo {
+  minAppVersion: string;
+  maxAppVersion?: string;
+  themeApi: 2;
+}
+
+export interface ThemeEntitlementDescriptor {
+  state: ThemeEntitlementState;
+  licenseKey?: string;
+  expiresAt?: string;
+  checkedAt?: string;
+  provider?: string;
+  note?: string;
+}
+
+export interface ThemeCommerceDescriptor {
+  sku?: string;
+  channel?: ThemeCatalogChannel;
+  licenseKind?: ThemeLicenseKind;
+  entitlement?: ThemeEntitlementDescriptor;
+  purchaseUrl?: string;
+  catalogUrl?: string;
+  bundleUrl?: string;
+  publisher?: ThemePublisherInfo;
+  releaseNotes?: string;
+  compatibility?: ThemeCompatibilityInfo;
+  commercialNote?: string;
+}
+
+export interface ThemeCatalogItem {
+  manifest: ThemePackManifest;
+  installed: boolean;
+  updateAvailable?: boolean;
+  entitlement: ThemeEntitlementDescriptor;
+}
+
+export interface ThemeCheckoutRequest {
+  themeId: string;
+  sku?: string;
+  returnUrl?: string;
+}
+
+export interface ThemeCheckoutResult {
+  provider: string;
+  checkoutUrl: string;
+  state: 'created' | 'local-mock' | 'unavailable';
+}
+
+export interface ThemeLicenseRedeemRequest {
+  themeId: string;
+  licenseKey: string;
+}
+
+export interface ThemeCommerceProvider {
+  id: string;
+  catalogEndpoint: '/v1/themes/catalog';
+  entitlementsEndpoint: '/v1/themes/entitlements';
+  checkoutEndpoint: '/v1/themes/checkout';
+  redeemEndpoint: '/v1/themes/licenses/redeem';
+  refreshEndpoint: '/v1/themes/entitlements/refresh';
+  getCatalog: () => Promise<ThemeCatalogItem[]>;
+  getEntitlements: () => Promise<Record<string, ThemeEntitlementDescriptor>>;
+  createCheckout: (request: ThemeCheckoutRequest) => Promise<ThemeCheckoutResult>;
+  redeemLicense: (
+    request: ThemeLicenseRedeemRequest,
+  ) => Promise<Record<string, ThemeEntitlementDescriptor>>;
+  refreshEntitlements: () => Promise<Record<string, ThemeEntitlementDescriptor>>;
+}
 
 export type ThemePrimitiveType =
   | 'Stack'
@@ -184,6 +316,17 @@ export interface ThemeManifestV2 {
   category?: string;
   tags?: string[];
   price?: string;
+  sku?: string;
+  channel?: ThemeCatalogChannel;
+  licenseKind?: ThemeLicenseKind;
+  entitlement?: ThemeEntitlementDescriptor;
+  purchaseUrl?: string;
+  catalogUrl?: string;
+  bundleUrl?: string;
+  publisher?: ThemePublisherInfo;
+  releaseNotes?: string;
+  compatibility?: ThemeCompatibilityInfo;
+  commercialNote?: string;
 }
 
 export interface ShellAction {
@@ -237,6 +380,7 @@ export interface ThemeChromeState {
   statusLayout: ThemeStatusLayout;
   rightWingPolicy: ThemeRightWingPolicy;
   actionPlacements: ThemeActionPlacements;
+  drawerShell?: ThemeDrawerShellRecipe;
 }
 
 export interface OfficialThemeProfile {
@@ -270,6 +414,17 @@ export interface ThemePackManifest {
   category?: string;
   tags?: string[];
   price?: string;
+  sku?: string;
+  channel?: ThemeCatalogChannel;
+  licenseKind?: ThemeLicenseKind;
+  entitlement?: ThemeEntitlementDescriptor;
+  purchaseUrl?: string;
+  catalogUrl?: string;
+  bundleUrl?: string;
+  publisher?: ThemePublisherInfo;
+  releaseNotes?: string;
+  compatibility?: ThemeCompatibilityInfo;
+  commercialNote?: string;
   permissions?: ThemePermission[];
   entrypoints?: ThemeCodeEntrypoint[];
   slots?: ThemeSlotId[];
@@ -283,6 +438,7 @@ export interface InstalledThemePack {
   previewImages?: string[];
   assetMap?: Record<string, string>;
   officialProfile?: OfficialThemeProfile;
+  catalogVisibility?: ThemeCatalogVisibility;
   /** v2: 关联的声明式主题模块（仅 officialTheme 填充） */
   module?: OfficialThemeModule;
   ux?: ThemeUxRecipeMap;
@@ -309,7 +465,69 @@ export interface ThemePackageInput {
   codeBundles?: Record<string, string>;
 }
 
-export const THEME_API_VERSION = 1;
+export type ThemeSlotProps = Record<string, unknown>;
+
+export interface ThemeHostStorage {
+  get: (key: string) => string | null;
+  set: (key: string, value: string) => void;
+  remove: (key: string) => void;
+}
+
+export interface ThemeHostActionRegistry {
+  list: () => readonly ShellAction[];
+  dispatch: (actionId: ThemeActionId) => void;
+}
+
+export interface ThemeHostSlotRegistry {
+  has: (slot: ThemeSlotId) => boolean;
+}
+
+export interface ThemeHostEditorApi {
+  getContent: () => string;
+  setContent?: (content: string) => void;
+  focus?: () => void;
+}
+
+export interface ThemeHostDialogApi {
+  open: (dialog: ThemeSlotId) => void;
+  close: (dialog: ThemeSlotId) => void;
+}
+
+export interface ThemeHostToastApi {
+  show: (message: string) => void;
+}
+
+export interface ThemeHostContext {
+  readonly themeId: string;
+  readonly manifest?: ThemePackManifest;
+  readonly runtime: ThemeRuntime;
+  readonly permissions: readonly ThemePermission[];
+  readonly chrome: ThemeChromeState;
+  readonly actions: ThemeHostActionRegistry;
+  readonly slots: ThemeHostSlotRegistry;
+  readonly storage: ThemeHostStorage;
+  readonly editor: ThemeHostEditorApi;
+  readonly dialogs: ThemeHostDialogApi;
+  readonly toast: ThemeHostToastApi;
+  readonly commerce: ThemeCommerceProvider;
+  readonly appState: Record<string, unknown>;
+  readonly ui: Record<string, unknown>;
+  dispatchAction: (actionId: ThemeActionId) => void;
+}
+
+export interface ThemePluginModule {
+  activate?: (context: ThemeHostContext) => void | (() => void);
+  components?: Partial<Record<ThemeSlotId, unknown>>;
+  css?: string;
+}
+
+export interface ThemePluginRegistration {
+  themeId: string;
+  components: Partial<Record<ThemeSlotId, unknown>>;
+  dispose: () => void;
+}
+
+export const THEME_API_VERSION = 2;
 
 export const THEME_LAYOUT_PRESETS: ThemeLayoutPreset[] = [
   'winged',
@@ -318,6 +536,7 @@ export const THEME_LAYOUT_PRESETS: ThemeLayoutPreset[] = [
   'reader',
   'studio',
   'atelier',
+  'single-page',
 ];
 
 export const THEME_CAPABILITIES: ThemeCapability[] = [
@@ -336,6 +555,9 @@ export const THEME_DEFAULT_ALLOWED_PERMISSIONS: ThemePermission[] = [
   'component-replace',
   'visual-effects',
   'theme-storage',
+  'network',
+  'filesystem-read',
+  'filesystem-write',
 ];
 
 // ── v2 Declarative Theme Module Types ──────────────────────
@@ -382,6 +604,7 @@ export interface ShellRecipe {
   drawerEmphasis: OfficialThemeUiProfile['drawerEmphasis'];
   motionIntensity: OfficialThemeUiProfile['motionIntensity'];
   actionPlacements: ThemeActionPlacements;
+  drawerShell?: ThemeDrawerShellRecipe;
   ux?: ThemeUxRecipeMap;
 }
 
@@ -409,6 +632,8 @@ export interface OfficialThemeModule {
   capabilities: ThemeCapability[];
   /** 品牌信息 */
   meta: OfficialThemeProfile;
+  /** 内部目录可见性，不写入用户导入的 .mltheme manifest。 */
+  catalogVisibility?: ThemeCatalogVisibility;
   /** 布局装配配方 */
   recipe: ShellRecipe;
   /** Token 覆盖 */
@@ -419,4 +644,6 @@ export interface OfficialThemeModule {
   css?: string;
   /** 静态资产 */
   assets?: ThemeAssetMap;
+  /** P0: 官方本地全权限 UX 插件入口 */
+  plugin?: ThemePluginModule;
 }

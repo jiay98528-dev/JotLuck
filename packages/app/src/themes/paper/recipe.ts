@@ -1,8 +1,7 @@
 import type { ShellRecipe } from '@/types/theme-pack';
 
 /**
- * 羽翼布局 (baseline) — 默认三栏写作桌
- *
+ * 羽翼布局 (baseline) - 默认三栏写作桌面。
  * workspaceIntent: baseline
  * defaultViewMode: live
  * 完整三栏布局 + classic TopBar + 书签左翼 + outline 右翼

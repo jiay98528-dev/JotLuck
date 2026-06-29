@@ -1,12 +1,13 @@
 <script lang="ts">
 import { defineComponent, h, type PropType, type VNodeChild } from 'vue';
 import ShellActionButton from '@/components/layout/ShellActionButton.vue';
-import { getTrustedThemeComponent } from '@/services/ThemeRuntimeHost';
+import { getThemeSlotComponent, themeRuntimeVersion } from '@/services/ThemeRuntimeHost';
 import type {
   ShellAction,
   ThemeActionRegion,
   ThemePrimitiveNode,
   ThemeSlotId,
+  ThemeSlotProps,
   UxComponentRecipe,
 } from '@/types/theme-pack';
 
@@ -36,6 +37,10 @@ export default defineComponent({
     statusText: {
       type: String,
       default: '',
+    },
+    slotProps: {
+      type: Object as PropType<ThemeSlotProps>,
+      default: () => ({}),
     },
   },
   setup(props, { slots }) {
@@ -94,13 +99,19 @@ export default defineComponent({
     };
 
     return () => {
-      const codeComponent = getTrustedThemeComponent(props.themeId, props.slotId);
+      void themeRuntimeVersion.value;
+      const codeComponent = getThemeSlotComponent(props.themeId, props.slotId);
       if (codeComponent) {
-        return h(codeComponent, {
-          slotId: props.slotId,
-          actions: props.actions,
-          statusText: props.statusText,
-        });
+        return h(
+          codeComponent,
+          {
+            slotId: props.slotId,
+            actions: props.actions,
+            statusText: props.statusText,
+            ...props.slotProps,
+          },
+          slots,
+        );
       }
 
       if (!props.recipe) return slots.default?.();

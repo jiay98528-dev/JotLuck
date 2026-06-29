@@ -1,23 +1,26 @@
-import type { Component } from 'vue';
+import { shallowRef, type Component } from 'vue';
+import { createMockThemeCommerceProvider } from '@/services/ThemeCommerceProvider';
 import type {
   InstalledThemePack,
   ShellAction,
+  ThemeActionId,
+  ThemeChromeState,
+  ThemeCommerceProvider,
+  ThemeHostDialogApi,
+  ThemeHostEditorApi,
+  ThemeHostContext,
   ThemePermission,
+  ThemePluginModule,
+  ThemeHostToastApi,
   ThemeSlotId,
 } from '@/types/theme-pack';
 
-export interface ThemeHostApi {
-  readonly themeId: string;
-  readonly permissions: readonly ThemePermission[];
-  dispatchAction: (actionId: ShellAction['id']) => void;
+export interface ThemeHostApi extends ThemeHostContext {
   getStorage: (key: string) => string | null;
   setStorage: (key: string, value: string) => void;
 }
 
-export interface TrustedThemeModule {
-  activate?: (api: ThemeHostApi) => void | (() => void);
-  components?: Partial<Record<ThemeSlotId, Component>>;
-}
+export type TrustedThemeModule = ThemePluginModule;
 
 export interface TrustedThemeRegistration {
   themeId: string;
@@ -27,6 +30,17 @@ export interface TrustedThemeRegistration {
 
 const registrations = new Map<string, TrustedThemeRegistration>();
 const objectUrls = new Map<string, string>();
+export const themeRuntimeVersion = shallowRef(0);
+
+function bumpRuntimeVersion(): void {
+  themeRuntimeVersion.value += 1;
+}
+
+function normalizeComponents(
+  components: ThemePluginModule['components'],
+): Partial<Record<ThemeSlotId, Component>> {
+  return (components ?? {}) as Partial<Record<ThemeSlotId, Component>>;
+}
 
 export function registerTrustedTheme(
   themeId: string,
@@ -37,12 +51,13 @@ export function registerTrustedTheme(
   const cleanup = module.activate?.(api);
   const registration: TrustedThemeRegistration = {
     themeId,
-    components: module.components ?? {},
+    components: normalizeComponents(module.components),
     dispose: () => {
       if (typeof cleanup === 'function') cleanup();
     },
   };
   registrations.set(themeId, registration);
+  bumpRuntimeVersion();
   return registration;
 }
 
@@ -51,6 +66,7 @@ export function unregisterTrustedTheme(themeId: string): void {
   if (!existing) return;
   existing.dispose();
   registrations.delete(themeId);
+  bumpRuntimeVersion();
   const objectUrl = objectUrls.get(themeId);
   if (objectUrl) {
     URL.revokeObjectURL(objectUrl);
@@ -65,41 +81,109 @@ export function getTrustedThemeComponent(
   return registrations.get(themeId)?.components[slot];
 }
 
+export const getThemeSlotComponent = getTrustedThemeComponent;
+
+export function hasThemeSlotComponent(themeId: string, slot: ThemeSlotId): boolean {
+  return Boolean(getThemeSlotComponent(themeId, slot));
+}
+
 export function createThemeHostApi(
-  themeId: string,
+  pack: InstalledThemePack,
   permissions: readonly ThemePermission[],
   actions: readonly ShellAction[],
+  chrome: ThemeChromeState,
+  ui: Record<string, unknown> = {},
+  commerce = createMockThemeCommerceProvider(() => [pack]),
 ): ThemeHostApi {
+  const themeId = pack.manifest.id;
   const actionMap = new Map(actions.map((action) => [action.id, action]));
+  const storagePrefix = `markluck:theme:${themeId}:`;
+  const dispatch = (actionId: ThemeActionId): void => {
+    void actionMap.get(actionId)?.run();
+  };
+  const uiApi = ui as {
+    editor?: Partial<ThemeHostEditorApi>;
+    dialogs?: Partial<ThemeHostDialogApi>;
+    toast?: Partial<ThemeHostToastApi>;
+    appState?: Record<string, unknown>;
+    commerce?: ThemeCommerceProvider;
+  };
+
+  const storage = {
+    get(key: string): string | null {
+      return localStorage.getItem(`${storagePrefix}${key}`);
+    },
+    set(key: string, value: string): void {
+      localStorage.setItem(`${storagePrefix}${key}`, value);
+    },
+    remove(key: string): void {
+      localStorage.removeItem(`${storagePrefix}${key}`);
+    },
+  };
+
   return {
     themeId,
+    manifest: pack.manifest,
+    runtime: pack.manifest.runtime,
     permissions,
-    dispatchAction(actionId) {
-      void actionMap.get(actionId)?.run();
+    chrome,
+    actions: {
+      list: () => actions,
+      dispatch,
     },
-    getStorage(key) {
-      return localStorage.getItem(`markluck:theme:${themeId}:${key}`);
+    slots: {
+      has(slot) {
+        return hasThemeSlotComponent(themeId, slot);
+      },
     },
-    setStorage(key, value) {
-      localStorage.setItem(`markluck:theme:${themeId}:${key}`, value);
+    storage,
+    editor: {
+      getContent: () => '',
+      ...uiApi.editor,
     },
+    dialogs: {
+      open: () => undefined,
+      close: () => undefined,
+      ...uiApi.dialogs,
+    },
+    toast: {
+      show: () => undefined,
+      ...uiApi.toast,
+    },
+    commerce: uiApi.commerce ?? commerce,
+    appState: uiApi.appState ?? {},
+    ui,
+    dispatchAction: dispatch,
+    getStorage: storage.get,
+    setStorage: storage.set,
   };
 }
 
 export async function activateTrustedThemeRuntime(
   pack: InstalledThemePack,
   actions: readonly ShellAction[],
+  chrome: ThemeChromeState,
+  ui: Record<string, unknown> = {},
+  commerce?: ThemeCommerceProvider,
 ): Promise<void> {
+  if (pack.module?.plugin) {
+    registerTrustedTheme(
+      pack.manifest.id,
+      pack.module.plugin,
+      createThemeHostApi(pack, pack.manifest.permissions ?? [], actions, chrome, ui, commerce),
+    );
+    return;
+  }
+
   if (pack.manifest.runtime !== 'trusted-code') {
     unregisterTrustedTheme(pack.manifest.id);
     return;
   }
-  if (!pack.trustedCodeAuthorized) return;
 
   const entrypoint = pack.manifest.entrypoints?.[0];
-  if (!entrypoint) throw new Error(`主题缺少代码入口: ${pack.manifest.id}`);
+  if (!entrypoint) throw new Error(`Theme is missing code entrypoint: ${pack.manifest.id}`);
   const source = pack.codeBundles?.[entrypoint.module];
-  if (!source) throw new Error(`主题代码 bundle 未安装: ${entrypoint.module}`);
+  if (!source) throw new Error(`Theme code bundle is not installed: ${entrypoint.module}`);
 
   unregisterTrustedTheme(pack.manifest.id);
   const objectUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
@@ -108,13 +192,13 @@ export async function activateTrustedThemeRuntime(
   const imported = (await import(/* @vite-ignore */ objectUrl)) as Record<string, unknown>;
   const exported = imported[entrypoint.exportName ?? 'default'] ?? imported.default;
   if (!isTrustedThemeModule(exported)) {
-    throw new Error(`主题代码入口未导出 TrustedThemeModule: ${pack.manifest.id}`);
+    throw new Error(`Theme code entrypoint did not export ThemePluginModule: ${pack.manifest.id}`);
   }
 
   registerTrustedTheme(
     pack.manifest.id,
     exported,
-    createThemeHostApi(pack.manifest.id, pack.manifest.permissions ?? [], actions),
+    createThemeHostApi(pack, pack.manifest.permissions ?? [], actions, chrome, ui, commerce),
   );
 }
 

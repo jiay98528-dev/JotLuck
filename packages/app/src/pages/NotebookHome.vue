@@ -1,423 +1,593 @@
 <template>
-  <Transition name="external-mode" mode="out-in" appear>
-    <div
-      v-if="isExternalReadonly"
-      key="external-reader"
-      class="external-reader"
-      data-testid="external-file-session"
-    >
-      <header class="external-reader-topbar">
-        <div class="external-reader-identity">
-          <span class="external-reader-kicker">外部文件 · 只读预览</span>
-          <h1 class="external-reader-title">{{ externalFileName }}</h1>
-          <p class="external-reader-path">{{ externalFilePath }}</p>
-        </div>
-        <div class="external-reader-actions">
-          <span class="external-reader-stat">{{ externalReadStats }}</span>
-          <button
-            v-if="!externalError"
-            class="btn btn--secondary"
-            @click="openExternalParentAsNotebook"
-          >
-            打开所在文件夹为笔记本
-          </button>
-          <button
-            v-if="!externalError"
-            class="btn btn--primary"
-            @click="showExternalEditConfirm = true"
-          >
-            启用编辑
-          </button>
-        </div>
-      </header>
-
-      <main class="external-reader-main">
-        <aside
-          v-if="headings.length > 0 && !loading && !externalError"
-          class="external-reader-rail"
+  <div class="notebook-home-root">
+    <Transition name="external-mode" appear>
+      <div v-if="isExternalReadonly" key="external-reader" class="external-reader-frame">
+        <ThemeSlotBoundary
+          slot-id="external-reader"
+          :theme-id="theme.renderedTheme.manifest.id"
+          :recipe="theme.activeUxRecipes['external-reader']"
+          :actions="shellActions"
+          :slot-props="externalReaderSlotProps"
         >
-          <span class="external-reader-rail-label">大纲</span>
-          <button
-            v-for="heading in headings"
-            :key="heading.id"
-            class="external-reader-heading"
-            :class="`external-reader-heading--level-${heading.level}`"
-            @click="scrollExternalHeading(heading.id)"
-          >
-            {{ heading.text }}
-          </button>
-        </aside>
-
-        <div class="external-reader-content">
-          <div v-if="loading" class="external-state">正在打开文件...</div>
-          <div v-else-if="externalError" class="external-state external-state--error">
-            <strong>无法打开文件</strong>
-            <span>{{ externalError }}</span>
-          </div>
-          <!-- eslint-disable vue/no-v-html -->
-          <article v-else class="markdown-body external-preview" v-html="externalPreviewHtml" />
-          <!-- eslint-enable vue/no-v-html -->
-        </div>
-      </main>
-    </div>
-
-    <AppShell
-      v-else
-      key="editor-shell"
-      :recent-notes="shellRecentNotesWithColors"
-      :active-path="shellActivePath"
-      :note-title="shellNoteTitle"
-      :notebook-name="shellNotebookName"
-      :show-top-bar="true"
-      :show-right-wing="showRightWing"
-      :headings="headings"
-      :backlinks="shellBacklinks"
-      :tags="shellTags"
-      :active-heading-id="activeHeadingId"
-      :char-count="editorStats.charCount"
-      :word-count="editorStats.wordCount"
-      :line-count="editorStats.lineCount"
-      :cursor-line="editorStats.cursorLine"
-      :cursor-col="editorStats.cursorCol"
-      :is-dirty="isDirty"
-      :is-saving="isSaving"
-      :save-error="saveError"
-      :last-saved-at="lastSavedAt"
-      :theme-chrome="chrome"
-      :actions="shellActions"
-      @select-note="onShellSelectNote"
-      @navigate-heading="onNavTreeNavigate"
-      @navigate-backlink="onBacklinkNavigate"
-      @select-tag="onTagSelect"
-      @toggle-right-wing="showRightWing = !showRightWing"
-    >
-      <template #editor>
-        <div v-if="isScratchSession" class="scratch-canvas">
-          <MarkdownEditor
-            ref="editorRef"
-            key="scratch"
-            :model-value="currentContent"
-            placeholder="开始输入文字"
-            :show-line-numbers="false"
-            :live-preview="true"
-            :pending-format="pendingFormatAction"
-            :completion-settings="completionSettings"
-            :enable-autocomplete="true"
-            @update:model-value="onEditorContentUpdate"
-            @selection-change="onSelectionChange"
-            @pending-format-ended="pendingFormatAction = null"
-          />
-        </div>
-
-        <div v-else class="workflow-canvas" :data-workspace-intent="chrome.workspaceIntent">
-          <StudioRail
-            v-if="chrome.editorControlLayout === 'studio-rail'"
-            :actions="actionsForRegion('studio-rail')"
-            :preset="activeParagraphPreset"
-            :active-action="pendingFormatAction"
-            @format="onToolbarFormat"
-          />
-
-          <div class="workflow-canvas__main">
-            <EditorControlStrip
-              v-if="chrome.editorControlLayout !== 'studio-rail'"
-              :region="{ layout: chrome.editorControlLayout, density: chrome.toolbarDensity }"
-              :actions="actionsForRegion('editor-control')"
-              :preset="activeParagraphPreset"
-              :active-action="pendingFormatAction"
-              @format="onToolbarFormat"
-            />
-
-            <div v-if="viewMode === 'read'" class="reader-workbench" data-view-mode="read">
-              <div class="reader-workbench__bar">
-                <span class="reader-workbench__label">阅读</span>
-                <div class="reader-workbench__actions">
-                  <ShellActionButton
-                    v-for="action in actionsForRegion('reader-bar')"
-                    :key="action.id"
-                    :action="action"
-                    label-mode="short"
-                    size="sm"
-                  />
-                </div>
+          <div class="external-reader" data-testid="external-file-session">
+            <header class="external-reader-topbar">
+              <div class="external-reader-identity">
+                <span class="external-reader-kicker">外部文件 · 只读预览</span>
+                <h1 class="external-reader-title">{{ externalFileName }}</h1>
+                <p class="external-reader-path">{{ externalFilePath }}</p>
               </div>
-              <!-- eslint-disable-next-line vue/no-v-html -->
-              <article class="markdown-body reader-preview" v-html="splitPreviewHtml" />
-            </div>
+              <div class="external-reader-actions">
+                <span class="external-reader-stat">{{ externalReadStats }}</span>
+                <button
+                  v-if="!externalError"
+                  class="btn btn--secondary"
+                  @click="openExternalParentAsNotebook"
+                >
+                  打开所在文件夹为笔记本
+                </button>
+                <button
+                  v-if="!externalError"
+                  class="btn btn--primary"
+                  @click="showExternalEditConfirm = true"
+                >
+                  启用编辑
+                </button>
+              </div>
+            </header>
 
-            <template v-else>
-              <!-- Format Bubble (floating, on text selection) -->
-              <FormatBubble
-                :visible="bubbleVisible"
-                :position="bubblePosition"
-                @format="onBubbleFormat"
-              />
-              <!-- Split Mode: left editor + right preview -->
-              <div v-if="viewMode === 'split'" class="split-pane">
-                <div class="split-left" :style="{ flex: `0 0 ${splitRatio}%` }">
-                  <MarkdownEditor
-                    ref="editorRef"
-                    :key="'split-' + shellActivePath"
-                    :model-value="currentContent"
-                    :show-line-numbers="true"
-                    :live-preview="false"
-                    :source-only="true"
-                    :pending-format="pendingFormatAction"
-                    :wiki-link-exists="wikiLinkExists"
-                    :wiki-link-revision="wikiLinkRevision"
-                    :completion-settings="completionSettings"
-                    :enable-autocomplete="!isExternalEditing"
-                    :on-editor-drop="isExternalEditing ? undefined : imageUpload.handleDrop"
-                    :on-editor-drag-over="
-                      isExternalEditing ? undefined : imageUpload.handleDragOver
-                    "
-                    :on-editor-paste="isExternalEditing ? undefined : imageUpload.handlePaste"
-                    @update:model-value="onEditorContentUpdate"
-                    @selection-change="onSelectionChange"
-                    @pending-format-ended="pendingFormatAction = null"
-                  />
+            <main class="external-reader-main">
+              <aside
+                v-if="headings.length > 0 && !loading && !externalError"
+                class="external-reader-rail"
+              >
+                <span class="external-reader-rail-label">大纲</span>
+                <button
+                  v-for="heading in headings"
+                  :key="heading.id"
+                  class="external-reader-heading"
+                  :class="`external-reader-heading--level-${heading.level}`"
+                  @click="scrollExternalHeading(heading.id)"
+                >
+                  {{ heading.text }}
+                </button>
+              </aside>
+
+              <div class="external-reader-content">
+                <div v-if="loading" class="external-state">正在打开文件...</div>
+                <div v-else-if="externalError" class="external-state external-state--error">
+                  <strong>无法打开文件</strong>
+                  <span>{{ externalError }}</span>
                 </div>
-                <div
-                  class="split-divider"
-                  :style="{ left: `${splitRatio}%` }"
-                  @mousedown="onSplitDragStart"
+                <!-- eslint-disable vue/no-v-html -->
+                <article
+                  v-else
+                  class="markdown-body external-preview"
+                  v-html="externalPreviewHtml"
                 />
-                <div class="split-right" :style="{ flex: `0 0 ${100 - splitRatio}%` }">
-                  <!-- eslint-disable-next-line vue/no-v-html -->
-                  <div class="markdown-body split-preview" v-html="splitPreviewHtml" />
+                <!-- eslint-enable vue/no-v-html -->
+              </div>
+            </main>
+          </div>
+        </ThemeSlotBoundary>
+      </div>
+    </Transition>
+
+    <Transition name="external-mode" appear>
+      <div v-if="!isExternalReadonly" key="editor-shell" class="editor-shell-frame">
+        <AppShell
+          :recent-notes="shellRecentNotesWithColors"
+          :active-path="shellActivePath"
+          :note-title="shellNoteTitle"
+          :notebook-name="shellNotebookName"
+          :show-top-bar="true"
+          :show-right-wing="showRightWing"
+          :headings="headings"
+          :backlinks="shellBacklinks"
+          :tags="shellTags"
+          :active-heading-id="activeHeadingId"
+          :char-count="editorStats.charCount"
+          :word-count="editorStats.wordCount"
+          :line-count="editorStats.lineCount"
+          :cursor-line="editorStats.cursorLine"
+          :cursor-col="editorStats.cursorCol"
+          :is-dirty="isDirty"
+          :is-saving="isSaving"
+          :save-error="saveError"
+          :last-saved-at="lastSavedAt"
+          :theme-chrome="chrome"
+          :actions="shellActions"
+          :theme-host-ui="themeHostUi"
+          @select-note="onShellSelectNote"
+          @navigate-heading="onNavTreeNavigate"
+          @navigate-backlink="onBacklinkNavigate"
+          @select-tag="onTagSelect"
+          @toggle-right-wing="showRightWing = !showRightWing"
+        >
+          <template #drawer-bottom>
+            <ThemeSlotBoundary
+              slot-id="editor-control"
+              :theme-id="theme.renderedTheme.manifest.id"
+              :recipe="theme.activeUxRecipes['editor-control']"
+              :actions="shellActions"
+              :slot-props="editorControlSlotProps"
+            >
+              <EditorControlStrip
+                :region="{ layout: chrome.editorControlLayout, density: chrome.toolbarDensity }"
+                :actions="actionsForRegion('editor-control')"
+                :preset="activeParagraphPreset"
+                :active-action="pendingFormatAction"
+                @format="onToolbarFormat"
+              />
+            </ThemeSlotBoundary>
+          </template>
+
+          <template #editor>
+            <ThemeSlotBoundary
+              slot-id="workflow-canvas"
+              :theme-id="theme.renderedTheme.manifest.id"
+              :recipe="theme.activeUxRecipes['workflow-canvas']"
+              :actions="shellActions"
+              :slot-props="workflowSlotProps"
+            >
+              <div class="workflow-canvas" :data-workspace-intent="chrome.workspaceIntent">
+                <StudioRail
+                  v-if="chrome.editorControlLayout === 'studio-rail' && !isSinglePageLayout"
+                  :actions="actionsForRegion('studio-rail')"
+                  :preset="activeParagraphPreset"
+                  :active-action="pendingFormatAction"
+                  @format="onToolbarFormat"
+                />
+
+                <div class="workflow-canvas__main">
+                  <ThemeSlotBoundary
+                    v-if="chrome.editorControlLayout !== 'studio-rail' && !isSinglePageLayout"
+                    slot-id="editor-control"
+                    :theme-id="theme.renderedTheme.manifest.id"
+                    :recipe="theme.activeUxRecipes['editor-control']"
+                    :actions="shellActions"
+                    :slot-props="editorControlSlotProps"
+                  >
+                    <EditorControlStrip
+                      :region="{
+                        layout: chrome.editorControlLayout,
+                        density: chrome.toolbarDensity,
+                      }"
+                      :actions="actionsForRegion('editor-control')"
+                      :preset="activeParagraphPreset"
+                      :active-action="pendingFormatAction"
+                      @format="onToolbarFormat"
+                    />
+                  </ThemeSlotBoundary>
+
+                  <ThemeSlotBoundary
+                    slot-id="editor-surface"
+                    :theme-id="theme.renderedTheme.manifest.id"
+                    :recipe="theme.activeUxRecipes['editor-surface']"
+                    :actions="shellActions"
+                    :slot-props="editorSurfaceSlotProps"
+                  >
+                    <div v-if="viewMode === 'read'" class="reader-workbench" data-view-mode="read">
+                      <div class="reader-workbench__bar">
+                        <span class="reader-workbench__label">阅读</span>
+                        <div class="reader-workbench__actions">
+                          <ShellActionButton
+                            v-for="action in actionsForRegion('reader-bar')"
+                            :key="action.id"
+                            :action="action"
+                            label-mode="short"
+                            size="sm"
+                          />
+                        </div>
+                      </div>
+                      <!-- eslint-disable-next-line vue/no-v-html -->
+                      <article class="markdown-body reader-preview" v-html="splitPreviewHtml" />
+                    </div>
+
+                    <template v-else>
+                      <!-- Format Bubble (floating, on text selection) -->
+                      <FormatBubble
+                        :visible="bubbleVisible"
+                        :position="bubblePosition"
+                        @format="onBubbleFormat"
+                      />
+                      <!-- Split Mode: left editor + right preview -->
+                      <div v-if="viewMode === 'split'" class="split-pane">
+                        <div class="split-left" :style="{ flex: `0 0 ${splitRatio}%` }">
+                          <MarkdownEditor
+                            v-if="!deferSplitEditorMount"
+                            ref="editorRef"
+                            :key="`split-${isScratchSession ? 'draft' : shellActivePath}`"
+                            :model-value="currentContent"
+                            :placeholder="isScratchSession ? '开始输入文字' : undefined"
+                            :show-line-numbers="!isLargeDocument"
+                            :live-preview="false"
+                            :source-only="true"
+                            :pending-format="pendingFormatAction"
+                            :wiki-link-exists="wikiLinkExists"
+                            :wiki-link-revision="wikiLinkRevision"
+                            :completion-settings="completionSettings"
+                            :enable-autocomplete="!isExternalEditing && !isLargeDocument"
+                            :on-editor-drop="isExternalEditing ? undefined : imageUpload.handleDrop"
+                            :on-editor-drag-over="
+                              isExternalEditing ? undefined : imageUpload.handleDragOver
+                            "
+                            :on-editor-paste="
+                              isExternalEditing ? undefined : imageUpload.handlePaste
+                            "
+                            @update:model-value="onEditorContentUpdate"
+                            @selection-change="onSelectionChange"
+                            @pending-format-ended="pendingFormatAction = null"
+                          />
+                          <div v-else class="large-doc-editor-placeholder">
+                            <span>正在准备大文档源码视图...</span>
+                          </div>
+                        </div>
+                        <div
+                          class="split-divider"
+                          :style="{ left: `${splitRatio}%` }"
+                          @mousedown="onSplitDragStart"
+                        />
+                        <div class="split-right" :style="{ flex: `0 0 ${100 - splitRatio}%` }">
+                          <!-- eslint-disable-next-line vue/no-v-html -->
+                          <div class="markdown-body split-preview" v-html="splitPreviewHtml" />
+                        </div>
+                      </div>
+                      <!-- Live Mode: single editor with block-level live preview -->
+                      <MarkdownEditor
+                        v-if="viewMode === 'live'"
+                        ref="editorRef"
+                        :key="`live-${isScratchSession ? 'draft' : shellActivePath}`"
+                        :model-value="currentContent"
+                        :placeholder="isScratchSession ? '开始输入文字' : undefined"
+                        :show-line-numbers="false"
+                        :live-preview="true"
+                        :pending-format="pendingFormatAction"
+                        :on-live-preview-external-link-click="onLivePreviewExternalLinkClick"
+                        :on-live-preview-tag-click="onLivePreviewTagClick"
+                        :on-live-preview-wiki-link-click="onLivePreviewWikiLinkClick"
+                        :wiki-link-exists="wikiLinkExists"
+                        :wiki-link-revision="wikiLinkRevision"
+                        :completion-settings="completionSettings"
+                        :enable-autocomplete="!isExternalEditing && !isLargeDocument"
+                        :on-editor-drop="isExternalEditing ? undefined : imageUpload.handleDrop"
+                        :on-editor-drag-over="
+                          isExternalEditing ? undefined : imageUpload.handleDragOver
+                        "
+                        :on-editor-paste="isExternalEditing ? undefined : imageUpload.handlePaste"
+                        @update:model-value="onEditorContentUpdate"
+                        @selection-change="onSelectionChange"
+                        @pending-format-ended="pendingFormatAction = null"
+                      />
+                    </template>
+                  </ThemeSlotBoundary>
                 </div>
               </div>
-              <!-- Live Mode: single editor with block-level live preview -->
-              <MarkdownEditor
-                v-if="viewMode === 'live'"
-                ref="editorRef"
-                :key="'live-' + shellActivePath"
-                :model-value="currentContent"
-                :show-line-numbers="false"
-                :live-preview="true"
-                :pending-format="pendingFormatAction"
-                :on-live-preview-external-link-click="onLivePreviewExternalLinkClick"
-                :on-live-preview-tag-click="onLivePreviewTagClick"
-                :on-live-preview-wiki-link-click="onLivePreviewWikiLinkClick"
-                :wiki-link-exists="wikiLinkExists"
-                :wiki-link-revision="wikiLinkRevision"
-                :completion-settings="completionSettings"
-                :enable-autocomplete="!isExternalEditing"
-                :on-editor-drop="isExternalEditing ? undefined : imageUpload.handleDrop"
-                :on-editor-drag-over="isExternalEditing ? undefined : imageUpload.handleDragOver"
-                :on-editor-paste="isExternalEditing ? undefined : imageUpload.handlePaste"
-                @update:model-value="onEditorContentUpdate"
-                @selection-change="onSelectionChange"
-                @pending-format-ended="pendingFormatAction = null"
-              />
-            </template>
-          </div>
-        </div>
-      </template>
-    </AppShell>
-  </Transition>
+            </ThemeSlotBoundary>
+          </template>
+        </AppShell>
+      </div>
+    </Transition>
+  </div>
 
   <!-- Command Palette -->
-  <CommandPalette
-    :visible="searchVisible"
-    @update:visible="searchVisible = $event"
-    @select-result="onSearchSelectResult"
-    @quick-action="onQuickAction"
-  />
+  <ThemeSlotBoundary
+    slot-id="command-palette"
+    :theme-id="theme.renderedTheme.manifest.id"
+    :recipe="theme.activeUxRecipes['command-palette']"
+    :actions="shellActions"
+    :slot-props="commandPaletteSlotProps"
+  >
+    <CommandPalette
+      :visible="searchVisible"
+      @update:visible="searchVisible = $event"
+      @select-result="onSearchSelectResult"
+      @quick-action="onQuickAction"
+    />
+  </ThemeSlotBoundary>
 
   <!-- File Drawer (left slide) -->
-  <FileDrawer
-    :visible="showLeftDrawer"
-    :files="shellFiles"
-    root-dir="/"
-    :active-path="shellActivePath"
-    :loading="loading"
-    :error="errorMessage"
-    @update:visible="showLeftDrawer = $event"
-    @select-file="onShellSelectNote"
-    @navigate-dir="onShellDrawerNavigateDir"
-    @create-file="onShellCreateFile"
-    @delete-file="requestShellDeleteFile"
-    @rename-file="onShellRenameFile"
-    @retry="onShellDrawerRetry"
-  />
+  <ThemeSlotBoundary
+    slot-id="file-drawer"
+    :theme-id="theme.renderedTheme.manifest.id"
+    :recipe="theme.activeUxRecipes['file-drawer']"
+    :actions="shellActions"
+    :slot-props="fileDrawerSlotProps"
+  >
+    <FileDrawer
+      :visible="showLeftDrawer"
+      :files="shellFiles"
+      root-dir="/"
+      :active-path="shellActivePath"
+      :loading="loading"
+      :error="errorMessage"
+      @update:visible="showLeftDrawer = $event"
+      @select-file="onShellSelectNote"
+      @navigate-dir="onShellDrawerNavigateDir"
+      @create-file="onShellCreateFile"
+      @delete-file="requestShellDeleteFile"
+      @rename-file="onShellRenameFile"
+      @retry="onShellDrawerRetry"
+    />
+  </ThemeSlotBoundary>
 
   <!-- Export Dialog -->
-  <ExportDialog
-    :visible="showExport"
-    :note-path="shellActivePath"
-    :note-title="shellNoteTitle"
-    :markdown-content="currentContent"
-    @update:visible="showExport = $event"
-  />
+  <ThemeSlotBoundary
+    slot-id="export-dialog"
+    :theme-id="theme.renderedTheme.manifest.id"
+    :recipe="theme.activeUxRecipes['export-dialog']"
+    :actions="shellActions"
+    :slot-props="exportDialogSlotProps"
+  >
+    <ExportDialog
+      :visible="showExport"
+      :note-path="shellActivePath"
+      :note-title="shellNoteTitle"
+      :markdown-content="currentContent"
+      @update:visible="showExport = $event"
+    />
+  </ThemeSlotBoundary>
 
   <!-- Template Dialog -->
-  <TemplateDialog
-    :visible="showTemplate"
-    :current-content="shellActivePath ? currentContent : undefined"
-    @update:visible="showTemplate = $event"
-    @select="onTemplateSelect"
-    @create-blank="onCreateBlank"
-  />
+  <ThemeSlotBoundary
+    slot-id="template-dialog"
+    :theme-id="theme.renderedTheme.manifest.id"
+    :recipe="theme.activeUxRecipes['template-dialog']"
+    :actions="shellActions"
+    :slot-props="templateDialogSlotProps"
+  >
+    <TemplateDialog
+      :visible="showTemplate"
+      :current-content="shellActivePath ? currentContent : undefined"
+      @update:visible="showTemplate = $event"
+      @select="onTemplateSelect"
+      @create-blank="onCreateBlank"
+    />
+  </ThemeSlotBoundary>
 
   <!-- Settings Dialog -->
-  <SettingsDialog
-    :visible="showSettings"
-    :completion-settings="completionSettings"
-    :completion-training-meta="completionTrainingMeta"
-    :external-scan-root-text-files="externalScanRootTextFiles"
-    @update:visible="showSettings = $event"
-    @update-completion-settings="onUpdateCompletionSettings"
-    @update-external-scan-root="onUpdateExternalScanRootTextFiles"
-  />
+  <ThemeSlotBoundary
+    slot-id="settings-dialog"
+    :theme-id="theme.renderedTheme.manifest.id"
+    :recipe="theme.activeUxRecipes['settings-dialog']"
+    :actions="shellActions"
+    :slot-props="settingsDialogSlotProps"
+  >
+    <SettingsDialog
+      :visible="showSettings"
+      :completion-settings="completionSettings"
+      :completion-training-meta="completionTrainingMeta"
+      :external-scan-root-text-files="externalScanRootTextFiles"
+      @update:visible="showSettings = $event"
+      @update-completion-settings="onUpdateCompletionSettings"
+      @update-external-scan-root="onUpdateExternalScanRootTextFiles"
+    />
+  </ThemeSlotBoundary>
 
-  <ThemeDialog :visible="showThemeDialog" @update:visible="showThemeDialog = $event" />
+  <ThemeSlotBoundary
+    slot-id="dialogs.theme"
+    :theme-id="theme.renderedTheme.manifest.id"
+    :recipe="theme.activeUxRecipes['dialogs.theme']"
+    :actions="shellActions"
+    :slot-props="themeDialogSlotProps"
+  >
+    <ThemeDialog :visible="showThemeDialog" @update:visible="showThemeDialog = $event" />
+  </ThemeSlotBoundary>
 
   <!-- Share Dialog -->
-  <ShareDialog
-    :visible="showShare"
-    :note-title="shellNoteTitle"
-    :markdown-content="currentContent"
-    @update:visible="showShare = $event"
-  />
+  <ThemeSlotBoundary
+    slot-id="share-dialog"
+    :theme-id="theme.renderedTheme.manifest.id"
+    :recipe="theme.activeUxRecipes['share-dialog']"
+    :actions="shellActions"
+    :slot-props="shareDialogSlotProps"
+  >
+    <ShareDialog
+      :visible="showShare"
+      :note-title="shellNoteTitle"
+      :markdown-content="currentContent"
+      @update:visible="showShare = $event"
+    />
+  </ThemeSlotBoundary>
 
   <!-- Toast Container -->
-  <ToastContainer />
+  <ThemeSlotBoundary
+    slot-id="toast-container"
+    :theme-id="theme.renderedTheme.manifest.id"
+    :recipe="theme.activeUxRecipes['toast-container']"
+    :actions="shellActions"
+    :slot-props="toastSlotProps"
+  >
+    <ToastContainer />
+  </ThemeSlotBoundary>
 
   <!-- Update Notification -->
-  <UpdateNotification
-    :visible="showUpdateNotification"
-    :latest-version="updateLatestVersion"
-    :release-url="updateReleaseUrl"
-    :release-notes="updateReleaseNotes"
-    @update:visible="showUpdateNotification = $event"
-    @dismiss-version="onDismissVersion"
-  />
+  <ThemeSlotBoundary
+    slot-id="update-notification"
+    :theme-id="theme.renderedTheme.manifest.id"
+    :recipe="theme.activeUxRecipes['update-notification']"
+    :actions="shellActions"
+    :slot-props="updateNotificationSlotProps"
+  >
+    <UpdateNotification
+      :visible="showUpdateNotification"
+      :latest-version="updateLatestVersion"
+      :release-url="updateReleaseUrl"
+      :release-notes="updateReleaseNotes"
+      @update:visible="showUpdateNotification = $event"
+      @dismiss-version="onDismissVersion"
+    />
+  </ThemeSlotBoundary>
 
   <!-- Markdown Cheat Sheet -->
-  <MarkdownCheatSheet />
+  <ThemeSlotBoundary
+    slot-id="markdown-cheat-sheet"
+    :theme-id="theme.renderedTheme.manifest.id"
+    :recipe="theme.activeUxRecipes['markdown-cheat-sheet']"
+    :actions="shellActions"
+    :slot-props="markdownCheatSheetSlotProps"
+  >
+    <MarkdownCheatSheet />
+  </ThemeSlotBoundary>
 
   <!-- New File Dialog -->
-  <Teleport to="body">
-    <div v-if="showNewFileDialog" class="modal-overlay" @click.self="cancelNewFile">
-      <div
-        class="modal-card"
-        style="width: 360px"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="new-file-title"
-      >
-        <div class="modal-header">
-          <h2 id="new-file-title">新建文件</h2>
-        </div>
-        <div class="modal-body">
-          <input
-            v-model="newFileName"
-            class="file-name-input"
-            :placeholder="`文件名（${supportedNoteExtensionsText}）`"
-            autofocus
-            @keydown.escape="cancelNewFile"
-            @keydown.enter="confirmNewFile"
-          />
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn--secondary" @click="cancelNewFile">取消</button>
-          <button class="btn btn--primary" :disabled="!newFileName.trim()" @click="confirmNewFile">
-            确定
-          </button>
+  <ThemeSlotBoundary
+    slot-id="new-file-dialog"
+    :theme-id="theme.renderedTheme.manifest.id"
+    :recipe="theme.activeUxRecipes['new-file-dialog']"
+    :actions="shellActions"
+    :slot-props="newFileDialogSlotProps"
+  >
+    <Teleport to="body">
+      <div v-if="showNewFileDialog" class="modal-overlay" @click.self="cancelNewFile">
+        <div
+          class="modal-card"
+          style="width: 360px"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="new-file-title"
+        >
+          <div class="modal-header">
+            <h2 id="new-file-title">新建文件</h2>
+          </div>
+          <div class="modal-body">
+            <input
+              v-model="newFileName"
+              class="file-name-input"
+              :placeholder="`文件名（${supportedNoteExtensionsText}）`"
+              autofocus
+              @keydown.escape="cancelNewFile"
+              @keydown.enter="confirmNewFile"
+            />
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn--secondary" @click="cancelNewFile">取消</button>
+            <button
+              class="btn btn--primary"
+              :disabled="!newFileName.trim()"
+              @click="confirmNewFile"
+            >
+              确定
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  </Teleport>
+    </Teleport>
+  </ThemeSlotBoundary>
 
   <!-- Delete Confirm Dialog -->
-  <Teleport to="body">
-    <div v-if="pendingDeletePath" class="modal-overlay" @click.self="cancelDeleteFile">
-      <div
-        class="modal-card"
-        style="width: 380px"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="delete-file-title"
-      >
-        <div class="modal-header">
-          <h2 id="delete-file-title">删除笔记</h2>
-        </div>
-        <div class="modal-body">
-          <p class="delete-confirm-text">
-            确定删除「{{ pendingDeleteName }}」？此操作会移动到系统回收站或从当前笔记本移除。
-          </p>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn--secondary" @click="cancelDeleteFile">取消</button>
-          <button class="btn btn--danger" @click="confirmDeleteFile">删除</button>
+  <ThemeSlotBoundary
+    slot-id="delete-confirm-dialog"
+    :theme-id="theme.renderedTheme.manifest.id"
+    :recipe="theme.activeUxRecipes['delete-confirm-dialog']"
+    :actions="shellActions"
+    :slot-props="deleteConfirmSlotProps"
+  >
+    <Teleport to="body">
+      <div v-if="pendingDeletePath" class="modal-overlay" @click.self="cancelDeleteFile">
+        <div
+          class="modal-card"
+          style="width: 380px"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-file-title"
+        >
+          <div class="modal-header">
+            <h2 id="delete-file-title">删除笔记</h2>
+          </div>
+          <div class="modal-body">
+            <p class="delete-confirm-text">
+              确定删除「{{ pendingDeleteName }}」？此操作会移动到系统回收站或从当前笔记本移除。
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn--secondary" @click="cancelDeleteFile">取消</button>
+            <button class="btn btn--danger" @click="confirmDeleteFile">删除</button>
+          </div>
         </div>
       </div>
-    </div>
-  </Teleport>
+    </Teleport>
+  </ThemeSlotBoundary>
 
   <!-- External Edit Confirm Dialog -->
-  <Teleport to="body">
-    <div
-      v-if="showExternalEditConfirm"
-      class="modal-overlay"
-      @click.self="showExternalEditConfirm = false"
-    >
+  <ThemeSlotBoundary
+    slot-id="external-edit-dialog"
+    :theme-id="theme.renderedTheme.manifest.id"
+    :recipe="theme.activeUxRecipes['external-edit-dialog']"
+    :actions="shellActions"
+    :slot-props="externalEditDialogSlotProps"
+  >
+    <Teleport to="body">
       <div
-        class="modal-card"
-        style="width: 420px"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="external-edit-title"
+        v-if="showExternalEditConfirm"
+        class="modal-overlay"
+        @click.self="showExternalEditConfirm = false"
       >
-        <div class="modal-header">
-          <h2 id="external-edit-title">启用单文件编辑</h2>
-        </div>
-        <div class="modal-body">
-          <p class="delete-confirm-text">
-            默认仅编辑当前文件，不会扫描所在文件夹，也不会把它加入笔记本或标签索引。
-            如需搜索和标签，可显式扫描所在文件夹；较大的目录可能需要一些时间。
-          </p>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn--secondary" @click="showExternalEditConfirm = false">取消</button>
-          <button class="btn btn--secondary" @click="confirmExternalEditAndScan">
-            扫描所在文件夹
-          </button>
-          <button class="btn btn--primary" @click="confirmExternalEdit(false)">
-            仅编辑当前文件
-          </button>
+        <div
+          class="modal-card"
+          style="width: 420px"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="external-edit-title"
+        >
+          <div class="modal-header">
+            <h2 id="external-edit-title">启用单文件编辑</h2>
+          </div>
+          <div class="modal-body">
+            <p class="delete-confirm-text">
+              默认仅编辑当前文件，不会扫描所在文件夹，也不会把它加入笔记本或标签索引。
+              如需搜索和标签，可显式扫描所在文件夹；较大的目录可能需要一些时间。
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn--secondary" @click="showExternalEditConfirm = false">
+              取消
+            </button>
+            <button class="btn btn--secondary" @click="confirmExternalEditAndScan">
+              扫描所在文件夹
+            </button>
+            <button class="btn btn--primary" @click="confirmExternalEdit(false)">
+              仅编辑当前文件
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  </Teleport>
+    </Teleport>
+  </ThemeSlotBoundary>
 
   <!-- Scratch Exit Confirm Dialog -->
-  <Teleport to="body">
-    <div v-if="showScratchExitDialog" class="modal-overlay">
-      <div
-        class="modal-card"
-        style="width: 420px"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="scratch-exit-title"
-      >
-        <div class="modal-header">
-          <h2 id="scratch-exit-title">保存临时草稿？</h2>
-        </div>
-        <div class="modal-body">
-          <p class="delete-confirm-text">
-            当前草稿还没有保存为文件。可以选择保存位置，或放弃这次临时内容。
-          </p>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn--secondary" @click="cancelScratchExit">取消</button>
-          <button class="btn btn--secondary" @click="discardScratchAndClose">不保存</button>
-          <button class="btn btn--primary" @click="saveScratchAndClose">保存</button>
+  <ThemeSlotBoundary
+    slot-id="scratch-exit-dialog"
+    :theme-id="theme.renderedTheme.manifest.id"
+    :recipe="theme.activeUxRecipes['scratch-exit-dialog']"
+    :actions="shellActions"
+    :slot-props="scratchExitDialogSlotProps"
+  >
+    <Teleport to="body">
+      <div v-if="showScratchExitDialog" class="modal-overlay">
+        <div
+          class="modal-card"
+          style="width: 420px"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="scratch-exit-title"
+        >
+          <div class="modal-header">
+            <h2 id="scratch-exit-title">保存临时草稿？</h2>
+          </div>
+          <div class="modal-body">
+            <p class="delete-confirm-text">
+              当前草稿还没有保存为文件。可以选择保存位置，或放弃这次临时内容。
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn--secondary" @click="cancelScratchExit">取消</button>
+            <button class="btn btn--secondary" @click="discardScratchAndClose">不保存</button>
+            <button class="btn btn--primary" @click="saveScratchAndClose">保存</button>
+          </div>
         </div>
       </div>
-    </div>
-  </Teleport>
+    </Teleport>
+  </ThemeSlotBoundary>
 </template>
 
 <script setup lang="ts">
@@ -449,6 +619,7 @@ import FormatBubble from '@/components/editor/FormatBubble.vue';
 import EditorControlStrip from '@/components/editor/EditorControlStrip.vue';
 import StudioRail from '@/components/editor/StudioRail.vue';
 import ThemeDialog from '@/components/theme/ThemeDialog.vue';
+import ThemeSlotBoundary from '@/components/theme/ThemeSlotBoundary.vue';
 import FileDrawer from '@/components/overlays/FileDrawer.vue';
 import ToastContainer, { useToast } from '@/components/common/Toast.vue';
 import { MockFSService } from '@/services/MockFSService';
@@ -495,7 +666,13 @@ import {
   stripSupportedNoteExtension,
   supportedNoteExtensionsLabel,
 } from '@/utils/note-files';
-import type { ShellAction, ThemeActionRegion, ThemeViewMode } from '@/types/theme-pack';
+import { getDraftMarkdownFileName } from '@/utils/draft-file-name';
+import type {
+  ShellAction,
+  ThemeActionRegion,
+  ThemeSlotId,
+  ThemeViewMode,
+} from '@/types/theme-pack';
 
 const CommandPalette = defineAsyncComponent(
   () => import('@/components/overlays/CommandPalette.vue'),
@@ -513,6 +690,10 @@ function createFileSystem(): IFileSystemService {
 }
 const fs: IFileSystemService = createFileSystem();
 const supportedNoteExtensionsText = supportedNoteExtensionsLabel();
+const MOCK_FS_STORAGE_KEY = 'markluck-mockfs';
+const LARGE_DOCUMENT_PREVIEW_DELAY_THRESHOLD_CHARS = 120_000;
+const LARGE_DOCUMENT_PREVIEW_DELAY_THRESHOLD_LINES = 3_000;
+const LARGE_DOCUMENT_DEFERRED_WORK_DELAY_MS = 1800;
 
 interface OpenedFilePayload {
   absolutePath: string;
@@ -533,6 +714,9 @@ const currentDir = ref('/');
 const theme = useThemeStore();
 // 便捷别名：主题 ChromeState（布局 recipe 的运行时镜像）
 const chrome = computed(() => theme.activeChromeState);
+const isSinglePageLayout = computed(
+  () => chrome.value.layoutPreset === 'single-page' && Boolean(chrome.value.drawerShell),
+);
 // --- Index & Search ---
 const indexStore = useIndexStore();
 const searchStore = useSearchStore();
@@ -550,7 +734,9 @@ const viewMode = ref<ViewMode>('live');
 const splitRatio = ref(50); // 50:50 default for split pane
 const splitPreviewHtml = ref('');
 const wikiLinkRevision = ref(0);
+const deferSplitEditorMount = ref(false);
 let splitDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let splitEditorMountTimer: ReturnType<typeof setTimeout> | null = null;
 
 const showRightWing = ref(true);
 const showLeftDrawer = ref(false);
@@ -565,6 +751,7 @@ const showShare = ref(false);
 const isScratchSession = ref(false);
 const showScratchExitDialog = ref(false);
 const pendingDeletePath = ref<string | null>(null);
+const toast = useToast();
 const notebookName = ref('未打开笔记本');
 const completionSettings = ref<CompletionSettings>(getCompletionSettings());
 const completionTrainingMeta = ref<CompletionTrainingMeta>(loadTrainingMeta());
@@ -721,6 +908,215 @@ function actionsForRegion(region: ThemeActionRegion): ShellAction[] {
   return shellActions.value.filter((action) => action.region === region);
 }
 
+const workflowSlotProps = computed(() => ({
+  activePath: shellActivePath.value,
+  noteTitle: shellNoteTitle.value,
+  notebookName: shellNotebookName.value,
+  isDraftSession: isScratchSession.value,
+  viewMode: viewMode.value,
+  workspaceIntent: chrome.value.workspaceIntent,
+  switchViewMode: cycleViewMode,
+  saveDraftAs: saveScratchAs,
+}));
+
+const editorControlSlotProps = computed(() => ({
+  region: { layout: chrome.value.editorControlLayout, density: chrome.value.toolbarDensity },
+  actions: actionsForRegion('editor-control'),
+  preset: activeParagraphPreset.value,
+  activeAction: pendingFormatAction.value,
+  format: onToolbarFormat,
+}));
+
+const editorSurfaceSlotProps = computed(() => ({
+  activePath: shellActivePath.value,
+  isDraftSession: isScratchSession.value,
+  viewMode: viewMode.value,
+  splitRatio: splitRatio.value,
+  charCount: editorStats.charCount,
+  wordCount: editorStats.wordCount,
+  headings: headings.value,
+  setViewMode: (mode: ViewMode) => {
+    viewMode.value = mode;
+  },
+}));
+
+const externalReaderSlotProps = computed(() => ({
+  fileName: externalFileName.value,
+  filePath: externalFilePath.value,
+  stats: externalReadStats.value,
+  headings: headings.value,
+  loading: loading.value,
+  error: externalError.value,
+  enableEdit: () => {
+    showExternalEditConfirm.value = true;
+  },
+  openParentAsNotebook: openExternalParentAsNotebook,
+  scrollHeading: scrollExternalHeading,
+}));
+
+const themeDialogSlotProps = computed(() => ({
+  visible: showThemeDialog.value,
+  activeThemeId: theme.activeThemeId,
+  themes: theme.themes,
+  entitlements: theme.entitlements,
+  commerceError: theme.commerceError,
+  close: () => {
+    showThemeDialog.value = false;
+  },
+  activateTheme: theme.activateTheme,
+  refreshEntitlements: theme.refreshEntitlements,
+}));
+
+const commandPaletteSlotProps = computed(() => ({
+  visible: searchVisible.value,
+  close: () => {
+    searchVisible.value = false;
+  },
+}));
+
+const fileDrawerSlotProps = computed(() => ({
+  visible: showLeftDrawer.value,
+  files: shellFiles.value,
+  activePath: shellActivePath.value,
+  loading: loading.value,
+  error: errorMessage.value,
+  close: () => {
+    showLeftDrawer.value = false;
+  },
+}));
+
+const exportDialogSlotProps = computed(() => ({
+  visible: showExport.value,
+  notePath: shellActivePath.value,
+  noteTitle: shellNoteTitle.value,
+  close: () => {
+    showExport.value = false;
+  },
+}));
+
+const templateDialogSlotProps = computed(() => ({
+  visible: showTemplate.value,
+  activePath: shellActivePath.value,
+  close: () => {
+    showTemplate.value = false;
+  },
+}));
+
+const settingsDialogSlotProps = computed(() => ({
+  visible: showSettings.value,
+  completionSettings: completionSettings.value,
+  completionTrainingMeta: completionTrainingMeta.value,
+  close: () => {
+    showSettings.value = false;
+  },
+}));
+
+const shareDialogSlotProps = computed(() => ({
+  visible: showShare.value,
+  noteTitle: shellNoteTitle.value,
+  close: () => {
+    showShare.value = false;
+  },
+}));
+
+const toastSlotProps = computed(() => ({
+  activeThemeId: theme.activeThemeId,
+}));
+
+const updateNotificationSlotProps = computed(() => ({
+  visible: showUpdateNotification.value,
+  latestVersion: updateLatestVersion.value,
+  releaseUrl: updateReleaseUrl.value,
+  close: () => {
+    showUpdateNotification.value = false;
+  },
+}));
+
+const markdownCheatSheetSlotProps = computed(() => ({
+  activeThemeId: theme.activeThemeId,
+}));
+
+const newFileDialogSlotProps = computed(() => ({
+  visible: showNewFileDialog.value,
+  fileName: newFileName.value,
+  supportedExtensions: supportedNoteExtensionsText,
+  cancel: cancelNewFile,
+  confirm: confirmNewFile,
+}));
+
+const deleteConfirmSlotProps = computed(() => ({
+  visible: Boolean(pendingDeletePath.value),
+  path: pendingDeletePath.value,
+  name: pendingDeleteName.value,
+  cancel: cancelDeleteFile,
+  confirm: confirmDeleteFile,
+}));
+
+const externalEditDialogSlotProps = computed(() => ({
+  visible: showExternalEditConfirm.value,
+  cancel: () => {
+    showExternalEditConfirm.value = false;
+  },
+  confirmEditOnly: () => confirmExternalEdit(false),
+  confirmScan: confirmExternalEditAndScan,
+}));
+
+const scratchExitDialogSlotProps = computed(() => ({
+  visible: showScratchExitDialog.value,
+  cancel: cancelScratchExit,
+  discard: discardScratchAndClose,
+  save: saveScratchAndClose,
+}));
+
+function openThemeDialogSlot(slot: ThemeSlotId): void {
+  if (slot === 'command-palette') searchVisible.value = true;
+  else if (slot === 'file-drawer') showLeftDrawer.value = true;
+  else if (slot === 'export-dialog') showExport.value = true;
+  else if (slot === 'template-dialog') showTemplate.value = true;
+  else if (slot === 'settings-dialog') showSettings.value = true;
+  else if (slot === 'share-dialog') showShare.value = true;
+  else if (slot === 'dialogs.theme') showThemeDialog.value = true;
+  else if (slot === 'new-file-dialog') showNewFileDialog.value = true;
+}
+
+function closeThemeDialogSlot(slot: ThemeSlotId): void {
+  if (slot === 'command-palette') searchVisible.value = false;
+  else if (slot === 'file-drawer') showLeftDrawer.value = false;
+  else if (slot === 'export-dialog') showExport.value = false;
+  else if (slot === 'template-dialog') showTemplate.value = false;
+  else if (slot === 'settings-dialog') showSettings.value = false;
+  else if (slot === 'share-dialog') showShare.value = false;
+  else if (slot === 'dialogs.theme') showThemeDialog.value = false;
+  else if (slot === 'new-file-dialog') cancelNewFile();
+  else if (slot === 'delete-confirm-dialog') cancelDeleteFile();
+  else if (slot === 'external-edit-dialog') showExternalEditConfirm.value = false;
+  else if (slot === 'scratch-exit-dialog') cancelScratchExit();
+}
+
+const themeHostUi = computed(() => ({
+  editor: {
+    getContent: () => currentContent.value,
+    setContent: (content: string) => onEditorContentUpdate(content),
+    focus: () => void nextTick(() => editorRef.value?.focus()),
+  },
+  dialogs: {
+    open: openThemeDialogSlot,
+    close: closeThemeDialogSlot,
+  },
+  toast: {
+    show: (message: string) => toast.show(message, 'info', 3500),
+  },
+  commerce: theme.commerce,
+  appState: {
+    activePath: shellActivePath.value,
+    noteTitle: shellNoteTitle.value,
+    notebookName: notebookName.value,
+    viewMode: viewMode.value,
+    isScratchSession: isScratchSession.value,
+    activeThemeId: theme.activeThemeId,
+  },
+}));
+
 // --- Format Bubble ---
 const bubbleVisible = ref(false);
 const bubblePosition = ref({ x: 0, y: 0 });
@@ -743,6 +1139,7 @@ function cycleViewMode(): void {
     chrome.value.defaultViewMode === 'read' ? ['read', 'live', 'split'] : ['split', 'live'];
   const idx = modes.indexOf(viewMode.value);
   viewMode.value = modes[(idx + 1 + modes.length) % modes.length]!;
+  scheduleSplitEditorMountForCurrentMode();
   if (viewMode.value === 'split' || viewMode.value === 'read') {
     updateSplitPreview();
   }
@@ -752,9 +1149,29 @@ function applyInitialThemeWorkflowDefaults(): void {
   pendingFormatAction.value = null;
   viewMode.value = chrome.value.defaultViewMode;
   showRightWing.value = chrome.value.rightWingPolicy !== 'collapsed';
+  refreshSplitPreviewIfVisible();
+}
+
+function refreshSplitPreviewIfVisible(): void {
   if (viewMode.value === 'split' || viewMode.value === 'read') {
     updateSplitPreview();
   }
+}
+
+function scheduleSplitEditorMountForCurrentMode(): void {
+  if (splitEditorMountTimer) {
+    clearTimeout(splitEditorMountTimer);
+    splitEditorMountTimer = null;
+  }
+  if (viewMode.value === 'split' && isLargeDocument.value) {
+    deferSplitEditorMount.value = true;
+    splitEditorMountTimer = setTimeout(() => {
+      deferSplitEditorMount.value = false;
+      splitEditorMountTimer = null;
+    }, LARGE_DOCUMENT_DEFERRED_WORK_DELAY_MS);
+    return;
+  }
+  deferSplitEditorMount.value = false;
 }
 
 // --- Split Pane ---
@@ -762,9 +1179,13 @@ function onSplitContentUpdate(content: string): void {
   currentContent.value = content;
   updateHeadings(content);
   updateEditorStats(content);
-  if (activePath.value) {
+  if (isScratchSession.value) {
+    isDirty.value = content.trim().length > 0;
+    saveError.value = null;
+  } else if (activePath.value) {
     isDirty.value = true;
     saveError.value = null;
+    rememberPendingMockFileWrite(activePath.value, content);
     if (saveTimer) clearTimeout(saveTimer);
     const savingPath = activePath.value;
     saveTimer = setTimeout(() => debouncedSave(savingPath, content), 600);
@@ -811,6 +1232,9 @@ const saveError = ref<string | null>(null);
 const lastSavedAt = ref<number | null>(null);
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let saveGeneration = 0;
+let currentSavePromise: Promise<void> | null = null;
+let noteSelectionQueue: Promise<void> = Promise.resolve();
+const pendingMockFileWrites = new Map<string, string>();
 
 // --- Editor Stats ---
 const editorStats = reactive({
@@ -820,6 +1244,11 @@ const editorStats = reactive({
   cursorLine: null as number | null,
   cursorCol: null as number | null,
 });
+const isLargeDocument = computed(
+  () =>
+    currentContent.value.length > LARGE_DOCUMENT_PREVIEW_DELAY_THRESHOLD_CHARS ||
+    editorStats.lineCount > LARGE_DOCUMENT_PREVIEW_DELAY_THRESHOLD_LINES,
+);
 
 // --- Computed ---
 const noteTitle = computed(() => {
@@ -976,11 +1405,14 @@ async function openNotebookRoot(rootPath: string): Promise<void> {
 }
 
 async function openInitialNotebook(): Promise<boolean> {
-  if (!window.__TAURI__) {
-    return false;
+  let recent: string[] = [];
+  try {
+    recent = await fs.getRecentNotebooks();
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[NotebookHome] 获取最近笔记本失败:', e);
   }
 
-  const recent = await fs.getRecentNotebooks();
   for (const root of recent) {
     try {
       await openNotebookRoot(root);
@@ -991,7 +1423,34 @@ async function openInitialNotebook(): Promise<boolean> {
     }
   }
 
+  if (!window.__TAURI__) {
+    try {
+      await openNotebookRoot('/');
+      return true;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[NotebookHome] Web 默认 MockFS 笔记本不可用:', e);
+    }
+  }
+
   return false;
+}
+
+function enterNotebookFileState(path: string, content: string): void {
+  isScratchSession.value = false;
+  externalSessionMode.value = 'none';
+  externalFile.value = null;
+  externalError.value = '';
+  activePath.value = path;
+  currentContent.value = content;
+  isDirty.value = false;
+  isSaving.value = false;
+  saveError.value = null;
+  lastSavedAt.value = Date.now();
+  updateHeadings(content);
+  updateEditorStats(content);
+  scheduleSplitEditorMountForCurrentMode();
+  refreshSplitPreviewIfVisible();
 }
 
 function enterScratchSession(): void {
@@ -1013,7 +1472,7 @@ function enterScratchSession(): void {
   showRightWing.value = true;
   updateHeadings('');
   updateEditorStats('');
-  updateSplitPreview();
+  refreshSplitPreviewIfVisible();
 }
 
 async function readExternalMarkdownFile(absolutePath: string): Promise<string> {
@@ -1061,12 +1520,12 @@ function splitAbsoluteFilePath(path: string): { root: string; relativePath: stri
   return { root, relativePath: `/${normalized.slice(slash + 1)}` };
 }
 
-function downloadScratchAsMarkdown(): void {
+function downloadScratchAsMarkdown(fileName: string): void {
   const blob = new Blob([currentContent.value], { type: 'text/markdown;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = '临时草稿.md';
+  link.download = fileName;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -1086,17 +1545,18 @@ async function enterNotebookFromSavedScratch(absolutePath: string): Promise<void
 }
 
 async function saveScratchAs(): Promise<boolean> {
-  if (!isScratchSession.value || !currentContent.value.trim()) return false;
+  if (!isScratchSession.value) return false;
+  const defaultFileName = getDraftMarkdownFileName(currentContent.value);
 
   if (!window.__TAURI__) {
-    downloadScratchAsMarkdown();
+    downloadScratchAsMarkdown(defaultFileName);
     isDirty.value = false;
     return true;
   }
 
   const selected = await saveDialog({
     title: '保存临时草稿',
-    defaultPath: '临时草稿.md',
+    defaultPath: defaultFileName,
     filters: [
       {
         name: 'Markdown',
@@ -1200,16 +1660,100 @@ async function listExternalNoteDirectory(relativePath = '/'): Promise<DirEntry[]
   );
 }
 
+function syncCurrentContentFromEditor(): void {
+  const view = editorRef.value?.getEditorView();
+  if (!view) return;
+  const content = view.state.doc.toString();
+  if (content === currentContent.value) return;
+
+  currentContent.value = content;
+  updateHeadings(content);
+  updateEditorStats(content);
+  scheduleSplitEditorMountForCurrentMode();
+  refreshSplitPreviewIfVisible();
+  if (isScratchSession.value) {
+    isDirty.value = content.trim().length > 0;
+  } else if (activePath.value || isExternalEditing.value) {
+    isDirty.value = true;
+  }
+}
+
+function encodeContentSize(content: string): number {
+  return new TextEncoder().encode(content).length;
+}
+
+function parentDirFromPath(path: string): string {
+  const normalized = normalizePath(path);
+  const slash = normalized.lastIndexOf('/');
+  return slash > 0 ? normalized.slice(0, slash) : '/';
+}
+
+function basenameFromPath(path: string): string {
+  return normalizePath(path).split('/').pop() ?? '';
+}
+
+function writeMockFileToStorage(path: string, content: string): void {
+  if (window.__TAURI__) return;
+  const raw = localStorage.getItem(MOCK_FS_STORAGE_KEY);
+  if (!raw) return;
+
+  try {
+    const data = JSON.parse(raw) as {
+      files?: Record<string, { content: string; mtime: number; size: number }>;
+      dirs?: Record<string, string[]>;
+      version?: number;
+    };
+    if (!data.files || !data.dirs) return;
+    const normalized = normalizePath(path);
+    const now = Date.now();
+    data.files[normalized] = {
+      content,
+      mtime: now,
+      size: encodeContentSize(content),
+    };
+
+    const parent = parentDirFromPath(normalized);
+    const name = basenameFromPath(normalized);
+    data.dirs[parent] = data.dirs[parent] ?? [];
+    if (name && !data.dirs[parent].includes(name)) data.dirs[parent].push(name);
+    localStorage.setItem(MOCK_FS_STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // MockFSService will recover corrupted storage on next startup.
+  }
+}
+
+function rememberPendingMockFileWrite(path: string, content: string): void {
+  if (window.__TAURI__ || isExternalEditing.value || isScratchSession.value) return;
+  pendingMockFileWrites.set(normalizePath(path), content);
+}
+
+function flushPendingMockFileWritesSync(): void {
+  if (window.__TAURI__) return;
+  syncCurrentContentFromEditor();
+  if (!isExternalEditing.value && !isScratchSession.value && activePath.value) {
+    pendingMockFileWrites.set(normalizePath(activePath.value), currentContent.value);
+  }
+  for (const [path, content] of pendingMockFileWrites) {
+    writeMockFileToStorage(path, content);
+  }
+}
+
 async function flushPendingCurrentSave(): Promise<void> {
+  syncCurrentContentFromEditor();
   if (saveTimer) {
     clearTimeout(saveTimer);
     saveTimer = null;
   }
-  if (!isDirty.value) return;
+  if (!isDirty.value) {
+    if (currentSavePromise) await currentSavePromise;
+    return;
+  }
   if (isExternalEditing.value && externalFile.value) {
     await debouncedExternalSave(currentContent.value);
   } else if (activePath.value) {
     await debouncedSave(activePath.value, currentContent.value);
+  } else if (currentSavePromise) {
+    await currentSavePromise;
   }
 }
 
@@ -1251,6 +1795,7 @@ async function enterExternalFileSession(
     lastSavedAt.value = null;
     updateHeadings(content);
     updateEditorStats(content);
+    scheduleSplitEditorMountForCurrentMode();
     updateExternalPreview();
   } catch (e) {
     externalFile.value = openedFile;
@@ -1304,7 +1849,7 @@ async function initNotebook(): Promise<void> {
   try {
     await indexStore.initialize(fs, true);
     wikiLinkRevision.value++;
-    updateSplitPreview();
+    refreshSplitPreviewIfVisible();
     if (pendingOpenedFile) {
       await onSelectNote(pendingOpenedFile.relativePath);
     }
@@ -1339,7 +1884,7 @@ function clearActiveNoteState(): void {
   loading.value = false;
   updateHeadings('');
   updateEditorStats('');
-  updateSplitPreview();
+  refreshSplitPreviewIfVisible();
 }
 
 async function listDirectoryRecursive(
@@ -1381,15 +1926,24 @@ function onDrawerNavigateDir(path: string): void {
 
 // --- File Operations ---
 async function onSelectNote(path: string): Promise<void> {
+  const task = noteSelectionQueue.catch(() => undefined).then(() => selectNoteNow(path));
+  noteSelectionQueue = task.catch(() => undefined);
+  await task;
+}
+
+async function selectNoteNow(path: string): Promise<void> {
   // Flush any pending save before switching notes
   if (saveTimer) {
     clearTimeout(saveTimer);
     saveTimer = null;
   }
+  syncCurrentContentFromEditor();
   // 防御性刷新：即使 saveTimer 已触发但 debouncedSave 尚未完成，
   // 只要 isDirty 为 true 就执行保存，确保内容不丢失
   if (isDirty.value && activePath.value) {
     await debouncedSave(activePath.value, currentContent.value);
+  } else if (currentSavePromise) {
+    await currentSavePromise;
   }
 
   if (!path) {
@@ -1448,7 +2002,7 @@ async function onSelectNote(path: string): Promise<void> {
 
   updateHeadings(content);
   updateEditorStats(content);
-  updateSplitPreview();
+  refreshSplitPreviewIfVisible();
   try {
     await indexStore.refreshDocument(fs, path);
   } catch (e) {
@@ -1491,7 +2045,7 @@ async function onSelectExternalNote(path: string): Promise<void> {
     lastSavedAt.value = null;
     updateHeadings(content);
     updateEditorStats(content);
-    updateSplitPreview();
+    refreshSplitPreviewIfVisible();
     if (isExternalFolderIndexed.value) {
       await indexStore.refreshDocument(createExternalFolderFileSystem(), normalizedPath);
       wikiLinkRevision.value++;
@@ -1652,11 +2206,7 @@ async function confirmNewFile(): Promise<void> {
   await refreshFileTree();
   await indexStore.refreshDocument(fs, path);
   void trainCurrentFile(path, content);
-  activePath.value = path;
-  currentContent.value = content;
-  updateHeadings(content);
-  updateEditorStats(content);
-  updateSplitPreview();
+  enterNotebookFileState(path, content);
 }
 
 function cancelNewFile(): void {
@@ -1691,9 +2241,16 @@ function wikiLinkExists(noteTitle: string): boolean {
  */
 function updateSplitPreview(): void {
   if (previewRenderTimer) clearTimeout(previewRenderTimer);
+  const content = currentContent.value;
+  const lineCount = content ? content.split('\n').length : 0;
+  const renderDelay =
+    content.length > LARGE_DOCUMENT_PREVIEW_DELAY_THRESHOLD_CHARS ||
+    lineCount > LARGE_DOCUMENT_PREVIEW_DELAY_THRESHOLD_LINES
+      ? LARGE_DOCUMENT_DEFERRED_WORK_DELAY_MS
+      : 50;
   previewRenderTimer = setTimeout(() => {
     try {
-      splitPreviewHtml.value = renderMarkdown(currentContent.value, { wikiLinkExists });
+      splitPreviewHtml.value = renderMarkdown(content, { wikiLinkExists });
       void nextTick(() => {
         const previewEl = document.querySelector<HTMLElement>(
           '.split-preview, .markdown-body--full',
@@ -1705,7 +2262,7 @@ function updateSplitPreview(): void {
       console.error('[NotebookHome] 渲染预览失败:', e);
       splitPreviewHtml.value = '<p class="render-error">渲染失败</p>';
     }
-  }, 50);
+  }, renderDelay);
 }
 
 function updateExternalPreview(): void {
@@ -1872,12 +2429,13 @@ function onContentUpdate(content: string): void {
   if (isScratchSession.value) {
     isDirty.value = content.trim().length > 0;
     saveError.value = null;
-    updateSplitPreview();
+    refreshSplitPreviewIfVisible();
     return;
   }
   if (activePath.value) {
     isDirty.value = true;
     saveError.value = null;
+    rememberPendingMockFileWrite(activePath.value, content);
     if (saveTimer) clearTimeout(saveTimer);
     const savingPath = activePath.value;
     saveTimer = setTimeout(() => debouncedSave(savingPath, content), 600);
@@ -1921,51 +2479,68 @@ function updateEditorStats(content: string): void {
 }
 
 async function debouncedSave(path: string, content: string): Promise<void> {
-  const gen = ++saveGeneration;
-  isSaving.value = true;
-  const start = Date.now();
+  const saveTask = (async () => {
+    const gen = ++saveGeneration;
+    isSaving.value = true;
+    const start = Date.now();
+    try {
+      await fs.writeFile(path, content);
+      if (gen !== saveGeneration) return; // 新保存已启动，放弃本次后续操作
+      await indexStore.refreshDocument(fs, path);
+      void trainCurrentFile(path, content);
+      if (gen !== saveGeneration) return;
+      wikiLinkRevision.value++;
+      lastSavedAt.value = Date.now();
+      pendingMockFileWrites.delete(normalizePath(path));
+      const elapsed = Date.now() - start;
+      if (elapsed < 500) await new Promise((r) => setTimeout(r, 500 - elapsed));
+      if (gen !== saveGeneration) return;
+      isDirty.value = false;
+    } catch (e) {
+      saveError.value = String(e);
+    } finally {
+      if (gen === saveGeneration) isSaving.value = false;
+    }
+  })();
+  currentSavePromise = saveTask;
   try {
-    await fs.writeFile(path, content);
-    if (gen !== saveGeneration) return; // 新保存已启动，放弃本次后续操作
-    await indexStore.refreshDocument(fs, path);
-    void trainCurrentFile(path, content);
-    if (gen !== saveGeneration) return;
-    wikiLinkRevision.value++;
-    lastSavedAt.value = Date.now();
-    const elapsed = Date.now() - start;
-    if (elapsed < 500) await new Promise((r) => setTimeout(r, 500 - elapsed));
-    if (gen !== saveGeneration) return;
-    isDirty.value = false;
-  } catch (e) {
-    saveError.value = String(e);
+    await saveTask;
   } finally {
-    if (gen === saveGeneration) isSaving.value = false;
+    if (currentSavePromise === saveTask) currentSavePromise = null;
   }
 }
 
 async function debouncedExternalSave(content: string): Promise<void> {
-  if (!externalFile.value) return;
-  const gen = ++saveGeneration;
-  isSaving.value = true;
-  const start = Date.now();
+  const absolutePath = externalFile.value?.absolutePath;
+  if (!absolutePath) return;
+  const saveTask = (async () => {
+    const gen = ++saveGeneration;
+    isSaving.value = true;
+    const start = Date.now();
+    try {
+      await writeExternalNoteFile(absolutePath, content);
+      if (gen !== saveGeneration) return;
+      lastSavedAt.value = Date.now();
+      const elapsed = Date.now() - start;
+      if (elapsed < 300) await new Promise((r) => setTimeout(r, 300 - elapsed));
+      if (gen !== saveGeneration) return;
+      isDirty.value = false;
+    } catch (e) {
+      saveError.value = e instanceof Error ? e.message : String(e);
+    } finally {
+      if (gen === saveGeneration) isSaving.value = false;
+    }
+  })();
+  currentSavePromise = saveTask;
   try {
-    await writeExternalNoteFile(externalFile.value.absolutePath, content);
-    if (gen !== saveGeneration) return;
-    lastSavedAt.value = Date.now();
-    const elapsed = Date.now() - start;
-    if (elapsed < 300) await new Promise((r) => setTimeout(r, 300 - elapsed));
-    if (gen !== saveGeneration) return;
-    isDirty.value = false;
-  } catch (e) {
-    saveError.value = e instanceof Error ? e.message : String(e);
+    await saveTask;
   } finally {
-    if (gen === saveGeneration) isSaving.value = false;
+    if (currentSavePromise === saveTask) currentSavePromise = null;
   }
 }
 
 // --- Format Bubble ---
 const FORMAT_HINT_KEY = 'markluck:formatBubble:hintShown';
-const toast = useToast();
 
 watch(imageUpload.uploadError, (message) => {
   if (message) toast.show(message, 'error', 4000);
@@ -2123,16 +2698,11 @@ async function onTemplateSelect(_tpl: unknown, content: string): Promise<void> {
   const titleMatch = content.match(/^#\s+(.+)$/m);
   const name = titleMatch?.[1]?.trim() || '新笔记';
   const path = `/${name}.md`;
-  // Set activePath + currentContent BEFORE async write so editor mounts immediately
-  activePath.value = path;
-  currentContent.value = content;
   await fs.writeFile(path, content);
   await refreshFileTree();
   await indexStore.refreshDocument(fs, path);
   void trainCurrentFile(path, content);
-  updateHeadings(content);
-  updateEditorStats(content);
-  updateSplitPreview();
+  enterNotebookFileState(path, content);
   showTemplate.value = false;
 }
 
@@ -2140,16 +2710,11 @@ async function onCreateBlank(): Promise<void> {
   const today = new Date().toISOString().slice(0, 10);
   const path = `/笔记-${today}.md`;
   const content = '# 新笔记\n\n';
-  // Set activePath + currentContent BEFORE async write so editor mounts immediately
-  activePath.value = path;
-  currentContent.value = content;
   await fs.writeFile(path, content);
   await refreshFileTree();
   await indexStore.refreshDocument(fs, path);
   void trainCurrentFile(path, content);
-  updateHeadings(content);
-  updateEditorStats(content);
-  updateSplitPreview();
+  enterNotebookFileState(path, content);
   showTemplate.value = false;
 }
 
@@ -2250,6 +2815,7 @@ function hasUnsavedScratch(): boolean {
 }
 
 function onBeforeUnload(e: BeforeUnloadEvent): void {
+  flushPendingMockFileWritesSync();
   if (!hasUnsavedScratch()) return;
   e.preventDefault();
   e.returnValue = '';
@@ -2350,6 +2916,7 @@ onUnmounted(() => {
   window.removeEventListener('beforeunload', onBeforeUnload);
   if (saveTimer) clearTimeout(saveTimer);
   if (splitDebounceTimer) clearTimeout(splitDebounceTimer);
+  if (splitEditorMountTimer) clearTimeout(splitEditorMountTimer);
   if (previewRenderTimer) clearTimeout(previewRenderTimer);
   if (updateTimer) clearTimeout(updateTimer);
   if (splitDragCleanup) splitDragCleanup();
@@ -2366,6 +2933,16 @@ function onDismissVersion(version: string) {
 </script>
 
 <style scoped>
+.notebook-home-root {
+  height: 100vh;
+  min-height: 0;
+}
+
+.editor-shell-frame {
+  height: 100vh;
+  min-height: 0;
+}
+
 /* ===== External Reader Session ===== */
 .external-mode-enter-active,
 .external-mode-leave-active {
@@ -2378,6 +2955,10 @@ function onDismissVersion(version: string) {
 .external-mode-leave-to {
   opacity: 0;
   transform: translateY(8px);
+}
+
+.external-reader-frame {
+  min-height: 100vh;
 }
 
 .external-reader {
@@ -2582,13 +3163,6 @@ function onDismissVersion(version: string) {
   .external-mode-leave-to {
     transform: none;
   }
-}
-
-/* ===== Scratch Canvas ===== */
-.scratch-canvas {
-  height: 100%;
-  min-height: 0;
-  background: var(--paper-surface);
 }
 
 /* ===== Workflow Canvas ===== */
@@ -2802,6 +3376,15 @@ function onDismissVersion(version: string) {
 
 .split-left {
   border-right: none;
+}
+
+.large-doc-editor-placeholder {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  color: var(--ink-secondary);
+  background: var(--paper-surface);
+  font-size: var(--fs-sm);
 }
 
 .split-right {

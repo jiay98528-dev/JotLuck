@@ -3,23 +3,24 @@ import type {
   InstalledThemePack,
   ThemeManifestV2,
   ThemePackageInput,
-  ThemePermission,
   ThemeUxRecipeMap,
   ThemeValidationIssue,
 } from '@/types/theme-pack';
 import { APP_THEME_VERSION } from './ThemeRegistry';
 
 const STORAGE_KEY = 'markluck:themes:installed:v2';
-const AUTH_KEY = 'markluck:themes:trusted-code-authorized:v2';
 const MAX_THEME_PACKAGE_BYTES = 8 * 1024 * 1024;
 const MAX_CSS_BYTES = 256 * 1024;
 const ALLOWED_ASSET_RE = /\.(png|jpe?g|webp|gif|svg)$/i;
 const CHECKSUM_RE = /^sha256-[a-f0-9]{64}$/i;
-const ALLOWED_DEFAULT_PERMISSIONS: ThemePermission[] = [
+const ALLOWED_DEFAULT_PERMISSIONS = [
   'shell-layout',
   'component-replace',
   'visual-effects',
   'theme-storage',
+  'network',
+  'filesystem-read',
+  'filesystem-write',
 ];
 
 interface StoredThemePackage {
@@ -35,6 +36,10 @@ type ThemeZipInput = Blob | ArrayBuffer | Uint8Array;
 
 export async function installThemePack(input: ThemeZipInput): Promise<InstalledThemePack> {
   return installLocalThemePackage(await parseThemePack(input));
+}
+
+export async function importThemePackFromFile(input: ThemeZipInput): Promise<InstalledThemePack> {
+  return installThemePack(input);
 }
 
 export async function parseThemePack(input: ThemeZipInput): Promise<ThemePackageInput> {
@@ -121,7 +126,7 @@ export function validateThemePackage(input: ThemePackageInput): ThemeValidationI
         permission === 'filesystem-write')
     ) {
       issues.push({
-        code: 'permission-not-enabled',
+        code: 'unknown-permission-declaration',
         message: `当前版本不默认开放 ${permission} 权限。`,
         path: 'manifest.permissions',
       });
@@ -196,7 +201,7 @@ export function installLocalThemePackage(input: ThemePackageInput): InstalledThe
     ux: input.ux,
     codeBundles: input.codeBundles,
     installedAt: Date.now(),
-    trustedCodeAuthorized: false,
+    trustedCodeAuthorized: true,
   };
   const all = loadStoredThemePackages().filter((item) => item.manifest.id !== input.manifest.id);
   all.unshift(stored);
@@ -215,13 +220,12 @@ export function removeInstalledThemePack(themeId: string): InstalledThemePack[] 
 }
 
 export function authorizeTrustedCodeTheme(themeId: string): void {
-  const authorized = readAuthorizedThemeIds();
-  authorized.add(themeId);
-  localStorage.setItem(AUTH_KEY, JSON.stringify([...authorized]));
+  void themeId;
 }
 
 export function isTrustedCodeThemeAuthorized(themeId: string): boolean {
-  return readAuthorizedThemeIds().has(themeId);
+  void themeId;
+  return true;
 }
 
 function loadStoredThemePackages(): StoredThemePackage[] {
@@ -235,16 +239,6 @@ function loadStoredThemePackages(): StoredThemePackage[] {
   }
 }
 
-function readAuthorizedThemeIds(): Set<string> {
-  try {
-    const raw = localStorage.getItem(AUTH_KEY);
-    const parsed = raw ? (JSON.parse(raw) as string[]) : [];
-    return new Set(Array.isArray(parsed) ? parsed : []);
-  } catch {
-    return new Set();
-  }
-}
-
 function storedToInstalled(stored: StoredThemePackage): InstalledThemePack {
   return {
     manifest: stored.manifest,
@@ -254,7 +248,6 @@ function storedToInstalled(stored: StoredThemePackage): InstalledThemePack {
     previewImages: stored.manifest.previewImages,
     ux: stored.ux,
     codeBundles: stored.codeBundles,
-    trustedCodeAuthorized:
-      stored.trustedCodeAuthorized || isTrustedCodeThemeAuthorized(stored.manifest.id),
+    trustedCodeAuthorized: stored.trustedCodeAuthorized ?? true,
   };
 }

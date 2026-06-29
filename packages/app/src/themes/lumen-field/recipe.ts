@@ -1,0 +1,57 @@
+import type { ShellRecipe } from '@/types/theme-pack';
+
+export const recipe: ShellRecipe = {
+  layoutPreset: 'single-page',
+  workspaceIntent: 'studio',
+  defaultViewMode: 'live',
+  topBar: { variant: 'studio', layout: 'compact' },
+  leftWing: { mode: 'rail', layout: 'navigator' },
+  editorControl: { layout: 'stacked', density: 'productive' },
+  statusBar: { layout: 'dashboard', density: 'productive' },
+  rightWing: {
+    mode: 'atlas',
+    policy: 'atlas',
+    sections: ['outline', 'backlinks', 'tags'],
+    defaultOpenSections: ['outline', 'backlinks', 'tags'],
+  },
+  readingWidth: 'immersive',
+  drawerEmphasis: 'high',
+  motionIntensity: 'medium',
+  drawerShell: {
+    left: {
+      side: 'left',
+      slot: 'left-wing',
+      label: '文件信标',
+      size: 280,
+      minSize: 232,
+      maxSize: 360,
+    },
+    right: {
+      side: 'right',
+      slot: 'right-wing',
+      label: '知识雷达',
+      size: 320,
+      minSize: 260,
+      maxSize: 420,
+    },
+    bottom: {
+      side: 'bottom',
+      slot: 'editor-control',
+      label: '命令舱',
+      size: 164,
+      minSize: 124,
+      maxSize: 260,
+    },
+  },
+  actionPlacements: {
+    'new-note': 'left-wing',
+    'file-drawer': 'left-wing',
+    search: 'editor-control',
+    template: 'editor-control',
+    export: 'status-right',
+    share: 'status-right',
+    theme: 'status-right',
+    settings: 'status-right',
+    'view-toggle': 'editor-control',
+  },
+};

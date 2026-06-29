@@ -66,6 +66,7 @@ const computedClasses = computed<string>(() =>
   align-items: center;
   justify-content: center;
   gap: var(--space-8);
+  min-width: 0;
   border-radius: var(--radius);
   font-family: var(--ff-body);
   font-weight: var(--fw-medium);
@@ -320,7 +321,10 @@ const computedClasses = computed<string>(() =>
 
 /* --- Label --- */
 .mk-btn__label {
-  display: inline;
+  display: inline-block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ============================================================

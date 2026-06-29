@@ -264,7 +264,6 @@ export class MockFSService implements IFileSystemService {
   }
 
   async writeFile(path: string, content: string): Promise<void> {
-    await delay(this.latency);
     const normalized = normalizePath(path);
     const now = Date.now();
     this.data.files[normalized] = {
@@ -278,6 +277,7 @@ export class MockFSService implements IFileSystemService {
     const name = this.basename(normalized);
     if (!this.data.dirs[parent].includes(name)) this.data.dirs[parent].push(name);
     this.persist();
+    await delay(this.latency);
   }
 
   async writeBinary(path: string, base64: string): Promise<void> {

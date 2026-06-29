@@ -12,6 +12,22 @@ import { parseFrontmatter, extractTitle } from './YAMLParser';
 
 const MAX_INDEXED_NOTE_FILES = 2000;
 const INDEX_LIMIT_ERROR = 'MARKLUCK_INDEX_LIMIT_EXCEEDED';
+const INDEX_FILE_CONCURRENCY = 16;
+
+async function runLimited<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex++];
+      if (item !== undefined) await worker(item);
+    }
+  });
+  await Promise.all(workers);
+}
 
 export class IndexService {
   private fs: IFileSystemService;
@@ -21,6 +37,7 @@ export class IndexService {
   private recentNotesList: Array<{ path: string; title: string; lastOpenedAt: number }> = [];
   private tagIndex: Map<string, string[]> = new Map();
   private allDocuments: Record<string, DocumentEntry> = {};
+  private documentContents: Map<string, string> = new Map();
   private indexedNoteCount = 0;
   private populateRecent: boolean;
 
@@ -80,6 +97,7 @@ export class IndexService {
 
     for (const removed of searchIndexPaths) {
       this.engine.removeDocument(removed);
+      this.documentContents.delete(removed);
     }
   }
 
@@ -119,6 +137,7 @@ export class IndexService {
     this.wikiIncoming.clear();
     this.tagIndex.clear();
     this.recentNotesList = [];
+    this.documentContents.clear();
     this.indexedNoteCount = 0;
 
     const documents: Record<string, DocumentEntry> = {};
@@ -149,8 +168,12 @@ export class IndexService {
       : [];
 
     this.engine.buildIndex(documents);
-    // Load full file content into the search engine for content-based matching
-    await this.engine.preloadContent(documents, (path) => this.fs.readFile(path));
+    // Reuse content already read during indexing. Falling back keeps the contract
+    // intact for documents added by future alternate scanners.
+    await this.engine.preloadContent(
+      documents,
+      async (path) => this.documentContents.get(path) ?? this.fs.readFile(path),
+    );
     return {
       version: '1',
       lastUpdated: new Date().toISOString(),
@@ -165,18 +188,20 @@ export class IndexService {
   private async scanDirectory(dir: string): Promise<void> {
     try {
       const entries = await this.fs.listDirectory(dir);
+      const noteEntries = entries.filter(
+        (entry) => entry.isFile && isSupportedNoteFile(entry.name),
+      );
+      if (this.indexedNoteCount + noteEntries.length > MAX_INDEXED_NOTE_FILES) {
+        throw new Error(
+          `${INDEX_LIMIT_ERROR}: 当前文件夹包含超过 ${MAX_INDEXED_NOTE_FILES} 个笔记文件，请选择更精确的笔记本文件夹。`,
+        );
+      }
+      this.indexedNoteCount += noteEntries.length;
+
+      await runLimited(noteEntries, INDEX_FILE_CONCURRENCY, (entry) => this.indexFile(entry.path));
+
       for (const entry of entries) {
-        if (entry.isDirectory) {
-          await this.scanDirectory(entry.path);
-        } else if (isSupportedNoteFile(entry.name)) {
-          if (this.indexedNoteCount >= MAX_INDEXED_NOTE_FILES) {
-            throw new Error(
-              `${INDEX_LIMIT_ERROR}: 当前文件夹包含超过 ${MAX_INDEXED_NOTE_FILES} 个笔记文件，请选择更精确的笔记本文件夹。`,
-            );
-          }
-          await this.indexFile(entry.path);
-          this.indexedNoteCount++;
-        }
+        if (entry.isDirectory) await this.scanDirectory(entry.path);
       }
     } catch (e) {
       if (String(e).includes(INDEX_LIMIT_ERROR)) throw e;
@@ -188,6 +213,7 @@ export class IndexService {
   private async indexFile(path: string): Promise<void> {
     try {
       const content = await this.fs.readFile(path);
+      this.documentContents.set(path, content);
       const fm = parseFrontmatter(content);
       const title =
         fm.data.title ||
@@ -254,6 +280,7 @@ export class IndexService {
     if (entry) {
       try {
         const content = await this.fs.readFile(path);
+        this.documentContents.set(path, content);
         this.engine.updateDocument(path, entry, content);
       } catch (e) {
         // eslint-disable-next-line no-console

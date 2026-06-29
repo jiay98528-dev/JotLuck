@@ -238,13 +238,15 @@ test.describe('边界与压力测试', () => {
     // Verify app is still functional after rapid switching
     await expect(page.locator('.cm-content')).toBeVisible({ timeout: 5000 });
     await expect(page.locator('.app-shell')).toBeVisible();
+    await page.locator('.wing-bookmark-dot').first().click();
+    await expect(page.locator('.status-saved')).toBeVisible({ timeout: 10000 });
 
     // Should be able to type after switching
     await page.locator('.cm-content').click();
-    await page.keyboard.type(' Rapid switch survived!');
-    await page.waitForTimeout(300);
-    const content = await getEditorContent(page);
-    expect(content).toContain('Rapid switch survived');
+    await page.keyboard.insertText(' Rapid switch survived!');
+    await expect
+      .poll(() => getEditorContent(page), { timeout: 5000 })
+      .toContain('Rapid switch survived');
   });
 
   // ----------------------------------------------------------

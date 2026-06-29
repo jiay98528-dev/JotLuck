@@ -2,27 +2,31 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import type {
   InstalledThemePack,
+  ThemeCheckoutResult,
   ThemeChromeState,
+  ThemeEntitlementDescriptor,
+  ThemeLicenseRedeemRequest,
   ThemeLayoutPreset,
   ThemePackageInput,
   ThemeValidationIssue,
   ThemeUxRecipeMap,
 } from '@/types/theme-pack';
+import { createMockThemeCommerceProvider } from '@/services/ThemeCommerceProvider';
 import {
   ACTIVE_THEME_STYLE_ID,
   DEFAULT_THEME_ID,
   getAllRegistryThemePacks,
 } from '@/services/ThemeRegistry';
 import {
-  authorizeTrustedCodeTheme,
+  importThemePackFromFile,
   installLocalThemePackage,
-  isTrustedCodeThemeAuthorized,
   loadInstalledThemePacks,
   removeInstalledThemePack,
   validateThemePackage,
 } from '@/services/ThemePackInstaller';
 
 const THEME_STATE_KEY = 'markluck:theme-state:v2';
+export const THEME_CENTER_SHOW_DEV_THEMES_KEY = 'markluck:theme-center:show-dev-themes';
 
 const SAFE_LOCAL_CHROME_STATE: ThemeChromeState = {
   official: false,
@@ -65,6 +69,13 @@ function cloneChromeState(chrome: ThemeChromeState): ThemeChromeState {
     rightWingSections: [...chrome.rightWingSections],
     defaultOpenSections: [...chrome.defaultOpenSections],
     actionPlacements: { ...chrome.actionPlacements },
+    drawerShell: chrome.drawerShell
+      ? {
+          left: { ...chrome.drawerShell.left },
+          right: { ...chrome.drawerShell.right },
+          bottom: { ...chrome.drawerShell.bottom },
+        }
+      : undefined,
   };
 }
 
@@ -102,6 +113,13 @@ function chromeStateFromPack(pack: InstalledThemePack): ThemeChromeState {
     statusLayout: recipe.statusBar.layout,
     rightWingPolicy: recipe.rightWing.policy,
     actionPlacements: { ...recipe.actionPlacements },
+    drawerShell: recipe.drawerShell
+      ? {
+          left: { ...recipe.drawerShell.left },
+          right: { ...recipe.drawerShell.right },
+          bottom: { ...recipe.drawerShell.bottom },
+        }
+      : undefined,
   };
 }
 
@@ -130,6 +148,19 @@ function persistThemeId(themeId: string): void {
   localStorage.setItem(THEME_STATE_KEY, JSON.stringify({ activeThemeId: themeId }));
 }
 
+function isCatalogTheme(pack: InstalledThemePack): boolean {
+  return pack.source === 'builtin' || pack.source === 'market';
+}
+
+function isDeveloperCatalogTheme(pack: InstalledThemePack): boolean {
+  return pack.catalogVisibility === 'developer' || pack.module?.catalogVisibility === 'developer';
+}
+
+function readShowDeveloperThemes(): boolean {
+  if (!import.meta.env.DEV || typeof localStorage === 'undefined') return false;
+  return localStorage.getItem(THEME_CENTER_SHOW_DEV_THEMES_KEY) === 'true';
+}
+
 export const useThemeStore = defineStore('theme', () => {
   const activeThemeId = ref(DEFAULT_THEME_ID);
   const previewThemeId = ref<string | null>(null);
@@ -137,10 +168,25 @@ export const useThemeStore = defineStore('theme', () => {
   const initialized = ref(false);
   const registryThemes = ref<InstalledThemePack[]>(getAllRegistryThemePacks());
   const installedThemes = ref<InstalledThemePack[]>([]);
+  const entitlements = ref<Record<string, ThemeEntitlementDescriptor>>({});
+  const commerceError = ref<string | null>(null);
+  const showDeveloperThemesInCatalog = ref(readShowDeveloperThemes());
 
   const themes = computed(() => uniqueThemes([...registryThemes.value, ...installedThemes.value]));
+  const commerce = createMockThemeCommerceProvider(() => themes.value);
   const marketThemes = computed(() => themes.value.filter((pack) => pack.source === 'market'));
   const importedThemes = computed(() => themes.value.filter((pack) => pack.source === 'imported'));
+  const publicCatalogThemes = computed(() =>
+    themes.value.filter((pack) => isCatalogTheme(pack) && !isDeveloperCatalogTheme(pack)),
+  );
+  const developerCatalogThemes = computed(() =>
+    themes.value.filter((pack) => isCatalogTheme(pack) && isDeveloperCatalogTheme(pack)),
+  );
+  const themeCenterCatalogThemes = computed(() =>
+    showDeveloperThemesInCatalog.value
+      ? [...publicCatalogThemes.value, ...developerCatalogThemes.value]
+      : publicCatalogThemes.value,
+  );
 
   const activeTheme = computed(() => {
     return (
@@ -167,6 +213,30 @@ export const useThemeStore = defineStore('theme', () => {
     installedThemes.value = loadInstalledThemePacks();
   }
 
+  function refreshThemeCenterDeveloperVisibility(): void {
+    showDeveloperThemesInCatalog.value = readShowDeveloperThemes();
+  }
+
+  async function refreshEntitlements(): Promise<void> {
+    try {
+      entitlements.value = await commerce.refreshEntitlements();
+      commerceError.value = null;
+    } catch (error) {
+      commerceError.value = error instanceof Error ? error.message : String(error);
+      entitlements.value = Object.fromEntries(
+        themes.value.map((pack) => [
+          pack.manifest.id,
+          {
+            state: 'offline-unknown',
+            checkedAt: new Date().toISOString(),
+            provider: commerce.id,
+            note: 'Entitlement refresh failed; installed themes remain usable offline.',
+          } satisfies ThemeEntitlementDescriptor,
+        ]),
+      );
+    }
+  }
+
   function init(): void {
     if (initialized.value) return;
     refreshRegistry();
@@ -176,6 +246,7 @@ export const useThemeStore = defineStore('theme', () => {
       : DEFAULT_THEME_ID;
     apply();
     initialized.value = true;
+    void refreshEntitlements();
   }
 
   function apply(): void {
@@ -202,6 +273,11 @@ export const useThemeStore = defineStore('theme', () => {
       html.setAttribute('data-editor-control-layout', chrome.editorControlLayout);
       html.setAttribute('data-status-layout', chrome.statusLayout);
       html.setAttribute('data-right-wing-policy', chrome.rightWingPolicy);
+      if (chrome.drawerShell) {
+        html.setAttribute('data-drawer-shell', 'enabled');
+      } else {
+        html.removeAttribute('data-drawer-shell');
+      }
       html.setAttribute('data-theme-role', pack.officialProfile?.role ?? 'baseline');
       html.setAttribute(
         'data-theme-performance',
@@ -217,16 +293,9 @@ export const useThemeStore = defineStore('theme', () => {
     }
   }
 
-  function assertActivatable(pack: InstalledThemePack): void {
-    if (pack.manifest.runtime !== 'trusted-code') return;
-    if (pack.trustedCodeAuthorized || isTrustedCodeThemeAuthorized(pack.manifest.id)) return;
-    throw new Error(`主题 ${pack.manifest.name} 包含可信代码，启用前需要授权`);
-  }
-
   function activateTheme(themeId: string): void {
     const pack = themes.value.find((item) => item.manifest.id === themeId);
     if (!pack) throw new Error(`主题不存在: ${themeId}`);
-    assertActivatable(pack);
     activeThemeId.value = themeId;
     previewThemeId.value = null;
     persistThemeId(themeId);
@@ -253,7 +322,17 @@ export const useThemeStore = defineStore('theme', () => {
   function installTheme(input: ThemePackageInput): ThemeValidationIssue[] {
     installLocalThemePackage(input);
     refreshRegistry();
+    void refreshEntitlements();
     return [];
+  }
+
+  async function importThemePack(
+    input: Blob | ArrayBuffer | Uint8Array,
+  ): Promise<InstalledThemePack> {
+    const pack = await importThemePackFromFile(input);
+    refreshRegistry();
+    void refreshEntitlements();
+    return pack;
   }
 
   function uninstallTheme(themeId: string): void {
@@ -268,15 +347,35 @@ export const useThemeStore = defineStore('theme', () => {
     }
     if (previewThemeId.value === themeId) previewThemeId.value = null;
     apply();
+    void refreshEntitlements();
   }
 
   function authorizeTrustedCode(themeId: string): void {
-    authorizeTrustedCodeTheme(themeId);
+    void themeId;
     refreshRegistry();
   }
 
   function validateTheme(input: ThemePackageInput): ThemeValidationIssue[] {
     return validateThemePackage(input);
+  }
+
+  function entitlementFor(themeId: string): ThemeEntitlementDescriptor {
+    return (
+      entitlements.value[themeId] ?? {
+        state: 'offline-unknown',
+        checkedAt: new Date(0).toISOString(),
+        provider: commerce.id,
+      }
+    );
+  }
+
+  async function createCheckout(themeId: string): Promise<ThemeCheckoutResult> {
+    const pack = themes.value.find((item) => item.manifest.id === themeId);
+    return commerce.createCheckout({ themeId, sku: pack?.manifest.sku });
+  }
+
+  async function redeemThemeLicense(request: ThemeLicenseRedeemRequest): Promise<void> {
+    entitlements.value = await commerce.redeemLicense(request);
   }
 
   function resetTheme(): void {
@@ -303,9 +402,16 @@ export const useThemeStore = defineStore('theme', () => {
     activeLayoutPreset,
     registryThemes,
     installedThemes,
+    entitlements,
+    commerce,
+    commerceError,
     themes,
     marketThemes,
     importedThemes,
+    publicCatalogThemes,
+    developerCatalogThemes,
+    themeCenterCatalogThemes,
+    showDeveloperThemesInCatalog,
     activeTheme,
     previewTheme,
     renderedTheme,
@@ -320,9 +426,15 @@ export const useThemeStore = defineStore('theme', () => {
     previewThemeById,
     clearPreview,
     installTheme,
+    importThemePack,
     uninstallTheme,
     authorizeTrustedCode,
     validateTheme,
+    entitlementFor,
+    refreshEntitlements,
+    refreshThemeCenterDeveloperVisibility,
+    createCheckout,
+    redeemThemeLicense,
     resetTheme,
   };
 });

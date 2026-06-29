@@ -5,6 +5,7 @@ import { tokens } from './tokens';
 const abilityLabModule: OfficialThemeModule = {
   id: 'markluck.ability-lab',
   name: '能力验证台',
+  catalogVisibility: 'developer',
   tags: ['local-market', 'ux-components', 'trusted-ready'],
   capabilities: ['tokens', 'layout-preset', 'ux-components', 'animations', 'trusted-code'],
   meta: {

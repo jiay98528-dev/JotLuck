@@ -59,6 +59,12 @@ function moduleToPack(
   mod: OfficialThemeModule,
   source: InstalledThemePack['source'],
 ): InstalledThemePack {
+  const uxSlots = mod.ux ? (Object.keys(mod.ux) as ThemeSlotId[]) : [];
+  const pluginSlots = mod.plugin?.components
+    ? (Object.keys(mod.plugin.components) as ThemeSlotId[])
+    : [];
+  const slots = Array.from(new Set([...uxSlots, ...pluginSlots]));
+  const previewImages = mod.meta.previewImage ? [mod.meta.previewImage] : undefined;
   return {
     manifest: {
       id: mod.id,
@@ -73,15 +79,41 @@ function moduleToPack(
       permissions: ['shell-layout', 'component-replace', 'visual-effects', 'theme-storage'],
       layoutPreset: mod.recipe.layoutPreset,
       checksums: { 'theme.css': BUILTIN_CHECKSUM },
-      slots: mod.ux ? (Object.keys(mod.ux) as ThemeSlotId[]) : undefined,
+      slots: slots.length > 0 ? slots : undefined,
+      previewImages,
       category: 'official',
       tags: mod.tags,
       price: 'included',
+      sku: `${mod.id}@1.0.0`,
+      channel: source === 'market' ? 'local-market' : 'builtin',
+      licenseKind: source === 'market' ? 'free' : 'included',
+      entitlement: {
+        state: source === 'market' ? 'free' : 'included',
+        provider: 'local-mock',
+      },
+      catalogUrl: '/v1/themes/catalog',
+      bundleUrl: `local://themes/${mod.id}`,
+      publisher: {
+        id: 'markluck',
+        name: 'MarkLuck',
+        verified: true,
+      },
+      releaseNotes: 'Bundled with the local MarkLuck theme catalog.',
+      compatibility: {
+        minAppVersion: APP_THEME_VERSION,
+        themeApi: 2,
+      },
+      commercialNote:
+        source === 'market'
+          ? 'Local market sample. Future paid catalog providers can reuse this manifest shape.'
+          : 'Included official theme. Core writing features are never locked behind commerce.',
     },
     css: buildThemeCss(mod.id, mod.tokens, mod.css),
     source,
     installedAt: 0,
+    previewImages,
     officialProfile: mod.meta,
+    catalogVisibility: mod.catalogVisibility ?? 'public',
     module: mod,
     ux: mod.ux,
     readonly: true,
@@ -133,6 +165,9 @@ function cloneThemePack(pack: InstalledThemePack): InstalledThemePack {
       checksums: { ...pack.manifest.checksums },
       previewImages: pack.manifest.previewImages ? [...pack.manifest.previewImages] : undefined,
       tags: pack.manifest.tags ? [...pack.manifest.tags] : undefined,
+      entitlement: pack.manifest.entitlement ? { ...pack.manifest.entitlement } : undefined,
+      publisher: pack.manifest.publisher ? { ...pack.manifest.publisher } : undefined,
+      compatibility: pack.manifest.compatibility ? { ...pack.manifest.compatibility } : undefined,
     },
     previewImages: pack.previewImages ? [...pack.previewImages] : undefined,
     assetMap: pack.assetMap ? { ...pack.assetMap } : undefined,

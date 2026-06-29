@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
 import {
-  authorizeTrustedCodeTheme,
+  importThemePackFromFile,
   installLocalThemePackage,
-  isTrustedCodeThemeAuthorized,
   loadInstalledThemePacks,
   parseThemePack,
   removeInstalledThemePack,
@@ -37,12 +36,12 @@ describe('ThemePackInstaller', () => {
     expect(validateThemePackage({ manifest: manifest() })).toEqual([]);
   });
 
-  it('rejects disabled network and filesystem permissions by default', () => {
+  it('keeps network and filesystem permissions as declarations, not install blockers', () => {
     const issues = validateThemePackage({
       manifest: manifest({ permissions: ['shell-layout', 'network', 'filesystem-write'] }),
     });
 
-    expect(issues.map((issue) => issue.code)).toContain('permission-not-enabled');
+    expect(issues).toEqual([]);
   });
 
   it('requires an entrypoint for trusted-code themes', () => {
@@ -53,17 +52,15 @@ describe('ThemePackInstaller', () => {
     expect(issues.map((issue) => issue.code)).toContain('missing-code-entrypoint');
   });
 
-  it('installs, authorizes, loads, and removes a local theme', () => {
+  it('installs, loads, and removes a local theme without trusted-code authorization gates', () => {
     const pack = installLocalThemePackage({
       manifest: manifest(),
       css: "[data-theme-id='local.test-theme'] { --accent: oklch(58% 0.12 180); }",
     });
 
     expect(pack.source).toBe('imported');
+    expect(pack.trustedCodeAuthorized).toBe(true);
     expect(loadInstalledThemePacks()).toHaveLength(1);
-
-    authorizeTrustedCodeTheme(pack.manifest.id);
-    expect(isTrustedCodeThemeAuthorized(pack.manifest.id)).toBe(true);
 
     removeInstalledThemePack(pack.manifest.id);
     expect(loadInstalledThemePacks()).toHaveLength(0);
@@ -93,6 +90,34 @@ describe('ThemePackInstaller', () => {
     expect(parsed.manifest.id).toBe('local.test-theme');
     expect(parsed.css).toContain('--accent');
     expect(parsed.ux?.topbar?.slot).toBe('topbar');
+  });
+
+  it('imports a .mltheme zip through the product import API', async () => {
+    const css = "[data-theme-id='local.import-theme'] { --accent: oklch(58% 0.12 180); }";
+    const zip = new JSZip();
+    zip.file(
+      'manifest.json',
+      JSON.stringify(
+        manifest({
+          id: 'local.import-theme',
+          name: 'Local Import Theme',
+          checksums: { 'theme.css': await sha256(css) },
+          channel: 'imported',
+          licenseKind: 'free',
+          sku: 'local.import-theme@1.0.0',
+        }),
+      ),
+    );
+    zip.file('theme.css', css);
+
+    const installed = await importThemePackFromFile(
+      await zip.generateAsync({ type: 'uint8array' }),
+    );
+
+    expect(installed.manifest.id).toBe('local.import-theme');
+    expect(installed.source).toBe('imported');
+    expect(installed.css).toContain('--accent');
+    expect(loadInstalledThemePacks()).toHaveLength(1);
   });
 
   it('parses trusted-code entrypoints into installed code bundles', async () => {

@@ -192,7 +192,9 @@ const legacyActionClass = computed(() => {
 
 .shell-action--full,
 .shell-action--short {
-  padding-inline: var(--space-8);
+  min-width: 44px;
+  padding-inline: var(--space-10);
+  line-height: var(--lh-ui);
 }
 
 .shell-action--search.shell-action--full,
@@ -228,6 +230,8 @@ const legacyActionClass = computed(() => {
 .shell-action__label {
   min-width: 0;
   overflow: hidden;
+  line-height: var(--lh-ui);
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>
