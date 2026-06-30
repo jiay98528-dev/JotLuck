@@ -112,3 +112,21 @@ jobs:
 
       - name: Run E2E tests
         run: pnpm --filter @markluck/app exec playwright test --project=${{ matrix.browser }} --workers=1
+
+  rust-audit:
+    name: Rust Dependency Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Audit Rust dependencies
+        run: cargo audit --file packages/app/src-tauri/Cargo.lock

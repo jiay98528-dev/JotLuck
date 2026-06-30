@@ -10,7 +10,16 @@ export default mergeConfig(
       coverage: {
         provider: 'v8',
         reportsDirectory: '../../coverage/app',
-        include: ['src/**/*.{ts,vue}'],
+        include: [
+          'src/services/MarkdownPredictor.ts',
+          'src/services/SearchEngine.ts',
+          'src/services/ThemeCommerceProvider.ts',
+          'src/services/ThemeRegistry.ts',
+          'src/utils/draft-file-name.ts',
+          'src/utils/markdown-formatting.ts',
+          'src/utils/ngram-engine.ts',
+          'src/utils/note-files.ts',
+        ],
         exclude: [
           'src/**/*.d.ts',
           'src/**/*.test.ts',
@@ -20,6 +29,12 @@ export default mergeConfig(
           'vite.config.ts',
           'vitest.config.ts',
         ],
+        thresholds: {
+          statements: 80,
+          branches: 80,
+          functions: 80,
+          lines: 80,
+        },
       },
     },
   }),

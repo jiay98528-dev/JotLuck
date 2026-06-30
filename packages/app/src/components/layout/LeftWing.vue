@@ -49,11 +49,11 @@
 
     <nav ref="bookmarkList" class="wing-bookmarks" aria-label="最近笔记">
       <button
-        v-for="(note, i) in notes"
+        v-for="note in notes"
         :key="note.path"
         class="wing-bookmark-dot"
         :class="{ active: note.path === activePath }"
-        :style="{ '--dot-color': dotPalette[note.colorIndex % 8], '--dot-delay': `${i * 30}ms` }"
+        :style="{ '--dot-color': dotPalette[note.colorIndex % 8] }"
         :title="note.title"
         :data-tooltip="note.title"
         :aria-label="note.title"
@@ -271,8 +271,6 @@ function normalizeBookmarkPath(path: string): string {
   background: transparent;
   cursor: pointer;
   color: var(--dot-color);
-  animation: dot-enter var(--dur-palette) var(--ease-fold) both;
-  animation-delay: var(--dot-delay);
 }
 
 .left-wing--layout-research-stack .wing-bookmarks {
@@ -408,17 +406,5 @@ function normalizeBookmarkPath(path: string): string {
 
 .wing-spacer {
   flex: 1;
-}
-
-@keyframes dot-enter {
-  from {
-    transform: translateY(4px);
-    opacity: 0;
-  }
-
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
 }
 </style>

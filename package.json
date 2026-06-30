@@ -14,6 +14,7 @@
     "format:fix": "prettier --write \"*.json\" \".github/**/*.yml\" \"AGENTS.md\" \"tool.md\" \"doc/**/*.md\" \"spec/**/*.md\" \"memory/**/*.md\" \"e2e/**/*.ts\" \"packages/**/*.{ts,vue,css,json,md,yaml}\"",
     "test": "pnpm --filter @markluck/app test",
     "test:coverage": "pnpm --filter @markluck/app test:coverage",
+    "audit:rust": "cargo audit --file packages/app/src-tauri/Cargo.lock",
     "typecheck": "pnpm --filter @markluck/app typecheck",
     "prepare": "husky"
   },

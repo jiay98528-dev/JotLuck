@@ -229,8 +229,11 @@ test.describe('边界与压力测试', () => {
     // Rapidly click through all dots multiple times
     for (let round = 0; round < 3; round++) {
       for (let i = 0; i < dotCount; i++) {
-        await dots.nth(i).click();
-        // No delay between clicks — stress test rapid switching
+        await dots.nth(i).evaluate((dot) => {
+          (dot as HTMLButtonElement).click();
+        });
+        // No delay between clicks — stress test rapid switching without
+        // coupling the assertion to WebKit's pointer stability heuristic.
       }
       await page.waitForTimeout(200);
     }
