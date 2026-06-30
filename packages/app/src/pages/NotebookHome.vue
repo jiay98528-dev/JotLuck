@@ -1237,6 +1237,7 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let saveGeneration = 0;
 let currentSavePromise: Promise<void> | null = null;
 let noteSelectionQueue: Promise<void> = Promise.resolve();
+let noteSelectionVersion = 0;
 const pendingMockFileWrites = new Map<string, string>();
 
 // --- Editor Stats ---
@@ -1931,12 +1932,18 @@ function onDrawerNavigateDir(path: string): void {
 
 // --- File Operations ---
 async function onSelectNote(path: string): Promise<void> {
-  const task = noteSelectionQueue.catch(() => undefined).then(() => selectNoteNow(path));
+  const selectionVersion = ++noteSelectionVersion;
+  const task = noteSelectionQueue
+    .catch(() => undefined)
+    .then(() => {
+      if (selectionVersion !== noteSelectionVersion) return;
+      return selectNoteNow(path, selectionVersion);
+    });
   noteSelectionQueue = task.catch(() => undefined);
   await task;
 }
 
-async function selectNoteNow(path: string): Promise<void> {
+async function selectNoteNow(path: string, selectionVersion: number): Promise<void> {
   // Flush any pending save before switching notes
   if (saveTimer) {
     clearTimeout(saveTimer);
@@ -1951,6 +1958,8 @@ async function selectNoteNow(path: string): Promise<void> {
     await currentSavePromise;
   }
 
+  if (selectionVersion !== noteSelectionVersion) return;
+
   if (!path) {
     clearActiveNoteState();
     return;
@@ -1958,6 +1967,7 @@ async function selectNoteNow(path: string): Promise<void> {
 
   try {
     const stat = await fs.statFile(path);
+    if (selectionVersion !== noteSelectionVersion) return;
     if (stat.isDirectory) {
       await loadDirectory(path);
       return;
@@ -1983,7 +1993,9 @@ async function selectNoteNow(path: string): Promise<void> {
   let content: string;
   try {
     content = await fs.readFile(path);
+    if (selectionVersion !== noteSelectionVersion) return;
   } catch (e) {
+    if (selectionVersion !== noteSelectionVersion) return;
     errorMessage.value = String(e);
     const normalizedTarget = normalizePath(path);
     const normalizedActive = normalizePath(activePath.value);

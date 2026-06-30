@@ -31,8 +31,7 @@ export async function getEditorContent(page: Page): Promise<string> {
 /** 在编辑器中输入文本 (聚焦 .cm-content 后逐字键入) */
 export async function typeInEditor(page: Page, text: string): Promise<void> {
   await ensureEditorReady(page);
-  const editor = page.locator('.cm-content');
-  await editor.click();
+  await focusEditor(page);
   // 使用 Ctrl+A+Backspace 清除内容（经 CM6 key handler，避免 fill() 的 MutationObserver 竞态）
   await page.keyboard.press('Control+a');
   await page.keyboard.press('Backspace');
@@ -43,8 +42,7 @@ export async function typeInEditor(page: Page, text: string): Promise<void> {
 /** 在编辑器中追加文本 */
 export async function appendInEditor(page: Page, text: string): Promise<void> {
   await ensureEditorReady(page);
-  const editor = page.locator('.cm-content');
-  await editor.click();
+  await focusEditor(page);
   // Move to end
   await page.keyboard.press('Control+End');
   await page.keyboard.type(text, { delay: 5 });
@@ -53,10 +51,23 @@ export async function appendInEditor(page: Page, text: string): Promise<void> {
 /** 清空编辑器内容 */
 export async function clearEditor(page: Page): Promise<void> {
   await ensureEditorReady(page);
-  const editor = page.locator('.cm-content');
-  await editor.click();
+  await focusEditor(page);
   await page.keyboard.press('Control+a');
   await page.keyboard.press('Backspace');
+}
+
+async function focusEditor(page: Page): Promise<void> {
+  const editor = page.locator('.cm-content').first();
+  await expect(editor).toBeVisible({ timeout: 5000 });
+  await editor.click({ timeout: 3000 }).catch(() => undefined);
+  await editor.evaluate((node) => {
+    (node as HTMLElement).focus();
+  });
+  await page
+    .waitForFunction(() => document.querySelector('.cm-editor')?.classList.contains('cm-focused'), {
+      timeout: 3000,
+    })
+    .catch(() => undefined);
 }
 
 /** 等待自动保存完成 (状态栏显示"已保存") */
