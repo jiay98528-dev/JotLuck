@@ -30,6 +30,8 @@ describe('ThemeDialog', () => {
     expect(text).toContain('当前使用');
     expect(text).toContain('主题说明');
     expect(text).toContain('导入主题文件');
+    expect(text).toContain('开发者实验功能');
+    expect(text).toContain('来自可信来源');
     expect(text).toContain('羽翼布局');
     expect(text).toContain('光场知识舱');
     expect(text).not.toContain('能力验证台');

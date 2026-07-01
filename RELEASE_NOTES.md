@@ -1,6 +1,6 @@
-# MarkLuck v0.15 Release Notes
+# MarkLuck v0.15.0-rc.1 Release Notes
 
-Date: 2026-06-25
+Date: 2026-06-30
 
 This release candidate focuses on release hardening, not new product scope. It
 collects the Web application, Tauri desktop path fixes, security/dependency
@@ -31,21 +31,20 @@ evidence into one reviewable candidate.
 
 ## Validation Matrix
 
-| Gate                      | Status              | Evidence                                                      |
-| ------------------------- | ------------------- | ------------------------------------------------------------- |
-| TypeScript                | Passed              | `pnpm.cmd --filter @markluck/app typecheck`                   |
-| ESLint                    | Passed              | `pnpm.cmd exec eslint packages/app/src packages/renderer/src` |
-| Stylelint                 | Passed              | `pnpm.cmd --filter @markluck/app lint:style`                  |
-| Unit tests                | Passed              | `vitest` 156/156                                              |
-| Web build                 | Passed              | Vite build completed                                          |
-| High npm audit            | Passed              | Remaining advisories are low/moderate                         |
-| Chromium E2E              | Passed              | 167/167 full run; table journey rechecked after final CSS fix |
-| Firefox risk suite        | Passed              | `16-user-journeys` 10/10                                      |
-| In-app browser manual GUI | Passed              | Core GUI journey closed in tool browser                      |
-| Installed desktop GUI     | Passed              | external read-only open, explicit edit/save, table, IME, Tab  |
-| Tauri release build       | Passed              | NSIS release installer generated in `打包/`                   |
-| WebKit E2E                | Environment blocked | Browser binary missing                                        |
-| Rust audit                | Environment blocked | `cargo audit` subcommand missing                              |
+| Gate                | Status           | Evidence                                                      |
+| ------------------- | ---------------- | ------------------------------------------------------------- |
+| TypeScript          | Passed           | `pnpm.cmd --filter @markluck/app typecheck`                   |
+| ESLint              | Passed           | `pnpm.cmd exec eslint packages/app/src packages/renderer/src` |
+| Stylelint           | Passed           | `pnpm.cmd --filter @markluck/app lint:style`                  |
+| Unit tests          | Passed           | `vitest` 187/187                                              |
+| Web build           | Passed           | Vite build completed                                          |
+| High npm audit      | Passed           | Remaining advisories are low/moderate                         |
+| Chromium E2E        | Passed           | 140 passed                                                    |
+| Firefox E2E         | Passed           | 137 passed / 3 skipped                                        |
+| WebKit E2E          | Passed           | 137 passed / 3 skipped; rapid note switching repeat=5 passed  |
+| GUI smoke           | Passed           | Create, switch, append, save, delete, no residual entry       |
+| Tauri release build | Passed           | NSIS release installer generated                              |
+| Rust audit          | Pending evidence | CI green or local `cargo-audit` output required for L4        |
 
 ## Upgrade And Data Notes
 
@@ -65,11 +64,10 @@ evidence into one reviewable candidate.
 
 ## Final RC Result
 
-M-R7 reached the final stop point on 2026-06-24. The current RC can proceed to
-user final review with two environment blockers recorded:
-
-- WebKit E2E requires installing the Playwright WebKit browser binary.
-- Rust dependency audit requires installing `cargo-audit`.
+M-R7 reached the final stop point and the final independent audit closed the
+WebKit rapid-switching blocker on 2026-06-30. The current RC can proceed to
+real-installer L4 review. Final public release must include Rust audit evidence
+from CI or a local `cargo-audit` run.
 
 Final evidence is recorded in
 `memory/release-candidate-final-report.md`.
@@ -83,5 +81,6 @@ file-open with the single-file read-only/edit session described above.
 
 Current package hash supersedes earlier RC hashes:
 
-- Installer: `打包/MarkLuck-v0.15-windows-x64/MarkLuck_v0.15_x64-setup.exe`
-- SHA256: `ace8db6f110eb13f3f7ad159fe25be309d7b8223f1515eb151c0e76fb30cac10`
+- Installer:
+  `packages/app/src-tauri/target/release/bundle/nsis/MarkLuck_0.15.0_x64-setup.exe`
+- SHA256: record in the installed-app L4 report for the exact published build.

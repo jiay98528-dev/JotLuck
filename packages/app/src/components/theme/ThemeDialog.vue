@@ -203,8 +203,18 @@
             <section class="theme-import">
               <div>
                 <h3>导入主题文件</h3>
-                <p>选择本机的主题包，安装后会出现在这里。</p>
+                <p>开发者实验功能。只导入你信任来源的 `.mltheme` 或 `.zip` 主题包。</p>
               </div>
+              <div class="theme-import__risk" role="note">
+                <strong>本地代码主题可执行主题作者提供的代码。</strong>
+                <span>
+                  MarkLuck 不会把它当作社区市场内容审核；导入后主题可接管已暴露的 UX 插槽。
+                </span>
+              </div>
+              <label class="theme-import__confirm">
+                <input v-model="importTrustAccepted" type="checkbox" />
+                <span>我确认该主题包来自可信来源，并理解这是开发者实验功能。</span>
+              </label>
               <input
                 ref="fileInput"
                 class="theme-center__file"
@@ -215,7 +225,8 @@
               <button
                 class="theme-action theme-action--primary theme-action--wide"
                 type="button"
-                @click="fileInput?.click()"
+                :disabled="!importTrustAccepted"
+                @click="openImportPicker"
               >
                 选择主题包
               </button>
@@ -268,6 +279,7 @@ const theme = useThemeStore();
 const fileInput = ref<HTMLInputElement | null>(null);
 const importMessage = ref('');
 const importError = ref('');
+const importTrustAccepted = ref(false);
 const selectedThemeId = ref<string | null>(null);
 
 const showDeveloperThemes = computed(
@@ -343,6 +355,14 @@ function activate(themeId: string): void {
   theme.activateTheme(themeId);
 }
 
+function openImportPicker(): void {
+  if (!importTrustAccepted.value) {
+    importError.value = '请先确认主题包来自可信来源。';
+    return;
+  }
+  fileInput.value?.click();
+}
+
 async function onImportFile(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
@@ -350,6 +370,10 @@ async function onImportFile(event: Event): Promise<void> {
   importError.value = '';
   importMessage.value = '';
   if (!file) return;
+  if (!importTrustAccepted.value) {
+    importError.value = '请先确认主题包来自可信来源。';
+    return;
+  }
   try {
     const pack = await theme.importThemePack(file);
     importMessage.value = `已安装：${pack.manifest.name}`;
@@ -740,6 +764,33 @@ async function onImportFile(event: Event): Promise<void> {
 .theme-import__list {
   display: grid;
   gap: var(--space-8);
+}
+
+.theme-import__risk,
+.theme-import__confirm {
+  display: grid;
+  gap: var(--space-6);
+  padding: var(--space-10);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: color-mix(in oklch, var(--signal-warning) 9%, var(--paper-surface));
+  color: var(--ink-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--lh-body);
+}
+
+.theme-import__risk strong {
+  color: var(--ink-primary);
+}
+
+.theme-import__confirm {
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  cursor: pointer;
+}
+
+.theme-import__confirm input {
+  margin-block-start: 0.2em;
 }
 
 .theme-installed {

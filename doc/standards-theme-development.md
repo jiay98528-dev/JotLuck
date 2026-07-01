@@ -27,7 +27,7 @@ ThemePluginModule 代码组件 > UxComponentRecipe DSL > 宿主默认组件
 | `official-code` | 内置官方主题模块         | 可携带 TS/Vue 组件和 `OfficialThemeModule.plugin`，随应用构建发布。                           |
 | `trusted-code`  | 本地导入的全 UX 插件主题 | 可加载 `runtime/*` 中声明的 JS bundle，注册 Vue 组件、注入 scoped CSS、执行主题生命周期逻辑。 |
 
-`trusted-code` 在当前 P0 产品策略下是本地全 UX 信任模型：不做权限审批、沙箱隔离或社区内容治理；`permissions` 当前作为能力声明和 UI 展示信息，不阻断已知权限值的本地主题启用。
+`trusted-code` 在当前 P0 产品策略下是本地全 UX 信任模型：不做权限审批、沙箱隔离或社区内容治理；`permissions` 当前作为能力声明和 UI 展示信息，不阻断已知权限值的本地主题启用。公开 RC 的主题中心导入入口必须标记为开发者实验功能，并在打开 `.mltheme/.zip` 文件选择器前要求用户确认主题包来自可信来源。该确认是产品披露，不是权限审批或沙箱。
 
 即便是 `trusted-code`，以下能力仍不属于主题直接接管范围：
 
@@ -117,6 +117,8 @@ Manifest 类型权威来源是 `packages/app/src/types/theme-pack.ts` 的 `Theme
 `catalogVisibility?: 'public' | 'developer'` 是官方内置主题模块的内部目录可见性字段，仅允许写在 `OfficialThemeModule` 上，不属于 `.mltheme` manifest 协议。默认值为 `public`；标记为 `developer` 的主题只用于本机开发和回归验收，普通主题中心不得展示，但仍必须能通过主题 id 被测试或内部入口直接激活。
 
 官方主题模块的 `meta.previewImage` 会由 `ThemeRegistry` 写入 `manifest.previewImages` 与 `InstalledThemePack.previewImages`。正式内置主题必须提交真实首页截图缩略图；外部导入主题缺少预览图时，主题中心才允许使用低调 fallback。
+
+外部导入主题必须在 UI 上明确区分于官方内置主题。导入入口不得暗示 MarkLuck 已审核主题包内容；若主题包包含 `trusted-code`，用户必须先看到“可执行本地主题代码”的说明。
 
 当前能力枚举：
 

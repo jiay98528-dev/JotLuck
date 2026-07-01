@@ -139,7 +139,6 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if let Some(opened_file) = capture_opened_file_from_args(&argv) {
                 *OPENED_FILE.lock().unwrap() = Some(opened_file.clone());

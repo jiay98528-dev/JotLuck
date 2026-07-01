@@ -23,13 +23,13 @@
 - 当前已验证的发行形态是 `Tauri + Windows NSIS` 桌面安装包，且现有验证结论明确写着“当前包仍是 unsigned release package”。见 [KNOWN_LIMITATIONS.md](../KNOWN_LIMITATIONS.md)、[memory/release-candidate-final-report.md](../memory/release-candidate-final-report.md)。
 - 桌面端会注册 `.md` / `.markdown` / `.mdx` 文件关联，不接管 `.txt`。见 [packages/app/src-tauri/tauri.conf.json](../packages/app/src-tauri/tauri.conf.json)、[README.md](../README.md)。
 - 应用当前存在一个真实联网点：GitHub Releases 版本检查。代码位于 [packages/app/src/composables/useVersionCheck.ts](../packages/app/src/composables/useVersionCheck.ts) 与 [packages/app/src/components/modals/SettingsDialog.vue](../packages/app/src/components/modals/SettingsDialog.vue)。欢迎页文案已经写明“仅查询 GitHub 公开版本号，不上传任何笔记内容”。见 [packages/app/src/pages/WelcomePage.vue](../packages/app/src/pages/WelcomePage.vue)。
-- 桌面端当前启用了较宽的 Tauri 权限：文件系统读写、对话框、`shell.open`、`process`。见 [packages/app/src-tauri/capabilities/default.json](../packages/app/src-tauri/capabilities/default.json)。
+- 桌面端当前启用了文件系统读写、对话框和 `shell.open`。`shell.open` 用于外部链接和系统设置入口；未使用的 `process` 权限应保持移除。见 [packages/app/src-tauri/capabilities/default.json](../packages/app/src-tauri/capabilities/default.json)。
 - Tauri 配置当前 `csp` 为 `null`。见 [packages/app/src-tauri/tauri.conf.json](../packages/app/src-tauri/tauri.conf.json)。
-- 主题系统允许导入本地 `.mltheme` / `.zip`，并支持 `trusted-code` 主题 runtime；当前策略是不做权限审批、沙箱隔离或社区治理。见 [doc/PRD.md](./PRD.md)、[doc/TAD.md](./TAD.md)、[doc/standards-theme-development.md](./standards-theme-development.md)。
-- 导入的本地 `trusted-code` 主题目前默认直接授权，且通过 `Blob` + `import()` 执行。见 [packages/app/src/services/ThemePackInstaller.ts](../packages/app/src/services/ThemePackInstaller.ts)、[packages/app/src/services/ThemeRuntimeHost.ts](../packages/app/src/services/ThemeRuntimeHost.ts)。
+- 主题系统允许导入本地 `.mltheme` / `.zip`，并支持 `trusted-code` 主题 runtime；当前策略是不做权限审批、沙箱隔离或社区治理，但导入入口必须显示实验标签和可信来源确认。见 [doc/PRD.md](./PRD.md)、[doc/TAD.md](./TAD.md)、[doc/standards-theme-development.md](./standards-theme-development.md)。
+- 导入的本地 `trusted-code` 主题通过 `Blob` + `import()` 执行；当前 RC 策略是保留为开发者实验功能，并在主题中心导入前要求用户显式确认可信来源。见 [packages/app/src/components/theme/ThemeDialog.vue](../packages/app/src/components/theme/ThemeDialog.vue)、[packages/app/src/services/ThemePackInstaller.ts](../packages/app/src/services/ThemePackInstaller.ts)、[packages/app/src/services/ThemeRuntimeHost.ts](../packages/app/src/services/ThemeRuntimeHost.ts)。
 - 当前代码里没有真实支付、真实账号、真实远程主题商店；`ThemeCommerceProvider` 仍是本地 mock。见 [packages/app/src/services/ThemeCommerceProvider.ts](../packages/app/src/services/ThemeCommerceProvider.ts)、[spec/progress.md](../spec/progress.md)。
 - 应用会在本机写入若干本地数据：最近笔记本、主题状态、主题授权 mock、欢迎页状态、更新检查状态、外部扫描设置，以及 `LOCALAPPDATA/MarkLuck/logs/startup-error.log`。见 [packages/app/src/services/TauriIPCService.ts](../packages/app/src/services/TauriIPCService.ts)、[packages/app/src/services/ThemePackInstaller.ts](../packages/app/src/services/ThemePackInstaller.ts)、[packages/app/src/services/ThemeCommerceProvider.ts](../packages/app/src/services/ThemeCommerceProvider.ts)、[packages/app/src-tauri/src/lib.rs](../packages/app/src-tauri/src/lib.rs)。
-- 当前版本号材料不一致：`package.json` / `tauri.conf.json` / `README.md` / `RELEASE_NOTES.md` 使用 `0.15.0` 或 `v0.15`，但 [KNOWN_LIMITATIONS.md](../KNOWN_LIMITATIONS.md) 与 [memory/release-candidate-final-report.md](../memory/release-candidate-final-report.md) 使用 `0.3.0-rc.1`。这会直接影响对外发行身份。
+- 当前发行身份统一为：应用版本 `0.15.0`，对外发行通道 `v0.15.0-rc.1`。最终公开包必须在安装版 L4 记录中写明安装包路径、SHA256 和 Rust audit 证据。
 
 ## 3. 首发建议结论
 
@@ -40,8 +40,8 @@
 - 收费入口：`官网/平台页收款`，不是应用内嵌真实支付
 - 默认网络策略：`手动检查更新或用户显式开启后再联网`
 - 风险功能策略：
-  - 推荐首发时关闭或隐藏“导入任意 trusted-code 主题”
-  - 若不关闭，则必须把它改成“开发者实验功能 + 明示风险 + 单独确认”
+  - `trusted-code` 导入保留为开发者实验功能
+  - 必须明示风险，并在打开主题包选择器前要求可信来源确认
 
 原因很直接：当前最大的发行风险不是笔记功能，而是“桌面包信任链 + 本地代码主题执行 + 对外材料缺失”。
 
@@ -51,14 +51,14 @@
 
 以下事项建议在公开发行前完成，否则不应把产品描述为“正式稳定发布”。
 
-| 事项                     | 当前状态                                                                                  | 为什么阻塞                                                           | 负责人             | 完成标准                                                                                |
-| ------------------------ | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------ | --------------------------------------------------------------------------------------- |
-| 版本与发行身份统一       | 当前存在 `0.15.0` 与 `0.3.0-rc.1` 双版本体系                                              | 用户、支付、发票、客服、下载页、哈希校验都会混乱                     | 开发               | 安装包名、应用内版本、README、Release Notes、Known Limitations、GitHub Release 全部一致 |
-| 主题导入风险策略定稿     | 当前 `.mltheme` 可导入，`trusted-code` 默认直接授权                                       | 这本质上是“本地执行第三方代码”能力，必须决定是否对普通用户开放       | 开发 + 商务        | 二选一：A. 正式版关闭/隐藏该功能；B. 保留但有风险提示、确认流、文档披露和实验标签       |
-| Tauri 权限最小化         | 当前 `process:default` 已启用，但仓库未见实际使用；`shell.open` 和 `csp: null` 仍偏宽     | 首发前要把“实际不用的能力”去掉，降低审计和信任成本                   | 开发               | 移除未使用插件/权限；形成一份最终权限说明                                               |
-| Windows 签名与安装信任链 | 当前已知是 unsigned NSIS installer                                                        | 对公司正式发行来说，未签名安装包会直接影响信任、拦截率和售后解释成本 | 开发 + 商务        | 已获得可用代码签名证书并完成签名验证                                                    |
-| 对外政策材料             | 仓库内暂无隐私政策、用户协议/EULA、第三方许可证清单、支持/退款说明                        | 公司主体对外收费或公开分发时，至少要把规则写清楚                     | 商务主责，开发配合 | 文档齐全并挂到下载页、官网、应用“关于”页                                                |
-| 发行说明闭环             | README 还引用了不存在的 `memory/release-hardening-execution-log.md`；发行材料版本也不一致 | 发行包说明不完整会直接损害可信度                                     | 开发               | README、Release Notes、Known Limitations、下载页、校验值、安装说明可互相对应            |
+| 事项                     | 当前状态                                                             | 为什么阻塞                                                           | 负责人             | 完成标准                                                                                |
+| ------------------------ | -------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------ | --------------------------------------------------------------------------------------- |
+| 版本与发行身份统一       | 当前统一为应用版本 `0.15.0`、发行通道 `v0.15.0-rc.1`                 | 用户、支付、发票、客服、下载页、哈希校验都依赖同一发行身份           | 开发               | 安装包名、应用内版本、README、Release Notes、Known Limitations、GitHub Release 全部一致 |
+| 主题导入风险策略定稿     | `.mltheme` 可导入，`trusted-code` 保留为开发者实验功能并要求显式确认 | 这本质上是“本地执行第三方代码”能力，必须对普通用户披露               | 开发 + 商务        | UI 风险提示、确认流、文档披露和实验标签一致                                             |
+| Tauri 权限最小化         | 已移除未使用的 `process` 权限；`shell.open` 和 `csp: null` 仍需说明  | 首发前要把“实际不用的能力”去掉，降低审计和信任成本                   | 开发               | 移除未使用插件/权限；形成一份最终权限说明                                               |
+| Windows 签名与安装信任链 | 当前已知是 unsigned NSIS installer                                   | 对公司正式发行来说，未签名安装包会直接影响信任、拦截率和售后解释成本 | 开发 + 商务        | 已获得可用代码签名证书并完成签名验证                                                    |
+| 对外政策材料             | 仓库内暂无隐私政策、用户协议/EULA、第三方许可证清单、支持/退款说明   | 公司主体对外收费或公开分发时，至少要把规则写清楚                     | 商务主责，开发配合 | 文档齐全并挂到下载页、官网、应用“关于”页                                                |
+| 发行说明闭环             | README、Release Notes、Known Limitations 与 RC 闸门文档必须互相对应  | 发行包说明不完整会直接损害可信度                                     | 开发               | README、Release Notes、Known Limitations、下载页、校验值、安装说明可互相对应            |
 
 ### 4.2 P1：首发前强烈建议完成
 
@@ -96,7 +96,7 @@
 动作：
 
 - 生产构建中隐藏“导入主题文件”入口。
-- 生产构建中禁用 `trusted-code` runtime。
+- 保留 `trusted-code` runtime，但把本地导入标记为“开发者实验功能”，并在打开文件选择器前要求可信来源确认。
 - 只保留内置主题与官方主题。
 
 优点：
@@ -221,7 +221,7 @@
 
 1. 统一版本号、安装包名、Release Notes、Known Limitations、README。
 2. 审查并收缩 Tauri 权限：
-   - 优先检查 `process:default`
+   - 确认 `process:default` 保持移除
    - 复核 `shell:allow-open`
    - 评估是否能恢复非空 CSP
 3. 根据第 0 阶段结论处理主题导入能力：
@@ -249,7 +249,7 @@
 
 - 功能边界和对外说法一致
 - 生产包权限最小化
-- 风险功能不再“默认静默开启”
+- 风险功能必须有可见披露和确认入口
 
 ### 阶段 2：商务与法务材料准备（D-10 到 D-5）
 

@@ -7,7 +7,7 @@
 
 ## 1. 执行摘要
 
-MarkLuck 的商业模式需要和它的产品哲学一致。根据项目文档，MarkLuck 是一个 **本地优先、全离线、纯文本、不锁数据、MIT 开源** 的 Markdown 笔记工具，当前发布通道已到 `0.3.0-rc.1`，Windows 桌面安装包、桌面构建、核心 GUI 闭环和主要自动化闸门都已通过验证。[PRD](./PRD.md) [README](../README.md) [进度](../spec/progress.md)
+MarkLuck 的商业模式需要和它的产品哲学一致。根据项目文档，MarkLuck 是一个 **本地优先、全离线、纯文本、不锁数据、MIT 开源** 的 Markdown 笔记工具，当前发布通道已到 `v0.15.0-rc.1`，Windows 桌面安装包、桌面构建、核心 GUI 闭环和主要自动化闸门都已通过验证。[PRD](./PRD.md) [README](../README.md) [进度](../spec/progress.md)
 
 在这个前提下，MarkLuck 不适合把“卖软件使用许可证”作为主盈利模式。原因很直接：MIT 已经给了用户极宽的使用、修改和分发权利，继续强调“买许可证才能用”会和开源心智冲突。
 

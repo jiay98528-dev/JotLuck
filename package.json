@@ -15,6 +15,7 @@
     "test": "pnpm --filter @markluck/app test",
     "test:coverage": "pnpm --filter @markluck/app test:coverage",
     "audit:rust": "cargo audit --file packages/app/src-tauri/Cargo.lock",
+    "release:rc-gate": "node scripts/release-rc-gate.mjs",
     "typecheck": "pnpm --filter @markluck/app typecheck",
     "prepare": "husky"
   },

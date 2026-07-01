@@ -1,21 +1,22 @@
 # Known Limitations
 
-This document describes limitations for MarkLuck `0.3.0-rc.1`. These are not
+This document describes limitations for MarkLuck `v0.15.0-rc.1`. These are not
 marketing claims; they are the remaining release constraints and expected
 behavior boundaries.
 
 ## Release Candidate Status
 
-- `0.3.0-rc.1` is a release candidate.
-- M-R7 final release-candidate validation has completed and reached the final
-  stop point.
-- Do not describe this build as the final stable release until the user accepts
-  the RC and the remaining environment gates are either run or formally waived.
+- `v0.15.0-rc.1` is a release candidate, not a final stable release.
+- L1/L2, coverage, build, Rust fmt/check/test, Tauri packaging,
+  Chromium/Firefox/WebKit E2E, and GUI smoke have passed in the final external
+  audit.
+- Final publication still requires a completed real-installer L4 report and
+  Rust audit evidence from CI or a local `cargo-audit` run.
 
 ## Environment-Dependent Gates
 
-- Playwright WebKit is blocked unless the WebKit browser binary is installed.
-- Rust dependency audit is blocked unless `cargo-audit` is installed.
+- Rust dependency audit requires the `cargo-audit` subcommand locally, or a
+  green CI Rust audit job with commit, URL, time, and status recorded.
 - Tauri release signing/notarization is not covered by the current unsigned
   Windows NSIS release package.
 - WebView2 installation uses Tauri's embedded bootstrapper. If a Windows device
@@ -31,16 +32,25 @@ behavior boundaries.
 
 ## Desktop App Limits
 
-- The latest verified package is an unsigned Windows NSIS release installer at
-  `打包/MarkLuck-0.3.0-rc.1-windows-x64/MarkLuck_0.3.0-rc.1_x64-setup.exe`.
-- The latest verified SHA256 is
-  `9b3d1f5fcec77996c1f8d5d046fe6724edda9baf425647bd848b68a7abcb8d8b`.
+- The RC installer path is
+  `packages/app/src-tauri/target/release/bundle/nsis/MarkLuck_0.15.0_x64-setup.exe`.
+- Each published installer must have its exact SHA256 recorded in the
+  installed-app L4 report.
 - Windows release packaging and installed desktop GUI risk validation have been
-  verified; macOS and Linux packages still need host-specific release
-  validation.
+  verified for Windows x64; macOS and Linux packages still need host-specific
+  release validation.
 - Opening `.md/.markdown/.mdx` from Windows starts a single-file read-only
   session. It intentionally does not scan the parent directory as a notebook.
   Editing must be explicitly enabled and saves only the current file.
+
+## Theme Import Limits
+
+- Local `.mltheme` and `.zip` imports are a developer experimental feature.
+- `trusted-code` themes may execute theme author code and may take over exposed
+  UX slots. Import only themes from trusted sources.
+- Current public RC behavior requires explicit user confirmation before opening
+  the theme-package picker. This is disclosure and confirmation, not a sandbox
+  or community-market review.
 
 ## Data And Asset Behavior
 

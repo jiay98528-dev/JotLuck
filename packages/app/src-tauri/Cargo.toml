@@ -25,7 +25,6 @@ tauri-plugin-log = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
-tauri-plugin-process = "2"
 tauri-plugin-single-instance = "2"
 
 # M6-03: File system operations

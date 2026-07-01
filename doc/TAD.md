@@ -9,7 +9,7 @@
 - `ThemeManifest v2` 声明 runtime、capabilities、permissions、entrypoints、slots、assets、checksums、minAppVersion 和商业化预留字段。
 - `useThemeStore` 管理运行态、安装包态和商业授权态：`activeThemeId`、`previewThemeId`、`installedThemes`、`entitlements`、安装、导入、卸载、启用、预览、回退和持久化。
 - `ThemeSlotBoundary` 是统一 UX 插槽边界，渲染优先级固定为：插件组件 > 声明式 DSL recipe > 宿主默认组件。
-- `ThemeRuntimeHost` 加载 `official-code` 和本地 `trusted-code` 插件，并向插件提供 `ThemeHostContext`。P0 阶段本地插件全权限运行，不做授权审批或沙箱隔离。
+- `ThemeRuntimeHost` 加载 `official-code` 和本地 `trusted-code` 插件，并向插件提供 `ThemeHostContext`。P0 阶段本地插件全权限运行，不做授权审批或沙箱隔离；公开 RC 只在导入入口做可信来源确认和实验功能披露，不改变 Theme API v2 的全 UX 插件能力。
 - `ThemeCommerceProvider` 预留真实后端契约：`GET /v1/themes/catalog`、`GET /v1/themes/entitlements`、`POST /v1/themes/checkout`、`POST /v1/themes/licenses/redeem`、`POST /v1/themes/entitlements/refresh`。默认实现为本地 mock。
 
 ## 总体结构
