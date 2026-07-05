@@ -75,7 +75,8 @@ export class SearchEngine {
     // Regex search
     if (query.regex) {
       try {
-        const re = new RegExp(query.regex, (query as { regexFlags?: string }).regexFlags ?? 'gi');
+        const flags = (query.regexFlags ?? 'i').replace(/[gy]/g, '');
+        const re = new RegExp(query.regex, flags);
         candidates = candidates.filter((c) => re.test(c.doc.content) || re.test(c.doc.entry.title));
       } catch (e) {
         // eslint-disable-next-line no-console

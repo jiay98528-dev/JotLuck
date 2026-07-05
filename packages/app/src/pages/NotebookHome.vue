@@ -668,6 +668,7 @@ import {
 } from '@/utils/note-files';
 import { getDraftMarkdownFileName } from '@/utils/draft-file-name';
 import { getMarkluckE2EBridge, peekMarkluckE2EBridge } from '@/utils/e2e-bridge';
+import { isDesktopRuntime, shouldPersistMockFs } from '@/utils/runtime';
 import type {
   ShellAction,
   ThemeActionRegion,
@@ -686,8 +687,8 @@ const ShareDialog = defineAsyncComponent(() => import('@/components/modals/Share
 // --- File System ---
 // Tauri 桌面端使用真实文件系统，Web/E2E 使用虚拟 MockFS
 function createFileSystem(): IFileSystemService {
-  if (window.__TAURI__) return new TauriIPCService();
-  return new MockFSService(50);
+  if (isDesktopRuntime()) return new TauriIPCService();
+  return new MockFSService(50, { persist: shouldPersistMockFs() });
 }
 const fs: IFileSystemService = createFileSystem();
 const supportedNoteExtensionsText = supportedNoteExtensionsLabel();
@@ -1388,7 +1389,7 @@ async function getPendingOpenedFile(): Promise<OpenedFilePayload | null> {
     startupOpenedFileConsumed = true;
     return mockOpenedFile;
   }
-  if (!window.__TAURI__) return null;
+  if (!isDesktopRuntime()) return null;
   try {
     const openedFile = normalizeOpenedFilePayload(
       await invoke<OpenedFilePayload | string | null>('get_opened_file'),
@@ -1427,7 +1428,7 @@ async function openInitialNotebook(): Promise<boolean> {
     }
   }
 
-  if (!window.__TAURI__) {
+  if (!isDesktopRuntime()) {
     try {
       await openNotebookRoot('/');
       return true;
@@ -1480,7 +1481,7 @@ function enterScratchSession(): void {
 }
 
 async function readExternalMarkdownFile(absolutePath: string): Promise<string> {
-  if (window.__TAURI__) {
+  if (isDesktopRuntime()) {
     return invoke<string>('read_external_markdown_file', { absolutePath });
   }
   const filesByPath = peekMarkluckE2EBridge()?.externalFiles ?? {};
@@ -1491,7 +1492,7 @@ async function readExternalMarkdownFile(absolutePath: string): Promise<string> {
 }
 
 async function readExternalNoteFile(absolutePath: string): Promise<string> {
-  if (window.__TAURI__) {
+  if (isDesktopRuntime()) {
     return invoke<string>('read_external_note_file', { absolutePath });
   }
   const filesByPath = peekMarkluckE2EBridge()?.externalFiles ?? {};
@@ -1502,7 +1503,7 @@ async function readExternalNoteFile(absolutePath: string): Promise<string> {
 }
 
 async function writeExternalNoteFile(absolutePath: string, content: string): Promise<void> {
-  if (window.__TAURI__) {
+  if (isDesktopRuntime()) {
     await invoke('write_external_note_file', { absolutePath, content });
     return;
   }
@@ -1554,7 +1555,7 @@ async function saveScratchAs(): Promise<boolean> {
   if (!isScratchSession.value) return false;
   const defaultFileName = getDraftMarkdownFileName(currentContent.value);
 
-  if (!window.__TAURI__) {
+  if (!isDesktopRuntime()) {
     downloadScratchAsMarkdown(defaultFileName);
     isDirty.value = false;
     return true;
@@ -1616,7 +1617,7 @@ function rememberExternalOpenedFile(openedFile: OpenedFilePayload): void {
 async function listExternalNoteDirectory(relativePath = '/'): Promise<DirEntry[]> {
   const rootPath = externalFile.value?.notebookRoot;
   if (!rootPath) return [];
-  if (window.__TAURI__) {
+  if (isDesktopRuntime()) {
     const entries = await invoke<
       Array<{ name: string; path: string; is_dir: boolean; size: number; modified_at: number }>
     >('list_external_note_directory', {
@@ -1699,7 +1700,7 @@ function basenameFromPath(path: string): string {
 }
 
 function writeMockFileToStorage(path: string, content: string): void {
-  if (window.__TAURI__) return;
+  if (isDesktopRuntime() || !shouldPersistMockFs()) return;
   const raw = localStorage.getItem(MOCK_FS_STORAGE_KEY);
   if (!raw) return;
 
@@ -1729,12 +1730,18 @@ function writeMockFileToStorage(path: string, content: string): void {
 }
 
 function rememberPendingMockFileWrite(path: string, content: string): void {
-  if (window.__TAURI__ || isExternalEditing.value || isScratchSession.value) return;
+  if (
+    isDesktopRuntime() ||
+    !shouldPersistMockFs() ||
+    isExternalEditing.value ||
+    isScratchSession.value
+  )
+    return;
   pendingMockFileWrites.set(normalizePath(path), content);
 }
 
 function flushPendingMockFileWritesSync(): void {
-  if (window.__TAURI__) return;
+  if (isDesktopRuntime() || !shouldPersistMockFs()) return;
   syncCurrentContentFromEditor();
   if (!isExternalEditing.value && !isScratchSession.value && activePath.value) {
     pendingMockFileWrites.set(normalizePath(activePath.value), currentContent.value);
@@ -2843,7 +2850,7 @@ function onBeforeUnload(e: BeforeUnloadEvent): void {
 
 async function closeCurrentWindow(): Promise<void> {
   allowWindowClose = true;
-  if (window.__TAURI__) {
+  if (isDesktopRuntime()) {
     await getCurrentWindow().close();
   } else {
     window.close();
@@ -2898,7 +2905,7 @@ onMounted(async () => {
   applyInitialThemeWorkflowDefaults();
   window.addEventListener('keydown', onGlobalKeydown, { capture: true });
   window.addEventListener('beforeunload', onBeforeUnload);
-  if (window.__TAURI__) {
+  if (isDesktopRuntime()) {
     unlistenWindowClose = await getCurrentWindow().onCloseRequested((event) => {
       if (allowWindowClose || !hasUnsavedScratch()) return;
       event.preventDefault();

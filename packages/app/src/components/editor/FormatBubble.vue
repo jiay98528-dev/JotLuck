@@ -107,7 +107,7 @@
  *   format — 用户点击了某个格式按钮，payload 为格式类型字符串
  *
  * Behavior:
- *   - 150ms 延迟后以 scale+opacity 动画入场（ease-back 微过冲）
+ *   - 150ms 延迟后以 scale+opacity 动画入场（非过冲 ease-out）
  *   - ease-exit 退场
  *   - 3s 无操作自动隐藏
  *   - Esc 键隐藏

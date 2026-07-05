@@ -83,6 +83,23 @@ describe('SearchEngine', () => {
     expect(results[0]!.notePath).toBe('/a.md');
   });
 
+  it('正则搜索不会因为 global lastIndex 漏掉连续候选文档', () => {
+    const engine = new SearchEngine();
+    const docs = makeDocs([
+      { path: '/a.md', title: 'Alpha' },
+      { path: '/b.md', title: 'Beta' },
+      { path: '/c.md', title: 'Gamma' },
+    ]);
+    engine.buildIndex(docs);
+    engine.updateDocument('/a.md', docs['/a.md']!, 'todo');
+    engine.updateDocument('/b.md', docs['/b.md']!, 'todo');
+    engine.updateDocument('/c.md', docs['/c.md']!, 'todo');
+
+    const results = engine.search({ text: '', regex: 'todo', regexFlags: 'gi' });
+
+    expect(results.map((result) => result.notePath).sort()).toEqual(['/a.md', '/b.md', '/c.md']);
+  });
+
   it('正则搜索不匹配时返回空', () => {
     const engine = new SearchEngine();
     const docs = makeDocs([{ path: '/a.md', title: 'No numbers' }]);
@@ -367,6 +384,23 @@ describe('SearchEngine', () => {
     expect(engine.search({ text: 'anything' })).toHaveLength(0);
     expect(engine.search({ text: '', tags: ['a'] })).toHaveLength(0);
     expect(engine.search({ text: '', regex: '.' })).toHaveLength(0);
+  });
+
+  it('regex search strips sticky state to avoid lastIndex leaks', () => {
+    const engine = new SearchEngine();
+    const docs = makeDocs([
+      { path: '/a.md', title: 'Alpha' },
+      { path: '/b.md', title: 'Beta' },
+      { path: '/c.md', title: 'Gamma' },
+    ]);
+    engine.buildIndex(docs);
+    engine.updateDocument('/a.md', docs['/a.md']!, 'todo');
+    engine.updateDocument('/b.md', docs['/b.md']!, 'todo');
+    engine.updateDocument('/c.md', docs['/c.md']!, 'todo');
+
+    const results = engine.search({ text: '', regex: 'todo', regexFlags: 'iy' });
+
+    expect(results.map((result) => result.notePath).sort()).toEqual(['/a.md', '/b.md', '/c.md']);
   });
 
   // -- preloadContent --

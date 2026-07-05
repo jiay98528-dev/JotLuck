@@ -139,7 +139,71 @@ export function validateThemePackage(input: ThemePackageInput): ThemeValidationI
       path: 'manifest.minAppVersion',
     });
   }
+  const unscopedSelector = findUnscopedCssSelector(input.css ?? '', manifest.id);
+  if (unscopedSelector) {
+    issues.push({
+      code: 'unscoped-css-selector',
+      message: `theme.css selector must be scoped to [data-theme-id="${manifest.id}"]: ${unscopedSelector}`,
+      path: 'theme.css',
+    });
+  }
   return issues;
+}
+
+function stripCssComments(css: string): string {
+  return css.replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
+function selectorHasThemeScope(selector: string, themeId: string): boolean {
+  return (
+    selector.includes(`[data-theme-id="${themeId}"]`) ||
+    selector.includes(`[data-theme-id='${themeId}']`) ||
+    selector.includes(`[data-theme-id=${themeId}]`)
+  );
+}
+
+function findUnscopedCssSelector(css: string, themeId: string): string | null {
+  if (!css.trim()) return null;
+
+  const source = stripCssComments(css);
+  let segmentStart = 0;
+  let depth = 0;
+  let keyframesDepth: number | null = null;
+
+  for (let i = 0; i < source.length; i++) {
+    const char = source[i];
+    if (char === '{') {
+      const prelude = source.slice(segmentStart, i).trim();
+      const lowerPrelude = prelude.toLowerCase();
+
+      if (keyframesDepth !== null && depth >= keyframesDepth) {
+        // Keyframe selectors (`from`, `to`, `50%`) are not DOM selectors.
+      } else if (
+        lowerPrelude.startsWith('@keyframes') ||
+        lowerPrelude.startsWith('@-webkit-keyframes')
+      ) {
+        keyframesDepth = depth + 1;
+      } else if (prelude && !prelude.startsWith('@')) {
+        const unscoped = prelude
+          .split(',')
+          .map((selector) => selector.trim())
+          .find((selector) => selector.length > 0 && !selectorHasThemeScope(selector, themeId));
+        if (unscoped) return unscoped;
+      }
+
+      depth += 1;
+      segmentStart = i + 1;
+      continue;
+    }
+
+    if (char === '}') {
+      depth = Math.max(0, depth - 1);
+      if (keyframesDepth !== null && depth < keyframesDepth) keyframesDepth = null;
+      segmentStart = i + 1;
+    }
+  }
+
+  return null;
 }
 
 async function validateZipEntries(zip: JSZip): Promise<void> {

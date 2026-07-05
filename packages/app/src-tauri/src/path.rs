@@ -24,20 +24,42 @@ impl fmt::Display for PathError {
     }
 }
 
-/// Validate that `target` is within `root` and does not escape via `..` traversal.
+fn joined_notebook_path(root: &Path, target: &Path) -> PathBuf {
+    if target.is_absolute() {
+        target.to_path_buf()
+    } else {
+        root.join(target)
+    }
+}
+
+fn nearest_existing_ancestor(path: &Path) -> Option<PathBuf> {
+    let mut current = path;
+    loop {
+        if current.exists() {
+            return Some(current.to_path_buf());
+        }
+        current = current.parent()?;
+    }
+}
+
+/// Validate that `target` is within `root` after resolving symlinks/junctions.
 pub fn is_safe_path(root: &Path, target: &Path) -> bool {
     let Ok(root_canon) = root.canonicalize() else {
         return false;
     };
-    let Ok(target_canon) = root.join(target).canonicalize() else {
-        if let Some(parent) = root.join(target).parent() {
-            if let Ok(parent_canon) = parent.canonicalize() {
-                return parent_canon.starts_with(&root_canon);
-            }
-        }
+
+    let full = joined_notebook_path(root, target);
+    if let Ok(target_canon) = full.canonicalize() {
+        return target_canon.starts_with(&root_canon);
+    };
+
+    let Some(existing_parent) = nearest_existing_ancestor(full.parent().unwrap_or(&full)) else {
         return false;
     };
-    target_canon.starts_with(&root_canon)
+    let Ok(parent_canon) = existing_parent.canonicalize() else {
+        return false;
+    };
+    parent_canon.starts_with(&root_canon)
 }
 
 /// Resolve a relative path within the notebook root.
@@ -61,17 +83,7 @@ pub fn resolve_safe_path(root: &Path, relative: &str) -> Result<PathBuf, PathErr
         return Err(PathError::PathTraversal(normalized));
     }
 
-    if notebook_relative.contains("..") && !is_safe_path(root, target) {
-        return Err(PathError::PathTraversal(normalized));
-    }
-
     let full = root.join(target);
-
-    if let Some(parent) = full.parent() {
-        if parent.starts_with(root) || is_safe_path(root, target) {
-            return Ok(full);
-        }
-    }
 
     if is_safe_path(root, target) {
         Ok(full)
@@ -93,6 +105,17 @@ pub fn display_path(root: &Path, full_path: &Path) -> String {
 mod tests {
     use super::*;
     use std::env;
+    use std::io;
+
+    #[cfg(unix)]
+    fn create_dir_link(source: &Path, link: &Path) -> io::Result<()> {
+        std::os::unix::fs::symlink(source, link)
+    }
+
+    #[cfg(windows)]
+    fn create_dir_link(source: &Path, link: &Path) -> io::Result<()> {
+        std::os::windows::fs::symlink_dir(source, link)
+    }
 
     #[test]
     fn test_safe_path_within_root() {
@@ -132,5 +155,25 @@ mod tests {
         let result = resolve_safe_path(&root, &outside_str);
         assert!(result.is_err());
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn test_reject_symlink_or_junction_escape_when_available() {
+        let root = env::temp_dir().join("markluck-test-link-root");
+        let outside = env::temp_dir().join("markluck-test-link-outside");
+        let link = root.join("linked");
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&outside);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+
+        if create_dir_link(&outside, &link).is_ok() {
+            std::fs::write(outside.join("secret.md"), "outside").unwrap();
+            assert!(!is_safe_path(&root, Path::new("linked/secret.md")));
+            assert!(resolve_safe_path(&root, "/linked/new.md").is_err());
+        }
+
+        let _ = std::fs::remove_dir_all(root);
+        let _ = std::fs::remove_dir_all(outside);
     }
 }

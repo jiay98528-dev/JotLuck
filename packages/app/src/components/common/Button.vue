@@ -252,6 +252,21 @@ const computedClasses = computed<string>(() =>
   padding: 0;
 }
 
+@media (pointer: coarse), (width <= 640px) {
+  .mk-btn--sm,
+  .mk-btn--md,
+  .mk-btn--lg {
+    height: var(--touch-target-min);
+  }
+
+  .mk-btn--icon-sm,
+  .mk-btn--icon,
+  .mk-btn--icon-lg {
+    width: var(--touch-target-min);
+    height: var(--touch-target-min);
+  }
+}
+
 /* ============================================================
  * Inner Elements
  * ============================================================ */

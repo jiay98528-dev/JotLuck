@@ -444,8 +444,8 @@ async function onImportFile(event: Event): Promise<void> {
 }
 
 .theme-center__close {
-  width: 38px;
-  height: 38px;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
   display: grid;
   flex: 0 0 auto;
   place-items: center;
@@ -635,7 +635,7 @@ async function onImportFile(event: Event): Promise<void> {
 
 .theme-action {
   min-width: 72px;
-  min-height: 36px;
+  min-height: var(--touch-target-min);
   padding: 0 var(--space-14);
   border: var(--border-thin) solid var(--rule);
   border-radius: var(--radius);
@@ -786,10 +786,13 @@ async function onImportFile(event: Event): Promise<void> {
 .theme-import__confirm {
   grid-template-columns: auto 1fr;
   align-items: start;
+  min-height: var(--touch-target-min);
   cursor: pointer;
 }
 
 .theme-import__confirm input {
+  width: 20px;
+  height: 20px;
   margin-block-start: 0.2em;
 }
 

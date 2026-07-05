@@ -8,7 +8,10 @@ use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::State;
+
+static WRITE_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// In-memory state: the current notebook root directory.
 pub struct NotebookRoot(pub std::sync::Mutex<Option<PathBuf>>);
@@ -104,6 +107,76 @@ fn resolve_external_note_file(absolute_path: &str) -> Result<PathBuf, String> {
     }
     path.canonicalize()
         .map_err(|e| format!("无法解析外部文件路径: {}", e))
+}
+
+fn unique_write_temp_path(target: &Path) -> Result<PathBuf, String> {
+    let parent = target
+        .parent()
+        .ok_or_else(|| "无法解析目标文件目录".to_string())?;
+    let file_name = target
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "无法解析目标文件名".to_string())?;
+    let counter = WRITE_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(counter as u128);
+    let process_id = std::process::id();
+
+    Ok(parent.join(format!(
+        ".{file_name}.{process_id}.{timestamp}.{counter}.tmp"
+    )))
+}
+
+#[cfg(windows)]
+fn replace_file(tmp_path: &Path, target: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+
+    const MOVEFILE_REPLACE_EXISTING: u32 = 0x1;
+    const MOVEFILE_WRITE_THROUGH: u32 = 0x8;
+
+    extern "system" {
+        fn MoveFileExW(
+            existing_file_name: *const u16,
+            new_file_name: *const u16,
+            flags: u32,
+        ) -> i32;
+    }
+
+    fn to_wide(path: &Path) -> Vec<u16> {
+        path.as_os_str().encode_wide().chain(Some(0)).collect()
+    }
+
+    let tmp_wide = to_wide(tmp_path);
+    let target_wide = to_wide(target);
+    let result = unsafe {
+        MoveFileExW(
+            tmp_wide.as_ptr(),
+            target_wide.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+
+    if result == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(windows))]
+fn replace_file(tmp_path: &Path, target: &Path) -> std::io::Result<()> {
+    fs::rename(tmp_path, target)
+}
+
+fn write_text_file_atomically(target: &Path, content: &str) -> Result<(), String> {
+    let tmp_path = unique_write_temp_path(target)?;
+    fs::write(&tmp_path, content).map_err(|e| format!("写入文件失败: {}", e))?;
+    replace_file(&tmp_path, target).map_err(|e| {
+        let _ = fs::remove_file(&tmp_path);
+        format!("保存文件失败: {}", e)
+    })
 }
 
 // ============================================================
@@ -371,10 +444,7 @@ fn write_file_at(root_path: &PathBuf, relative_path: &str, content: &str) -> Res
         fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
     }
 
-    // Atomic write: write to .tmp then rename
-    let tmp_path = target.with_extension("md.tmp");
-    fs::write(&tmp_path, content).map_err(|e| format!("写入文件失败: {}", e))?;
-    fs::rename(&tmp_path, &target).map_err(|e| format!("保存文件失败: {}", e))?;
+    write_text_file_atomically(&target, content)?;
 
     Ok(())
 }
@@ -383,14 +453,14 @@ fn write_file_at(root_path: &PathBuf, relative_path: &str, content: &str) -> Res
 #[tauri::command]
 pub fn write_external_markdown_file(absolute_path: String, content: String) -> Result<(), String> {
     let target = resolve_external_markdown_file(&absolute_path)?;
-    fs::write(&target, content).map_err(|e| format!("保存外部文件失败: {}", e))
+    write_text_file_atomically(&target, &content).map_err(|e| format!("保存外部文件失败: {}", e))
 }
 
 /// Write one supported text note by absolute path without opening its parent as notebook.
 #[tauri::command]
 pub fn write_external_note_file(absolute_path: String, content: String) -> Result<(), String> {
     let target = resolve_external_note_file(&absolute_path)?;
-    fs::write(&target, content).map_err(|e| format!("保存外部文件失败: {}", e))
+    write_text_file_atomically(&target, &content).map_err(|e| format!("保存外部文件失败: {}", e))
 }
 
 /// Write binary content to a file (base64 payload, relative to notebook root).
@@ -540,6 +610,46 @@ mod tests {
         let root = std::env::temp_dir().join(format!("markluck-{name}-{suffix}"));
         std::fs::create_dir_all(&root).unwrap();
         root
+    }
+
+    #[test]
+    fn write_temp_paths_are_unique_for_same_stem_notes() {
+        let root = temp_notebook("fs-temp-paths");
+        let md = root.join("notes").join("same.md");
+        let txt = root.join("notes").join("same.txt");
+        std::fs::create_dir_all(md.parent().unwrap()).unwrap();
+
+        let first = unique_write_temp_path(&md).unwrap();
+        let second = unique_write_temp_path(&txt).unwrap();
+        let third = unique_write_temp_path(&md).unwrap();
+
+        assert_ne!(first, second);
+        assert_ne!(first, third);
+        assert_eq!(first.parent(), md.parent());
+        assert_eq!(second.parent(), txt.parent());
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn write_file_overwrites_existing_note_with_unique_temp_file() {
+        let root = temp_notebook("fs-overwrite");
+
+        write_file_at(&root, "/notes/same.md", "first").unwrap();
+        write_file_at(&root, "/notes/same.txt", "txt").unwrap();
+        write_file_at(&root, "/notes/same.md", "second").unwrap();
+
+        assert_eq!(read_file_at(&root, "/notes/same.md").unwrap(), "second");
+        assert_eq!(read_file_at(&root, "/notes/same.txt").unwrap(), "txt");
+        assert!(std::fs::read_dir(root.join("notes"))
+            .unwrap()
+            .all(|entry| !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".tmp")));
+
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

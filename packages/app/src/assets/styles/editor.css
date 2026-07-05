@@ -169,7 +169,7 @@
 
 /* ---- Blockquote ---- */
 .cm-live-block[data-block-type='blockquoteLine'] {
-  border-left: 3px solid var(--blockquote-rule);
+  border-left: var(--border-thin) solid var(--blockquote-rule);
   padding-left: var(--space-12);
   color: var(--ink-secondary);
 }

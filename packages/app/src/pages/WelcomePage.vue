@@ -70,13 +70,16 @@
                 <div class="welcome-setting-row">
                   <div class="welcome-setting-info">
                     <span class="welcome-setting-label">自动检查可用更新</span>
-                    <span
+                    <button
                       class="toggle-track"
                       :class="{ active: autoCheckEnabled }"
+                      type="button"
+                      role="switch"
+                      :aria-checked="autoCheckEnabled"
                       @click="autoCheckEnabled = !autoCheckEnabled"
                     >
                       <span class="toggle-thumb" />
-                    </span>
+                    </button>
                   </div>
                   <p class="welcome-setting-desc">仅查询 GitHub 公开版本号，不上传任何笔记内容。</p>
                 </div>
@@ -111,6 +114,7 @@
 import { onMounted, ref } from 'vue';
 import { open as openExternal } from '@tauri-apps/plugin-shell';
 import Button from '@/components/common/Button.vue';
+import { isDesktopRuntime } from '@/utils/runtime';
 
 defineProps<{ visible: boolean }>();
 const emit = defineEmits<{ 'update:visible': [boolean]; complete: [] }>();
@@ -159,7 +163,7 @@ function complete(): void {
 async function onSetDefaultEditor(): Promise<void> {
   localStorage.setItem(DEFAULT_EDITOR_PROMPT_KEY, '1');
 
-  if (!window.__TAURI__) {
+  if (!isDesktopRuntime()) {
     defaultEditorNotice.value =
       '当前是 Web 预览环境。安装版会尝试打开 Windows 默认应用设置，最终仍需你手动选择 MarkLuck。';
     return;
@@ -207,7 +211,7 @@ async function onSetDefaultEditor(): Promise<void> {
 
 .welcome-brand-name {
   margin: 0;
-  font-size: clamp(2rem, 4vw, 2.6rem);
+  font-size: var(--text-hero);
   line-height: 1;
 }
 
@@ -295,21 +299,36 @@ async function onSetDefaultEditor(): Promise<void> {
 
 .toggle-track {
   position: relative;
-  width: 44px;
-  height: 24px;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.toggle-track::before {
+  content: '';
+  position: absolute;
+  inset: 10px 0;
   border-radius: 999px;
   background: var(--rule-strong);
-  cursor: pointer;
   transition: background-color var(--dur-micro) var(--ease-fade);
 }
 
-.toggle-track.active {
+.toggle-track.active::before {
   background: var(--accent);
+}
+
+.toggle-track:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: var(--focus-ring-offset);
 }
 
 .toggle-thumb {
   position: absolute;
-  top: 2px;
+  top: 12px;
   left: 2px;
   width: 20px;
   height: 20px;

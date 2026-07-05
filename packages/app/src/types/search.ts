@@ -13,6 +13,7 @@ export interface DateRange {
 export interface SearchQuery {
   readonly text: string;
   readonly regex?: string;
+  readonly regexFlags?: string;
   readonly tags?: readonly string[];
   readonly dateRange?: DateRange;
   readonly folder?: string;

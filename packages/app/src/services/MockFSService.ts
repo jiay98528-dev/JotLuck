@@ -2,8 +2,8 @@
  * MockFSService - in-memory virtual file system for Web/E2E.
  *
  * The mock mirrors the Tauri IPC file-system contract: notebook-rooted paths use
- * `/` as the root marker, every note is plain text, and the sample notebook is
- * persisted to localStorage between page reloads.
+ * `/` as the root marker, and every note is plain text. Browser persistence is
+ * opt-in so normal Web previews do not silently become a note database.
  */
 import type {
   DirEntry,
@@ -29,6 +29,10 @@ interface MockFSData {
   version: number;
   files: Record<string, StoredFile>;
   dirs: Record<string, string[]>;
+}
+
+export interface MockFSServiceOptions {
+  persist?: boolean;
 }
 
 function delay(ms: number): Promise<void> {
@@ -217,13 +221,17 @@ MarkLuck 的界面应该退到内容之后。文件树、编辑器、预览和�
 export class MockFSService implements IFileSystemService {
   private data: MockFSData;
   private readonly latency: number;
+  private readonly persistToLocalStorage: boolean;
 
-  constructor(latencyMs = DEFAULT_DELAY) {
+  constructor(latencyMs = DEFAULT_DELAY, options: MockFSServiceOptions = {}) {
     this.latency = latencyMs;
+    this.persistToLocalStorage = options.persist ?? false;
     this.data = this.load();
   }
 
   private load(): MockFSData {
+    if (!this.persistToLocalStorage) return createSampleNotebook();
+
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
@@ -242,6 +250,7 @@ export class MockFSService implements IFileSystemService {
 
   private persist(data?: MockFSData): void {
     if (data) this.data = data;
+    if (!this.persistToLocalStorage) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
   }
 

@@ -10,8 +10,15 @@
     <div
       class="grab-handle"
       title="双击折叠 / 展开 | 拖拽调整宽度"
+      role="separator"
+      tabindex="0"
+      aria-orientation="vertical"
+      :aria-valuemin="0"
+      :aria-valuemax="MAX_WIDTH"
+      :aria-valuenow="collapsed ? 0 : panelWidth"
       @dblclick="handleDoubleClick"
-      @mousedown="handleResizeStart"
+      @keydown="handleHandleKeydown"
+      @pointerdown="handleResizeStart"
     >
       <div class="grab-line" />
     </div>
@@ -331,30 +338,66 @@ const panelWidth = ref(widthForPolicy(props.region.policy));
 
 let resizeActive = false;
 
-function handleResizeStart(e: MouseEvent) {
+function setPanelWidth(width: number): void {
+  panelWidth.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, width));
+}
+
+function handleHandleKeydown(event: KeyboardEvent): void {
+  const step = event.shiftKey ? 24 : 12;
+
+  switch (event.key) {
+    case 'Enter':
+    case ' ':
+      event.preventDefault();
+      emit('toggle-collapse');
+      break;
+    case 'ArrowLeft':
+      event.preventDefault();
+      if (props.collapsed) emit('toggle-collapse');
+      else setPanelWidth(panelWidth.value + step);
+      break;
+    case 'ArrowRight':
+      event.preventDefault();
+      if (!props.collapsed) setPanelWidth(panelWidth.value - step);
+      break;
+    case 'Home':
+      event.preventDefault();
+      setPanelWidth(MIN_WIDTH);
+      break;
+    case 'End':
+      event.preventDefault();
+      setPanelWidth(MAX_WIDTH);
+      break;
+  }
+}
+
+function handleResizeStart(e: PointerEvent) {
   if (e.detail >= 2) return; // ignore double-click drag
+  e.preventDefault();
   resizeActive = true;
   const startX = e.clientX;
   const startWidth = panelWidth.value;
 
-  const onMove = (ev: MouseEvent) => {
+  const onMove = (ev: PointerEvent) => {
     if (!resizeActive) return;
     const delta = ev.clientX - startX;
-    panelWidth.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidth - delta));
+    setPanelWidth(startWidth - delta);
   };
 
   const onUp = () => {
     resizeActive = false;
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    document.removeEventListener('pointercancel', onUp);
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
   };
 
   document.body.style.cursor = 'col-resize';
   document.body.style.userSelect = 'none';
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('mouseup', onUp);
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+  document.addEventListener('pointercancel', onUp);
 }
 
 function widthForPolicy(policy: ThemeRightWingPolicy): number {
@@ -407,9 +450,10 @@ function onNavigateHeading(headingId: string, lineNumber: number) {
   flex-direction: column;
   background: var(--paper-right);
   user-select: none;
-  overflow: hidden;
-  transition: width var(--dur-expand) var(--ease-fold);
-  will-change: width;
+  overflow: visible;
+  transition:
+    background-color var(--dur-micro) var(--ease-fade),
+    border-color var(--dur-micro) var(--ease-fade);
 }
 
 .right-wing.collapsed {
@@ -444,15 +488,21 @@ function onNavigateHeading(headingId: string, lineNumber: number) {
  * ============================================================ */
 .grab-handle {
   position: absolute;
-  left: 0;
+  left: calc(var(--touch-target-min) / -2);
   top: 0;
   bottom: 0;
-  width: 6px; /* wide click target */
+  width: var(--touch-target-min);
   cursor: col-resize;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1;
+  touch-action: none;
+}
+
+.grab-handle:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: calc(-1 * var(--focus-ring-offset));
 }
 
 .grab-line {

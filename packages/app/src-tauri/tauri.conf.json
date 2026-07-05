@@ -26,9 +26,9 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self' customprotocol: asset: http://asset.localhost; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost http://localhost:* ws://localhost:*; font-src 'self' data:"
     },
-    "withGlobalTauri": true
+    "withGlobalTauri": false
   },
   "bundle": {
     "active": true,

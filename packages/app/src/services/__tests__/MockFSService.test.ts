@@ -49,4 +49,23 @@ describe('MockFSService sample notebook', () => {
 
     expect(names).toEqual(['component.mdx', 'long-form.markdown', 'plain.txt', 'readme.md']);
   });
+
+  it('keeps browser-preview writes in memory unless persistence is enabled', async () => {
+    const memoryFs = new MockFSService(0);
+
+    await memoryFs.writeFile('/draft.md', '# Draft');
+
+    expect(localStorage.getItem('markluck-mockfs')).toBeNull();
+    await expect(new MockFSService(0).readFile('/draft.md')).rejects.toThrow();
+  });
+
+  it('persists writes only when explicitly requested', async () => {
+    const persistentFs = new MockFSService(0, { persist: true });
+
+    await persistentFs.writeFile('/draft.md', '# Draft');
+
+    await expect(new MockFSService(0, { persist: true }).readFile('/draft.md')).resolves.toBe(
+      '# Draft',
+    );
+  });
 });

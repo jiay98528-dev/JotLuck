@@ -36,6 +36,29 @@ describe('ThemePackInstaller', () => {
     expect(validateThemePackage({ manifest: manifest() })).toEqual([]);
   });
 
+  it('rejects unscoped theme css selectors', () => {
+    const issues = validateThemePackage({
+      manifest: manifest(),
+      css: 'body { background: red; }',
+    });
+
+    expect(issues.map((issue) => issue.code)).toContain('unscoped-css-selector');
+  });
+
+  it('allows scoped selectors inside media rules and keyframes', () => {
+    const issues = validateThemePackage({
+      manifest: manifest(),
+      css: `
+        @media (min-width: 800px) {
+          [data-theme-id="local.test-theme"] .editor-shell { opacity: 1; }
+        }
+        @keyframes local-fade { from { opacity: 0; } to { opacity: 1; } }
+      `,
+    });
+
+    expect(issues).toEqual([]);
+  });
+
   it('keeps network and filesystem permissions as declarations, not install blockers', () => {
     const issues = validateThemePackage({
       manifest: manifest({ permissions: ['shell-layout', 'network', 'filesystem-write'] }),
@@ -118,6 +141,20 @@ describe('ThemePackInstaller', () => {
     expect(installed.source).toBe('imported');
     expect(installed.css).toContain('--accent');
     expect(loadInstalledThemePacks()).toHaveLength(1);
+  });
+
+  it('rejects imported .mltheme zip packages with global css selectors', async () => {
+    const css = 'body { color: red; }';
+    const zip = new JSZip();
+    zip.file(
+      'manifest.json',
+      JSON.stringify(manifest({ checksums: { 'theme.css': await sha256(css) } })),
+    );
+    zip.file('theme.css', css);
+
+    await expect(parseThemePack(await zip.generateAsync({ type: 'uint8array' }))).rejects.toThrow(
+      'selector must be scoped',
+    );
   });
 
   it('parses trusted-code entrypoints into installed code bundles', async () => {

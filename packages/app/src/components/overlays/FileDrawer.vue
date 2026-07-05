@@ -234,10 +234,12 @@
                   }"
                   :style="{ paddingInlineStart: `${node.depth * 16 + 8}px` }"
                   role="treeitem"
+                  :tabindex="treeItemTabIndex(node)"
                   :aria-expanded="node.entry.isDirectory ? node.isExpanded : undefined"
                   :aria-selected="node.entry.path === activePath"
                   @click="handleItemClick(node)"
                   @dblclick="handleItemDblClick(node)"
+                  @keydown="handleTreeItemKeydown($event, node)"
                   @contextmenu.prevent="openContextMenu($event, node)"
                 >
                   <!-- Active Indicator -->
@@ -735,6 +737,29 @@ function toggleDir(path: string): void {
   expandedDirs.value = next;
 }
 
+function treeItemTabIndex(node: FlatNode): 0 | -1 {
+  if (renamingPath.value !== null) return -1;
+  if (props.activePath) {
+    const activeNodeExists = displayNodes.value.some(
+      (item) => item.entry.path === props.activePath,
+    );
+    if (activeNodeExists) return node.entry.path === props.activePath ? 0 : -1;
+  }
+  return displayNodes.value[0]?.entry.path === node.entry.path ? 0 : -1;
+}
+
+function focusTreeItemAt(index: number): void {
+  void nextTick(() => {
+    const items = treeContainerRef.value?.querySelectorAll<HTMLElement>('[role="treeitem"]');
+    items?.[index]?.focus();
+  });
+}
+
+function focusTreeItemByPath(path: string): void {
+  const index = displayNodes.value.findIndex((node) => node.entry.path === path);
+  if (index >= 0) focusTreeItemAt(index);
+}
+
 function handleItemClick(node: FlatNode): void {
   closeContextMenu();
 
@@ -744,6 +769,57 @@ function handleItemClick(node: FlatNode): void {
   } else if (isSupportedNoteFile(node.entry.name)) {
     emit('select-file', node.entry.path);
     close(); // 选择文件后自动关闭抽屉，避免 overlay 永久遮挡编辑器
+  }
+}
+
+function handleTreeItemKeydown(event: KeyboardEvent, node: FlatNode): void {
+  if (renamingPath.value !== null) return;
+
+  const currentIndex = displayNodes.value.findIndex((item) => item.entry.path === node.entry.path);
+
+  switch (event.key) {
+    case 'Enter':
+    case ' ':
+      event.preventDefault();
+      handleItemClick(node);
+      break;
+    case 'ArrowDown':
+      event.preventDefault();
+      focusTreeItemAt(Math.min(displayNodes.value.length - 1, currentIndex + 1));
+      break;
+    case 'ArrowUp':
+      event.preventDefault();
+      focusTreeItemAt(Math.max(0, currentIndex - 1));
+      break;
+    case 'Home':
+      event.preventDefault();
+      focusTreeItemAt(0);
+      break;
+    case 'End':
+      event.preventDefault();
+      focusTreeItemAt(displayNodes.value.length - 1);
+      break;
+    case 'ArrowRight':
+      if (!node.entry.isDirectory) return;
+      event.preventDefault();
+      if (!node.isExpanded) {
+        toggleDir(node.entry.path);
+        emit('navigate-dir', node.entry.path);
+      } else {
+        const child = displayNodes.value[currentIndex + 1];
+        if (child && child.depth > node.depth) focusTreeItemByPath(child.entry.path);
+      }
+      break;
+    case 'ArrowLeft':
+      if (!node.entry.isDirectory) return;
+      event.preventDefault();
+      if (node.isExpanded) {
+        toggleDir(node.entry.path);
+      } else {
+        const parent = dirname(node.entry.path);
+        if (parent) focusTreeItemByPath(parent);
+      }
+      break;
   }
 }
 
@@ -1264,6 +1340,11 @@ watch(
 
 .tree-item:active {
   background: var(--surface-active);
+}
+
+.tree-item:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: calc(-1 * var(--focus-ring-offset));
 }
 
 /* --- Active State --- */

@@ -907,7 +907,8 @@ body {
 
 /* ── Blockquote ── */
 .markdown-body blockquote {
-  border-left: 3px solid var(--accent);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
   margin: 1em 0;
   padding: 0.5em 1em;
   color: var(--ink-muted);

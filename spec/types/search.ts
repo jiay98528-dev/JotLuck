@@ -42,6 +42,9 @@ export interface SearchQuery {
   /** 正则表达式模式（作为字符串传递，由搜索后端编译）。置空则退化为文本搜索 */
   readonly regex?: string;
 
+  /** 正则表达式 flags。搜索实现会忽略 global flag，避免跨文档 lastIndex 状态泄漏 */
+  readonly regexFlags?: string;
+
   /** 限定标签列表 —— 结果笔记必须包含 **所有** 指定标签 */
   readonly tags?: readonly string[];
 

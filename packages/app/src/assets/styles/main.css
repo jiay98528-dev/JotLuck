@@ -156,7 +156,9 @@ body {
 .markdown-body blockquote {
   margin: 0.8em 0;
   padding: 0.5em 1em;
-  border-left: 3px solid var(--accent);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: color-mix(in oklch, var(--accent-soft) 24%, transparent);
   color: var(--ink-secondary);
 }
 

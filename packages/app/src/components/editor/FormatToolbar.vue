@@ -119,10 +119,13 @@ function onPresetChange(event: Event): void {
 <style scoped>
 .format-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  align-content: center;
   gap: var(--space-4);
   min-width: 0;
-  overflow-x: auto;
+  max-height: 88px;
+  overflow: hidden auto;
   padding: var(--space-4);
   scrollbar-width: thin;
 }
@@ -208,6 +211,35 @@ function onPresetChange(event: Event): void {
   min-width: 0;
   padding-inline: var(--space-8);
   font-size: 11px;
+}
+
+@media (pointer: coarse), (width <= 640px) {
+  .format-toolbar {
+    gap: var(--space-6);
+    max-height: 112px;
+    padding: var(--space-6);
+  }
+
+  .format-toolbar__preset select,
+  .format-toolbar--compact .format-toolbar__preset select {
+    height: var(--touch-target-min);
+    min-width: 112px;
+    padding-inline-start: var(--space-10);
+    font-size: var(--text-sm);
+  }
+
+  .format-toolbar__divider {
+    height: 32px;
+  }
+
+  .format-toolbar__button.is-code {
+    width: var(--touch-target-min);
+  }
+
+  .format-toolbar--compact .format-toolbar__clear {
+    padding-inline: var(--space-12);
+    font-size: var(--text-sm);
+  }
 }
 
 .format-toolbar--productive .format-toolbar__button.is-active,

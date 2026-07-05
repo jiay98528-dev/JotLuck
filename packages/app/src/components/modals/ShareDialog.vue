@@ -282,7 +282,7 @@ function wrapHtml(md: string, title: string): string {
   pre{background:var(--code-block-bg);padding:16px;border-radius:2px;overflow-x:auto;font-size:14px}
   code{font-family:'Fira Code',monospace;font-size:.9em;background:var(--code-bg);padding:2px 6px;border-radius:2px}
   pre code{background:none;padding:0}
-  blockquote{border-left:3px solid var(--accent);padding:.5em 1em;color:var(--ink-muted);margin:1em 0}
+  blockquote{border:1px solid var(--rule);border-radius:4px;background:var(--code-block-bg);padding:.5em 1em;color:var(--ink-muted);margin:1em 0}
   table{border-collapse:collapse;width:100%;margin:1em 0}
   th,td{border:1px solid var(--rule);padding:8px 12px;text-align:left}
   th{background:var(--table-stripe)}
