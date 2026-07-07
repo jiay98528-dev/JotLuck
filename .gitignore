@@ -50,5 +50,8 @@ assets/
 !packages/app/src/assets/theme-assets/
 !packages/app/src/assets/theme-assets/*.webp
 
+# Autocomplete web corpus cache (local-only)
+scripts/corpus/_web-cache/
+
 # Vite
 *.local

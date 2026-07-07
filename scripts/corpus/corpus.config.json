@@ -12,28 +12,51 @@
   },
   "sources": [
     {
-      "path": "novel-zh/",
-      "weight": 0.4,
-      "description": "Long-form fiction, down-weighted because note autocomplete should not sound novelistic."
-    },
-    {
       "path": "creative-zh/",
-      "weight": 3.0,
-      "description": "Chinese diary, essay, and note-style writing."
+      "weight": 1.2,
+      "description": "Lightweight Chinese prose for natural phrasing only; not long-form narrative."
     },
     {
       "path": "tech-writing-zh/",
-      "weight": 3.0,
-      "description": "Chinese technical writing, tutorials, API docs, README patterns."
+      "weight": 2.5,
+      "description": "Chinese technical notes, bug analysis, architecture notes, release and config writing."
     },
     {
       "path": "code-doc-en/",
-      "weight": 1.0,
+      "weight": 0.5,
       "description": "English programming docs, kept lower to avoid cross-language bleed."
     },
     {
+      "path": "code-doc-en/software-development-patterns.md",
+      "weight": 1.6,
+      "category": "en-tech-docs",
+      "language": "en",
+      "description": "High-value English software development note patterns; intentionally boosted to reduce generic web English drift."
+    },
+    {
+      "path": "code-doc-en/debugging-notes.md",
+      "weight": 1.4,
+      "category": "en-tech-docs",
+      "language": "en",
+      "description": "Focused English debugging note anchors; boosted so useful software phrases survive web-local pruning."
+    },
+    {
+      "path": "code-doc-en/release-checklist.md",
+      "weight": 1.2,
+      "category": "en-tech-docs",
+      "language": "en",
+      "description": "Focused English release and project status phrases for quiet software-note completion."
+    },
+    {
+      "path": "code-doc-en/software-note-anchors.md",
+      "weight": 1.3,
+      "category": "en-tech-docs",
+      "language": "en",
+      "description": "Focused English software-note anchors for review, implementation, validation, and quality reports."
+    },
+    {
       "path": "markdown-structures/",
-      "weight": 3.0,
+      "weight": 2.0,
       "description": "Markdown list, table, quote, and task structures."
     },
     {
@@ -43,13 +66,13 @@
     },
     {
       "path": "../../doc/",
-      "weight": 2.2,
-      "description": "Project documents."
+      "weight": 0.2,
+      "description": "Project documents, very low weight to avoid spec-like prose dominating notes."
     },
     {
       "path": "../../spec/",
-      "weight": 2.2,
-      "description": "Project specs."
+      "weight": 0.2,
+      "description": "Project specs, very low weight to keep baseline note-like."
     }
   ]
 }
