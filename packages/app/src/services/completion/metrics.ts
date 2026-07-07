@@ -13,14 +13,15 @@ export interface ProviderMetrics {
 }
 
 export interface MetricsStore {
-  version: 2;
+  version: 3;
   providers: Record<string, ProviderMetrics>;
   layers: Record<string, ProviderMetrics>;
+  syntaxTypes: Record<string, ProviderMetrics>;
   updatedAt: number;
 }
 
 export function recordProviderShown(candidate: CompletionCandidate, latencyMs: number): void {
-  updateMetrics(candidate.providerId, candidate.sourceLayer, (metrics) => {
+  updateMetrics(candidate.providerId, candidate.sourceLayer, candidate.syntaxType, (metrics) => {
     metrics.shown++;
     metrics.latencies.push(Math.max(0, Math.round(latencyMs)));
     if (metrics.latencies.length > MAX_LATENCY_SAMPLES) {
@@ -32,10 +33,11 @@ export function recordProviderShown(candidate: CompletionCandidate, latencyMs: n
 export function recordProviderAccepted(
   providerId: string | null,
   sourceLayer: CompletionSourceLayer | undefined,
+  syntaxType: string | undefined,
   savedChars: number,
 ): void {
   if (!providerId) return;
-  updateMetrics(providerId, sourceLayer, (metrics) => {
+  updateMetrics(providerId, sourceLayer, syntaxType, (metrics) => {
     metrics.accepted++;
     metrics.savedChars += Math.max(0, savedChars);
   });
@@ -44,9 +46,10 @@ export function recordProviderAccepted(
 export function recordProviderRejected(
   providerId: string | null,
   sourceLayer?: CompletionSourceLayer,
+  syntaxType?: string,
 ): void {
   if (!providerId) return;
-  updateMetrics(providerId, sourceLayer, (metrics) => {
+  updateMetrics(providerId, sourceLayer, syntaxType, (metrics) => {
     metrics.rejected++;
   });
 }
@@ -67,6 +70,7 @@ export function clearCompletionMetrics(): void {
 function updateMetrics(
   providerId: string,
   sourceLayer: CompletionSourceLayer | undefined,
+  syntaxType: string | undefined,
   updater: (metrics: ProviderMetrics) => void,
 ): void {
   try {
@@ -74,6 +78,10 @@ function updateMetrics(
     updater((store.providers[providerId] ??= createProviderMetrics()));
     updater(
       (store.layers[getLayerMetricsKey(providerId, sourceLayer)] ??= createProviderMetrics()),
+    );
+    updater(
+      (store.syntaxTypes[getSyntaxMetricsKey(providerId, sourceLayer, syntaxType)] ??=
+        createProviderMetrics()),
     );
     store.updatedAt = Date.now();
     localStorage.setItem(METRICS_KEY, JSON.stringify(store));
@@ -85,12 +93,21 @@ function updateMetrics(
 function loadMetrics(): MetricsStore {
   const raw = localStorage.getItem(METRICS_KEY);
   if (!raw) return loadLegacyMetrics();
-  const parsed = JSON.parse(raw) as Partial<MetricsStore>;
-  if (parsed.version !== 2 || !parsed.providers) return createMetricsStore();
+  const parsed = JSON.parse(raw) as {
+    version?: number;
+    providers?: MetricsStore['providers'];
+    layers?: MetricsStore['layers'];
+    syntaxTypes?: MetricsStore['syntaxTypes'];
+    updatedAt?: number;
+  };
+  if ((parsed.version !== 2 && parsed.version !== 3) || !parsed.providers) {
+    return createMetricsStore();
+  }
   return {
-    version: 2,
+    version: 3,
     providers: parsed.providers,
     layers: parsed.layers ?? {},
+    syntaxTypes: parsed.syntaxTypes ?? {},
     updatedAt: parsed.updatedAt ?? 0,
   };
 }
@@ -106,9 +123,10 @@ function loadLegacyMetrics(): MetricsStore {
     }>;
     if (parsed.version !== 1 || !parsed.providers) return createMetricsStore();
     return {
-      version: 2,
+      version: 3,
       providers: parsed.providers,
       layers: {},
+      syntaxTypes: {},
       updatedAt: parsed.updatedAt ?? 0,
     };
   } catch {
@@ -118,9 +136,10 @@ function loadLegacyMetrics(): MetricsStore {
 
 function createMetricsStore(): MetricsStore {
   return {
-    version: 2,
+    version: 3,
     providers: {},
     layers: {},
+    syntaxTypes: {},
     updatedAt: 0,
   };
 }
@@ -140,4 +159,12 @@ function getLayerMetricsKey(
   sourceLayer: CompletionSourceLayer | undefined,
 ): string {
   return `${providerId}:${sourceLayer ?? 'unknown'}`;
+}
+
+function getSyntaxMetricsKey(
+  providerId: string,
+  sourceLayer: CompletionSourceLayer | undefined,
+  syntaxType: string | undefined,
+): string {
+  return `${providerId}:${sourceLayer ?? 'unknown'}:${syntaxType ?? 'unknown'}`;
 }

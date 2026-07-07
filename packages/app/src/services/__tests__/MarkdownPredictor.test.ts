@@ -781,6 +781,31 @@ describe('MarkdownPredictor', () => {
       expect(metrics.layers['ngram:l1']?.shown).toBe(1);
       expect(metrics.layers['ngram:l1']?.accepted).toBe(1);
       expect(metrics.layers['ngram:l1']?.rejected).toBe(1);
+      expect(metrics.syntaxTypes['ngram:l1:general']?.shown).toBe(1);
+      expect(metrics.syntaxTypes['ngram:l1:general']?.accepted).toBe(1);
+      expect(metrics.syntaxTypes['ngram:l1:general']?.rejected).toBe(1);
+    });
+
+    it('lets high-information L1 candidates beat weak fallback candidates', () => {
+      const p = createPredictor(4);
+      const doc = 'This ';
+      priv(p).l1 = new Map([['his ', new Map([['local plan', 1]])]]);
+
+      const result = p.getGhostText(doc.length, doc);
+      expect(result?.providerId).toBe('ngram');
+      expect(result?.sourceLayer).toBe('l1');
+      expect(result?.text).toBe('local');
+    });
+
+    it('does not let low-information L3 fragments beat useful fallback phrases', () => {
+      const p = createPredictor(4);
+      const doc = 'Risk ';
+      priv(p).l3 = new Map([['isk ', new Map([['is', 1]])]]);
+
+      const result = p.getGhostText(doc.length, doc);
+      expect(result?.providerId).toBe('short-english');
+      expect(result?.sourceLayer).toBe('fallback');
+      expect(result?.text).toBe('needs review');
     });
   });
 
@@ -878,7 +903,7 @@ describe('MarkdownPredictor', () => {
       const result = p.getGhostText(doc.length, doc);
       expect(result).not.toBeNull();
       expect(result!.text).toBe('继续');
-      expect(result!.syntaxType).toBe('short-zh');
+      expect(result!.syntaxType).toBe('phrase-slot');
     });
 
     it('keeps common English short fallbacks available', () => {
@@ -886,7 +911,7 @@ describe('MarkdownPredictor', () => {
       const doc = 'Project ';
       const result = p.getGhostText(doc.length, doc);
       expect(result).not.toBeNull();
-      expect(result!.text).toBe('status');
+      expect(result!.text).toBe('status note');
       expect(result!.syntaxType).toBe('short-en');
     });
 

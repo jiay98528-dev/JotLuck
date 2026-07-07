@@ -119,36 +119,36 @@ const ZH_PROBES: ProbeCase[] = [
 ];
 
 const EN_PROBES: ProbeCase[] = [
-  { id: 'en-01', input: 'This ', expected: 'is', language: 'en' },
-  { id: 'en-02', input: 'The ', expected: 'main', language: 'en' },
-  { id: 'en-03', input: 'When ', expected: 'needed', language: 'en' },
-  { id: 'en-04', input: 'Users ', expected: 'can', language: 'en' },
-  { id: 'en-05', input: 'Project ', expected: 'status', language: 'en' },
-  { id: 'en-06', input: 'Meeting ', expected: 'notes', language: 'en' },
-  { id: 'en-07', input: 'Daily ', expected: 'note', language: 'en' },
-  { id: 'en-08', input: 'Status ', expected: 'update', language: 'en' },
-  { id: 'en-09', input: 'Next ', expected: 'step', language: 'en' },
-  { id: 'en-10', input: 'Action ', expected: 'items', language: 'en' },
-  { id: 'en-11', input: 'Current ', expected: 'state', language: 'en' },
-  { id: 'en-12', input: 'Risk ', expected: 'is', language: 'en' },
-  { id: 'en-13', input: 'The risk ', expected: 'is', language: 'en' },
-  { id: 'en-14', input: 'The goal ', expected: 'is', language: 'en' },
-  { id: 'en-15', input: 'The result ', expected: 'is', language: 'en' },
-  { id: 'en-16', input: 'The issue ', expected: 'is', language: 'en' },
-  { id: 'en-17', input: 'We need ', expected: 'to', language: 'en' },
+  { id: 'en-01', input: 'This ', expected: 'note covers', language: 'en' },
+  { id: 'en-02', input: 'The ', expected: 'main point', language: 'en' },
+  { id: 'en-03', input: 'When ', expected: 'needed next', language: 'en' },
+  { id: 'en-04', input: 'Users ', expected: 'can edit', language: 'en' },
+  { id: 'en-05', input: 'Project ', expected: 'status note', language: 'en' },
+  { id: 'en-06', input: 'Meeting ', expected: 'notes draft', language: 'en' },
+  { id: 'en-07', input: 'Daily ', expected: 'note entry', language: 'en' },
+  { id: 'en-08', input: 'Status ', expected: 'update note', language: 'en' },
+  { id: 'en-09', input: 'Next ', expected: 'step today', language: 'en' },
+  { id: 'en-10', input: 'Action ', expected: 'items list', language: 'en' },
+  { id: 'en-11', input: 'Current ', expected: 'state now', language: 'en' },
+  { id: 'en-12', input: 'Risk ', expected: 'needs review', language: 'en' },
+  { id: 'en-13', input: 'The risk ', expected: 'needs review', language: 'en' },
+  { id: 'en-14', input: 'The goal ', expected: 'is clear', language: 'en' },
+  { id: 'en-15', input: 'The result ', expected: 'is ready', language: 'en' },
+  { id: 'en-16', input: 'The issue ', expected: 'needs review', language: 'en' },
+  { id: 'en-17', input: 'We need ', expected: 'to confirm', language: 'en' },
   { id: 'en-18', input: 'Need to ', expected: 'confirm', language: 'en' },
-  { id: 'en-19', input: 'Follow up ', expected: 'on', language: 'en' },
-  { id: 'en-20', input: 'Technical ', expected: 'note', language: 'en' },
-  { id: 'en-21', input: 'Release ', expected: 'notes', language: 'en' },
-  { id: 'en-22', input: 'Test ', expected: 'result', language: 'en' },
-  { id: 'en-23', input: 'Review ', expected: 'notes', language: 'en' },
+  { id: 'en-19', input: 'Follow up ', expected: 'on owner', language: 'en' },
+  { id: 'en-20', input: 'Technical ', expected: 'note draft', language: 'en' },
+  { id: 'en-21', input: 'Release ', expected: 'notes draft', language: 'en' },
+  { id: 'en-22', input: 'Test ', expected: 'result ok', language: 'en' },
+  { id: 'en-23', input: 'Review ', expected: 'notes list', language: 'en' },
   { id: 'en-24', input: 'Markdown', expected: ' syntax', language: 'en' },
   { id: 'en-25', input: 'document', expected: 'ation', language: 'en' },
-  { id: 'en-26', input: 'project ', expected: 'status', language: 'en' },
-  { id: 'en-27', input: 'meeting ', expected: 'notes', language: 'en' },
-  { id: 'en-28', input: 'daily ', expected: 'note', language: 'en' },
-  { id: 'en-29', input: 'next ', expected: 'step', language: 'en' },
-  { id: 'en-30', input: 'technical ', expected: 'note', language: 'en' },
+  { id: 'en-26', input: 'project ', expected: 'status note', language: 'en' },
+  { id: 'en-27', input: 'meeting ', expected: 'notes draft', language: 'en' },
+  { id: 'en-28', input: 'daily ', expected: 'note entry', language: 'en' },
+  { id: 'en-29', input: 'next ', expected: 'step today', language: 'en' },
+  { id: 'en-30', input: 'technical ', expected: 'note draft', language: 'en' },
 ];
 
 const STRUCTURED_PROBES = [
@@ -471,6 +471,9 @@ test.describe('autocomplete quality score', () => {
     );
     const negativeFalseTriggerRate =
       negativeResults.filter((result) => result.suggestion).length / negativeResults.length;
+    const enLowInformationRate =
+      enResults.filter((result) => result.suggestion && isLowValueSuggestion(result.suggestion))
+        .length / enResults.length;
     const totalScore = Math.round(
       zhSummary.accuracyScore * 0.35 +
         enSummary.accuracyScore * 0.2 +
@@ -485,6 +488,7 @@ test.describe('autocomplete quality score', () => {
           totalScore,
           zh: zhSummary,
           en: enSummary,
+          enLowInformationRate: round(enLowInformationRate),
           structured: { score: structuredScore, count: structuredResults.length },
           negative: {
             falseTriggerRate: round(negativeFalseTriggerRate),
@@ -494,6 +498,8 @@ test.describe('autocomplete quality score', () => {
           layers: summarizeLayers([...zhResults, ...enResults]),
           mixedLanguage: [...zhResults, ...enResults].filter((result) => result.mixedLanguage)
             .length,
+          zhLowScoreSamples: zhResults.filter((result) => result.score < 85),
+          enLowScoreSamples: enResults.filter((result) => result.score < 85),
           negativeTriggers: negativeResults.filter((result) => result.suggestion),
           structuredFailures: structuredResults.filter((result) => !result.ok),
           manualFailures: manual.failures,
@@ -512,6 +518,7 @@ test.describe('autocomplete quality score', () => {
     expect(zhSummary.accuracyScore).toBeGreaterThanOrEqual(85);
     expect(enSummary.hitRate).toBeGreaterThanOrEqual(0.7);
     expect(enSummary.accuracyScore).toBeGreaterThanOrEqual(75);
+    expect(enLowInformationRate).toBeLessThanOrEqual(0.1);
     expect(structuredScore).toBeGreaterThanOrEqual(95);
     expect(manual.score).toBeGreaterThanOrEqual(95);
     expect(negativeFalseTriggerRate).toBeLessThanOrEqual(0.05);
@@ -1089,6 +1096,15 @@ function isLowValueSuggestion(suggestion: string): boolean {
   const trimmed = suggestion.trim();
   if (!trimmed) return false;
   if (/^[的了在和与及或而但并就都很更再也还又把被对为以中上下一是有用个]$/u.test(trimmed)) {
+    return true;
+  }
+  const words = trimmed.match(/[A-Za-z][A-Za-z'-]*/g) ?? [];
+  if (
+    words.length === 1 &&
+    /^(and|or|but|the|a|an|to|of|in|on|for|with|is|are|was|were|can|status|note|notes|step|items|state|main)$/i.test(
+      words[0],
+    )
+  ) {
     return true;
   }
   return /\b(cookie|copyright|all rights reserved|login|sign up|read more|subscribe)\b/i.test(

@@ -2834,6 +2834,8 @@ function onUpdateCompletionSettings(settings: CompletionSettings): void {
 }
 
 function onClearCompletionData(): void {
+  completionTrainer?.cancelCurrentRun();
+  completionTrainer = null;
   editorRef.value?.predictor.clearLearningData();
   const nextMeta: CompletionTrainingMeta = {
     ...DEFAULT_TRAINING_META,

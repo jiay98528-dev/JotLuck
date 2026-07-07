@@ -245,7 +245,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
             debounce.timer = null;
             this.doPredict(view);
           },
-          settings.aggressiveness === 'balanced' ? 80 : 150,
+          settings.aggressiveness === 'balanced' ? 40 : 150,
         );
       }
 

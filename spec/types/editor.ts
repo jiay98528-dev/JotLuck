@@ -183,6 +183,7 @@ export interface CompletionContext {
 export interface CompletionCandidate {
   text: string;
   confidence: number;
+  informationScore?: number;
   from: number;
   providerId: CompletionSourceType;
   source: 'structured' | 'ngram' | 'recent' | 'llm';

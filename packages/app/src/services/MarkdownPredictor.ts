@@ -40,6 +40,8 @@ import {
 } from './completion/providers';
 import {
   clearCompletionMetrics,
+  loadCompletionMetrics,
+  type MetricsStore,
   recordProviderAccepted,
   recordProviderRejected,
   recordProviderShown,
@@ -109,6 +111,7 @@ export class MarkdownPredictor {
   private ablationMode: CompletionAblationMode = 'full-stack';
   private lastPredictionProviderId: string | null = null;
   private lastPredictionSourceLayer: CompletionSourceLayer | undefined;
+  private lastPredictionSyntaxType: string | undefined;
   private lastPredictionFeedbackKey: string | null = null;
   private lastPredictionRejectionKey: string | null = null;
 
@@ -169,6 +172,7 @@ export class MarkdownPredictor {
       return null;
     }
 
+    const metrics = loadCompletionMetrics();
     const { candidate } = resolveCompletion(context, this.createProviders(), {
       getRejectionCount: (item, itemContext) =>
         this.rejectionCounts.get(this.getRejectionKey(item, itemContext)) ?? 0,
@@ -176,10 +180,11 @@ export class MarkdownPredictor {
         Math.min(
           0.12,
           (this.acceptedBoosts.get(this.getFeedbackKey(item, itemContext)) ?? 0) * 0.04,
-        ),
+        ) + this.getMetricAdjustment(item, metrics),
     });
     this.lastPredictionProviderId = candidate?.providerId ?? null;
     this.lastPredictionSourceLayer = candidate?.sourceLayer;
+    this.lastPredictionSyntaxType = candidate?.syntaxType;
     this.lastPredictionFeedbackKey = candidate ? this.getFeedbackKey(candidate, context) : null;
     this.lastPredictionRejectionKey = candidate ? this.getRejectionKey(candidate, context) : null;
     if (!candidate) return null;
@@ -218,6 +223,7 @@ export class MarkdownPredictor {
     recordProviderAccepted(
       this.lastPredictionProviderId,
       this.lastPredictionSourceLayer,
+      this.lastPredictionSyntaxType,
       acceptedText.length,
     );
   }
@@ -238,7 +244,11 @@ export class MarkdownPredictor {
         (this.rejectionCounts.get(this.lastPredictionRejectionKey) ?? 0) + 1,
       );
     }
-    recordProviderRejected(this.lastPredictionProviderId, this.lastPredictionSourceLayer);
+    recordProviderRejected(
+      this.lastPredictionProviderId,
+      this.lastPredictionSourceLayer,
+      this.lastPredictionSyntaxType,
+    );
   }
 
   scanOpenedDocument(text: string): void {
@@ -278,6 +288,7 @@ export class MarkdownPredictor {
     this.entryFlags.clear();
     this.lastPredictionProviderId = null;
     this.lastPredictionSourceLayer = undefined;
+    this.lastPredictionSyntaxType = undefined;
     this.lastPredictionFeedbackKey = null;
     this.lastPredictionRejectionKey = null;
     this.l2Meta = { schemaVersion: 3, docs: 0, totalEntries: 0, lastSave: Date.now() };
@@ -392,6 +403,32 @@ export class MarkdownPredictor {
 
   private getRejectionKey(candidate: CompletionCandidate, context: CompletionContext): string {
     return `${candidate.providerId}|${candidate.syntaxType}|${context.blockType}|${context.paragraphStart}`;
+  }
+
+  private getMetricAdjustment(candidate: CompletionCandidate, metrics: MetricsStore): number {
+    const layerKey = `${candidate.providerId}:${candidate.sourceLayer ?? 'unknown'}`;
+    const syntaxKey = `${layerKey}:${candidate.syntaxType ?? 'unknown'}`;
+    const entries = [metrics.syntaxTypes[syntaxKey], metrics.layers[layerKey]].filter(
+      (item): item is NonNullable<typeof item> => Boolean(item),
+    );
+    if (entries.length === 0) return 0;
+
+    const shown = entries.reduce((sum, item) => sum + item.shown, 0);
+    if (shown < 6) return 0;
+    const accepted = entries.reduce((sum, item) => sum + item.accepted, 0);
+    const rejected = entries.reduce((sum, item) => sum + item.rejected, 0);
+    const acceptRate = accepted / shown;
+    const rejectRate = rejected / shown;
+    const weakSource =
+      candidate.sourceLayer === 'fallback' ||
+      candidate.sourceLayer === 'l3' ||
+      candidate.providerId === 'short-chinese-fallback' ||
+      candidate.providerId === 'short-english';
+
+    if (weakSource && acceptRate < 0.12 && rejectRate >= 0.25) return -0.12;
+    if (weakSource && acceptRate < 0.1) return -0.06;
+    if (!weakSource && acceptRate >= 0.45) return 0.04;
+    return 0;
   }
 
   private applyQualityGate(

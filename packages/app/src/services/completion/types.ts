@@ -77,6 +77,7 @@ export interface CompletionContext {
 export interface CompletionCandidate {
   text: string;
   confidence: number;
+  informationScore?: number;
   from: number;
   providerId: string;
   source: CompletionSourceKind;

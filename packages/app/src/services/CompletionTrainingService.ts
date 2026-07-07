@@ -84,6 +84,7 @@ export function subscribeTrainingMeta(
 
 export class CompletionTrainingService {
   private running = false;
+  private generation = 0;
 
   constructor(
     private readonly fs: IFileSystemService,
@@ -93,6 +94,7 @@ export class CompletionTrainingService {
   async trainNotebook(entries: DirEntry[]): Promise<void> {
     if (this.running) return;
     this.running = true;
+    const generation = this.generation;
     const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     let meta: CompletionTrainingMeta = {
       ...loadTrainingMeta(),
@@ -103,14 +105,20 @@ export class CompletionTrainingService {
       failedPaths: {},
       lastRunId: runId,
     };
+    if (!this.isCurrentGeneration(generation)) return;
     saveTrainingMeta(meta);
 
     try {
       await this.predictor.initialize();
+      if (!this.isCurrentGeneration(generation)) return;
       const candidates = entries.filter((entry) => this.shouldTrainEntry(entry, meta));
       for (let i = 0; i < candidates.length; i += 4) {
+        if (!this.isCurrentGeneration(generation)) return;
         const batch = candidates.slice(i, i + 4);
-        const results = await Promise.all(batch.map((entry) => this.trainEntry(entry, meta)));
+        const results = await Promise.all(
+          batch.map((entry) => this.trainEntry(entry, meta, generation)),
+        );
+        if (!this.isCurrentGeneration(generation)) return;
         for (const result of results) {
           if (result.ok) {
             meta.successCount++;
@@ -123,6 +131,7 @@ export class CompletionTrainingService {
         saveTrainingMeta(meta);
         await idleDelay();
       }
+      if (!this.isCurrentGeneration(generation)) return;
       const status = meta.failureCount === 0 ? 'done' : meta.successCount > 0 ? 'partial' : 'error';
       saveTrainingMeta(
         normalizeMeta({
@@ -136,6 +145,7 @@ export class CompletionTrainingService {
         }),
       );
     } catch (error) {
+      if (!this.isCurrentGeneration(generation)) return;
       saveTrainingMeta(
         normalizeMeta({
           ...meta,
@@ -147,6 +157,11 @@ export class CompletionTrainingService {
     } finally {
       this.running = false;
     }
+  }
+
+  cancelCurrentRun(): void {
+    this.generation++;
+    this.running = false;
   }
 
   async trainFile(path: string, content: string, stat?: CompletionTrainingFileMeta): Promise<void> {
@@ -173,9 +188,11 @@ export class CompletionTrainingService {
   private async trainEntry(
     entry: DirEntry,
     meta: CompletionTrainingMeta,
+    generation: number,
   ): Promise<{ ok: true; path: string } | { ok: false; path: string; error: string }> {
     try {
       const content = await this.fs.readFile(entry.path);
+      if (!this.isCurrentGeneration(generation)) return { ok: true, path: entry.path };
       this.predictor.ingestDocument(entry.path, stripUntrainableMarkdown(content), true);
       meta.trainedPaths[entry.path] = {
         mtime: entry.mtime ?? Date.now(),
@@ -189,6 +206,10 @@ export class CompletionTrainingService {
         error: error instanceof Error ? error.message : String(error),
       };
     }
+  }
+
+  private isCurrentGeneration(generation: number): boolean {
+    return generation === this.generation;
   }
 
   private shouldTrainEntry(entry: DirEntry, meta: CompletionTrainingMeta): boolean {

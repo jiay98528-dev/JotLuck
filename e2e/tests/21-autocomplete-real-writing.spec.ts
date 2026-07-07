@@ -19,6 +19,7 @@ interface WritingStats {
   mixedTriggers: number;
   totalChars: number;
   latencies: number[];
+  falseSamples: Array<{ id: string; marker: string; suggestion: string; remaining: string }>;
 }
 
 const CASES: WritingCase[] = [
@@ -195,6 +196,7 @@ test.describe('autocomplete real Chinese writing score', () => {
       mixedTriggers: 0,
       totalChars: 0,
       latencies: [],
+      falseSamples: [],
     };
 
     await openAppWithoutInternalBridge(page);
@@ -204,8 +206,12 @@ test.describe('autocomplete real Chinese writing score', () => {
       let cursor = 0;
 
       for (const checkpoint of item.checkpoints) {
-        const checkpointEnd =
-          item.text.indexOf(checkpoint.marker, cursor) + checkpoint.marker.length;
+        const markerIndex = item.text.indexOf(checkpoint.marker, cursor);
+        const firstMarkerIndex = item.text.indexOf(checkpoint.marker);
+        if (markerIndex < 0 && firstMarkerIndex >= 0 && firstMarkerIndex < cursor) {
+          continue;
+        }
+        const checkpointEnd = markerIndex + checkpoint.marker.length;
         expect(checkpointEnd, `${item.id} checkpoint ${checkpoint.marker}`).toBeGreaterThanOrEqual(
           cursor + checkpoint.marker.length,
         );
@@ -229,6 +235,12 @@ test.describe('autocomplete real Chinese writing score', () => {
           stats.accepted += 1;
         } else {
           stats.falseTriggers += 1;
+          stats.falseSamples.push({
+            id: item.id,
+            marker: checkpoint.marker,
+            suggestion,
+            remaining: item.text.slice(cursor, cursor + 24),
+          });
           await page.keyboard.press('Escape');
         }
       }
@@ -255,6 +267,7 @@ test.describe('autocomplete real Chinese writing score', () => {
           triggers: stats.triggers,
           accepted: stats.accepted,
           falseTriggers: stats.falseTriggers,
+          falseSamples: stats.falseSamples,
           mixedTriggers: stats.mixedTriggers,
           triggerRate,
           usableRate,
@@ -269,12 +282,12 @@ test.describe('autocomplete real Chinese writing score', () => {
 
     expect(crashErrors).toEqual([]);
     expect(stats.mixedTriggers).toBe(0);
-    expect(falseTriggerRate).toBeLessThanOrEqual(0.15);
+    expect(falseTriggerRate).toBeLessThanOrEqual(0.04);
     expect(triggerRate).toBeGreaterThanOrEqual(0.3);
-    expect(triggerRate).toBeLessThanOrEqual(0.55);
-    expect(usableRate).toBeGreaterThanOrEqual(0.15);
+    expect(triggerRate).toBeLessThanOrEqual(0.45);
+    expect(usableRate).toBeGreaterThanOrEqual(0.3);
     expect(usableRate).toBeLessThanOrEqual(0.35);
-    expect(p90).toBeLessThanOrEqual(230);
+    expect(p90).toBeLessThanOrEqual(130);
   });
 });
 
