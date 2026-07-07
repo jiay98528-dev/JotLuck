@@ -564,6 +564,19 @@ describe('MarkdownPredictor', () => {
       expect(result!.text.length).toBeLessThanOrEqual(8);
     });
 
+    it('boosts phrase-slot confidence after real Chinese sentence punctuation', () => {
+      const p = createPredictor(4);
+      const baseDoc = '原因是';
+      const boostedDoc = '今天先记录项目复盘。团队讨论风险边界，也确认下一步安排。原因是';
+
+      const base = p.getGhostText(baseDoc.length, baseDoc);
+      const boosted = p.getGhostText(boostedDoc.length, boostedDoc);
+
+      expect(base?.providerId).toBe('phrase-slot');
+      expect(boosted?.providerId).toBe('phrase-slot');
+      expect(boosted!.confidence).toBeGreaterThan(base!.confidence);
+    });
+
     it('does not trigger phrase slots in mixed-language context', () => {
       const p = createPredictor(4);
       const doc = '今天 review 我认为';

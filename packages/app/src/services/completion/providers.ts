@@ -477,7 +477,7 @@ function getPhraseSlotContextBoost(context: CompletionContext): number {
   let boost = 0;
   if (context.paragraphBeforeCursor.trim().length >= 40) boost += 0.03;
   if (context.recentTokens.length >= 3) boost += 0.02;
-  if (/[銆傦紒锛??锛?]/u.test(context.paragraphBeforeCursor)) boost += 0.02;
+  if (/[。！？；：]/u.test(context.paragraphBeforeCursor)) boost += 0.02;
   return boost;
 }
 
