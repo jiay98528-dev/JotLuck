@@ -170,7 +170,7 @@ export async function openExportDialog(page: Page): Promise<void> {
 
 /** 等待应用初始化完成 (跳过欢迎页) */
 export async function waitForAppReady(page: Page): Promise<void> {
-  const APP_URL = 'http://localhost:5173';
+  const APP_URL = process.env.MARKLUCK_E2E_BASE_URL ?? 'http://localhost:5173';
   // CRITICAL: addInitScript runs BEFORE any page JavaScript (including Vue's onMounted).
   // This ensures App.vue reads the flag before deciding to show the welcome overlay.
   // Without this, the welcome overlay intercepts all pointer events in tests.

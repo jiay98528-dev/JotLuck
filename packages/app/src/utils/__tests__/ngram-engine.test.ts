@@ -387,6 +387,47 @@ describe('serialize ↔ deserialize', () => {
   });
 });
 
+it('v3 JSONL roundtrips delimiter characters safely', () => {
+  const table = new Map([
+    [
+      'a|,\n',
+      new Map([
+        ['\n', 3],
+        ['|', 2],
+        [',', 1],
+        ['你', 4],
+      ]),
+    ],
+  ]);
+
+  const compact = serialize(table);
+  const restored = deserialize(compact);
+
+  expect(compact.trimStart().startsWith('[')).toBe(true);
+  expect(restored.get('a|,\n')?.get('\n')).toBe(3);
+  expect(restored.get('a|,\n')?.get('|')).toBe(2);
+  expect(restored.get('a|,\n')?.get(',')).toBe(1);
+  expect(restored.get('a|,\n')?.get('你')).toBe(4);
+});
+
+it('still reads legacy v2 compact lines', () => {
+  const restored = deserialize('61626364|e,2|b');
+  expect(restored.get('abcd')?.get('e')).toBe(2);
+});
+
+it('skips invalid JSONL and invalid counts without throwing', () => {
+  const compact = [
+    '["61626364",[["65",2]],"b"]',
+    '["zz",[["65",2]],"b"]',
+    '["61626364",[["66",-1],["67","NaN"]],"b"]',
+    '{bad json',
+  ].join('\n');
+  const restored = deserialize(compact);
+  expect(restored.get('abcd')?.get('e')).toBe(2);
+  expect(restored.get('abcd')?.has('b')).toBe(false);
+  expect(restored.get('abcd')?.has('c')).toBe(false);
+});
+
 // ---- estimateSize ----
 
 describe('estimateSize', () => {

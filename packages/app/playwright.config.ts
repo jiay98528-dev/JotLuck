@@ -1,5 +1,14 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const baseURL = process.env.MARKLUCK_E2E_BASE_URL ?? 'http://localhost:5173';
+const parsedBaseURL = new URL(baseURL);
+const previewHost = parsedBaseURL.hostname === 'localhost' ? '127.0.0.1' : parsedBaseURL.hostname;
+const previewPort = parsedBaseURL.port || (parsedBaseURL.protocol === 'https:' ? '443' : '80');
+const webServerCommand = [
+  'pnpm --filter @markluck/app build:e2e',
+  `pnpm --filter @markluck/app preview --host ${previewHost} --port ${previewPort}`,
+].join(' && ');
+
 export default defineConfig({
   testDir: '../../e2e/tests',
   timeout: 30000,
@@ -11,7 +20,7 @@ export default defineConfig({
   reporter: [['html', { outputFolder: '../../e2e/report' }], ['list']],
 
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -33,9 +42,8 @@ export default defineConfig({
   ],
 
   webServer: {
-    command:
-      'pnpm --filter @markluck/app build:e2e && pnpm --filter @markluck/app preview --host 127.0.0.1 --port 5173',
-    url: 'http://localhost:5173',
+    command: webServerCommand,
+    url: baseURL,
     reuseExistingServer: process.env.MARKLUCK_E2E_REUSE === '1',
     timeout: 60000,
   },

@@ -117,6 +117,30 @@ describe('CompletionTrainingService', () => {
     expect(localStorage.getItem(TRAINING_META_KEY)).not.toBeNull();
   });
 
+  it('records partial training failures without reporting done', async () => {
+    const fs = mockFs({
+      '/ok.md': '为了验证训练部分失败，这里写入一段普通文本。',
+      '/bad.md': 'unreadable',
+    });
+    vi.mocked(fs.readFile).mockImplementation((path: string) => {
+      if (path === '/bad.md') return Promise.reject(new Error('permission denied'));
+      return Promise.resolve('/ok.md content 为了验证训练部分失败');
+    });
+    const service = new CompletionTrainingService(fs, new MarkdownPredictor());
+    const entries: DirEntry[] = [
+      { path: '/ok.md', name: 'ok.md', isFile: true, isDirectory: false, size: 40, mtime: 1 },
+      { path: '/bad.md', name: 'bad.md', isFile: true, isDirectory: false, size: 40, mtime: 1 },
+    ];
+
+    await service.trainNotebook(entries);
+
+    const meta = loadTrainingMeta();
+    expect(meta.status).toBe('partial');
+    expect(meta.successCount).toBe(1);
+    expect(meta.failureCount).toBe(1);
+    expect(meta.failedPaths['/bad.md']).toContain('permission denied');
+  });
+
   it('removePath updates persisted meta', () => {
     localStorage.setItem(
       TRAINING_META_KEY,
