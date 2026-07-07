@@ -124,6 +124,9 @@ export interface PredictionResult {
   providerId?: string;
   syntaxType?: string;
   learnable?: boolean;
+  informationScore?: number;
+  learningBoost?: number;
+  learningPenalty?: number;
 }
 
 export type CompletionSourceLayer =

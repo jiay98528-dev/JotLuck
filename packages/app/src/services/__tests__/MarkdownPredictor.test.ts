@@ -14,6 +14,7 @@ import {
   type PredictorIndexData,
 } from '../MarkdownPredictor';
 import { loadCompletionMetrics } from '../completion/metrics';
+import { LEARNING_SIGNALS_STORAGE_KEY } from '../completion/learning-signals';
 
 // ---- helpers ----
 
@@ -784,6 +785,65 @@ describe('MarkdownPredictor', () => {
       expect(metrics.syntaxTypes['ngram:l1:general']?.shown).toBe(1);
       expect(metrics.syntaxTypes['ngram:l1:general']?.accepted).toBe(1);
       expect(metrics.syntaxTypes['ngram:l1:general']?.rejected).toBe(1);
+    });
+
+    it('persists learning signals and exposes a boost for accepted strong contexts', () => {
+      const p = createPredictor(2);
+      priv(p).l1 = new Map([['ab', new Map([['x', 1]])]]);
+
+      const first = p.getGhostText(2, 'ab');
+      expect(first?.text).toBe('x');
+      p.acceptCompletion('ab', first!.text);
+
+      const second = p.getGhostText(2, 'ab');
+      expect(second?.text).toBe('x');
+      p.acceptCompletion('ab', second!.text);
+
+      const third = p.getGhostText(2, 'ab');
+      expect(third?.learningBoost).toBeGreaterThan(0);
+      expect(localStorage.getItem(LEARNING_SIGNALS_STORAGE_KEY)).toContain('accepted');
+    });
+
+    it('applies persistent learning penalty to repeatedly rejected weak fallback contexts', () => {
+      const p = createPredictor(4);
+      const doc = 'Risk ';
+
+      const first = p.getGhostText(doc.length, doc);
+      expect(first?.sourceLayer).toBe('fallback');
+      p.rejectCompletion('Risk', first!.text);
+
+      const second = p.getGhostText(doc.length, doc);
+      expect(second?.sourceLayer).toBe('fallback');
+      p.rejectCompletion('Risk', second!.text);
+
+      const fresh = createPredictor(4);
+      const result = fresh.getGhostText(doc.length, doc);
+      expect(result?.learningPenalty).toBeGreaterThan(0);
+    });
+
+    it('does not write low-information weak fallback acceptances into L2 ngram history', () => {
+      const p = createPredictor(4);
+      priv(p).lastPredictionProviderId = 'short-english';
+      priv(p).lastPredictionSourceLayer = 'fallback';
+      priv(p).lastPredictionSyntaxType = 'short-en';
+      priv(p).lastPredictionInformationScore = 0.2;
+
+      p.acceptCompletion('This ', 'note');
+
+      expect(priv(p).l2.size).toBe(0);
+      expect(localStorage.getItem(ACCEPTED_LEXICON_STORAGE_KEY)).toContain('note');
+    });
+
+    it('clears learning signals with local learning data', () => {
+      const p = createPredictor(2);
+      priv(p).l1 = new Map([['ab', new Map([['x', 1]])]]);
+
+      const result = p.getGhostText(2, 'ab');
+      p.acceptCompletion('ab', result!.text);
+      expect(localStorage.getItem(LEARNING_SIGNALS_STORAGE_KEY)).not.toBeNull();
+
+      p.clearLearningData();
+      expect(localStorage.getItem(LEARNING_SIGNALS_STORAGE_KEY)).toBeNull();
     });
 
     it('lets high-information L1 candidates beat weak fallback candidates', () => {

@@ -46,6 +46,18 @@ import {
   recordProviderRejected,
   recordProviderShown,
 } from './completion/metrics';
+import {
+  clearLearningSignals,
+  getLearningSignalAdjustment,
+  getLearningSignalKey,
+  isWeakLearningSource,
+  loadLearningSignals,
+  type LearningSignalStore,
+  recordSignalAccepted,
+  recordSignalRejected,
+  recordSignalShown,
+  saveLearningSignals,
+} from './completion/learning-signals';
 import { resolveCompletion } from './completion/resolver';
 import type {
   CompletionAblationMode,
@@ -106,14 +118,17 @@ export class MarkdownPredictor {
   private recentPhrases: string[] = [];
   private documentLexicon: string[] = [];
   private acceptedLexicon: string[] = [];
+  private learningSignals: LearningSignalStore = loadLearningSignals();
   private rejectionCounts = new Map<string, number>();
   private acceptedBoosts = new Map<string, number>();
   private ablationMode: CompletionAblationMode = 'full-stack';
   private lastPredictionProviderId: string | null = null;
   private lastPredictionSourceLayer: CompletionSourceLayer | undefined;
   private lastPredictionSyntaxType: string | undefined;
+  private lastPredictionInformationScore: number | undefined;
   private lastPredictionFeedbackKey: string | null = null;
   private lastPredictionRejectionKey: string | null = null;
+  private lastPredictionLearningKey: string | null = null;
 
   constructor(private readonly n: number = 4) {}
 
@@ -180,17 +195,26 @@ export class MarkdownPredictor {
         Math.min(
           0.12,
           (this.acceptedBoosts.get(this.getFeedbackKey(item, itemContext)) ?? 0) * 0.04,
-        ) + this.getMetricAdjustment(item, metrics),
+        ) +
+        this.getMetricAdjustment(item, metrics) +
+        getLearningSignalAdjustment(
+          this.learningSignals,
+          getLearningSignalKey(item, itemContext),
+          item,
+        ),
     });
     this.lastPredictionProviderId = candidate?.providerId ?? null;
     this.lastPredictionSourceLayer = candidate?.sourceLayer;
     this.lastPredictionSyntaxType = candidate?.syntaxType;
+    this.lastPredictionInformationScore = candidate?.informationScore;
     this.lastPredictionFeedbackKey = candidate ? this.getFeedbackKey(candidate, context) : null;
     this.lastPredictionRejectionKey = candidate ? this.getRejectionKey(candidate, context) : null;
+    this.lastPredictionLearningKey = candidate ? getLearningSignalKey(candidate, context) : null;
     if (!candidate) return null;
 
     const result = this.toPredictionResult(candidate);
     recordProviderShown(candidate, performance.now() - start);
+    this.recordLearningSignalShown(candidate, context);
     return result;
   }
 
@@ -200,15 +224,19 @@ export class MarkdownPredictor {
     options: CompletionFeedbackOptions = {},
   ): void {
     const shouldLearn = options.learn ?? true;
+    const shouldWriteNgram = shouldLearn && this.shouldWriteAcceptedNgram();
     if (shouldLearn) {
       const now = Date.now();
       this.accessTimestamps.set(ctx, now);
       this.entryFlags.set(ctx, 'u');
+      this.rememberAcceptedLexicon(acceptedText);
+      if (!shouldWriteNgram) this.saveToLocalStorage();
+    }
+    if (shouldWriteNgram) {
       ngramLearn(this.l1, ctx, acceptedText, this.n);
       ngramLearn(this.l2, ctx, acceptedText, this.n);
       if (ctx.length >= 2) ngramLearn(this.shortL2, ctx.slice(-2), acceptedText.slice(0, 6), 2);
       this.rememberRecentPhrase(ctx + acceptedText);
-      this.rememberAcceptedLexicon(acceptedText);
       this.saveToLocalStorage();
     }
     if (this.lastPredictionRejectionKey) {
@@ -226,6 +254,7 @@ export class MarkdownPredictor {
       this.lastPredictionSyntaxType,
       acceptedText.length,
     );
+    this.recordLearningSignalAccepted(acceptedText.length);
   }
 
   rejectCompletion(
@@ -249,6 +278,7 @@ export class MarkdownPredictor {
       this.lastPredictionSourceLayer,
       this.lastPredictionSyntaxType,
     );
+    this.recordLearningSignalRejected();
   }
 
   scanOpenedDocument(text: string): void {
@@ -258,8 +288,12 @@ export class MarkdownPredictor {
   }
 
   ingestDocument(_path: string, text: string, persist = true): void {
-    mergeInto(this.l2, pruneTable(scanDocument(text, this.n), 1, 4));
-    mergeInto(this.shortL2, pruneTable(this.scanShortDocument(text), 1, 4));
+    const documentTable = pruneTable(scanDocument(text, this.n), 2, 3);
+    const shortTable = pruneTable(this.scanShortDocument(text), 2, 3);
+    this.markLowPriorityContexts(documentTable);
+    this.markLowPriorityContexts(shortTable);
+    mergeInto(this.l2, documentTable);
+    mergeInto(this.shortL2, shortTable);
     this.l2Meta.docs++;
     this.l2Meta.totalEntries = this.l2.size + this.shortL2.size;
     this.maybeEliminate();
@@ -267,8 +301,12 @@ export class MarkdownPredictor {
   }
 
   closeDocument(): void {
-    mergeInto(this.l2, pruneTable(this.l1, 3, 3));
-    mergeInto(this.shortL2, pruneTable(this.shortL1, 2, 3));
+    const documentTable = pruneTable(this.l1, 4, 2);
+    const shortTable = pruneTable(this.shortL1, 3, 2);
+    this.markLowPriorityContexts(documentTable);
+    this.markLowPriorityContexts(shortTable);
+    mergeInto(this.l2, documentTable);
+    mergeInto(this.shortL2, shortTable);
     this.l1.clear();
     this.shortL1.clear();
     this.l2Meta.docs++;
@@ -289,8 +327,10 @@ export class MarkdownPredictor {
     this.lastPredictionProviderId = null;
     this.lastPredictionSourceLayer = undefined;
     this.lastPredictionSyntaxType = undefined;
+    this.lastPredictionInformationScore = undefined;
     this.lastPredictionFeedbackKey = null;
     this.lastPredictionRejectionKey = null;
+    this.lastPredictionLearningKey = null;
     this.l2Meta = { schemaVersion: 3, docs: 0, totalEntries: 0, lastSave: Date.now() };
 
     localStorage.removeItem(L2_STORAGE_KEY);
@@ -298,6 +338,8 @@ export class MarkdownPredictor {
     localStorage.removeItem(L2_META_KEY);
     localStorage.removeItem(ACCEPTED_LEXICON_STORAGE_KEY);
     clearCompletionMetrics();
+    clearLearningSignals();
+    this.learningSignals = loadLearningSignals();
   }
 
   detectSyntaxContext(cursorPos: number, doc: string): SyntaxContext {
@@ -374,7 +416,61 @@ export class MarkdownPredictor {
       syntaxType: candidate.syntaxType,
       providerId: candidate.providerId,
       learnable: candidate.learnable,
+      informationScore: candidate.informationScore,
+      learningBoost: candidate.learningBoost,
+      learningPenalty: candidate.learningPenalty,
     };
+  }
+
+  private shouldWriteAcceptedNgram(): boolean {
+    if (
+      !this.lastPredictionProviderId ||
+      !this.lastPredictionSourceLayer ||
+      this.lastPredictionSyntaxType === 'markdown-structure'
+    ) {
+      return true;
+    }
+    const candidate: CompletionCandidate = {
+      text: '',
+      confidence: 0,
+      from: 0,
+      providerId: this.lastPredictionProviderId,
+      source: 'ngram',
+      sourceLayer: this.lastPredictionSourceLayer,
+      syntaxType: this.lastPredictionSyntaxType ?? 'general',
+      informationScore: this.lastPredictionInformationScore,
+      learnable: true,
+      priority: 0,
+    };
+    return !(isWeakLearningSource(candidate) && (this.lastPredictionInformationScore ?? 0) < 0.5);
+  }
+
+  private recordLearningSignalShown(
+    candidate: CompletionCandidate,
+    context: CompletionContext,
+  ): void {
+    const key = getLearningSignalKey(candidate, context);
+    this.learningSignals = recordSignalShown(this.learningSignals, key);
+    saveLearningSignals(this.learningSignals);
+  }
+
+  private recordLearningSignalAccepted(savedChars: number): void {
+    if (!this.lastPredictionLearningKey) return;
+    this.learningSignals = recordSignalAccepted(
+      this.learningSignals,
+      this.lastPredictionLearningKey,
+      savedChars,
+    );
+    saveLearningSignals(this.learningSignals);
+  }
+
+  private recordLearningSignalRejected(): void {
+    if (!this.lastPredictionLearningKey) return;
+    this.learningSignals = recordSignalRejected(
+      this.learningSignals,
+      this.lastPredictionLearningKey,
+    );
+    saveLearningSignals(this.learningSignals);
   }
 
   private rememberRecentPhrase(text: string): void {
@@ -393,6 +489,12 @@ export class MarkdownPredictor {
       ...terms,
       ...this.acceptedLexicon.filter((item) => !terms.includes(item)),
     ].slice(0, 80);
+  }
+
+  private markLowPriorityContexts(table: NGramTable): void {
+    for (const ctx of table.keys()) {
+      if (this.entryFlags.get(ctx) !== 'u') this.entryFlags.set(ctx, 'b');
+    }
   }
 
   private getFeedbackKey(candidate: CompletionCandidate, context: CompletionContext): string {

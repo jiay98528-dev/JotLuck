@@ -13,6 +13,9 @@ export interface PredictionResult {
   syntaxType?: string;
   providerId?: string;
   learnable?: boolean;
+  informationScore?: number;
+  learningBoost?: number;
+  learningPenalty?: number;
 }
 
 export interface PredictionTrace {

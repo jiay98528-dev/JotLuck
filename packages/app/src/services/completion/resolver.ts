@@ -30,6 +30,8 @@ export function resolveCompletion(
       candidates.push({
         ...normalized,
         confidence: Math.max(0, Math.min(0.99, normalized.confidence + boost)),
+        learningBoost: boost > 0 ? boost : normalized.learningBoost,
+        learningPenalty: boost < 0 ? Math.abs(boost) : normalized.learningPenalty,
       });
     }
   }
@@ -141,6 +143,7 @@ function isLowValueCandidate(
   }
 
   if (context.languageHint === 'en') {
+    if (/[\u3000-\u303f\uff00-\uffef]/u.test(trimmed)) return true;
     if (candidate.providerId === 'ngram' && isWebBoilerplateContext(context)) return true;
     if (/^(and|or|but|the|a|an|to|of|in|on|for|with|is|are|was|were|status)$/i.test(trimmed)) {
       return true;
@@ -175,6 +178,7 @@ function rankCandidate(candidate: CompletionCandidate): number {
 function getEffectivePriority(candidate: CompletionCandidate): number {
   if (candidate.source === 'structured') return candidate.priority;
   if (candidate.providerId === 'short-chinese-fallback') return candidate.priority + 12;
+  if (candidate.providerId === 'short-english') return candidate.priority - 7;
   switch (candidate.sourceLayer) {
     case 'l1':
     case 'short-l1':

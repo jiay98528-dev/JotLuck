@@ -455,10 +455,11 @@ export class PhraseSlotProvider implements CompletionProvider {
 
   provideMany(context: CompletionContext): CompletionCandidate[] {
     const beforeCursor = context.sentencePrefix || context.line?.beforeCursor || '';
+    const contextBoost = getPhraseSlotContextBoost(context);
     const candidates = PHRASE_SLOT_FALLBACKS.filter(([pattern]) => pattern.test(beforeCursor)).map(
       ([, text, confidence]) => ({
         text,
-        confidence,
+        confidence: Math.min(0.82, confidence + contextBoost),
         from: context.cursorPos,
         providerId: this.id,
         source: 'ngram' as const,
@@ -470,6 +471,14 @@ export class PhraseSlotProvider implements CompletionProvider {
     );
     return candidates.slice(0, 5);
   }
+}
+
+function getPhraseSlotContextBoost(context: CompletionContext): number {
+  let boost = 0;
+  if (context.paragraphBeforeCursor.trim().length >= 40) boost += 0.03;
+  if (context.recentTokens.length >= 3) boost += 0.02;
+  if (/[銆傦紒锛??锛?]/u.test(context.paragraphBeforeCursor)) boost += 0.02;
+  return boost;
 }
 
 export class RecentPhraseProvider implements CompletionProvider {

@@ -78,6 +78,8 @@ export interface CompletionCandidate {
   text: string;
   confidence: number;
   informationScore?: number;
+  learningBoost?: number;
+  learningPenalty?: number;
   from: number;
   providerId: string;
   source: CompletionSourceKind;
