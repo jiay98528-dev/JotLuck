@@ -360,6 +360,7 @@
       @update:visible="showSettings = $event"
       @update-completion-settings="onUpdateCompletionSettings"
       @update-external-scan-root="onUpdateExternalScanRootTextFiles"
+      @clear-completion-data="onClearCompletionData"
     />
   </ThemeSlotBoundary>
 
@@ -650,7 +651,9 @@ import {
 } from '@/services/CompletionSettings';
 import {
   CompletionTrainingService,
+  DEFAULT_TRAINING_META,
   loadTrainingMeta,
+  saveTrainingMeta,
   subscribeTrainingMeta,
   type CompletionTrainingMeta,
 } from '@/services/CompletionTrainingService';
@@ -2780,9 +2783,12 @@ function connectPredictor(): void {
   pred.setIndexData({
     getAllNoteTitles: () => svc?.getAllNoteTitles() ?? [],
     getAllTags: () => (indexStore.tags ?? []).map((t) => t.name),
+    getRecentNoteTitles: () =>
+      indexStore.recentNotes.map((note) => stripSupportedNoteExtension(note.title)),
     matchFilePaths: (prefix: string) => {
       const docs = svc?.getAllDocuments() ?? {};
-      return Object.keys(docs).filter((p) => p.toLowerCase().includes(prefix.toLowerCase()));
+      const q = prefix.toLowerCase();
+      return Object.keys(docs).filter((p) => p.toLowerCase().startsWith(q));
     },
   });
   const titles = svc?.getAllNoteTitles() ?? [];
@@ -2825,6 +2831,19 @@ function onUpdateCompletionSettings(settings: CompletionSettings): void {
   saveCompletionSettings(settings);
   editorRef.value?.predictor.configure(settings);
   if (settings.backgroundTraining) void maybeTrainNotebook();
+}
+
+function onClearCompletionData(): void {
+  editorRef.value?.predictor.clearLearningData();
+  const nextMeta: CompletionTrainingMeta = {
+    ...DEFAULT_TRAINING_META,
+    trainedPaths: {},
+    failedPaths: {},
+    updatedAt: Date.now(),
+  };
+  completionTrainingMeta.value = nextMeta;
+  saveTrainingMeta(nextMeta);
+  toast.show('已清空文字补全的本地学习数据', 'success', 2500);
 }
 
 function onUpdateExternalScanRootTextFiles(value: boolean): void {

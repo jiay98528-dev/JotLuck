@@ -119,10 +119,36 @@ export interface PredictionResult {
   confidence: number;
   /** 预测起点在文档中的位置 */
   from: number;
+  source?: 'structured' | 'ngram' | 'recent' | 'llm';
+  sourceLayer?: CompletionSourceLayer;
+  providerId?: string;
+  syntaxType?: string;
+  learnable?: boolean;
 }
 
+export type CompletionSourceLayer =
+  | 'l1'
+  | 'l2'
+  | 'l3'
+  | 'short-l1'
+  | 'short-l2'
+  | 'short-l3'
+  | 'provider'
+  | 'fallback';
+
 /** 补全源类型 */
-export type CompletionSourceType = 'wiki-link' | 'tag' | 'file-path';
+export type CompletionSourceType =
+  | 'format-closure'
+  | 'markdown-structure'
+  | 'wiki-link'
+  | 'tag'
+  | 'file-path'
+  | 'sequence-pattern'
+  | 'short-chinese'
+  | 'short-english'
+  | 'ngram'
+  | 'recent-phrase'
+  | 'llm';
 
 /** 补全源接口 */
 export interface CompletionSource {
@@ -132,6 +158,45 @@ export interface CompletionSource {
   trigger: string;
   /** 获取候选列表 */
   getCompletions(query: string): CompletionItem[];
+}
+
+export interface CompletionContext {
+  doc: string;
+  cursorPos: number;
+  line: {
+    text: string;
+    from: number;
+    to: number;
+    cursorColumn: number;
+    beforeCursor: string;
+  } | null;
+  syntax: {
+    type: string;
+    prefix: string;
+    openMarker?: string;
+  };
+  atEndOfLine: boolean;
+  emptyLine: boolean;
+  languageHint: 'zh' | 'en' | 'mixed' | 'unknown';
+}
+
+export interface CompletionCandidate {
+  text: string;
+  confidence: number;
+  from: number;
+  providerId: CompletionSourceType;
+  source: 'structured' | 'ngram' | 'recent' | 'llm';
+  sourceLayer?: CompletionSourceLayer;
+  syntaxType: string;
+  learnable: boolean;
+  priority: number;
+}
+
+export interface CompletionProvider {
+  id: CompletionSourceType;
+  priority: number;
+  canProvide(context: CompletionContext): boolean;
+  provide(context: CompletionContext): CompletionCandidate | null;
 }
 
 // ===== 应用设置 =====

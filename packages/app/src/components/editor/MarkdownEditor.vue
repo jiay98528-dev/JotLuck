@@ -90,9 +90,38 @@ const internallyEmittedValues = new Set<string>();
 let activePendingAction: FormatAction | null = null;
 let pendingInlineMarkers: readonly [string, string] | null = null;
 let deferredPendingAction: FormatAction | null = null;
+let scanOpenedDocumentTimer: ReturnType<typeof setTimeout> | null = null;
+let scanPausedForComposition = false;
 
 function currentCompletionSettings(): CompletionSettings {
   return props.completionSettings ?? getCompletionSettings();
+}
+
+function isAutocompleteScanEnabled(): boolean {
+  const settings = currentCompletionSettings();
+  return props.enableAutocomplete !== false && settings.enabled;
+}
+
+function clearOpenedDocumentScanTimer(): void {
+  if (!scanOpenedDocumentTimer) return;
+  clearTimeout(scanOpenedDocumentTimer);
+  scanOpenedDocumentTimer = null;
+}
+
+function refreshOpenedDocumentScan(text?: string): void {
+  if (!isAutocompleteScanEnabled()) return;
+  predictor.scanOpenedDocument(text ?? view?.state.doc.toString() ?? '');
+}
+
+function scheduleOpenedDocumentScan(editorView: EditorView | null = view): void {
+  if (!editorView || !isAutocompleteScanEnabled()) return;
+  if (scanPausedForComposition || editorView.composing || editorView.compositionStarted) return;
+  clearOpenedDocumentScanTimer();
+  scanOpenedDocumentTimer = setTimeout(() => {
+    scanOpenedDocumentTimer = null;
+    if (!view || scanPausedForComposition || view.composing || view.compositionStarted) return;
+    refreshOpenedDocumentScan(view.state.doc.toString());
+  }, 400);
 }
 
 function autocompleteExtensions() {
@@ -149,6 +178,7 @@ function createState(doc: string) {
             if (oldest !== undefined) internallyEmittedValues.delete(oldest);
           }
           emit('update:modelValue', value);
+          scheduleOpenedDocumentScan(update.view);
         }
       }),
     ],
@@ -313,7 +343,26 @@ onMounted(() => {
     e2eBridge.editor = {
       id: INSTANCE_ID,
       getContent: getEditorContentFn,
+      setContent: (content) => {
+        if (!view) return;
+        (
+          view.dom as HTMLElement & { __markluckClearGhostText?: () => void }
+        ).__markluckClearGhostText?.();
+        view.dispatch({
+          changes: { from: 0, to: view.state.doc.length, insert: content },
+          selection: { anchor: content.length },
+        });
+        refreshOpenedDocumentScan(content);
+        view.focus();
+      },
+      getCursor: () => view?.state.selection.main.head ?? 0,
+      getPrediction: () => {
+        const doc = view?.state.doc.toString() ?? '';
+        const cursor = view?.state.selection.main.head ?? doc.length;
+        return predictor.getGhostText(cursor, doc);
+      },
       seedCompletionCorpus: (excerpts) => predictor.ingestExcerpts(excerpts),
+      setCompletionAblationMode: (mode) => predictor.setAblationMode(mode),
     };
   }
 
@@ -324,7 +373,7 @@ onMounted(() => {
   predictor.configure(settings);
   if (props.enableAutocomplete !== false && settings.enabled) {
     predictor.initialize().then(() => {
-      predictor.scanOpenedDocument(props.modelValue);
+      predictor.scanOpenedDocument(view?.state.doc.toString() ?? props.modelValue);
     });
   }
 
@@ -349,6 +398,8 @@ onMounted(() => {
   // marker insertion until after compositionend so the dispatch
   // doesn't corrupt CM6's composition transaction.
   view.contentDOM.addEventListener('compositionend', onCompositionEndApplyDeferred);
+  view.contentDOM.addEventListener('compositionstart', onCompositionStartRefreshScan);
+  view.contentDOM.addEventListener('compositionend', onCompositionEndRefreshScan);
 });
 
 onUnmounted(() => {
@@ -357,10 +408,13 @@ onUnmounted(() => {
   document.removeEventListener('selectionchange', onSelectionChange);
   if (view) {
     view.contentDOM.removeEventListener('compositionend', onCompositionEndApplyDeferred);
+    view.contentDOM.removeEventListener('compositionstart', onCompositionStartRefreshScan);
+    view.contentDOM.removeEventListener('compositionend', onCompositionEndRefreshScan);
     suppressSync = true;
     view.destroy();
     view = null;
   }
+  clearOpenedDocumentScanTimer();
   // Persist L1→L2 before component is destroyed.
   // Without this, L2 never accumulates and ghost text always cold-starts.
   predictor.closeDocument();
@@ -380,6 +434,7 @@ watch(
         changes: { from: 0, to: view.state.doc.length, insert: val },
       });
       suppressSync = false;
+      refreshOpenedDocumentScan(val);
     }
   },
 );
@@ -401,6 +456,19 @@ function onCompositionEndApplyDeferred(): void {
     const action = deferredPendingAction;
     deferredPendingAction = null;
     applyPendingFormat(action);
+  }, 0);
+}
+
+function onCompositionStartRefreshScan(): void {
+  scanPausedForComposition = true;
+  clearOpenedDocumentScanTimer();
+}
+
+function onCompositionEndRefreshScan(): void {
+  scanPausedForComposition = false;
+  setTimeout(() => {
+    if (!view || view.composing || view.compositionStarted) return;
+    refreshOpenedDocumentScan(view.state.doc.toString());
   }, 0);
 }
 

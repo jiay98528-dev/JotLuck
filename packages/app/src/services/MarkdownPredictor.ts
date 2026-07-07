@@ -2,7 +2,6 @@ import {
   type NGramTable,
   type PredictionResult,
   scanDocument,
-  predict as ngramPredict,
   learn as ngramLearn,
   rejectPrediction,
   mergeInto,
@@ -13,50 +12,82 @@ import {
 } from '@/utils/ngram-engine';
 import type { CompletionSettings } from './CompletionSettings';
 import { DEFAULT_COMPLETION_SETTINGS } from './CompletionSettings';
+import {
+  buildCompletionContext,
+  detectOpenFormat,
+  detectSyntaxContext,
+  extractContext,
+  getLineAt,
+  isDisabledContext,
+  isInFencedCode,
+  isInFrontmatter,
+} from './completion/context';
+import {
+  FilePathProvider,
+  FormatClosureProvider,
+  LexiconProvider,
+  LineEchoProvider,
+  MarkdownStructureProvider,
+  NgramProvider,
+  PhraseSlotProvider,
+  RecentPhraseProvider,
+  SequencePatternProvider,
+  ShortChineseProvider,
+  ShortEnglishProvider,
+  TagProvider,
+  WikiLinkProvider,
+  type NgramProviderState,
+} from './completion/providers';
+import {
+  clearCompletionMetrics,
+  recordProviderAccepted,
+  recordProviderRejected,
+  recordProviderShown,
+} from './completion/metrics';
+import { resolveCompletion } from './completion/resolver';
+import type {
+  CompletionAblationMode,
+  CompletionCandidate,
+  CompletionContext,
+  CompletionProvider,
+  CompletionSourceLayer,
+  PredictorIndexData,
+  SyntaxContext,
+  SyntaxType,
+} from './completion/types';
 
-export type SyntaxType =
-  | 'wiki-link'
-  | 'tag'
-  | 'file-path'
-  | 'markdown-format'
-  | 'markdown-structure'
-  | 'general';
-
-export interface SyntaxContext {
-  type: SyntaxType;
-  prefix: string;
-  openMarker?: string;
-}
-
-export interface PredictorIndexData {
-  getAllNoteTitles(): string[];
-  getAllTags(): string[];
-  matchFilePaths(prefix: string): string[];
-}
+export type { PredictorIndexData, SyntaxContext, SyntaxType };
 
 const L2_STORAGE_KEY = 'markluck:ngram:v2';
 const L2_META_KEY = 'markluck:ngram:meta';
 const SHORT_L2_STORAGE_KEY = 'markluck:ngram:short:v1';
+export const ACCEPTED_LEXICON_STORAGE_KEY = 'markluck:autocomplete:acceptedLexicon:v1';
 
 interface L2Meta {
-  v: number;
+  v?: number;
+  schemaVersion: number;
   docs: number;
   totalEntries: number;
   lastSave: number;
+  lastError?: string;
+  migratedFrom?: number;
 }
 
-const SHORT_ZH_FALLBACKS: Array<[string, string]> = [
-  ['这是', '一个'],
-  ['为了', '更好'],
-  ['用户', '可以'],
-  ['项目', '进度'],
-  ['今天', '的'],
-  ['需要', '注意'],
-  ['我们', '可以'],
-  ['如果', '需要'],
-  ['可以', '继续'],
-  ['目前', '已经'],
-];
+interface CompletionFeedbackOptions {
+  learn?: boolean;
+}
+
+function normalizeL2Meta(meta: Partial<L2Meta>): L2Meta {
+  const legacyVersion = meta.v;
+  return {
+    schemaVersion: 3,
+    docs: Number.isFinite(meta.docs) ? Number(meta.docs) : 0,
+    totalEntries: Number.isFinite(meta.totalEntries) ? Number(meta.totalEntries) : 0,
+    lastSave: Number.isFinite(meta.lastSave) ? Number(meta.lastSave) : 0,
+    migratedFrom: legacyVersion && legacyVersion < 3 ? legacyVersion : meta.migratedFrom,
+    lastError: typeof meta.lastError === 'string' ? meta.lastError : undefined,
+  };
+}
 
 export class MarkdownPredictor {
   private l1: NGramTable = new Map();
@@ -64,12 +95,22 @@ export class MarkdownPredictor {
   private l3: NGramTable = new Map();
   private shortL1: NGramTable = new Map();
   private shortL2: NGramTable = new Map();
-  private l2Meta: L2Meta = { v: 2, docs: 0, totalEntries: 0, lastSave: 0 };
+  private l2Meta: L2Meta = { schemaVersion: 3, docs: 0, totalEntries: 0, lastSave: 0 };
   private indexData: PredictorIndexData | null = null;
   private accessTimestamps = new Map<string, number>();
   private entryFlags = new Map<string, 'b' | 'u'>();
   private initialized: Promise<void> | null = null;
   private settings: CompletionSettings = { ...DEFAULT_COMPLETION_SETTINGS };
+  private recentPhrases: string[] = [];
+  private documentLexicon: string[] = [];
+  private acceptedLexicon: string[] = [];
+  private rejectionCounts = new Map<string, number>();
+  private acceptedBoosts = new Map<string, number>();
+  private ablationMode: CompletionAblationMode = 'full-stack';
+  private lastPredictionProviderId: string | null = null;
+  private lastPredictionSourceLayer: CompletionSourceLayer | undefined;
+  private lastPredictionFeedbackKey: string | null = null;
+  private lastPredictionRejectionKey: string | null = null;
 
   constructor(private readonly n: number = 4) {}
 
@@ -79,6 +120,10 @@ export class MarkdownPredictor {
 
   configure(settings: Partial<CompletionSettings>): void {
     this.settings = { ...this.settings, ...settings };
+  }
+
+  setAblationMode(mode: CompletionAblationMode): void {
+    this.ablationMode = mode;
   }
 
   getSettings(): CompletionSettings {
@@ -91,67 +136,115 @@ export class MarkdownPredictor {
   }
 
   async loadBaseline(): Promise<void> {
-    try {
-      const resp = await fetch('/baseline-ngram.v1.compact.txt');
-      if (!resp.ok) return;
-      this.l3 = deserialize(await resp.text());
-      for (const ctx of this.l3.keys()) this.entryFlags.set(ctx, 'b');
-    } catch {
-      this.l3 = new Map();
+    this.l3 = new Map();
+    for (const url of getBaselineUrls()) {
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) continue;
+        this.l3 = deserialize(await resp.text());
+        for (const ctx of this.l3.keys()) this.entryFlags.set(ctx, 'b');
+        return;
+      } catch {
+        // Try the next baseline URL. The editor remains usable without L3 data.
+      }
     }
   }
 
   getGhostText(cursorPos: number, doc: string): PredictionResult | null {
     if (!this.settings.enabled) return null;
-    if (this.isInFencedCode(cursorPos, doc) || this.isInFrontmatter(cursorPos, doc)) return null;
+    const start = performance.now();
+    const context = buildCompletionContext({
+      doc,
+      cursorPos,
+      settings: this.settings,
+      indexData: this.indexData,
+      n: this.n,
+    });
+    if (context.disabled) return null;
+    if (
+      !context.emptyLine &&
+      this.extractContext(cursorPos, doc).length < 2 &&
+      context.syntax.type === 'general'
+    ) {
+      return null;
+    }
 
-    const line = this.getLineAt(cursorPos, doc);
-    const emptyLine = line ? line.text.trim() === '' : doc.length === 0;
-    const syntaxCtx = this.detectSyntaxContext(cursorPos, doc);
+    const { candidate } = resolveCompletion(context, this.createProviders(), {
+      getRejectionCount: (item, itemContext) =>
+        this.rejectionCounts.get(this.getRejectionKey(item, itemContext)) ?? 0,
+      getBoost: (item, itemContext) =>
+        Math.min(
+          0.12,
+          (this.acceptedBoosts.get(this.getFeedbackKey(item, itemContext)) ?? 0) * 0.04,
+        ),
+    });
+    this.lastPredictionProviderId = candidate?.providerId ?? null;
+    this.lastPredictionSourceLayer = candidate?.sourceLayer;
+    this.lastPredictionFeedbackKey = candidate ? this.getFeedbackKey(candidate, context) : null;
+    this.lastPredictionRejectionKey = candidate ? this.getRejectionKey(candidate, context) : null;
+    if (!candidate) return null;
 
-    const structured = this.injectStructuredKnowledge(syntaxCtx);
-    if (structured && structured.confidence >= 0.8) return structured;
-
-    if (emptyLine) return structured;
-    if (this.extractContext(cursorPos, doc).length < 2) return structured;
-
-    const shortZh = this.predictShortChinese(cursorPos, doc);
-    if (shortZh) return shortZh;
-
-    const maxLen = this.settings.maxSuggestionLength;
-    const minConfidence = this.settings.minConfidence;
-    const candidates = [
-      ngramPredict(this.l1, cursorPos, doc, this.n, maxLen, minConfidence),
-      ngramPredict(this.l2, cursorPos, doc, this.n, maxLen, minConfidence),
-      ngramPredict(this.l3, cursorPos, doc, this.n, maxLen, minConfidence),
-    ]
-      .filter((r): r is PredictionResult => !!r)
-      .map((r) => this.applyQualityGate(r, cursorPos, doc))
-      .filter((r): r is PredictionResult => !!r);
-
-    candidates.sort((a, b) => b.confidence - a.confidence);
-    return candidates[0] ?? structured;
+    const result = this.toPredictionResult(candidate);
+    recordProviderShown(candidate, performance.now() - start);
+    return result;
   }
 
-  acceptCompletion(ctx: string, acceptedText: string): void {
-    const now = Date.now();
-    this.accessTimestamps.set(ctx, now);
-    this.entryFlags.set(ctx, 'u');
-    ngramLearn(this.l1, ctx, acceptedText, this.n);
-    ngramLearn(this.l2, ctx, acceptedText, this.n);
-    if (ctx.length >= 2) ngramLearn(this.shortL2, ctx.slice(-2), acceptedText.slice(0, 6), 2);
-    this.saveToLocalStorage();
+  acceptCompletion(
+    ctx: string,
+    acceptedText: string,
+    options: CompletionFeedbackOptions = {},
+  ): void {
+    const shouldLearn = options.learn ?? true;
+    if (shouldLearn) {
+      const now = Date.now();
+      this.accessTimestamps.set(ctx, now);
+      this.entryFlags.set(ctx, 'u');
+      ngramLearn(this.l1, ctx, acceptedText, this.n);
+      ngramLearn(this.l2, ctx, acceptedText, this.n);
+      if (ctx.length >= 2) ngramLearn(this.shortL2, ctx.slice(-2), acceptedText.slice(0, 6), 2);
+      this.rememberRecentPhrase(ctx + acceptedText);
+      this.rememberAcceptedLexicon(acceptedText);
+      this.saveToLocalStorage();
+    }
+    if (this.lastPredictionRejectionKey) {
+      this.rejectionCounts.delete(this.lastPredictionRejectionKey);
+    }
+    if (this.lastPredictionFeedbackKey) {
+      this.acceptedBoosts.set(
+        this.lastPredictionFeedbackKey,
+        (this.acceptedBoosts.get(this.lastPredictionFeedbackKey) ?? 0) + 1,
+      );
+    }
+    recordProviderAccepted(
+      this.lastPredictionProviderId,
+      this.lastPredictionSourceLayer,
+      acceptedText.length,
+    );
   }
 
-  rejectCompletion(ctx: string, rejectedText: string): void {
-    rejectPrediction(this.l1, ctx, rejectedText);
-    rejectPrediction(this.l2, ctx, rejectedText);
-    if (ctx.length >= 2) rejectPrediction(this.shortL2, ctx.slice(-2), rejectedText);
+  rejectCompletion(
+    ctx: string,
+    rejectedText: string,
+    options: CompletionFeedbackOptions = {},
+  ): void {
+    if (options.learn ?? true) {
+      rejectPrediction(this.l1, ctx, rejectedText);
+      rejectPrediction(this.l2, ctx, rejectedText);
+      if (ctx.length >= 2) rejectPrediction(this.shortL2, ctx.slice(-2), rejectedText);
+    }
+    if (this.lastPredictionRejectionKey) {
+      this.rejectionCounts.set(
+        this.lastPredictionRejectionKey,
+        (this.rejectionCounts.get(this.lastPredictionRejectionKey) ?? 0) + 1,
+      );
+    }
+    recordProviderRejected(this.lastPredictionProviderId, this.lastPredictionSourceLayer);
   }
 
   scanOpenedDocument(text: string): void {
     this.l1 = scanDocument(text, this.n);
     this.shortL1 = this.scanShortDocument(text);
+    this.documentLexicon = extractLexiconTerms(text);
   }
 
   ingestDocument(_path: string, text: string, persist = true): void {
@@ -174,42 +267,34 @@ export class MarkdownPredictor {
     this.saveToLocalStorage();
   }
 
+  clearLearningData(): void {
+    this.l2 = new Map();
+    this.shortL2 = new Map();
+    this.recentPhrases = [];
+    this.acceptedLexicon = [];
+    this.rejectionCounts.clear();
+    this.acceptedBoosts.clear();
+    this.accessTimestamps.clear();
+    this.entryFlags.clear();
+    this.lastPredictionProviderId = null;
+    this.lastPredictionSourceLayer = undefined;
+    this.lastPredictionFeedbackKey = null;
+    this.lastPredictionRejectionKey = null;
+    this.l2Meta = { schemaVersion: 3, docs: 0, totalEntries: 0, lastSave: Date.now() };
+
+    localStorage.removeItem(L2_STORAGE_KEY);
+    localStorage.removeItem(SHORT_L2_STORAGE_KEY);
+    localStorage.removeItem(L2_META_KEY);
+    localStorage.removeItem(ACCEPTED_LEXICON_STORAGE_KEY);
+    clearCompletionMetrics();
+  }
+
   detectSyntaxContext(cursorPos: number, doc: string): SyntaxContext {
-    const line = this.getLineAt(cursorPos, doc);
-    if (!line) return { type: 'general', prefix: '' };
-    const colInLine = cursorPos - line.from;
-    const beforeCursor = line.text.slice(0, colInLine);
-    const trimmed = beforeCursor.trimStart();
-
-    if (/^[-*+]\s?$/.test(trimmed)) return { type: 'markdown-structure', prefix: trimmed };
-    if (/^#{1,6}\s?$/.test(trimmed)) return { type: 'markdown-structure', prefix: trimmed };
-    if (/^>\s?$/.test(trimmed)) return { type: 'markdown-structure', prefix: trimmed };
-
-    const wikiMatch = beforeCursor.match(/\[\[([^\]]*)$/);
-    if (wikiMatch) return { type: 'wiki-link', prefix: wikiMatch[1] || '' };
-
-    const tagMatch = beforeCursor.match(/(?:^|\s)#(\S*)$/);
-    if (tagMatch && !/^#{1,6}\s/.test(line.text.trimStart())) {
-      return { type: 'tag', prefix: tagMatch[1] || '' };
-    }
-
-    const pathMatch = beforeCursor.match(/(?:!\[.*?\]|\[.*?\])\(([^)]*)$/);
-    if (pathMatch) return { type: 'file-path', prefix: pathMatch[1] || '' };
-
-    const openMarker = this.detectOpenFormat(line.text, colInLine);
-    if (openMarker) {
-      const markerStart = beforeCursor.lastIndexOf(openMarker);
-      const prefix = markerStart >= 0 ? beforeCursor.slice(markerStart + openMarker.length) : '';
-      return { type: 'markdown-format', prefix, openMarker };
-    }
-
-    return { type: 'general', prefix: '' };
+    return detectSyntaxContext(cursorPos, doc);
   }
 
   isDisabledContext(cursorPos: number, doc: string): boolean {
-    if (this.isInFencedCode(cursorPos, doc) || this.isInFrontmatter(cursorPos, doc)) return true;
-    const line = this.getLineAt(cursorPos, doc);
-    return !!line && line.text.trim() === '';
+    return isDisabledContext(cursorPos, doc);
   }
 
   ingestExcerpts(excerpts: string[]): void {
@@ -227,122 +312,86 @@ export class MarkdownPredictor {
     await this.loadBaseline();
   }
 
-  private injectStructuredKnowledge(ctx: SyntaxContext): PredictionResult | null {
-    if (ctx.type === 'markdown-format') return this.predictFormatClosure(ctx);
-    if (ctx.type === 'markdown-structure') return this.predictMarkdownStructure(ctx);
-    if (!this.indexData) return null;
-    if (ctx.type === 'wiki-link') return this.predictWikiLink(ctx.prefix);
-    if (ctx.type === 'tag') return this.predictTag(ctx.prefix);
-    if (ctx.type === 'file-path') return this.predictFilePath(ctx.prefix);
-    return null;
+  private createProviders(): CompletionProvider[] {
+    return [
+      new FormatClosureProvider(),
+      new MarkdownStructureProvider(),
+      new WikiLinkProvider(),
+      new TagProvider(),
+      new FilePathProvider(),
+      ...(this.ablationMode === 'full-stack' || this.ablationMode === 'provider-only'
+        ? [
+            new SequencePatternProvider(),
+            new LineEchoProvider(),
+            new LexiconProvider(() => this.getNgramProviderState()),
+            new PhraseSlotProvider(),
+            new RecentPhraseProvider(() => this.getNgramProviderState()),
+          ]
+        : []),
+      ...(this.ablationMode === 'provider-only'
+        ? [new ShortEnglishProvider()]
+        : [
+            new ShortChineseProvider(() => this.getNgramProviderState()),
+            ...(this.ablationMode === 'full-stack' ? [new ShortEnglishProvider()] : []),
+            new NgramProvider(() => this.getNgramProviderState()),
+          ]),
+    ];
   }
 
-  private predictWikiLink(prefix: string): PredictionResult | null {
-    const titles = this.indexData!.getAllNoteTitles();
-    const q = prefix.toLowerCase();
-    const matches = titles
-      .filter((t) => t.toLowerCase().startsWith(q))
-      .sort((a, b) => a.length - b.length);
-    if (!matches[0]) return null;
-    const best = matches[0];
+  private getNgramProviderState(): NgramProviderState {
     return {
-      text: best.slice(prefix.length) + ']]',
-      confidence: matches.length === 1 ? 0.95 : 0.75,
-      from: 0,
-      source: 'structured',
-      syntaxType: 'wiki-link',
+      n: this.n,
+      l1: this.l1,
+      l2: this.l2,
+      l3: this.l3,
+      shortL1: this.shortL1,
+      shortL2: this.shortL2,
+      ablationMode: this.ablationMode,
+      recentPhrases: this.recentPhrases,
+      lexiconTerms: [...this.documentLexicon, ...this.acceptedLexicon],
+      qualityGate: (result, cursorPos, doc) => this.applyQualityGate(result, cursorPos, doc),
     };
   }
 
-  private predictTag(prefix: string): PredictionResult | null {
-    const q = prefix.toLowerCase();
-    const matches = this.indexData!.getAllTags().filter((t) => t.toLowerCase().startsWith(q));
-    if (!matches[0]) return null;
+  private toPredictionResult(candidate: CompletionCandidate): PredictionResult {
     return {
-      text: matches[0].slice(prefix.length) + ' ',
-      confidence: prefix.length > 0 ? 0.9 : 0.7,
-      from: 0,
-      source: 'structured',
-      syntaxType: 'tag',
+      text: candidate.text,
+      confidence: candidate.confidence,
+      from: candidate.from,
+      source: candidate.source === 'recent' ? 'ngram' : candidate.source,
+      sourceLayer: candidate.sourceLayer,
+      syntaxType: candidate.syntaxType,
+      providerId: candidate.providerId,
+      learnable: candidate.learnable,
     };
   }
 
-  private predictFilePath(prefix: string): PredictionResult | null {
-    const paths = this.indexData!.matchFilePaths(prefix);
-    if (!paths[0]) return null;
-    return {
-      text: paths[0].slice(prefix.length) + ')',
-      confidence: paths.length === 1 ? 0.9 : 0.65,
-      from: 0,
-      source: 'structured',
-      syntaxType: 'file-path',
-    };
+  private rememberRecentPhrase(text: string): void {
+    const phrase = text.trim();
+    if (phrase.length < 4) return;
+    this.recentPhrases = [phrase, ...this.recentPhrases.filter((item) => item !== phrase)].slice(
+      0,
+      50,
+    );
   }
 
-  private predictMarkdownStructure(ctx: SyntaxContext): PredictionResult | null {
-    const prefix = ctx.prefix;
-    const text =
-      prefix.startsWith('-') || prefix.startsWith('*') || prefix.startsWith('+')
-        ? '[ ] '
-        : prefix.startsWith('#')
-          ? '标题'
-          : '引用';
-    return {
-      text,
-      confidence: 0.82,
-      from: 0,
-      source: 'structured',
-      syntaxType: 'markdown-structure',
-    };
+  private rememberAcceptedLexicon(text: string): void {
+    const terms = extractLexiconTerms(text);
+    if (terms.length === 0) return;
+    this.acceptedLexicon = [
+      ...terms,
+      ...this.acceptedLexicon.filter((item) => !terms.includes(item)),
+    ].slice(0, 80);
   }
 
-  private predictFormatClosure(ctx: SyntaxContext): PredictionResult | null {
-    const marker = ctx.openMarker;
-    if (!marker) return null;
-    const prefix = ctx.prefix.trim();
-    const hasPrefix = prefix.length > 0;
-    const placeholders: Record<string, string> = {
-      '**': '粗体**',
-      '*': '斜体*',
-      '`': 'code`',
-      __: '强调__',
-    };
-    return {
-      text: hasPrefix ? marker : (placeholders[marker] ?? marker),
-      confidence: hasPrefix ? 0.92 : 0.85,
-      from: 0,
-      source: 'structured',
-      syntaxType: 'markdown-format',
-    };
+  private getFeedbackKey(candidate: CompletionCandidate, context: CompletionContext): string {
+    const prefix = (context.sentencePrefix || context.line?.beforeCursor || '').slice(-12);
+    const paragraphKey = hashFeedbackParagraph(context.paragraphBeforeCursor);
+    return `${candidate.providerId}|${candidate.syntaxType}|${context.blockType}|${paragraphKey}|${prefix}`;
   }
 
-  private predictShortChinese(cursorPos: number, doc: string): PredictionResult | null {
-    const ctx2 = doc.slice(Math.max(0, cursorPos - 2), cursorPos);
-    const ctx3 = doc.slice(Math.max(0, cursorPos - 3), cursorPos);
-    if (!/[\u3400-\u9fff]/.test(ctx2 + ctx3)) return null;
-
-    const candidates = [
-      ngramPredict(this.shortL1, cursorPos, doc, 2, 6, 0.55),
-      ngramPredict(this.shortL2, cursorPos, doc, 2, 6, 0.55),
-    ]
-      .filter((r): r is PredictionResult => !!r)
-      .map((r) => ({ ...r, confidence: Math.min(0.76, r.confidence), syntaxType: 'short-zh' }))
-      .map((r) => this.applyQualityGate(r, cursorPos, doc))
-      .filter((r): r is PredictionResult => !!r);
-
-    const fixed = SHORT_ZH_FALLBACKS.find(([prefix]) => ctx2 === prefix || ctx3.endsWith(prefix));
-    if (fixed) {
-      candidates.push({
-        text: fixed[1],
-        confidence: 0.62,
-        from: cursorPos,
-        source: 'ngram',
-        syntaxType: 'short-zh',
-      });
-    }
-
-    candidates.sort((a, b) => b.confidence - a.confidence);
-    return candidates[0] ?? null;
+  private getRejectionKey(candidate: CompletionCandidate, context: CompletionContext): string {
+    return `${candidate.providerId}|${candidate.syntaxType}|${context.blockType}|${context.paragraphStart}`;
   }
 
   private applyQualityGate(
@@ -352,7 +401,7 @@ export class MarkdownPredictor {
   ): PredictionResult | null {
     const text = result.text.slice(0, this.settings.maxSuggestionLength);
     if (!text.trim()) return null;
-    if (text.includes('\r')) return null;
+    if (text.includes('\r') || text.includes('\n')) return null;
     if (/(.)\1{4,}/u.test(text)) return null;
     if (/^[*_#`~]{3,}/.test(text)) return null;
     if (/^\s{2,}/.test(text)) return null;
@@ -363,7 +412,7 @@ export class MarkdownPredictor {
     const ctxHasAsciiWord = /[A-Za-z]{3,}/.test(ctx);
     if (ctxHasCjk && /[A-Za-z]/.test(first)) return null;
     if (ctxHasAsciiWord && /[\u3400-\u9fff]/.test(first)) return null;
-    if (/[。！？!?；;：:]$/.test(ctx.trim())) return null;
+    if (/[。！？!?；;：:]$/u.test(ctx.trim())) return null;
 
     return { ...result, text };
   }
@@ -379,16 +428,25 @@ export class MarkdownPredictor {
     try {
       localStorage.setItem(L2_STORAGE_KEY, serialize(this.l2));
       localStorage.setItem(SHORT_L2_STORAGE_KEY, serialize(this.shortL2));
+      localStorage.setItem(ACCEPTED_LEXICON_STORAGE_KEY, JSON.stringify(this.acceptedLexicon));
       this.l2Meta.lastSave = Date.now();
       this.l2Meta.totalEntries = this.l2.size + this.shortL2.size;
+      this.l2Meta.schemaVersion = 3;
+      this.l2Meta.lastError = undefined;
       localStorage.setItem(L2_META_KEY, JSON.stringify(this.l2Meta));
     } catch {
       this.forceEliminate();
       try {
         localStorage.setItem(L2_STORAGE_KEY, serialize(this.l2));
         localStorage.setItem(SHORT_L2_STORAGE_KEY, serialize(this.shortL2));
+        localStorage.setItem(ACCEPTED_LEXICON_STORAGE_KEY, JSON.stringify(this.acceptedLexicon));
+        this.l2Meta.schemaVersion = 3;
+        this.l2Meta.totalEntries = this.l2.size + this.shortL2.size;
+        this.l2Meta.lastSave = Date.now();
+        this.l2Meta.lastError = undefined;
         localStorage.setItem(L2_META_KEY, JSON.stringify(this.l2Meta));
       } catch {
+        this.l2Meta.lastError = 'storage-write-failed';
         // Storage is best-effort.
       }
     }
@@ -401,11 +459,26 @@ export class MarkdownPredictor {
       const shortCompact = localStorage.getItem(SHORT_L2_STORAGE_KEY);
       if (shortCompact) this.shortL2 = deserialize(shortCompact);
       const meta = localStorage.getItem(L2_META_KEY);
-      if (meta) this.l2Meta = JSON.parse(meta) as L2Meta;
+      if (meta) this.l2Meta = normalizeL2Meta(JSON.parse(meta) as Partial<L2Meta>);
+      const acceptedLexicon = localStorage.getItem(ACCEPTED_LEXICON_STORAGE_KEY);
+      if (acceptedLexicon) {
+        const parsed = JSON.parse(acceptedLexicon) as unknown;
+        this.acceptedLexicon = Array.isArray(parsed)
+          ? parsed.filter((item): item is string => typeof item === 'string').slice(0, 80)
+          : [];
+      }
+      this.l2Meta.totalEntries = this.l2.size + this.shortL2.size;
       for (const ctx of this.l2.keys()) this.entryFlags.set(ctx, 'u');
     } catch {
       this.l2 = new Map();
       this.shortL2 = new Map();
+      this.l2Meta = {
+        schemaVersion: 3,
+        docs: 0,
+        totalEntries: 0,
+        lastSave: 0,
+        lastError: 'storage-read-failed',
+      };
     }
   }
 
@@ -444,76 +517,74 @@ export class MarkdownPredictor {
   }
 
   private extractContext(cursorPos: number, doc: string): string {
-    return doc.slice(Math.max(0, cursorPos - this.n), cursorPos);
+    return extractContext(cursorPos, doc, this.n);
   }
 
-  private getLineAt(pos: number, doc: string): { text: string; from: number; to: number } | null {
-    let lineStart = 0;
-    for (let i = 0; i < doc.length; i++) {
-      if (doc[i] === '\n') {
-        if (pos >= lineStart && pos <= i + 1)
-          return { text: doc.slice(lineStart, i), from: lineStart, to: i };
-        lineStart = i + 1;
+  getLineAt(pos: number, doc: string): { text: string; from: number; to: number } | null {
+    return getLineAt(pos, doc);
+  }
+
+  isInFencedCode(cursorPos: number, doc: string): boolean {
+    return isInFencedCode(cursorPos, doc);
+  }
+
+  isInFrontmatter(cursorPos: number, doc: string): boolean {
+    return isInFrontmatter(cursorPos, doc);
+  }
+
+  detectOpenFormat(lineText: string, colInLine: number): string | null {
+    return detectOpenFormat(lineText, colInLine);
+  }
+}
+
+function getBaselineUrls(): string[] {
+  const configured = import.meta.env.DEV ? import.meta.env.VITE_AUTOCOMPLETE_BASELINE_URL : '';
+  const urls = [
+    configured,
+    '/baseline-ngram.web-local.compact.txt',
+    '/baseline-ngram.v1.compact.txt',
+  ].filter(Boolean);
+  return [...new Set(urls)];
+}
+
+function extractLexiconTerms(text: string): string[] {
+  const counts = new Map<string, number>();
+  const clean = text.replace(/```[\s\S]*?```/g, ' ').replace(/\[[^\]]+\]\([^)]+\)/g, ' ');
+
+  for (const match of clean.matchAll(/[\u3400-\u9fff]{2,12}/gu)) {
+    const segment = match[0];
+    for (let size = 2; size <= Math.min(8, segment.length); size++) {
+      for (let index = 0; index <= segment.length - size; index++) {
+        const term = segment.slice(index, index + size);
+        if (isLowValueLexiconTerm(term)) continue;
+        counts.set(term, (counts.get(term) ?? 0) + 1);
       }
     }
-    if (pos >= lineStart) return { text: doc.slice(lineStart), from: lineStart, to: doc.length };
-    return null;
   }
 
-  private isInFencedCode(cursorPos: number, doc: string): boolean {
-    let inFence = false;
-    let pos = 0;
-    for (const line of doc.split('\n')) {
-      const lineEnd = pos + line.length;
-      if (line.startsWith('```')) {
-        if (cursorPos >= pos && cursorPos <= lineEnd) return true;
-        inFence = !inFence;
-      } else if (inFence && cursorPos >= pos && cursorPos <= lineEnd) {
-        return true;
-      }
-      pos = lineEnd + 1;
-    }
-    return false;
+  for (const match of clean.matchAll(/[A-Za-z][A-Za-z0-9_-]{2,24}/g)) {
+    const term = match[0];
+    counts.set(term, (counts.get(term) ?? 0) + 1);
   }
 
-  private isInFrontmatter(cursorPos: number, doc: string): boolean {
-    const lines = doc.split('\n');
-    if (lines[0]?.trim() !== '---') return false;
-    let fmEnd = -1;
-    for (let i = 1; i < lines.length; i++) {
-      if (lines[i]?.trim() === '---') {
-        fmEnd = i;
-        break;
-      }
-    }
-    if (fmEnd === -1) return false;
-    let pos = 0;
-    for (let i = 0; i <= fmEnd; i++) {
-      const ln = lines[i] ?? '';
-      const lineEnd = pos + ln.length;
-      if (cursorPos >= pos && cursorPos <= lineEnd) return true;
-      pos = lineEnd + 1;
-    }
-    return false;
-  }
+  return [...counts]
+    .filter(([term, count]) => count >= 2 || term.length >= 4)
+    .sort((a, b) => b[1] - a[1] || a[0].length - b[0].length)
+    .map(([term]) => term)
+    .slice(0, 120);
+}
 
-  private detectOpenFormat(lineText: string, colInLine: number): string | null {
-    const before = lineText.slice(0, colInLine);
-    const countMarker = (marker: string): boolean => {
-      let count = 0;
-      let idx = 0;
-      while ((idx = before.indexOf(marker, idx)) !== -1) {
-        count++;
-        idx += marker.length;
-      }
-      return count % 2 === 1;
-    };
+function isLowValueLexiconTerm(term: string): boolean {
+  return /^[的是了在和与及或而但并就都很更再也还又把被对为以中上下一个可以需要应该因为所以这里那里这种这个]+$/u.test(
+    term,
+  );
+}
 
-    if (countMarker('**')) return '**';
-    if (countMarker('__')) return '__';
-    const singleStars = before.match(/(?<!\*)\*(?!\*)/g);
-    if (singleStars && singleStars.length % 2 === 1) return '*';
-    if (countMarker('`')) return '`';
-    return null;
+function hashFeedbackParagraph(text: string): string {
+  let hash = 0;
+  const sample = text.slice(-160);
+  for (let index = 0; index < sample.length; index++) {
+    hash = (hash * 31 + sample.charCodeAt(index)) >>> 0;
   }
+  return hash.toString(36);
 }

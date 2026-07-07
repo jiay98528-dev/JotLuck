@@ -208,6 +208,12 @@
                 </div>
                 <p class="local-note">仅处理当前笔记本中的本地 Markdown / 文本文件。</p>
               </div>
+
+              <div class="settings-actions settings-actions--left">
+                <button class="segment-btn" type="button" @click="$emit('clear-completion-data')">
+                  清空本地学习数据
+                </button>
+              </div>
             </section>
 
             <section v-show="activeTab === 'updates'" class="section">
@@ -297,6 +303,7 @@ const emit = defineEmits<{
   'update:visible': [boolean];
   'update-completion-settings': [CompletionSettings];
   'update-external-scan-root': [boolean];
+  'clear-completion-data': [];
 }>();
 
 interface TabDef {
@@ -345,6 +352,7 @@ const aboutLinks = [
 const trainingStatusLabel = computed(() => {
   const status = props.completionTrainingMeta?.status ?? 'idle';
   if (status === 'training') return '训练中';
+  if (status === 'partial') return '部分完成';
   if (status === 'error') return '失败';
   if (status === 'done') return '已完成';
   return '待训练';

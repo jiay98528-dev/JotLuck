@@ -1,3 +1,6 @@
+import type { PredictionResult } from '@/utils/ngram-engine';
+import type { CompletionAblationMode } from '@/services/completion/types';
+
 export interface MarkluckE2EOpenedFile {
   absolutePath?: string;
   absolute_path?: string;
@@ -10,7 +13,11 @@ export interface MarkluckE2EOpenedFile {
 export interface MarkluckE2EEditorBridge {
   id: string;
   getContent: () => string;
+  setContent: (content: string) => void;
+  getCursor: () => number;
+  getPrediction: () => PredictionResult | null;
   seedCompletionCorpus: (excerpts: string[]) => void;
+  setCompletionAblationMode: (mode: CompletionAblationMode) => void;
 }
 
 export interface MarkluckE2EBridge {

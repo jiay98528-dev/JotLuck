@@ -1,7 +1,7 @@
 /**
  * cm6-ghost-text — CodeMirror 6 Ghost Text 补全插件
  *
- * 统一幽灵文本管道：150ms 防抖触发预测 → Decoration.widget 渲染 → Tab 接受
+ * 统一幽灵文本管道：80ms 防抖触发预测 → Decoration.widget 渲染 → Tab 接受
  * 语法上下文检测内置于 MarkdownPredictor 服务层。
  *
  * @see spec/frontend/autocomplete-spec.md
@@ -71,6 +71,10 @@ interface DebounceState {
   timer: ReturnType<typeof setTimeout> | null;
 }
 
+interface GhostDebugHost extends HTMLElement {
+  __markluckClearGhostText?: () => void;
+}
+
 // ---- ViewPlugin ----
 
 function createGhostTextPlugin(predictor: MarkdownPredictor, settings: CompletionSettings) {
@@ -80,11 +84,13 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
     class {
       /** 当前 ghost text 内容，用于 Tab 接受时获取 */
       currentGhostText: string = '';
-      private currentPredictionSource: 'ngram' | 'structured' | null = null;
+      private currentPredictionLearnable = false;
       private currentContext = '';
       private currentPredictionCursor: number | null = null;
       private acceptingGhost = false;
       private editorInteractionActive = false;
+      private suppressedGhostAt: { doc: string; cursor: number } | null = null;
+      private decorationClearQueued = false;
       /** True during IME composition — skip prediction scheduling */
       private isComposing = false;
       private editorView: EditorView | null = null;
@@ -101,6 +107,10 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
 
       constructor(view: EditorView) {
         this.editorView = view;
+        (view.dom as GhostDebugHost).__markluckClearGhostText = () => {
+          this.clearPendingTimers();
+          this.clearGhost(view, true, true);
+        };
 
         // ── IME composition guard ────────────────────────────
         const onCompStart = () => {
@@ -173,6 +183,10 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
             event.preventDefault();
             this.acceptGhost(view, event.target);
           }
+          if (event.key === 'Escape' && this.canRejectGhost(view, event.target)) {
+            event.preventDefault();
+            this.rejectGhost(view);
+          }
         };
         (view.root as unknown as EventTarget).addEventListener('keydown', onRootKeyDown, {
           capture: true,
@@ -198,6 +212,11 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         ) {
           return;
         }
+        if (this.acceptingGhost && update.docChanged) {
+          this.clearPendingTimers();
+          this.clearGhost(update.view, false);
+          return;
+        }
         const mainSelection = update.view.state.selection.main;
         const selectionInvalidatesGhost =
           update.selectionSet &&
@@ -209,10 +228,12 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           this.clearPendingTimers();
 
           // 如果文档或选区变化 → 清除当前 ghost text
+          this.suppressedGhostAt = null;
           this.recordMismatch(update);
-          this.clearGhost(update.view);
+          this.clearGhost(update.view, false);
+          this.deferClearGhostDecorations(update.view);
 
-          // 150ms 防抖后重新预测
+          // 防抖后重新预测
           this.schedulePredict(update.view);
         }
       }
@@ -224,7 +245,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
             debounce.timer = null;
             this.doPredict(view);
           },
-          settings.aggressiveness === 'balanced' ? 120 : 150,
+          settings.aggressiveness === 'balanced' ? 80 : 150,
         );
       }
 
@@ -242,6 +263,10 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           return;
         }
 
+        if (this.suppressedGhostAt?.doc === doc && this.suppressedGhostAt.cursor === cursor) {
+          this.clearGhost(view);
+          return;
+        }
         const result = predictor.getGhostText(cursor, doc);
         if (result && result.text) {
           // BUG-030: 防止重复预测同一文本导致的预测级联
@@ -258,7 +283,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           if (!atEndOfLine && !isStructured) return;
 
           this.currentGhostText = result.text;
-          this.currentPredictionSource = result.source ?? 'ngram';
+          this.currentPredictionLearnable = result.learnable ?? result.source !== 'structured';
           this.currentContext = doc.slice(Math.max(0, cursor - 4), cursor);
           this.currentPredictionCursor = cursor;
           view.dispatch({
@@ -282,7 +307,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         const shouldClearDecorations = forceDispatch || this.currentGhostText || hasRenderedGhost;
 
         this.currentGhostText = '';
-        this.currentPredictionSource = null;
+        this.currentPredictionLearnable = false;
         this.currentContext = '';
         this.currentPredictionCursor = null;
 
@@ -313,6 +338,25 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         return view.hasFocus || editorHasDomFocus || eventCameFromEditor || editorWasLastActive;
       }
 
+      canRejectGhost(view: EditorView, eventTarget?: EventTarget | null): boolean {
+        if (!this.currentGhostText) return false;
+        if (this.isImeActive(view)) return false;
+
+        const activeElement = view.root.activeElement;
+        const activeElementInModal =
+          activeElement instanceof Element && !!activeElement.closest('.modal-overlay');
+        if (activeElementInModal) return false;
+
+        const editorHasDomFocus =
+          activeElement === view.contentDOM ||
+          (activeElement instanceof Node && view.dom.contains(activeElement));
+        const eventCameFromEditor = eventTarget instanceof Node && view.dom.contains(eventTarget);
+
+        return (
+          view.hasFocus || editorHasDomFocus || eventCameFromEditor || this.editorInteractionActive
+        );
+      }
+
       private clearPendingTimers(): void {
         if (debounce.timer) {
           clearTimeout(debounce.timer);
@@ -322,6 +366,16 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           clearTimeout(this.compositionPredictTimer);
           this.compositionPredictTimer = null;
         }
+      }
+
+      private deferClearGhostDecorations(view: EditorView): void {
+        if (this.decorationClearQueued) return;
+        this.decorationClearQueued = true;
+        queueMicrotask(() => {
+          this.decorationClearQueued = false;
+          if (this.editorView !== view) return;
+          view.dispatch({ effects: setGhostDecorations.of(Decoration.none) });
+        });
       }
 
       private scheduleAfterComposition(view: EditorView): void {
@@ -339,7 +393,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
 
         const cursor = view.state.selection.main.head;
         const text = this.currentGhostText;
-        const predictionSource = this.currentPredictionSource;
+        const predictionLearnable = this.currentPredictionLearnable;
         const doc = view.state.doc.toString();
         const ctx = this.currentContext || doc.slice(Math.max(0, cursor - 4), cursor);
 
@@ -347,22 +401,22 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         // update(), and stale ghost state can otherwise re-enter prediction.
         this.clearPendingTimers();
         this.acceptingGhost = true;
+        this.suppressedGhostAt = null;
         this.currentGhostText = '';
-        this.currentPredictionSource = null;
+        this.currentPredictionLearnable = false;
         this.currentContext = '';
 
         // 插入 ghost text
         view.dispatch({
           changes: { from: cursor, insert: text },
           selection: { anchor: cursor + text.length },
+          effects: setGhostDecorations.of(Decoration.none),
         });
         this.acceptingGhost = false;
 
         // Structured completions are deterministic editor assistance, not user prose.
         // Feeding them into N-gram creates loops such as `**` -> `********`.
-        if (predictionSource !== 'structured') {
-          predictor.acceptCompletion(ctx, text);
-        }
+        predictor.acceptCompletion(ctx, text, { learn: predictionLearnable });
 
         return true;
       }
@@ -374,8 +428,11 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         const cursor = view.state.selection.main.head;
         const doc = view.state.doc.toString();
         const ctx = this.currentContext || doc.slice(Math.max(0, cursor - 4), cursor);
+        const predictionLearnable = this.currentPredictionLearnable;
 
-        predictor.rejectCompletion(ctx, this.currentGhostText);
+        this.clearPendingTimers();
+        this.suppressedGhostAt = { doc, cursor };
+        predictor.rejectCompletion(ctx, this.currentGhostText, { learn: predictionLearnable });
         this.clearGhost(view);
         return true;
       }
@@ -385,7 +442,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           this.acceptingGhost ||
           !update.docChanged ||
           !this.currentGhostText ||
-          this.currentPredictionSource === 'structured'
+          !this.currentPredictionLearnable
         ) {
           return;
         }
@@ -405,6 +462,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         this.clearPendingTimers();
         if (this.editorView) {
           this.clearGhost(this.editorView, true, true);
+          delete (this.editorView.dom as GhostDebugHost).__markluckClearGhostText;
           const dom = this.editorView.contentDOM;
           if (this.__compStart) dom.removeEventListener('compositionstart', this.__compStart);
           if (this.__compEnd) dom.removeEventListener('compositionend', this.__compEnd);
@@ -511,7 +569,7 @@ export function ghostTextPlugin(
         }
         if (event.key === 'Escape' && p.currentGhostText) {
           event.preventDefault();
-          return p.rejectGhost(view);
+          return p.canRejectGhost(view, event.target) ? p.rejectGhost(view) : false;
         }
         return false;
       },

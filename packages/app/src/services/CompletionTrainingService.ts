@@ -3,7 +3,7 @@ import type { MarkdownPredictor } from './MarkdownPredictor';
 
 export const TRAINING_META_KEY = 'markluck:autocomplete:trainingMeta';
 export const TRAINING_META_EVENT = 'markluck:autocomplete:trainingMetaChanged';
-export const TRAINING_META_VERSION = 1;
+export const TRAINING_META_VERSION = 2;
 const MAX_TRAINING_FILE_SIZE = 512 * 1024;
 
 export interface CompletionTrainingFileMeta {
@@ -13,11 +13,15 @@ export interface CompletionTrainingFileMeta {
 
 export interface CompletionTrainingMeta {
   version: number;
-  status: 'idle' | 'training' | 'done' | 'error';
+  status: 'idle' | 'training' | 'done' | 'partial' | 'error';
   trainedPaths: Record<string, CompletionTrainingFileMeta>;
   fileCount: number;
   updatedAt: number;
   lastError?: string;
+  successCount: number;
+  failureCount: number;
+  failedPaths: Record<string, string>;
+  lastRunId?: string;
 }
 
 export const DEFAULT_TRAINING_META: CompletionTrainingMeta = {
@@ -26,6 +30,9 @@ export const DEFAULT_TRAINING_META: CompletionTrainingMeta = {
   trainedPaths: {},
   fileCount: 0,
   updatedAt: 0,
+  successCount: 0,
+  failureCount: 0,
+  failedPaths: {},
 };
 
 export function loadTrainingMeta(): CompletionTrainingMeta {
@@ -33,22 +40,23 @@ export function loadTrainingMeta(): CompletionTrainingMeta {
     const raw = localStorage.getItem(TRAINING_META_KEY);
     if (!raw) return createDefaultTrainingMeta();
     const parsed = JSON.parse(raw) as Partial<CompletionTrainingMeta>;
-    if (parsed.version !== TRAINING_META_VERSION) {
+    if (parsed.version !== 1 && parsed.version !== TRAINING_META_VERSION) {
       return createDefaultTrainingMeta();
     }
-    return {
+    return normalizeMeta({
       ...DEFAULT_TRAINING_META,
       ...parsed,
       trainedPaths: parsed.trainedPaths ?? {},
+      failedPaths: parsed.failedPaths ?? {},
       fileCount: Object.keys(parsed.trainedPaths ?? {}).length,
-    };
+    } as CompletionTrainingMeta);
   } catch {
     return createDefaultTrainingMeta();
   }
 }
 
 function createDefaultTrainingMeta(): CompletionTrainingMeta {
-  return { ...DEFAULT_TRAINING_META, trainedPaths: {} };
+  return { ...DEFAULT_TRAINING_META, trainedPaths: {}, failedPaths: {} };
 }
 
 export function saveTrainingMeta(meta: CompletionTrainingMeta): void {
@@ -85,10 +93,15 @@ export class CompletionTrainingService {
   async trainNotebook(entries: DirEntry[]): Promise<void> {
     if (this.running) return;
     this.running = true;
+    const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     let meta: CompletionTrainingMeta = {
       ...loadTrainingMeta(),
       status: 'training',
       lastError: undefined,
+      successCount: 0,
+      failureCount: 0,
+      failedPaths: {},
+      lastRunId: runId,
     };
     saveTrainingMeta(meta);
 
@@ -97,12 +110,31 @@ export class CompletionTrainingService {
       const candidates = entries.filter((entry) => this.shouldTrainEntry(entry, meta));
       for (let i = 0; i < candidates.length; i += 4) {
         const batch = candidates.slice(i, i + 4);
-        await Promise.all(batch.map((entry) => this.trainEntry(entry, meta)));
+        const results = await Promise.all(batch.map((entry) => this.trainEntry(entry, meta)));
+        for (const result of results) {
+          if (result.ok) {
+            meta.successCount++;
+          } else {
+            meta.failureCount++;
+            meta.failedPaths[result.path] = result.error;
+          }
+        }
         meta = normalizeMeta({ ...meta, status: 'training', updatedAt: Date.now() });
         saveTrainingMeta(meta);
         await idleDelay();
       }
-      saveTrainingMeta(normalizeMeta({ ...meta, status: 'done', updatedAt: Date.now() }));
+      const status = meta.failureCount === 0 ? 'done' : meta.successCount > 0 ? 'partial' : 'error';
+      saveTrainingMeta(
+        normalizeMeta({
+          ...meta,
+          status,
+          updatedAt: Date.now(),
+          lastError:
+            meta.failureCount > 0
+              ? `${meta.failureCount} file(s) failed during autocomplete training`
+              : undefined,
+        }),
+      );
     } catch (error) {
       saveTrainingMeta(
         normalizeMeta({
@@ -138,19 +170,24 @@ export class CompletionTrainingService {
     saveTrainingMeta(normalizeMeta({ ...meta, status: 'done', updatedAt: Date.now() }));
   }
 
-  private async trainEntry(entry: DirEntry, meta: CompletionTrainingMeta): Promise<void> {
+  private async trainEntry(
+    entry: DirEntry,
+    meta: CompletionTrainingMeta,
+  ): Promise<{ ok: true; path: string } | { ok: false; path: string; error: string }> {
     try {
       const content = await this.fs.readFile(entry.path);
-      await this.trainFile(entry.path, content, {
-        mtime: entry.mtime ?? Date.now(),
-        size: entry.size ?? content.length,
-      });
+      this.predictor.ingestDocument(entry.path, stripUntrainableMarkdown(content), true);
       meta.trainedPaths[entry.path] = {
         mtime: entry.mtime ?? Date.now(),
         size: entry.size ?? content.length,
       };
-    } catch {
-      // Skip unreadable files, the editor remains usable without them.
+      return { ok: true, path: entry.path };
+    } catch (error) {
+      return {
+        ok: false,
+        path: entry.path,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
   }
 
@@ -181,14 +218,25 @@ export function stripUntrainableMarkdown(content: string): string {
 
 function normalizeMeta(meta: CompletionTrainingMeta): CompletionTrainingMeta {
   const trainedPaths = meta.trainedPaths ?? {};
+  const failedPaths = meta.failedPaths ?? {};
   return {
     version: TRAINING_META_VERSION,
-    status: meta.status,
+    status: normalizeStatus(meta.status),
     trainedPaths,
     fileCount: Object.keys(trainedPaths).length,
     updatedAt: meta.updatedAt,
     lastError: meta.lastError,
+    successCount: Number.isFinite(meta.successCount) ? meta.successCount : 0,
+    failureCount: Number.isFinite(meta.failureCount) ? meta.failureCount : 0,
+    failedPaths,
+    lastRunId: meta.lastRunId,
   };
+}
+
+function normalizeStatus(
+  status: CompletionTrainingMeta['status'],
+): CompletionTrainingMeta['status'] {
+  return ['idle', 'training', 'done', 'partial', 'error'].includes(status) ? status : 'idle';
 }
 
 function idleDelay(): Promise<void> {

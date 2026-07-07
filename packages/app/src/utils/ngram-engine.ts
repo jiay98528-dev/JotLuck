@@ -8,8 +8,11 @@ export interface PredictionResult {
   text: string;
   confidence: number;
   from: number;
-  source?: 'ngram' | 'structured';
+  source?: 'ngram' | 'structured' | 'recent' | 'llm';
+  sourceLayer?: string;
   syntaxType?: string;
+  providerId?: string;
+  learnable?: boolean;
 }
 
 export interface PredictionTrace {
@@ -168,13 +171,9 @@ export function pruneTable(
 export function serialize(table: NGramTable): string {
   const lines: string[] = [];
   for (const [ctx, preds] of table) {
-    const ctxHex = _toHex(ctx);
-    const predParts = [...preds]
-      .sort((a, b) => b[1] - a[1])
-      .map(([ch, cnt]) => `${ch},${cnt}`)
-      .join('|');
+    const predParts = [...preds].sort((a, b) => b[1] - a[1]).map(([ch, cnt]) => [_toHex(ch), cnt]);
     const flags = [...preds].some(([, c]) => c > 100) ? 'u' : 'b';
-    lines.push(`${ctxHex}|${predParts}|${flags}`);
+    lines.push(JSON.stringify([_toHex(ctx), predParts, flags]));
   }
   return lines.join('\n');
 }
@@ -183,19 +182,10 @@ export function deserialize(compact: string): NGramTable {
   const table: NGramTable = new Map();
   const lines = compact.split('\n').filter((l) => l.trim());
   for (const line of lines) {
-    const parts = line.split('|');
-    if (parts.length < 3 || !parts[0]) continue;
-    const ctx = _fromHex(parts[0]);
-    const preds = new Map<string, number>();
-    for (let i = 1; i < parts.length - 1; i++) {
-      const segment = parts[i];
-      if (!segment) continue;
-      const [ch, cntStr] = segment.split(',');
-      if (ch && cntStr) {
-        preds.set(ch, parseInt(cntStr, 10) || 1);
-      }
-    }
-    if (preds.size > 0) table.set(ctx, preds);
+    const parsed = line.trimStart().startsWith('[')
+      ? deserializeV3Line(line)
+      : deserializeLegacyLine(line);
+    if (parsed) table.set(parsed.ctx, parsed.preds);
   }
   return table;
 }
@@ -218,7 +208,56 @@ function _toHex(s: string): string {
 }
 
 function _fromHex(hex: string): string {
+  if (!isValidHex(hex)) return '';
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < hex.length; i += 2) bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
   return new TextDecoder().decode(bytes);
+}
+
+function deserializeV3Line(line: string): { ctx: string; preds: Map<string, number> } | null {
+  try {
+    const parsed = JSON.parse(line) as unknown;
+    if (!Array.isArray(parsed) || typeof parsed[0] !== 'string' || !Array.isArray(parsed[1])) {
+      return null;
+    }
+    if (!isValidHex(parsed[0])) return null;
+    const ctx = _fromHex(parsed[0]);
+    const preds = new Map<string, number>();
+    for (const item of parsed[1]) {
+      if (!Array.isArray(item) || typeof item[0] !== 'string') continue;
+      if (!isValidHex(item[0])) continue;
+      const count = normalizeCount(item[1]);
+      if (count === null) continue;
+      const ch = _fromHex(item[0]);
+      if (ch) preds.set(ch, count);
+    }
+    return preds.size > 0 ? { ctx, preds } : null;
+  } catch {
+    return null;
+  }
+}
+
+function deserializeLegacyLine(line: string): { ctx: string; preds: Map<string, number> } | null {
+  const parts = line.split('|');
+  if (parts.length < 3 || !parts[0] || !isValidHex(parts[0])) return null;
+  const ctx = _fromHex(parts[0]);
+  const preds = new Map<string, number>();
+  for (let i = 1; i < parts.length - 1; i++) {
+    const segment = parts[i];
+    if (!segment) continue;
+    const [ch, cntStr] = segment.split(',');
+    const count = normalizeCount(cntStr);
+    if (ch && count !== null) preds.set(ch, count);
+  }
+  return preds.size > 0 ? { ctx, preds } : null;
+}
+
+function normalizeCount(value: unknown): number | null {
+  const count = typeof value === 'number' ? value : Number.parseInt(String(value), 10);
+  if (!Number.isFinite(count) || count <= 0 || count > 1_000_000_000) return null;
+  return Math.floor(count);
+}
+
+function isValidHex(hex: string): boolean {
+  return hex.length > 0 && hex.length % 2 === 0 && /^[0-9a-f]+$/i.test(hex);
 }
