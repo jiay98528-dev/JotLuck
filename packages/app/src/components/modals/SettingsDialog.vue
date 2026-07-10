@@ -254,7 +254,7 @@
             <section v-show="activeTab === 'about'" class="section">
               <h3 class="section-title">关于</h3>
               <div class="about-card">
-                <strong>MarkLuck {{ appVersion }}</strong>
+                <strong>JotLuck {{ appVersion }}</strong>
                 <p>默认羽翼工作台，本地优先，离线可用。</p>
               </div>
               <div class="settings-actions">
@@ -279,6 +279,14 @@
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
+import {
+  APP_ISSUES_URL,
+  APP_LICENSE_URL,
+  APP_RELEASES_API_URL,
+  APP_REPOSITORY_URL,
+  APP_VERSION,
+  APP_VERSION_LABEL,
+} from '@/config/app-meta';
 import {
   DEFAULT_COMPLETION_SETTINGS,
   type CompletionSettings,
@@ -333,19 +341,19 @@ const autoSaveDelay = ref(3000);
 const autoCompleteEnabled = ref(props.completionSettings.enabled);
 const backgroundTraining = ref(props.completionSettings.backgroundTraining);
 
-const AUTO_CHECK_KEY = 'markluck:version:autoCheck';
-const AUTO_INSTALL_KEY = 'markluck:version:autoInstall';
+const AUTO_CHECK_KEY = 'jotluck:version:autoCheck';
+const AUTO_INSTALL_KEY = 'jotluck:version:autoInstall';
 const autoCheckUpdates = ref(localStorage.getItem(AUTO_CHECK_KEY) === 'true');
 const checking = ref(false);
 const updateStatus = ref('');
-const appVersion = 'v0.15';
+const appVersion = APP_VERSION_LABEL;
 
 const aboutLinks = [
-  { label: 'GitHub 仓库', url: 'https://github.com/jiay98528-dev/MarkLuck' },
-  { label: '问题反馈', url: 'https://github.com/jiay98528-dev/MarkLuck/issues' },
+  { label: 'GitHub 仓库', url: APP_REPOSITORY_URL },
+  { label: '问题反馈', url: APP_ISSUES_URL },
   {
     label: 'MIT 许可',
-    url: 'https://github.com/jiay98528-dev/MarkLuck/blob/main/LICENSE',
+    url: APP_LICENSE_URL,
   },
 ];
 
@@ -366,7 +374,7 @@ watch(
 );
 
 watch(externalScanRootTextFiles, (value) => {
-  localStorage.setItem('markluck:external:scanRootTextFiles', String(value));
+  localStorage.setItem('jotluck:external:scanRootTextFiles', String(value));
   emit('update-external-scan-root', value);
 });
 
@@ -419,11 +427,11 @@ async function onCheckUpdate(): Promise<void> {
   checking.value = true;
   updateStatus.value = '';
   try {
-    const resp = await fetch('https://api.github.com/repos/jiay98528-dev/MarkLuck/releases/latest');
+    const resp = await fetch(APP_RELEASES_API_URL);
     if (!resp.ok) throw new Error('API error');
     const data = await resp.json();
     const latest = data.tag_name || data.name || '';
-    const current = '0.15.0';
+    const current = APP_VERSION;
     const cleanVersion = (value: string) => value.replace(/^v/, '');
     updateStatus.value =
       latest && cleanVersion(latest) !== current ? `发现新版本 ${latest}` : '已是最新版本';
@@ -435,7 +443,7 @@ async function onCheckUpdate(): Promise<void> {
 }
 
 function onReplayWelcome(): void {
-  localStorage.removeItem('markluck:welcome:completed');
+  localStorage.removeItem('jotluck:welcome:completed');
   window.location.reload();
 }
 

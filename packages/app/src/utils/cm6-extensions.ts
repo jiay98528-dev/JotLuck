@@ -18,13 +18,13 @@ import { tags } from '@lezer/highlight';
 import type { Extension } from '@codemirror/state';
 
 /**
- * MarkLuck 自定义语法高亮样式。
+ * JotLuck 自定义语法高亮样式。
  *
  * 基于 paper 主题的 heading 表现：bold-only（无下划线）。
  * CodeMirror 6 默认的 defaultHighlightStyle 会给 heading 加
  * `textDecoration: 'underline'`，这在纸张隐喻中过于抢眼，改为纯加粗。
  */
-const markluckHighlightStyle = HighlightStyle.define([
+const JotLuckHighlightStyle = HighlightStyle.define([
   // Headings: bold only, no underline — matches .markdown-body h1-h6 preview style
   { tag: tags.heading, fontWeight: 'bold', textDecoration: 'none' },
   { tag: tags.heading1, fontWeight: 'bold', fontSize: '2em', textDecoration: 'none' },
@@ -51,7 +51,7 @@ const sourceOnlyHighlightStyle = HighlightStyle.define([
   { tag: tags.link, color: 'var(--link)', textDecoration: 'none' },
 ]);
 
-export function markluckExtensions(ph = '开始书写…', sourceOnly = false): Extension[] {
+export function jotluckExtensions(ph = '开始书写…', sourceOnly = false): Extension[] {
   return [
     markdown(),
     history(),
@@ -59,7 +59,7 @@ export function markluckExtensions(ph = '开始书写…', sourceOnly = false): 
     keymap.of([...defaultKeymap, ...historyKeymap]),
     EditorView.lineWrapping,
     cmPlaceholder(ph),
-    syntaxHighlighting(sourceOnly ? sourceOnlyHighlightStyle : markluckHighlightStyle),
+    syntaxHighlighting(sourceOnly ? sourceOnlyHighlightStyle : JotLuckHighlightStyle),
     EditorView.theme(
       {
         '&': {

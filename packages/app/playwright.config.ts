@@ -1,12 +1,12 @@
-import { defineConfig, devices } from '@playwright/test';
+﻿import { defineConfig, devices } from '@playwright/test';
 
-const baseURL = process.env.MARKLUCK_E2E_BASE_URL ?? 'http://localhost:5173';
+const baseURL = process.env.JOTLUCK_E2E_BASE_URL ?? 'http://localhost:5173';
 const parsedBaseURL = new URL(baseURL);
 const previewHost = parsedBaseURL.hostname === 'localhost' ? '127.0.0.1' : parsedBaseURL.hostname;
 const previewPort = parsedBaseURL.port || (parsedBaseURL.protocol === 'https:' ? '443' : '80');
 const webServerCommand = [
-  'pnpm --filter @markluck/app build:e2e',
-  `pnpm --filter @markluck/app preview --host ${previewHost} --port ${previewPort}`,
+  'pnpm --filter @jotluck/app build:e2e',
+  `pnpm --filter @jotluck/app preview --host ${previewHost} --port ${previewPort}`,
 ].join(' && ');
 
 export default defineConfig({
@@ -44,7 +44,7 @@ export default defineConfig({
   webServer: {
     command: webServerCommand,
     url: baseURL,
-    reuseExistingServer: process.env.MARKLUCK_E2E_REUSE === '1',
+    reuseExistingServer: process.env.JotLuck_E2E_REUSE === '1',
     timeout: 60000,
   },
 });

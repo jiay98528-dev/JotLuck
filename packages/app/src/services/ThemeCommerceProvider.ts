@@ -8,7 +8,7 @@ import type {
   ThemeLicenseRedeemRequest,
 } from '@/types/theme-pack';
 
-const ENTITLEMENTS_KEY = 'markluck:themes:entitlements:v2';
+const ENTITLEMENTS_KEY = 'jotluck:themes:entitlements:v2';
 
 function defaultEntitlement(pack: InstalledThemePack): ThemeEntitlementDescriptor {
   if (pack.source === 'builtin') {
@@ -83,7 +83,7 @@ export function createMockThemeCommerceProvider(
         provider: 'local-mock',
         checkoutUrl:
           pack?.manifest.purchaseUrl ??
-          `markluck://themes/checkout?themeId=${encodeURIComponent(request.themeId)}`,
+          `jotluck://themes/checkout?themeId=${encodeURIComponent(request.themeId)}`,
         state: 'local-mock',
       };
     },

@@ -1,5 +1,5 @@
 /**
- * MarkLuck E2E — 安全测试套件
+ * JotLuck E2E — 安全测试套件
  *
  * 验证 XSS 防护与内容安全扫描：
  *   1. 注入恶意代码到编辑器 → 渲染输出经 DOMPurify 清洗
@@ -199,7 +199,7 @@ test.describe('安全测试', () => {
     const warnings = await page.evaluate((content) => {
       // Dynamically import the scanner — use the same logic as contentUtils.ts
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const scanner = (window as any).__markluck_scanContentWarnings;
+      const scanner = (window as any).__jotluck_scanContentWarnings;
       if (typeof scanner === 'function') return scanner(content);
       // Fallback: inline the scanner logic
       const result: { type: string; message: string; position?: number }[] = [];
@@ -242,7 +242,7 @@ test.describe('安全测试', () => {
     // 运行内容安全扫描器
     const warnings = await page.evaluate((content) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const scanner = (window as any).__markluck_scanContentWarnings;
+      const scanner = (window as any).__jotluck_scanContentWarnings;
       if (typeof scanner === 'function') return scanner(content);
       // Fallback: inline the scanner logic
       const result: { type: string; message: string; position?: number }[] = [];
@@ -291,8 +291,8 @@ test.describe('网络隐私', () => {
     });
 
     await page.addInitScript(() => {
-      localStorage.setItem('markluck:welcome:completed', '1');
-      localStorage.setItem('markluck:version:autoCheck', 'false');
+      localStorage.setItem('jotluck:welcome:completed', '1');
+      localStorage.setItem('jotluck:version:autoCheck', 'false');
     });
     await page.goto('http://localhost:5173', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.app-shell')).toBeVisible({ timeout: 10000 });

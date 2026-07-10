@@ -6,7 +6,7 @@
     :data-layout="region.layout"
     aria-label="笔记本导航"
   >
-    <button class="wing-logo" title="MarkLuck, 回到首页" @click="$emit('select-note', '')">
+    <button class="wing-logo" title="JotLuck, 回到首页" @click="$emit('select-note', '')">
       <svg
         width="20"
         height="20"

@@ -28,7 +28,7 @@
                 <button
                   v-if="!externalError"
                   class="btn btn--primary"
-                  @click="showExternalEditConfirm = true"
+                  @click="openExternalParentAsNotebook"
                 >
                   启用编辑
                 </button>
@@ -338,9 +338,14 @@
     <TemplateDialog
       :visible="showTemplate"
       :current-content="shellActivePath ? currentContent : undefined"
+      :custom-templates="customTemplates"
+      :can-save-custom-template="canSaveCurrentAsTemplate"
+      :custom-template-disabled-reason="customTemplateDisabledReason"
       @update:visible="showTemplate = $event"
       @select="onTemplateSelect"
       @create-blank="onCreateBlank"
+      @save-template="onSaveCustomTemplate"
+      @delete-template="onDeleteCustomTemplate"
     />
   </ThemeSlotBoundary>
 
@@ -629,7 +634,7 @@ import { useIndexStore } from '@/stores/index';
 import { useSearchStore } from '@/stores/search';
 import { useThemeStore } from '@/stores/theme';
 import { useHeadings } from '@/composables/useHeadings';
-import { renderMarkdown, highlightCodeBlocks } from '@markluck/renderer';
+import { renderMarkdown, highlightCodeBlocks } from '@jotluck/renderer';
 import type {
   DirEntry,
   BacklinkEntry,
@@ -637,6 +642,7 @@ import type {
   IFileSystemService,
   FormatAction,
   ParagraphPreset,
+  TemplateItem,
 } from '@/types';
 import UpdateNotification from '@/components/overlays/UpdateNotification.vue';
 import MarkdownCheatSheet from '@/components/overlays/MarkdownCheatSheet.vue';
@@ -670,8 +676,14 @@ import {
   supportedNoteExtensionsLabel,
 } from '@/utils/note-files';
 import { getDraftMarkdownFileName } from '@/utils/draft-file-name';
-import { getMarkluckE2EBridge, peekMarkluckE2EBridge } from '@/utils/e2e-bridge';
+import { getJotLuckE2EBridge, peekJotLuckE2EBridge } from '@/utils/e2e-bridge';
 import { isDesktopRuntime, shouldPersistMockFs } from '@/utils/runtime';
+import {
+  loadCustomTemplatesFromFiles,
+  migrateLegacyCustomTemplates,
+  saveCustomTemplateToFiles,
+  deleteCustomTemplateFile,
+} from '@/services/TemplateEngine';
 import type {
   ShellAction,
   ThemeActionRegion,
@@ -695,7 +707,7 @@ function createFileSystem(): IFileSystemService {
 }
 const fs: IFileSystemService = createFileSystem();
 const supportedNoteExtensionsText = supportedNoteExtensionsLabel();
-const MOCK_FS_STORAGE_KEY = 'markluck-mockfs';
+const MOCK_FS_STORAGE_KEY = 'jotluck-mockfs';
 const LARGE_DOCUMENT_PREVIEW_DELAY_THRESHOLD_CHARS = 120_000;
 const LARGE_DOCUMENT_PREVIEW_DELAY_THRESHOLD_LINES = 3_000;
 const LARGE_DOCUMENT_DEFERRED_WORK_DELAY_MS = 1800;
@@ -756,10 +768,12 @@ const showSettings = ref(false);
 const showThemeDialog = ref(false);
 const showShare = ref(false);
 const isScratchSession = ref(false);
+const customTemplates = ref<TemplateItem[]>([]);
 const showScratchExitDialog = ref(false);
 const pendingDeletePath = ref<string | null>(null);
 const toast = useToast();
 const notebookName = ref('未打开笔记本');
+const activeNotebookRoot = ref('');
 const completionSettings = ref<CompletionSettings>(getCompletionSettings());
 const completionTrainingMeta = ref<CompletionTrainingMeta>(loadTrainingMeta());
 let unsubscribeCompletionSettings: (() => void) | null = null;
@@ -771,6 +785,21 @@ let startupOpenedFileConsumed = false;
 let allowWindowClose = false;
 const MAX_FILE_TREE_ENTRIES = 5000;
 
+function hashCompletionScope(input: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+const completionStorageScope = computed(() =>
+  activeNotebookRoot.value
+    ? `notebook-${hashCompletionScope(activeNotebookRoot.value)}`
+    : 'unscoped',
+);
+
 const externalSessionMode = ref<ExternalSessionMode>('none');
 const externalFile = ref<OpenedFilePayload | null>(null);
 const externalError = ref('');
@@ -780,7 +809,7 @@ const externalFiles = ref<DirEntry[]>([]);
 const externalOpenedNotes = ref<Array<{ path: string; title: string; lastOpenedAt: number }>>([]);
 const externalOpenedFileMap = ref<Record<string, OpenedFilePayload>>({});
 const externalScanRootTextFiles = ref(
-  localStorage.getItem('markluck:external:scanRootTextFiles') === 'true',
+  localStorage.getItem('jotluck:external:scanRootTextFiles') === 'true',
 );
 const isExternalSession = computed(() => externalSessionMode.value !== 'none');
 const isExternalReadonly = computed(() => externalSessionMode.value === 'readonly');
@@ -789,6 +818,30 @@ const isExternalEditing = computed(
     externalSessionMode.value === 'edit-shell' || externalSessionMode.value === 'folder-indexed',
 );
 const isExternalFolderIndexed = computed(() => externalSessionMode.value === 'folder-indexed');
+const canSaveCurrentAsTemplate = computed(
+  () =>
+    Boolean(activeNotebookRoot.value) &&
+    !isScratchSession.value &&
+    !isExternalSession.value &&
+    currentContent.value.trim().length > 0,
+);
+const customTemplateDisabledReason = computed(() => {
+  if (!currentContent.value.trim()) return '当前笔记为空，无法保存为模板。';
+  if (isScratchSession.value) return '临时草稿尚未进入笔记本，保存后可作为模板。';
+  if (isExternalSession.value) return '外部单文件不写入模板目录，请先打开所在文件夹为笔记本。';
+  if (!activeNotebookRoot.value) return '请先打开一个笔记本，再保存自定义模板。';
+  return '';
+});
+const e2eBridge = getJotLuckE2EBridge();
+if (e2eBridge) {
+  e2eBridge.debugState = () => ({
+    activePath: activePath.value,
+    currentContent: currentContent.value,
+    externalSessionMode: externalSessionMode.value,
+    isDirty: isDirty.value,
+    isExternalEditing: isExternalEditing.value,
+  });
+}
 const externalFilePath = computed(() => externalFile.value?.absolutePath ?? '');
 const externalFileName = computed(() => {
   const path = externalFilePath.value;
@@ -954,9 +1007,7 @@ const externalReaderSlotProps = computed(() => ({
   headings: headings.value,
   loading: loading.value,
   error: externalError.value,
-  enableEdit: () => {
-    showExternalEditConfirm.value = true;
-  },
+  enableEdit: openExternalParentAsNotebook,
   openParentAsNotebook: openExternalParentAsNotebook,
   scrollHeading: scrollExternalHeading,
 }));
@@ -1242,6 +1293,7 @@ let saveGeneration = 0;
 let currentSavePromise: Promise<void> | null = null;
 let noteSelectionQueue: Promise<void> = Promise.resolve();
 let noteSelectionVersion = 0;
+let externalSelectionVersion = 0;
 const pendingMockFileWrites = new Map<string, string>();
 
 // --- Editor Stats ---
@@ -1387,7 +1439,7 @@ function normalizeOpenedFilePayload(payload: unknown): OpenedFilePayload | null 
 
 async function getPendingOpenedFile(): Promise<OpenedFilePayload | null> {
   if (startupOpenedFileConsumed) return null;
-  const mockOpenedFile = normalizeOpenedFilePayload(peekMarkluckE2EBridge()?.mockOpenedFile);
+  const mockOpenedFile = normalizeOpenedFilePayload(peekJotLuckE2EBridge()?.mockOpenedFile);
   if (mockOpenedFile) {
     startupOpenedFileConsumed = true;
     return mockOpenedFile;
@@ -1409,6 +1461,12 @@ async function getPendingOpenedFile(): Promise<OpenedFilePayload | null> {
 async function openNotebookRoot(rootPath: string): Promise<void> {
   isScratchSession.value = false;
   const handle = await fs.openNotebookAt(rootPath);
+  const nextRoot = normalizeOsPath(handle.rootPath);
+  if (nextRoot !== activeNotebookRoot.value) {
+    completionTrainer?.cancelCurrentRun();
+    completionTrainer = null;
+  }
+  activeNotebookRoot.value = nextRoot;
   notebookName.value = handle.name || displayNameFromPath(handle.rootPath);
 }
 
@@ -1466,6 +1524,8 @@ function enterScratchSession(): void {
   externalSessionMode.value = 'none';
   externalFile.value = null;
   externalError.value = '';
+  activeNotebookRoot.value = '';
+  customTemplates.value = [];
   activePath.value = '';
   currentContent.value = '';
   files.value = [];
@@ -1487,7 +1547,7 @@ async function readExternalMarkdownFile(absolutePath: string): Promise<string> {
   if (isDesktopRuntime()) {
     return invoke<string>('read_external_markdown_file', { absolutePath });
   }
-  const filesByPath = peekMarkluckE2EBridge()?.externalFiles ?? {};
+  const filesByPath = peekJotLuckE2EBridge()?.externalFiles ?? {};
   if (Object.prototype.hasOwnProperty.call(filesByPath, absolutePath)) {
     return filesByPath[absolutePath] ?? '';
   }
@@ -1498,7 +1558,7 @@ async function readExternalNoteFile(absolutePath: string): Promise<string> {
   if (isDesktopRuntime()) {
     return invoke<string>('read_external_note_file', { absolutePath });
   }
-  const filesByPath = peekMarkluckE2EBridge()?.externalFiles ?? {};
+  const filesByPath = peekJotLuckE2EBridge()?.externalFiles ?? {};
   if (Object.prototype.hasOwnProperty.call(filesByPath, absolutePath)) {
     return filesByPath[absolutePath] ?? '';
   }
@@ -1510,12 +1570,17 @@ async function writeExternalNoteFile(absolutePath: string, content: string): Pro
     await invoke('write_external_note_file', { absolutePath, content });
     return;
   }
-  const e2eBridge = getMarkluckE2EBridge();
+  const e2eBridge = getJotLuckE2EBridge();
   if (!e2eBridge) throw new Error('Web external file writes are available only in E2E mode');
   e2eBridge.externalFiles = e2eBridge.externalFiles ?? {};
   e2eBridge.externalFiles[absolutePath] = content;
   e2eBridge.externalWrites = e2eBridge.externalWrites ?? [];
   e2eBridge.externalWrites.push({ absolutePath, content, time: Date.now() });
+}
+
+async function registerExternalAccessRoot(rootPath: string): Promise<void> {
+  if (!isDesktopRuntime()) return;
+  await invoke('register_external_access_root', { rootPath });
 }
 
 function ensureMarkdownExtension(path: string): string {
@@ -1577,6 +1642,8 @@ async function saveScratchAs(): Promise<boolean> {
   if (!selected) return false;
 
   const absolutePath = ensureMarkdownExtension(String(selected));
+  const { root } = splitAbsoluteFilePath(absolutePath);
+  await registerExternalAccessRoot(root);
   await writeExternalNoteFile(absolutePath, currentContent.value);
   await enterNotebookFromSavedScratch(absolutePath);
   toast.show('草稿已保存为笔记。', 'success', 2500);
@@ -1637,7 +1704,7 @@ async function listExternalNoteDirectory(relativePath = '/'): Promise<DirEntry[]
     }));
   }
 
-  const filesByPath = peekMarkluckE2EBridge()?.externalFiles ?? {};
+  const filesByPath = peekJotLuckE2EBridge()?.externalFiles ?? {};
   const normalizedRoot = normalizeOsPath(rootPath).replace(/\/+$/, '');
   const normalizedDir = normalizePath(relativePath);
   const dirPrefix = normalizedDir === '/' ? '/' : `${normalizedDir}/`;
@@ -1773,6 +1840,29 @@ async function flushPendingCurrentSave(): Promise<void> {
   }
 }
 
+async function flushCurrentSaveOrBlock(reason: string): Promise<boolean> {
+  await flushPendingCurrentSave();
+  if (!isDirty.value && !saveError.value) return true;
+  const message = saveError.value
+    ? `${reason}失败：${saveError.value}`
+    : `${reason}失败：当前内容尚未保存`;
+  toast.show(message, 'error', 4000);
+  return false;
+}
+
+function clearPendingSaveForPath(path: string): void {
+  const normalized = normalizePath(path);
+  pendingMockFileWrites.delete(normalized);
+  if (normalizePath(activePath.value) === normalized) {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    saveGeneration++;
+    currentSavePromise = null;
+  }
+}
+
 async function enterExternalFileSession(
   openedFile: OpenedFilePayload,
   options: { setLoading?: boolean } = {},
@@ -1784,7 +1874,7 @@ async function enterExternalFileSession(
   if (shouldSetLoading) loading.value = true;
   externalError.value = '';
   errorMessage.value = '';
-  window.dispatchEvent(new CustomEvent('markluck:external-file-opened'));
+  window.dispatchEvent(new CustomEvent('jotluck:external-file-opened'));
   showExternalEditConfirm.value = false;
   searchVisible.value = false;
   showLeftDrawer.value = false;
@@ -1797,6 +1887,8 @@ async function enterExternalFileSession(
   externalFiles.value = [];
   externalOpenedNotes.value = [];
   externalOpenedFileMap.value = {};
+  activeNotebookRoot.value = '';
+  customTemplates.value = [];
   notebookName.value = '外部文件';
 
   try {
@@ -1864,6 +1956,7 @@ async function initNotebook(): Promise<void> {
   if (!notebookReady) return;
   try {
     await indexStore.initialize(fs, true);
+    await refreshCustomTemplates(true);
     wikiLinkRevision.value++;
     refreshSplitPreviewIfVisible();
     if (pendingOpenedFile) {
@@ -1872,6 +1965,21 @@ async function initNotebook(): Promise<void> {
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[NotebookHome] indexStore.initialize 失败', e);
+  }
+}
+
+async function refreshCustomTemplates(migrateLegacy = false): Promise<void> {
+  if (!activeNotebookRoot.value || isScratchSession.value || isExternalSession.value) {
+    customTemplates.value = [];
+    return;
+  }
+  try {
+    if (migrateLegacy) await migrateLegacyCustomTemplates(fs);
+    customTemplates.value = await loadCustomTemplatesFromFiles(fs);
+  } catch (e) {
+    customTemplates.value = [];
+    // eslint-disable-next-line no-console
+    console.warn('[NotebookHome] 自定义模板加载失败', e);
   }
 }
 
@@ -2041,6 +2149,7 @@ async function selectNoteNow(path: string, selectionVersion: number): Promise<vo
 }
 
 async function onSelectExternalNote(path: string): Promise<void> {
+  const selectionVersion = ++externalSelectionVersion;
   const normalizedPath = normalizePath(path);
   const entry = externalFiles.value.find((item) => normalizePath(item.path) === normalizedPath);
 
@@ -2056,6 +2165,7 @@ async function onSelectExternalNote(path: string): Promise<void> {
   }
 
   await flushPendingCurrentSave();
+  if (selectionVersion !== externalSelectionVersion) return;
   loading.value = true;
   errorMessage.value = '';
   saveError.value = null;
@@ -2065,6 +2175,7 @@ async function onSelectExternalNote(path: string): Promise<void> {
     const openedFile =
       externalOpenedFileMap.value[normalizedPath] ?? openedFileFromRelative(normalizedPath);
     const content = await readExternalNoteFile(openedFile.absolutePath);
+    if (selectionVersion !== externalSelectionVersion) return;
     externalFile.value = openedFile;
     currentContent.value = content;
     rememberExternalOpenedFile(openedFile);
@@ -2075,15 +2186,17 @@ async function onSelectExternalNote(path: string): Promise<void> {
     refreshSplitPreviewIfVisible();
     if (isExternalFolderIndexed.value) {
       await indexStore.refreshDocument(createExternalFolderFileSystem(), normalizedPath);
+      if (selectionVersion !== externalSelectionVersion) return;
       wikiLinkRevision.value++;
     }
     showLeftDrawer.value = false;
     void nextTick(() => editorRef.value?.focus());
   } catch (e) {
+    if (selectionVersion !== externalSelectionVersion) return;
     saveError.value = e instanceof Error ? e.message : String(e);
     toast.show(`打开外部文件失败：${saveError.value}`, 'error', 4000);
   } finally {
-    loading.value = false;
+    if (selectionVersion === externalSelectionVersion) loading.value = false;
   }
 }
 
@@ -2167,8 +2280,13 @@ async function onShellRenameFile(oldPath: string, newName: string): Promise<void
 }
 
 async function onDeleteFile(path: string): Promise<void> {
+  const normalizedPath = normalizePath(path);
+  if (normalizePath(activePath.value) === normalizedPath) {
+    await flushPendingCurrentSave();
+  }
+  clearPendingSaveForPath(path);
   await fs.deleteFile(path);
-  if (normalizePath(activePath.value) === normalizePath(path)) {
+  if (normalizePath(activePath.value) === normalizedPath) {
     clearActiveNoteState();
   }
   indexStore.removeDocument(path);
@@ -2201,12 +2319,15 @@ async function onRenameFile(oldPath: string, newName: string): Promise<void> {
     toast.show(`仅支持 ${supportedNoteExtensionsText} 文件`, 'warning', 3000);
     return;
   }
+  const renamingActivePath = normalizePath(activePath.value) === normalizePath(oldPath);
+  if (renamingActivePath && !(await flushCurrentSaveOrBlock('重命名'))) return;
   // 从旧路径提取父目录，避免 currentDir 尾斜杠不一致导致路径错误
   const parentDir = oldPath.substring(0, oldPath.lastIndexOf('/') + 1) || '/';
   const newPath = joinPath(parentDir, newName);
+  clearPendingSaveForPath(oldPath);
   await fs.renameFile(oldPath, newPath);
   completionTrainer?.removePath(oldPath);
-  if (activePath.value === oldPath) activePath.value = newPath;
+  if (renamingActivePath) activePath.value = newPath;
   // 更新索引：移除旧路径，索引新路径
   indexStore.removeDocument(oldPath);
   await indexStore.refreshDocument(fs, newPath);
@@ -2424,7 +2545,7 @@ function confirmExternalEdit(scanRoot = false): void {
 
 async function confirmExternalEditAndScan(): Promise<void> {
   externalScanRootTextFiles.value = true;
-  localStorage.setItem('markluck:external:scanRootTextFiles', 'true');
+  localStorage.setItem('jotluck:external:scanRootTextFiles', 'true');
   confirmExternalEdit(true);
   await buildExternalFolderIndex();
 }
@@ -2433,22 +2554,64 @@ async function openExternalParentAsNotebook(): Promise<void> {
   if (!externalFile.value) return;
   const target = externalFile.value;
   await flushPendingCurrentSave();
-  externalSessionMode.value = 'none';
-  externalFile.value = null;
+  loading.value = true;
   externalError.value = '';
-  externalFiles.value = [];
-  externalOpenedNotes.value = [];
-  externalOpenedFileMap.value = {};
-  await openNotebookRoot(target.notebookRoot);
-  await loadDirectory('/');
-  await indexStore.initialize(fs, true);
-  wikiLinkRevision.value++;
-  await onSelectNote(target.relativePath);
+  try {
+    if (!isDesktopRuntime()) {
+      await openNotebookRoot('/');
+      await hydrateMockNotebookFromExternalFiles(target.notebookRoot);
+    } else {
+      await openNotebookRoot(target.notebookRoot);
+    }
+    await loadDirectory('/');
+    await indexStore.initialize(fs, true);
+    wikiLinkRevision.value++;
+    await onSelectNote(target.relativePath);
+    externalSessionMode.value = 'none';
+    externalFile.value = null;
+    externalFiles.value = [];
+    externalOpenedNotes.value = [];
+    externalOpenedFileMap.value = {};
+    await refreshCustomTemplates(true);
+    await nextTick();
+    editorRef.value?.focus();
+  } catch (e) {
+    externalError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    loading.value = false;
+  }
 }
 
 function scrollExternalHeading(id: string): void {
   const target = document.getElementById(id);
   target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function ensureNotebookDirectoryPath(path: string): Promise<void> {
+  const normalized = normalizePath(path);
+  if (normalized === '/') return;
+  const segments = normalized.split('/').filter(Boolean);
+  let cursor = '';
+  for (const segment of segments) {
+    cursor = `${cursor}/${segment}`;
+    await fs.createDirectory(cursor);
+  }
+}
+
+async function hydrateMockNotebookFromExternalFiles(rootPath: string): Promise<void> {
+  if (isDesktopRuntime()) return;
+  const filesByPath = peekJotLuckE2EBridge()?.externalFiles;
+  if (!filesByPath) return;
+  const normalizedRoot = normalizeOsPath(rootPath).replace(/\/+$/, '');
+  for (const [absolutePath, content] of Object.entries(filesByPath)) {
+    const normalizedPath = normalizeOsPath(absolutePath);
+    if (!normalizedPath.startsWith(`${normalizedRoot}/`)) continue;
+    const relativePath = normalizePath(`/${normalizedPath.slice(normalizedRoot.length + 1)}`);
+    const fileName = relativePath.split('/').pop() ?? '';
+    if (!isSupportedNoteFile(fileName)) continue;
+    await ensureNotebookDirectoryPath(parentDirFromPath(relativePath));
+    await fs.writeFile(relativePath, content);
+  }
 }
 
 // --- Content Updates ---
@@ -2570,7 +2733,7 @@ async function debouncedExternalSave(content: string): Promise<void> {
 }
 
 // --- Format Bubble ---
-const FORMAT_HINT_KEY = 'markluck:formatBubble:hintShown';
+const FORMAT_HINT_KEY = 'jotluck:formatBubble:hintShown';
 
 watch(imageUpload.uploadError, (message) => {
   if (message) toast.show(message, 'error', 4000);
@@ -2724,6 +2887,34 @@ async function onLivePreviewWikiLinkClick(noteTitle: string, anchor: null | stri
 }
 
 // --- Templates ---
+async function onSaveCustomTemplate(name: string, description: string): Promise<void> {
+  if (!canSaveCurrentAsTemplate.value) {
+    toast.show(
+      customTemplateDisabledReason.value || '当前状态不能保存自定义模板。',
+      'warning',
+      3000,
+    );
+    return;
+  }
+  try {
+    await saveCustomTemplateToFiles(fs, name, description, currentContent.value);
+    await refreshCustomTemplates();
+    toast.show('模板已保存到当前笔记本。', 'success', 2500);
+  } catch (e) {
+    toast.show(`模板保存失败：${e instanceof Error ? e.message : String(e)}`, 'error', 4000);
+  }
+}
+
+async function onDeleteCustomTemplate(id: string): Promise<void> {
+  try {
+    await deleteCustomTemplateFile(fs, id);
+    await refreshCustomTemplates();
+    toast.show('模板已删除。', 'success', 2500);
+  } catch (e) {
+    toast.show(`模板删除失败：${e instanceof Error ? e.message : String(e)}`, 'error', 4000);
+  }
+}
+
 async function onTemplateSelect(_tpl: unknown, content: string): Promise<void> {
   const titleMatch = content.match(/^#\s+(.+)$/m);
   const name = titleMatch?.[1]?.trim() || '新笔记';
@@ -2779,6 +2970,8 @@ function connectPredictor(): void {
   if (isExternalSession.value) return;
   const pred = editorRef.value?.predictor;
   if (!pred) return;
+  pred.setStorageScope(completionStorageScope.value);
+  completionTrainingMeta.value = loadTrainingMeta(completionStorageScope.value);
   const svc = indexStore.getIndexService();
   pred.setIndexData({
     getAllNoteTitles: () => svc?.getAllNoteTitles() ?? [],
@@ -2844,13 +3037,13 @@ function onClearCompletionData(): void {
     updatedAt: Date.now(),
   };
   completionTrainingMeta.value = nextMeta;
-  saveTrainingMeta(nextMeta);
+  saveTrainingMeta(nextMeta, completionStorageScope.value);
   toast.show('已清空文字补全的本地学习数据', 'success', 2500);
 }
 
 function onUpdateExternalScanRootTextFiles(value: boolean): void {
   externalScanRootTextFiles.value = value;
-  localStorage.setItem('markluck:external:scanRootTextFiles', String(value));
+  localStorage.setItem('jotluck:external:scanRootTextFiles', String(value));
   if (value && isExternalEditing.value && !isExternalFolderIndexed.value) {
     void confirmExternalEditAndScan();
   } else if (!value && isExternalFolderIndexed.value) {
@@ -2878,6 +3071,15 @@ async function closeCurrentWindow(): Promise<void> {
   }
 }
 
+async function requestDesktopWindowClose(): Promise<void> {
+  if (hasUnsavedScratch()) {
+    showScratchExitDialog.value = true;
+    return;
+  }
+  if (!(await flushCurrentSaveOrBlock('关闭窗口'))) return;
+  await closeCurrentWindow();
+}
+
 function cancelScratchExit(): void {
   showScratchExitDialog.value = false;
 }
@@ -2903,7 +3105,7 @@ watch([activePath, viewMode], async () => {
 });
 
 // ── Version Check ──────────────────────────────────────────
-const VERSION_AUTO_CHECK_KEY = 'markluck:version:autoCheck';
+const VERSION_AUTO_CHECK_KEY = 'jotluck:version:autoCheck';
 const { hasUpdate, latestVersion, releaseUrl, releaseNotes, checkNow } = useVersionCheck();
 const showUpdateNotification = ref(false);
 const updateLatestVersion = computed(() => latestVersion.value);
@@ -2928,9 +3130,9 @@ onMounted(async () => {
   window.addEventListener('beforeunload', onBeforeUnload);
   if (isDesktopRuntime()) {
     unlistenWindowClose = await getCurrentWindow().onCloseRequested((event) => {
-      if (allowWindowClose || !hasUnsavedScratch()) return;
+      if (allowWindowClose) return;
       event.preventDefault();
-      showScratchExitDialog.value = true;
+      void requestDesktopWindowClose();
     });
     unlistenOpenedFile = await listen<OpenedFilePayload | string>('opened-file', (event) => {
       void handleOpenedFile(event.payload);
@@ -2945,9 +3147,12 @@ onMounted(async () => {
     editorRef.value?.predictor.configure(settings);
     if (!isExternalSession.value && settings.backgroundTraining) void maybeTrainNotebook();
   });
-  unsubscribeTrainingMeta = subscribeTrainingMeta((meta) => {
-    completionTrainingMeta.value = meta;
-  });
+  unsubscribeTrainingMeta = subscribeTrainingMeta(
+    (meta) => {
+      completionTrainingMeta.value = meta;
+    },
+    () => completionStorageScope.value,
+  );
 
   // Check for updates after a delay only when the user enabled auto-check.
   updateTimer = setTimeout(async () => {
@@ -2975,7 +3180,7 @@ onUnmounted(() => {
 });
 
 function onDismissVersion(version: string) {
-  localStorage.setItem('markluck:version:dismissedVersion', version);
+  localStorage.setItem('jotluck:version:dismissedVersion', version);
   showUpdateNotification.value = false;
 }
 </script>
@@ -2984,6 +3189,7 @@ function onDismissVersion(version: string) {
 .notebook-home-root {
   height: 100vh;
   min-height: 0;
+  overflow: hidden;
 }
 
 .editor-shell-frame {
@@ -3006,13 +3212,16 @@ function onDismissVersion(version: string) {
 }
 
 .external-reader-frame {
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .external-reader {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
   background: var(--paper-bg);
   color: var(--ink-primary);
 }
@@ -3070,6 +3279,8 @@ function onDismissVersion(version: string) {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: var(--space-10);
 }
 
@@ -3085,8 +3296,10 @@ function onDismissVersion(version: string) {
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-24);
   min-height: 0;
-  padding: var(--space-40) clamp(var(--space-20), 4vw, var(--space-56)) var(--space-96);
+  padding: var(--space-40) clamp(var(--space-32), 5vw, var(--space-64)) var(--space-96);
   overflow: hidden auto;
+  overscroll-behavior: contain;
+  scroll-padding: var(--space-32) 0 var(--space-96);
 }
 
 .external-reader-content {
@@ -3098,7 +3311,7 @@ function onDismissVersion(version: string) {
 
 .external-preview {
   min-height: calc(100vh - 220px);
-  padding: 0 0 var(--space-48);
+  padding: 0 clamp(var(--space-8), 2vw, var(--space-24)) var(--space-48);
 }
 
 .external-reader-rail {
@@ -3125,7 +3338,7 @@ function onDismissVersion(version: string) {
 @media (width >= 1120px) {
   .external-reader-main {
     grid-template-columns: minmax(160px, 220px) minmax(0, var(--editor-max-width)) minmax(
-        120px,
+        160px,
         1fr
       );
   }

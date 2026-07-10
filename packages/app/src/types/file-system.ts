@@ -1,5 +1,5 @@
 // ============================================================
-// MarkLuck — File System Abstraction Types
+// JotLuck — File System Abstraction Types
 // ============================================================
 // Source: spec/types/file-system.ts
 

@@ -215,7 +215,7 @@ async function fetchText(url: string, timeoutMs: number): Promise<string> {
       signal: controller.signal,
       headers: {
         'user-agent':
-          'MarkLuckWebCorpusCollector/0.1 (+local autocomplete corpus; privacy-scrubbed fragments)',
+          'JotLuckWebCorpusCollector/0.1 (+local autocomplete corpus; privacy-scrubbed fragments)',
         accept: 'text/html,application/xhtml+xml,text/plain;q=0.8,*/*;q=0.2',
       },
     });

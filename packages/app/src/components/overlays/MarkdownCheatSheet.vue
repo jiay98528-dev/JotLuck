@@ -64,9 +64,9 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 // ============================================================
 // Constants
 // ============================================================
-const LS_POSITION = 'markluck:cheatsheet:position';
-const LS_COLLAPSED = 'markluck:cheatsheet:collapsed';
-const LS_HIDDEN = 'markluck:cheatsheet:hidden';
+const LS_POSITION = 'jotluck:cheatsheet:position';
+const LS_COLLAPSED = 'jotluck:cheatsheet:collapsed';
+const LS_HIDDEN = 'jotluck:cheatsheet:hidden';
 const SMALL_SCREEN_BREAKPOINT = 800;
 const VIEWPORT_MARGIN = 12;
 

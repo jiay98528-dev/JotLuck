@@ -79,7 +79,7 @@ test.describe('V6 用户旅程', () => {
 
   test('J1b: 文件抽屉只展示支持的笔记格式', async ({ page }) => {
     await page.evaluate(() => {
-      const raw = localStorage.getItem('markluck-mockfs');
+      const raw = localStorage.getItem('jotluck-mockfs');
       const data = raw ? JSON.parse(raw) : { version: 4, files: {}, dirs: { '/': [] } };
       const now = Date.now();
       const encodeSize = (content: string) => new TextEncoder().encode(content).length;
@@ -107,7 +107,7 @@ test.describe('V6 用户旅程', () => {
       write('/mixed-formats/image.png', 'not listed');
       write('/mixed-formats/export.pdf', 'not listed');
       write('/mixed-formats/readme.md.bak', 'not listed');
-      localStorage.setItem('markluck-mockfs', JSON.stringify(data));
+      localStorage.setItem('jotluck-mockfs', JSON.stringify(data));
     });
 
     await page.reload({ waitUntil: 'domcontentloaded' });
@@ -209,7 +209,7 @@ test.describe('V6 用户旅程', () => {
 
     // Step 5: 刷新页面，验证持久化
     await page.addInitScript(() => {
-      localStorage.setItem('markluck:welcome:completed', '1');
+      localStorage.setItem('jotluck:welcome:completed', '1');
     });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForAppReady(page);
@@ -469,7 +469,7 @@ test.describe('V6 用户旅程', () => {
     await waitForAutoSave(page);
 
     const assetState = await page.evaluate(() => {
-      const raw = localStorage.getItem('markluck-mockfs');
+      const raw = localStorage.getItem('jotluck-mockfs');
       const data = raw ? JSON.parse(raw) : { files: {} };
       const assetPaths = Object.keys(data.files).filter(
         (path) => path.startsWith('/assets/img_') && path.endsWith('.png'),
@@ -491,18 +491,18 @@ test.describe('V6 用户旅程', () => {
   });
 });
 
-test.describe('外部文件单文件会话', () => {
-  test('双击 Markdown 文件进入只读预览，启用编辑后只保存当前文件', async ({ page }) => {
+test.describe('外部文件父目录笔记本会话', () => {
+  test('双击 Markdown 文件进入只读预览，启用编辑后打开父目录笔记本', async ({ page }) => {
     const externalPath = 'C:/Users/alice/Desktop/external.md';
     const siblingPath = 'C:/Users/alice/Desktop/sibling.md';
     await page.addInitScript((path) => {
       const sibling = 'C:/Users/alice/Desktop/sibling.md';
-      localStorage.removeItem('markluck:welcome:completed');
+      localStorage.removeItem('jotluck:welcome:completed');
       localStorage.setItem(
-        'markluck-recent-notebooks',
+        'jotluck-recent-notebooks',
         JSON.stringify(['C:/Users/alice/Desktop', 'D:/Notes/RealNotebook']),
       );
-      (window as any).__markluck_e2e = {
+      (window as any).__jotluck_e2e = {
         mockOpenedFile: { absolutePath: path },
         externalFiles: {
           [path]: [
@@ -521,6 +521,8 @@ test.describe('外部文件单文件会话', () => {
 
     await page.goto('http://localhost:5173/');
     await page.waitForLoadState('networkidle');
+    const visibleEditorText = async (): Promise<string> =>
+      (await page.locator('.editor-shell-frame .cm-content').last().textContent()) ?? '';
 
     await expect(page.locator('[data-testid="external-file-session"]')).toBeVisible({
       timeout: 10000,
@@ -532,42 +534,58 @@ test.describe('外部文件单文件会话', () => {
     await expect(page.getByRole('button', { name: '启用编辑' })).toBeVisible();
 
     await page.getByRole('button', { name: '启用编辑' }).click();
-    await expect(page.getByRole('dialog', { name: '启用单文件编辑' })).toBeVisible();
-    await page.getByRole('button', { name: '仅编辑当前文件' }).click();
     await expect(page.locator('.cm-content')).toBeVisible({ timeout: 5000 });
     await expect(page.locator('.topbar')).toBeVisible();
     await expect(page.locator('.format-toolbar')).toBeVisible();
     await expect(page.locator('.status-bar')).toBeVisible();
     await expect(page.locator('.left-wing')).toBeVisible();
-    await expect(page.locator('.wing-bookmark-dot[aria-label="external"]')).toHaveCount(1);
-    await expect(page.locator('.wing-bookmark-dot[aria-label="sibling"]')).toHaveCount(0);
+    await expect.poll(visibleEditorText, { timeout: 5000 }).toContain('外部文档');
+    await page.getByRole('button', { name: /当前即时|即时/ }).click();
+    await expect(page.getByRole('button', { name: /当前分栏|分栏/ })).toBeVisible({
+      timeout: 5000,
+    });
 
-    await appendInEditor(page, '\n\n已启用单文件编辑。');
+    const visibleEditorFrame = page.locator('.editor-shell-frame .cm-editor').last();
+    await visibleEditorFrame.click({ position: { x: 32, y: 32 } });
+    await expect(page.locator('.editor-shell-frame .cm-editor.cm-focused')).toBeVisible({
+      timeout: 3000,
+    });
+    await page.evaluate(() => {
+      (window as any).__jotluck_e2e?.editor?.setContent?.('# 外部文档\n\n已进入父目录笔记本编辑。');
+    });
+    expect(
+      await page.evaluate(() => (window as any).__jotluck_e2e?.debugState?.().activePath),
+    ).toBe('/external.md');
+    expect(
+      await page.evaluate(() => (window as any).__jotluck_e2e?.debugState?.().externalSessionMode),
+    ).toBe('none');
+    await expect.poll(visibleEditorText, { timeout: 5000 }).toContain('已进入父目录笔记本编辑');
     await expect
       .poll(
         () =>
-          page.evaluate(
-            (path) => (window as any).__markluck_e2e?.externalFiles?.[path] ?? '',
-            externalPath,
-          ),
-        { timeout: 10000 },
+          page.evaluate(() => (window as any).__jotluck_e2e?.debugState?.().currentContent ?? ''),
+        { timeout: 5000 },
       )
-      .toContain('已启用单文件编辑');
+      .toContain('已进入父目录笔记本编辑');
+    await waitForMockFileContent(page, '/external.md', '已进入父目录笔记本编辑');
 
     await page.locator('.topbar-btn--menu').click();
     await expect(page.locator('.file-drawer')).toBeVisible({ timeout: 3000 });
+    await expect(page.locator('.tree-item:has-text("external.md")')).toBeVisible();
     await expect(page.locator('.tree-item:has-text("sibling.md")')).toBeVisible();
-    await expect(page.locator('.wing-bookmark-dot[aria-label="sibling"]')).toHaveCount(0);
     await page.locator('.tree-item:has-text("sibling.md")').click({ force: true });
-    await expect.poll(() => getEditorContent(page), { timeout: 5000 }).toContain('同目录文件');
-    await expect(page.locator('.wing-bookmark-dot[aria-label="sibling"]')).toHaveCount(1);
+    await expect.poll(visibleEditorText, { timeout: 5000 }).toContain('同目录文件');
+    await page.locator('.topbar-btn--menu').click();
+    await expect(page.locator('.file-drawer')).toBeVisible({ timeout: 3000 });
+    await page.locator('.tree-item:has-text("external.md")').click({ force: true });
+    await expect.poll(visibleEditorText, { timeout: 5000 }).toContain('已进入父目录笔记本编辑');
 
-    const recent = await page.evaluate(() => localStorage.getItem('markluck-recent-notebooks'));
+    const recent = await page.evaluate(() => localStorage.getItem('jotluck-recent-notebooks'));
     expect(recent).not.toContain('external.md');
     expect(recent).not.toContain('sibling.md');
     expect(
       await page.evaluate(
-        (path) => (window as any).__markluck_e2e?.externalFiles?.[path],
+        (path) => (window as any).__jotluck_e2e?.externalFiles?.[path],
         siblingPath,
       ),
     ).toContain('同目录文件');

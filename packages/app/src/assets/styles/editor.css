@@ -180,26 +180,51 @@
   border-top: var(--border-medium) solid var(--rule);
 }
 
-/* ---- List Items — pure inline + ::before marker (no block ctx) ---- */
+/* ---- List Items — stable marker column + content column ---- */
 .cm-live-block[data-block-type='unorderedListItem'],
 .cm-live-block[data-block-type='orderedListItem'],
 .cm-live-block[data-block-type='taskListItem'] {
-  display: inline;
+  display: inline-grid;
+  grid-template-columns: max-content minmax(0, auto);
+  column-gap: var(--space-8);
+  align-items: start;
+  max-width: 100%;
+  vertical-align: top;
 }
 
-/* Unordered list: bullet marker via ::before */
 .cm-live-block[data-block-type='unorderedListItem']::before {
-  content: '\2022\00A0\00A0'; /* bullet + 2 nbsp */
+  content: none;
 }
 
-/* Task list: checkbox marker via ::before */
 .cm-live-block[data-block-type='taskListItem']::before {
-  content: '';
+  content: none;
+}
+
+.cm-list-marker-slot {
+  min-width: 2.25ch;
+  color: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.cm-list-marker {
+  display: inline-block;
+  min-width: 1.4ch;
+}
+
+.cm-list-content {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.cm-list-content > p {
+  display: inline;
 }
 
 .cm-live-block[data-block-type='taskListItem'] input[type='checkbox'],
 .cm-live-block[data-block-type='taskListItem'] .cm-task-toggle {
-  margin-right: var(--space-8);
   accent-color: var(--accent);
   cursor: pointer;
 }

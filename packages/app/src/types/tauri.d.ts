@@ -1,13 +1,15 @@
-import type { MarkluckE2EBridge } from '@/utils/e2e-bridge';
+import type { JotLuckE2EBridge } from '@/utils/e2e-bridge';
 
 /**
  * Runtime globals.
  *
- * `window.__markluck_e2e` is only created by the Vite `e2e` mode bridge.
+ * `window.__jotluck_e2e` is only created by the Vite `e2e` mode bridge.
  */
 declare global {
+  const __APP_VERSION__: string;
+
   interface Window {
-    __markluck_e2e?: MarkluckE2EBridge;
+    __jotluck_e2e?: JotLuckE2EBridge;
   }
 }
 

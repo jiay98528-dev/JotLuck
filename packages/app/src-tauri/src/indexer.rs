@@ -3,10 +3,11 @@
 // Builds and queries a full-text search index over supported note files
 // in the notebook directory. Supports incremental updates.
 
-use crate::path::display_path;
+use crate::fs_ops::NotebookRoot;
+use crate::path::{display_path, resolve_safe_path};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Mutex;
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
@@ -236,12 +237,16 @@ fn generate_snippet(content: &str, query: &str, max_len: usize) -> String {
 
 /// Build full index from all supported note files in the notebook.
 #[tauri::command]
-pub fn build_index(root_path: String, index: State<Mutex<SearchIndex>>) -> Result<usize, String> {
+pub fn build_index(
+    index: State<Mutex<SearchIndex>>,
+    root: State<NotebookRoot>,
+) -> Result<usize, String> {
+    let root_path = root.get().ok_or("未打开笔记本")?;
     let mut idx = index.lock().map_err(|e| e.to_string())?;
-    let index_dir = PathBuf::from(&root_path).join(".markluck_index");
+    let index_dir = root_path.join(".JotLuck_index");
     idx.open(&index_dir)?;
 
-    let root = Path::new(&root_path);
+    let root = root_path.as_path();
     let mut count = 0;
 
     for entry in walkdir::WalkDir::new(root)
@@ -274,20 +279,21 @@ pub fn build_index(root_path: String, index: State<Mutex<SearchIndex>>) -> Resul
 #[tauri::command]
 pub fn update_index_document(
     file_path: String,
-    root_path: String,
     index: State<Mutex<SearchIndex>>,
+    root: State<NotebookRoot>,
 ) -> Result<(), String> {
+    let root_path = root.get().ok_or("未打开笔记本")?;
     let idx = index.lock().map_err(|e| e.to_string())?;
-    let root = Path::new(&root_path);
-    let full = root.join(&file_path);
+    let full = resolve_safe_path(&root_path, &file_path).map_err(|e| e.to_string())?;
+    let indexed_path = display_path(&root_path, &full);
 
     if full.exists() {
         let content = fs::read_to_string(&full).unwrap_or_default();
         let title = extract_title(&content);
         let tags = extract_tags(&content);
-        idx.index_document(&file_path, &title, &content, &tags)?;
+        idx.index_document(&indexed_path, &title, &content, &tags)?;
     } else {
-        idx.remove_document(&file_path)?;
+        idx.remove_document(&indexed_path)?;
     }
 
     idx.commit()?;

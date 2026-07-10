@@ -251,7 +251,7 @@ test.describe('边界与压力测试', () => {
     await stableNote.click();
     await expect
       .poll(() => getEditorContent(page), { timeout: 10000 })
-      .toContain('欢迎使用 MarkLuck');
+      .toContain('欢迎使用 JotLuck');
     await expect(page.locator('.status-saved')).toBeVisible({ timeout: 10000 });
 
     // Should be able to type after switching
@@ -389,7 +389,7 @@ test.describe('边界与压力测试', () => {
       '}',
       '',
       '// Call the function',
-      'hello("MarkLuck");',
+      'hello("JotLuck");',
       '```',
       '',
       '```python',

@@ -3,7 +3,7 @@ import { recipe } from './recipe';
 import { tokens } from './tokens';
 
 const abilityLabModule: OfficialThemeModule = {
-  id: 'markluck.ability-lab',
+  id: 'jotluck.ability-lab',
   name: '能力验证台',
   catalogVisibility: 'developer',
   tags: ['local-market', 'ux-components', 'trusted-ready'],
@@ -55,12 +55,12 @@ const abilityLabModule: OfficialThemeModule = {
     },
   },
   css: `
-[data-theme-id='markluck.ability-lab'] .app-shell {
+[data-theme-id='jotluck.ability-lab'] .app-shell {
   background:
     linear-gradient(90deg, color-mix(in oklch, var(--accent-soft) 28%, transparent), transparent 30%),
     var(--paper-bg);
 }
-[data-theme-id='markluck.ability-lab'] .ux-topbar-lab {
+[data-theme-id='jotluck.ability-lab'] .ux-topbar-lab {
   min-height: var(--topbar-height);
   display: grid;
   grid-template-columns: auto minmax(140px, 0.8fr) minmax(220px, 1fr) auto;
@@ -70,7 +70,7 @@ const abilityLabModule: OfficialThemeModule = {
   border-bottom: var(--border-thin) solid color-mix(in oklch, var(--accent) 20%, var(--rule));
   background: color-mix(in oklch, var(--paper-surface) 90%, transparent);
 }
-[data-theme-id='markluck.ability-lab'] .ux-status-lab {
+[data-theme-id='jotluck.ability-lab'] .ux-status-lab {
   min-height: 34px;
   display: flex;
   align-items: center;

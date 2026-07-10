@@ -9,7 +9,7 @@
  */
 import type { ExportOptions, ExportResult } from '@/types';
 import { ExportFormat } from '@/types';
-import { renderMarkdown } from '@markluck/renderer';
+import { renderMarkdown } from '@jotluck/renderer';
 import {
   Document,
   Packer,
@@ -302,7 +302,7 @@ function buildTextRuns(tokens: Token[] | undefined, fmt: InlineFormat = {}): Tex
         runs.push(new TextRun({ text: t.text, ...fmt }));
         break;
       }
-      // Custom MarkLuck inline token types — render as plain text
+      // Custom JotLuck inline token types — render as plain text
       case 'wikiLink':
       case 'tag': {
         const t = token as { raw?: string; text?: string };
@@ -715,7 +715,7 @@ function exportCsv(md: string, fileName: string, options?: Partial<ExportOptions
 
   if (tables.length === 0) {
     // No tables — export the whole content as a single-cell CSV
-    triggerDownload(processed, `${fileName}.csv`, 'text/csv;charset=UTF-8');
+    triggerDownload(escapeCsvCell(processed), `${fileName}.csv`, 'text/csv;charset=UTF-8');
     return { success: true, format: ExportFormat.CSV, fileName: `${fileName}.csv` };
   }
 
@@ -732,10 +732,15 @@ function exportCsv(md: string, fileName: string, options?: Partial<ExportOptions
 }
 
 function escapeCsvCell(cell: string): string {
-  if (cell.includes(',') || cell.includes('"') || cell.includes('\n')) {
-    return `"${cell.replace(/"/g, '""')}"`;
+  const safeCell = protectCsvFormula(cell);
+  if (safeCell.includes(',') || safeCell.includes('"') || safeCell.includes('\n')) {
+    return `"${safeCell.replace(/"/g, '""')}"`;
   }
-  return cell;
+  return safeCell;
+}
+
+function protectCsvFormula(cell: string): string {
+  return /^[=+\-@\t\r]/.test(cell) ? `'${cell}` : cell;
 }
 
 // ============================================================================

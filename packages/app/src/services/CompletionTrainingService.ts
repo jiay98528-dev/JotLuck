@@ -1,8 +1,8 @@
 import type { DirEntry, IFileSystemService } from '@/types';
 import type { MarkdownPredictor } from './MarkdownPredictor';
 
-export const TRAINING_META_KEY = 'markluck:autocomplete:trainingMeta';
-export const TRAINING_META_EVENT = 'markluck:autocomplete:trainingMetaChanged';
+export const TRAINING_META_KEY = 'jotluck:autocomplete:trainingMeta';
+export const TRAINING_META_EVENT = 'jotluck:autocomplete:trainingMetaChanged';
 export const TRAINING_META_VERSION = 2;
 const MAX_TRAINING_FILE_SIZE = 512 * 1024;
 
@@ -35,9 +35,31 @@ export const DEFAULT_TRAINING_META: CompletionTrainingMeta = {
   failedPaths: {},
 };
 
-export function loadTrainingMeta(): CompletionTrainingMeta {
+function normalizeTrainingScope(scope: string): string {
+  const normalized = scope
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-');
+  return normalized || 'unscoped';
+}
+
+export function trainingMetaKeyForScope(scope = 'unscoped'): string {
+  return `jotluck:scope:${normalizeTrainingScope(scope)}:autocomplete:trainingMeta`;
+}
+
+function migrateLegacyTrainingMeta(scopedKey: string): void {
+  if (localStorage.getItem(scopedKey) === null) {
+    const legacy = localStorage.getItem(TRAINING_META_KEY);
+    if (legacy !== null) localStorage.setItem(scopedKey, legacy);
+  }
+  localStorage.removeItem(TRAINING_META_KEY);
+}
+
+export function loadTrainingMeta(scope = 'unscoped'): CompletionTrainingMeta {
   try {
-    const raw = localStorage.getItem(TRAINING_META_KEY);
+    const scopedKey = trainingMetaKeyForScope(scope);
+    migrateLegacyTrainingMeta(scopedKey);
+    const raw = localStorage.getItem(scopedKey);
     if (!raw) return createDefaultTrainingMeta();
     const parsed = JSON.parse(raw) as Partial<CompletionTrainingMeta>;
     if (parsed.version !== 1 && parsed.version !== TRAINING_META_VERSION) {
@@ -59,21 +81,33 @@ function createDefaultTrainingMeta(): CompletionTrainingMeta {
   return { ...DEFAULT_TRAINING_META, trainedPaths: {}, failedPaths: {} };
 }
 
-export function saveTrainingMeta(meta: CompletionTrainingMeta): void {
+export function saveTrainingMeta(meta: CompletionTrainingMeta, scope = 'unscoped'): void {
   const normalized = normalizeMeta(meta);
-  localStorage.setItem(TRAINING_META_KEY, JSON.stringify(normalized));
-  window.dispatchEvent(new CustomEvent(TRAINING_META_EVENT, { detail: normalized }));
+  const normalizedScope = normalizeTrainingScope(scope);
+  localStorage.setItem(trainingMetaKeyForScope(normalizedScope), JSON.stringify(normalized));
+  localStorage.removeItem(TRAINING_META_KEY);
+  window.dispatchEvent(
+    new CustomEvent(TRAINING_META_EVENT, { detail: { scope: normalizedScope, meta: normalized } }),
+  );
 }
 
 export function subscribeTrainingMeta(
   listener: (meta: CompletionTrainingMeta) => void,
+  getScope: () => string = () => 'unscoped',
 ): () => void {
   const handler = (event: Event) => {
-    listener((event as CustomEvent<CompletionTrainingMeta>).detail ?? loadTrainingMeta());
+    const detail = (event as CustomEvent<{ scope?: string; meta?: CompletionTrainingMeta }>).detail;
+    const scope = normalizeTrainingScope(getScope());
+    if (detail?.meta && normalizeTrainingScope(detail.scope ?? '') === scope) {
+      listener(detail.meta);
+      return;
+    }
+    listener(loadTrainingMeta(scope));
   };
   window.addEventListener(TRAINING_META_EVENT, handler);
   const storageHandler = (event: StorageEvent) => {
-    if (event.key === TRAINING_META_KEY) listener(loadTrainingMeta());
+    const scope = normalizeTrainingScope(getScope());
+    if (event.key === trainingMetaKeyForScope(scope)) listener(loadTrainingMeta(scope));
   };
   window.addEventListener('storage', storageHandler);
   return () => {
@@ -91,13 +125,17 @@ export class CompletionTrainingService {
     private readonly predictor: MarkdownPredictor,
   ) {}
 
+  private get storageScope(): string {
+    return this.predictor.getStorageScope();
+  }
+
   async trainNotebook(entries: DirEntry[]): Promise<void> {
     if (this.running) return;
     this.running = true;
     const generation = this.generation;
     const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     let meta: CompletionTrainingMeta = {
-      ...loadTrainingMeta(),
+      ...loadTrainingMeta(this.storageScope),
       status: 'training',
       lastError: undefined,
       successCount: 0,
@@ -106,7 +144,7 @@ export class CompletionTrainingService {
       lastRunId: runId,
     };
     if (!this.isCurrentGeneration(generation)) return;
-    saveTrainingMeta(meta);
+    saveTrainingMeta(meta, this.storageScope);
 
     try {
       await this.predictor.initialize();
@@ -128,7 +166,7 @@ export class CompletionTrainingService {
           }
         }
         meta = normalizeMeta({ ...meta, status: 'training', updatedAt: Date.now() });
-        saveTrainingMeta(meta);
+        saveTrainingMeta(meta, this.storageScope);
         await idleDelay();
       }
       if (!this.isCurrentGeneration(generation)) return;
@@ -143,6 +181,7 @@ export class CompletionTrainingService {
               ? `${meta.failureCount} file(s) failed during autocomplete training`
               : undefined,
         }),
+        this.storageScope,
       );
     } catch (error) {
       if (!this.isCurrentGeneration(generation)) return;
@@ -153,6 +192,7 @@ export class CompletionTrainingService {
           updatedAt: Date.now(),
           lastError: error instanceof Error ? error.message : String(error),
         }),
+        this.storageScope,
       );
     } finally {
       this.running = false;
@@ -170,19 +210,25 @@ export class CompletionTrainingService {
     if (size > MAX_TRAINING_FILE_SIZE) return;
     await this.predictor.initialize();
     this.predictor.ingestDocument(path, stripUntrainableMarkdown(content), true);
-    const meta = loadTrainingMeta();
+    const meta = loadTrainingMeta(this.storageScope);
     meta.trainedPaths[path] = {
       mtime: stat?.mtime ?? Date.now(),
       size,
     };
-    saveTrainingMeta(normalizeMeta({ ...meta, status: 'done', updatedAt: Date.now() }));
+    saveTrainingMeta(
+      normalizeMeta({ ...meta, status: 'done', updatedAt: Date.now() }),
+      this.storageScope,
+    );
   }
 
   removePath(path: string): void {
-    const meta = loadTrainingMeta();
+    const meta = loadTrainingMeta(this.storageScope);
     if (!(path in meta.trainedPaths)) return;
     delete meta.trainedPaths[path];
-    saveTrainingMeta(normalizeMeta({ ...meta, status: 'done', updatedAt: Date.now() }));
+    saveTrainingMeta(
+      normalizeMeta({ ...meta, status: 'done', updatedAt: Date.now() }),
+      this.storageScope,
+    );
   }
 
   private async trainEntry(

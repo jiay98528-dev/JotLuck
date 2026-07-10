@@ -112,7 +112,7 @@ function setLineNumbers(visible: boolean): void {
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│ [三] MarkLuck                [分栏] [↑] [↗] [☀]   │ ← TopBar 44px
+│ [三] JotLuck                [分栏] [↑] [↗] [☀]   │ ← TopBar 44px
 │─────────────────────────────────────────────────────│
 │                     │                               │
 │   CodeMirror 6      │   Markdown Preview            │

@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 use tauri::State;
 
 static WRITE_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -29,6 +30,37 @@ impl NotebookRoot {
         if let Ok(mut root) = self.0.lock() {
             *root = Some(path);
         }
+    }
+}
+
+/// In-memory state: external roots explicitly opened through file association or UI flow.
+pub struct ExternalAccessRoots(pub Mutex<Vec<PathBuf>>);
+
+impl ExternalAccessRoots {
+    pub fn new() -> Self {
+        Self(Mutex::new(Vec::new()))
+    }
+
+    pub fn allow_root_path(&self, root_path: &str) -> Result<(), String> {
+        let root = resolve_external_root(root_path)?;
+        self.allow_root(root);
+        Ok(())
+    }
+
+    pub fn allow_root(&self, root: PathBuf) {
+        let Ok(mut roots) = self.0.lock() else {
+            return;
+        };
+        if !roots.iter().any(|existing| existing == &root) {
+            roots.push(root);
+        }
+    }
+
+    fn is_allowed_path(&self, path: &Path) -> bool {
+        let Ok(roots) = self.0.lock() else {
+            return false;
+        };
+        roots.iter().any(|root| path.starts_with(root))
     }
 }
 
@@ -107,6 +139,68 @@ fn resolve_external_note_file(absolute_path: &str) -> Result<PathBuf, String> {
     }
     path.canonicalize()
         .map_err(|e| format!("无法解析外部文件路径: {}", e))
+}
+
+fn resolve_external_markdown_file_for_write(absolute_path: &str) -> Result<PathBuf, String> {
+    resolve_external_file_for_write(absolute_path, true)
+}
+
+fn resolve_external_note_file_for_write(absolute_path: &str) -> Result<PathBuf, String> {
+    resolve_external_file_for_write(absolute_path, false)
+}
+
+fn resolve_external_file_for_write(
+    absolute_path: &str,
+    markdown_only: bool,
+) -> Result<PathBuf, String> {
+    let path = PathBuf::from(absolute_path);
+    if !path.is_absolute() {
+        return Err("外部文件路径必须是绝对路径".to_string());
+    }
+    if markdown_only && !is_markdown_like_file(absolute_path) {
+        return Err("仅支持打开 .md/.markdown/.mdx 文件".to_string());
+    }
+    if !markdown_only && !is_supported_note_file(absolute_path) {
+        return Err("仅支持打开 .md/.markdown/.mdx/.txt 文件".to_string());
+    }
+    if path.exists() {
+        if !path.is_file() {
+            return Err(format!("路径不是文件: {}", absolute_path));
+        }
+        return path
+            .canonicalize()
+            .map_err(|e| format!("无法解析外部文件路径: {}", e));
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| "外部文件缺少父目录".to_string())?;
+    if !parent.exists() || !parent.is_dir() {
+        return Err(format!("父目录不存在: {}", parent.display()));
+    }
+    let parent = parent
+        .canonicalize()
+        .map_err(|e| format!("无法解析外部文件父目录: {}", e))?;
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| "外部文件缺少文件名".to_string())?;
+    Ok(parent.join(file_name))
+}
+
+fn ensure_external_path_allowed(access: &ExternalAccessRoots, path: &Path) -> Result<(), String> {
+    if access.is_allowed_path(path) {
+        Ok(())
+    } else {
+        Err("外部文件未通过本次会话授权".to_string())
+    }
+}
+
+/// Register an external root selected by a first-party UI flow such as file association or save dialog.
+#[tauri::command]
+pub fn register_external_access_root(
+    root_path: String,
+    access: State<ExternalAccessRoots>,
+) -> Result<(), String> {
+    access.allow_root_path(&root_path)
 }
 
 fn unique_write_temp_path(target: &Path) -> Result<PathBuf, String> {
@@ -218,7 +312,7 @@ fn write_sample_file_if_missing(root_path: &Path, name: &str, content: &str) -> 
 /// Open or create the first-run sample notebook under the user's app data directory.
 #[tauri::command]
 pub fn open_sample_notebook(root: State<NotebookRoot>) -> Result<String, String> {
-    let sample_root = local_app_data_dir()?.join("MarkLuck").join("示例笔记本");
+    let sample_root = local_app_data_dir()?.join("JotLuck").join("示例笔记本");
     fs::create_dir_all(&sample_root).map_err(|e| format!("创建示例笔记本失败: {}", e))?;
 
     write_sample_file_if_missing(
@@ -232,9 +326,9 @@ tags:
 created: 2026-06-01
 ---
 
-# 欢迎使用 MarkLuck
+# 欢迎使用 JotLuck
 
-MarkLuck 是一款轻量、本地优先、离线可用的 Markdown 笔记工具。每一条笔记都是普通的 .md 文件，文件夹就是笔记本。
+JotLuck 是一款轻量、本地优先、离线可用的 Markdown 笔记工具。每一条笔记都是普通的 .md 文件，文件夹就是笔记本。
 
 ## 从这里开始
 
@@ -243,9 +337,9 @@ MarkLuck 是一款轻量、本地优先、离线可用的 Markdown 笔记工具�
 - 使用 Ctrl+K 搜索笔记、标签和正文。
 - 通过 [[格式示例]] 查看常用 Markdown 写法。
 - 关联项目资料：[[项目规划]]。
-- 外部链接示例：[MarkLuck GitHub](https://github.com)。
+- 外部链接示例：[JotLuck GitHub](https://github.com)。
 
-> MarkLuck 只增强写作体验，不接管你的数据。
+> JotLuck 只增强写作体验，不接管你的数据。
 "#,
     )?;
     write_sample_file_if_missing(
@@ -344,8 +438,10 @@ pub fn list_directory(
 pub fn list_external_note_directory(
     root_path: String,
     relative_path: String,
+    access: State<ExternalAccessRoots>,
 ) -> Result<Vec<DirEntry>, String> {
     let root_path = resolve_external_root(&root_path)?;
+    ensure_external_path_allowed(&access, &root_path)?;
     list_directory_at(&root_path, &relative_path)
 }
 
@@ -364,6 +460,9 @@ fn list_directory_at(root_path: &PathBuf, relative_path: &str) -> Result<Vec<Dir
 
         // The file drawer is a note manager: show directories and editable text notes only.
         let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') {
+            continue;
+        }
         if !file_type.is_dir() && !is_supported_note_file(&name) {
             continue;
         }
@@ -412,15 +511,30 @@ fn read_file_at(root_path: &PathBuf, relative_path: &str) -> Result<String, Stri
 
 /// Read one markdown-family file by absolute path without opening its parent as notebook.
 #[tauri::command]
-pub fn read_external_markdown_file(absolute_path: String) -> Result<String, String> {
-    let target = resolve_external_markdown_file(&absolute_path)?;
+pub fn read_external_markdown_file(
+    absolute_path: String,
+    access: State<ExternalAccessRoots>,
+) -> Result<String, String> {
+    read_external_markdown_file_with_access(&absolute_path, &access)
+}
+
+fn read_external_markdown_file_with_access(
+    absolute_path: &str,
+    access: &ExternalAccessRoots,
+) -> Result<String, String> {
+    let target = resolve_external_markdown_file(absolute_path)?;
+    ensure_external_path_allowed(access, &target)?;
     fs::read_to_string(&target).map_err(|e| format!("读取外部文件失败: {}", e))
 }
 
 /// Read one supported text note by absolute path without opening its parent as notebook.
 #[tauri::command]
-pub fn read_external_note_file(absolute_path: String) -> Result<String, String> {
+pub fn read_external_note_file(
+    absolute_path: String,
+    access: State<ExternalAccessRoots>,
+) -> Result<String, String> {
     let target = resolve_external_note_file(&absolute_path)?;
+    ensure_external_path_allowed(&access, &target)?;
     fs::read_to_string(&target).map_err(|e| format!("读取外部文件失败: {}", e))
 }
 
@@ -451,15 +565,33 @@ fn write_file_at(root_path: &PathBuf, relative_path: &str, content: &str) -> Res
 
 /// Write one markdown-family file by absolute path without opening its parent as notebook.
 #[tauri::command]
-pub fn write_external_markdown_file(absolute_path: String, content: String) -> Result<(), String> {
-    let target = resolve_external_markdown_file(&absolute_path)?;
-    write_text_file_atomically(&target, &content).map_err(|e| format!("保存外部文件失败: {}", e))
+pub fn write_external_markdown_file(
+    absolute_path: String,
+    content: String,
+    access: State<ExternalAccessRoots>,
+) -> Result<(), String> {
+    write_external_markdown_file_with_access(&absolute_path, &content, &access)
+}
+
+fn write_external_markdown_file_with_access(
+    absolute_path: &str,
+    content: &str,
+    access: &ExternalAccessRoots,
+) -> Result<(), String> {
+    let target = resolve_external_markdown_file_for_write(absolute_path)?;
+    ensure_external_path_allowed(access, &target)?;
+    write_text_file_atomically(&target, content).map_err(|e| format!("保存外部文件失败: {}", e))
 }
 
 /// Write one supported text note by absolute path without opening its parent as notebook.
 #[tauri::command]
-pub fn write_external_note_file(absolute_path: String, content: String) -> Result<(), String> {
-    let target = resolve_external_note_file(&absolute_path)?;
+pub fn write_external_note_file(
+    absolute_path: String,
+    content: String,
+    access: State<ExternalAccessRoots>,
+) -> Result<(), String> {
+    let target = resolve_external_note_file_for_write(&absolute_path)?;
+    ensure_external_path_allowed(&access, &target)?;
     write_text_file_atomically(&target, &content).map_err(|e| format!("保存外部文件失败: {}", e))
 }
 
@@ -607,7 +739,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("markluck-{name}-{suffix}"));
+        let root = std::env::temp_dir().join(format!("JotLuck-{name}-{suffix}"));
         std::fs::create_dir_all(&root).unwrap();
         root
     }
@@ -718,12 +850,14 @@ mod tests {
         let target = root.join("external.mdx");
         std::fs::write(&target, "# External").unwrap();
         let path = target.to_string_lossy().to_string();
+        let access = ExternalAccessRoots::new();
+        access.allow_root(root.canonicalize().unwrap());
 
         assert_eq!(
-            read_external_markdown_file(path.clone()).unwrap(),
+            read_external_markdown_file_with_access(&path, &access).unwrap(),
             "# External"
         );
-        write_external_markdown_file(path.clone(), "# Changed\n\n内容".to_string()).unwrap();
+        write_external_markdown_file_with_access(&path, "# Changed\n\n内容", &access).unwrap();
         assert_eq!(
             std::fs::read_to_string(&target).unwrap(),
             "# Changed\n\n内容"
@@ -733,13 +867,55 @@ mod tests {
     }
 
     #[test]
+    fn external_note_file_write_allows_new_file_under_registered_root() {
+        let root = temp_notebook("external-new-file");
+        let target = root.join("saved.md");
+        let access = ExternalAccessRoots::new();
+        access.allow_root(root.canonicalize().unwrap());
+
+        write_external_markdown_file_with_access(
+            target.to_string_lossy().as_ref(),
+            "# Saved",
+            &access,
+        )
+        .unwrap();
+
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "# Saved");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn external_markdown_file_rejects_txt_and_directories() {
         let root = temp_notebook("external-reject");
         let txt = root.join("plain.txt");
         std::fs::write(&txt, "plain").unwrap();
+        let access = ExternalAccessRoots::new();
+        access.allow_root(root.canonicalize().unwrap());
 
-        assert!(read_external_markdown_file(txt.to_string_lossy().to_string()).is_err());
-        assert!(read_external_markdown_file(root.to_string_lossy().to_string()).is_err());
+        assert!(
+            read_external_markdown_file_with_access(txt.to_string_lossy().as_ref(), &access)
+                .is_err()
+        );
+        assert!(
+            read_external_markdown_file_with_access(root.to_string_lossy().as_ref(), &access)
+                .is_err()
+        );
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn external_markdown_file_rejects_unregistered_root() {
+        let root = temp_notebook("external-unregistered");
+        let target = root.join("external.md");
+        std::fs::write(&target, "# External").unwrap();
+        let access = ExternalAccessRoots::new();
+
+        assert!(read_external_markdown_file_with_access(
+            target.to_string_lossy().as_ref(),
+            &access
+        )
+        .is_err());
 
         std::fs::remove_dir_all(root).unwrap();
     }

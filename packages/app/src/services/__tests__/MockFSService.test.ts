@@ -15,7 +15,7 @@ describe('MockFSService sample notebook', () => {
     expect(names).toContain('快速入门.md');
     expect(names).toContain('格式示例.md');
 
-    await expect(fs.readFile('/快速入门.md')).resolves.toContain('欢迎使用 MarkLuck');
+    await expect(fs.readFile('/快速入门.md')).resolves.toContain('欢迎使用 JotLuck');
     await expect(fs.readFile('/格式示例.md')).resolves.toContain('# 格式示例');
   });
 
@@ -55,7 +55,7 @@ describe('MockFSService sample notebook', () => {
 
     await memoryFs.writeFile('/draft.md', '# Draft');
 
-    expect(localStorage.getItem('markluck-mockfs')).toBeNull();
+    expect(localStorage.getItem('jotluck-mockfs')).toBeNull();
     await expect(new MockFSService(0).readFile('/draft.md')).rejects.toThrow();
   });
 

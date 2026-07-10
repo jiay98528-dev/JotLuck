@@ -1,4 +1,4 @@
-# MarkLuck v0.15.0-rc.1 Release Notes
+# JotLuck v0.15.0-rc.1 Release Notes
 
 Date: 2026-06-30
 
@@ -24,6 +24,14 @@ evidence into one reviewable candidate.
   navigation regressions have been closed.
 - Startup update checks no longer contact GitHub when automatic checks are
   disabled.
+- App identity and release links now come from a single `app-meta` source so
+  repository URLs, Issues links, license links, and update checks do not drift.
+- Tauri permissions have been narrowed by removing unscoped `shell:allow-open`;
+  `withGlobalTauri=false` and non-empty CSP are covered by static tests.
+- The native file watcher now has an explicit stop/replace lifecycle instead of
+  leaking the watcher for the process lifetime.
+- Markdown rendering boundaries now have regression coverage for Setext
+  headings, table/list semantics, fenced code, and bare JSON-like blocks.
 - High-severity npm audit findings have been removed from the current pnpm
   dependency graph.
 - XLSX export no longer depends on SheetJS `xlsx`; it uses
@@ -33,10 +41,10 @@ evidence into one reviewable candidate.
 
 | Gate                | Status           | Evidence                                                      |
 | ------------------- | ---------------- | ------------------------------------------------------------- |
-| TypeScript          | Passed           | `pnpm.cmd --filter @markluck/app typecheck`                   |
+| TypeScript          | Passed           | `pnpm.cmd --filter @jotluck/app typecheck`                    |
 | ESLint              | Passed           | `pnpm.cmd exec eslint packages/app/src packages/renderer/src` |
-| Stylelint           | Passed           | `pnpm.cmd --filter @markluck/app lint:style`                  |
-| Unit tests          | Passed           | `vitest` 187/187                                              |
+| Stylelint           | Passed           | `pnpm.cmd --filter @jotluck/app lint:style`                   |
+| Unit tests          | Passed           | `vitest` suite                                                |
 | Web build           | Passed           | Vite build completed                                          |
 | High npm audit      | Passed           | Remaining advisories are low/moderate                         |
 | Chromium E2E        | Passed           | 140 passed                                                    |
@@ -51,7 +59,7 @@ evidence into one reviewable candidate.
 - Notes remain plain text files. The app opens and manages `.md`, `.markdown`,
   `.mdx`, and `.txt` files as notes.
 - Windows installer registration covers `.md`, `.markdown`, and `.mdx`.
-  MarkLuck intentionally does not hijack the default `.txt` association.
+  JotLuck intentionally does not hijack the default `.txt` association.
 - External Markdown-family files opened from Windows use a single-file
   read-only session by default. Enabling edit mode saves only that file and
   does not add the parent directory as a notebook.
@@ -82,5 +90,5 @@ file-open with the single-file read-only/edit session described above.
 Current package hash supersedes earlier RC hashes:
 
 - Installer:
-  `packages/app/src-tauri/target/release/bundle/nsis/MarkLuck_0.15.0_x64-setup.exe`
+  `packages/app/src-tauri/target/release/bundle/nsis/JotLuck_0.15.0_x64-setup.exe`
 - SHA256: record in the installed-app L4 report for the exact published build.

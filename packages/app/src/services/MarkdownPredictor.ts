@@ -72,10 +72,10 @@ import type {
 
 export type { PredictorIndexData, SyntaxContext, SyntaxType };
 
-const L2_STORAGE_KEY = 'markluck:ngram:v2';
-const L2_META_KEY = 'markluck:ngram:meta';
-const SHORT_L2_STORAGE_KEY = 'markluck:ngram:short:v1';
-export const ACCEPTED_LEXICON_STORAGE_KEY = 'markluck:autocomplete:acceptedLexicon:v1';
+const LEGACY_L2_STORAGE_KEY = 'jotluck:ngram:v2';
+const LEGACY_L2_META_KEY = 'jotluck:ngram:meta';
+const LEGACY_SHORT_L2_STORAGE_KEY = 'jotluck:ngram:short:v1';
+export const ACCEPTED_LEXICON_STORAGE_KEY = 'jotluck:autocomplete:acceptedLexicon:v1';
 
 interface L2Meta {
   v?: number;
@@ -101,6 +101,51 @@ function normalizeL2Meta(meta: Partial<L2Meta>): L2Meta {
     migratedFrom: legacyVersion && legacyVersion < 3 ? legacyVersion : meta.migratedFrom,
     lastError: typeof meta.lastError === 'string' ? meta.lastError : undefined,
   };
+}
+
+function normalizeStorageScope(scope: string): string {
+  const normalized = scope
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-');
+  return normalized || 'unscoped';
+}
+
+function scopedLearningKey(scope: string, suffix: string): string {
+  return `jotluck:scope:${normalizeStorageScope(scope)}:${suffix}`;
+}
+
+function removeLegacyLearningStorage(): void {
+  localStorage.removeItem(LEGACY_L2_STORAGE_KEY);
+  localStorage.removeItem(LEGACY_SHORT_L2_STORAGE_KEY);
+  localStorage.removeItem(LEGACY_L2_META_KEY);
+  localStorage.removeItem(ACCEPTED_LEXICON_STORAGE_KEY);
+}
+
+function migrateLegacyLearningStorage(keys: {
+  l2: string;
+  shortL2: string;
+  meta: string;
+  acceptedLexicon: string;
+}): void {
+  const hasScopedData =
+    localStorage.getItem(keys.l2) !== null ||
+    localStorage.getItem(keys.shortL2) !== null ||
+    localStorage.getItem(keys.meta) !== null ||
+    localStorage.getItem(keys.acceptedLexicon) !== null;
+  if (!hasScopedData) {
+    const migrations: Array<[string, string]> = [
+      [LEGACY_L2_STORAGE_KEY, keys.l2],
+      [LEGACY_SHORT_L2_STORAGE_KEY, keys.shortL2],
+      [LEGACY_L2_META_KEY, keys.meta],
+      [ACCEPTED_LEXICON_STORAGE_KEY, keys.acceptedLexicon],
+    ];
+    for (const [legacyKey, scopedKey] of migrations) {
+      const value = localStorage.getItem(legacyKey);
+      if (value !== null) localStorage.setItem(scopedKey, value);
+    }
+  }
+  removeLegacyLearningStorage();
 }
 
 export class MarkdownPredictor {
@@ -129,6 +174,7 @@ export class MarkdownPredictor {
   private lastPredictionFeedbackKey: string | null = null;
   private lastPredictionRejectionKey: string | null = null;
   private lastPredictionLearningKey: string | null = null;
+  private storageScope = 'unscoped';
 
   constructor(private readonly n: number = 4) {}
 
@@ -146,6 +192,18 @@ export class MarkdownPredictor {
 
   getSettings(): CompletionSettings {
     return { ...this.settings };
+  }
+
+  setStorageScope(scope: string): void {
+    const normalized = normalizeStorageScope(scope);
+    if (normalized === this.storageScope) return;
+    this.storageScope = normalized;
+    this.resetPersistentLearningState();
+    this.loadFromLocalStorage();
+  }
+
+  getStorageScope(): string {
+    return this.storageScope;
   }
 
   async initialize(): Promise<void> {
@@ -316,14 +374,11 @@ export class MarkdownPredictor {
   }
 
   clearLearningData(): void {
-    this.l2 = new Map();
-    this.shortL2 = new Map();
+    this.resetPersistentLearningState();
     this.recentPhrases = [];
-    this.acceptedLexicon = [];
     this.rejectionCounts.clear();
     this.acceptedBoosts.clear();
     this.accessTimestamps.clear();
-    this.entryFlags.clear();
     this.lastPredictionProviderId = null;
     this.lastPredictionSourceLayer = undefined;
     this.lastPredictionSyntaxType = undefined;
@@ -331,12 +386,12 @@ export class MarkdownPredictor {
     this.lastPredictionFeedbackKey = null;
     this.lastPredictionRejectionKey = null;
     this.lastPredictionLearningKey = null;
-    this.l2Meta = { schemaVersion: 3, docs: 0, totalEntries: 0, lastSave: Date.now() };
-
-    localStorage.removeItem(L2_STORAGE_KEY);
-    localStorage.removeItem(SHORT_L2_STORAGE_KEY);
-    localStorage.removeItem(L2_META_KEY);
-    localStorage.removeItem(ACCEPTED_LEXICON_STORAGE_KEY);
+    const keys = this.storageKeys();
+    localStorage.removeItem(keys.l2);
+    localStorage.removeItem(keys.shortL2);
+    localStorage.removeItem(keys.meta);
+    localStorage.removeItem(keys.acceptedLexicon);
+    removeLegacyLearningStorage();
     clearCompletionMetrics();
     clearLearningSignals();
     this.learningSignals = loadLearningSignals();
@@ -363,6 +418,30 @@ export class MarkdownPredictor {
   private async initializeOnce(): Promise<void> {
     this.loadFromLocalStorage();
     await this.loadBaseline();
+  }
+
+  private storageKeys(): {
+    l2: string;
+    shortL2: string;
+    meta: string;
+    acceptedLexicon: string;
+  } {
+    return {
+      l2: scopedLearningKey(this.storageScope, 'ngram:v2'),
+      shortL2: scopedLearningKey(this.storageScope, 'ngram:short:v1'),
+      meta: scopedLearningKey(this.storageScope, 'ngram:meta'),
+      acceptedLexicon: scopedLearningKey(this.storageScope, 'autocomplete:acceptedLexicon:v1'),
+    };
+  }
+
+  private resetPersistentLearningState(): void {
+    this.l2 = new Map();
+    this.shortL2 = new Map();
+    this.acceptedLexicon = [];
+    this.accessTimestamps.clear();
+    this.entryFlags.clear();
+    for (const ctx of this.l3.keys()) this.entryFlags.set(ctx, 'b');
+    this.l2Meta = { schemaVersion: 3, docs: 0, totalEntries: 0, lastSave: Date.now() };
   }
 
   private createProviders(): CompletionProvider[] {
@@ -564,26 +643,29 @@ export class MarkdownPredictor {
   }
 
   private saveToLocalStorage(): void {
+    const keys = this.storageKeys();
     try {
-      localStorage.setItem(L2_STORAGE_KEY, serialize(this.l2));
-      localStorage.setItem(SHORT_L2_STORAGE_KEY, serialize(this.shortL2));
-      localStorage.setItem(ACCEPTED_LEXICON_STORAGE_KEY, JSON.stringify(this.acceptedLexicon));
+      localStorage.setItem(keys.l2, serialize(this.l2));
+      localStorage.setItem(keys.shortL2, serialize(this.shortL2));
+      localStorage.setItem(keys.acceptedLexicon, JSON.stringify(this.acceptedLexicon));
       this.l2Meta.lastSave = Date.now();
       this.l2Meta.totalEntries = this.l2.size + this.shortL2.size;
       this.l2Meta.schemaVersion = 3;
       this.l2Meta.lastError = undefined;
-      localStorage.setItem(L2_META_KEY, JSON.stringify(this.l2Meta));
+      localStorage.setItem(keys.meta, JSON.stringify(this.l2Meta));
+      removeLegacyLearningStorage();
     } catch {
       this.forceEliminate();
       try {
-        localStorage.setItem(L2_STORAGE_KEY, serialize(this.l2));
-        localStorage.setItem(SHORT_L2_STORAGE_KEY, serialize(this.shortL2));
-        localStorage.setItem(ACCEPTED_LEXICON_STORAGE_KEY, JSON.stringify(this.acceptedLexicon));
+        localStorage.setItem(keys.l2, serialize(this.l2));
+        localStorage.setItem(keys.shortL2, serialize(this.shortL2));
+        localStorage.setItem(keys.acceptedLexicon, JSON.stringify(this.acceptedLexicon));
         this.l2Meta.schemaVersion = 3;
         this.l2Meta.totalEntries = this.l2.size + this.shortL2.size;
         this.l2Meta.lastSave = Date.now();
         this.l2Meta.lastError = undefined;
-        localStorage.setItem(L2_META_KEY, JSON.stringify(this.l2Meta));
+        localStorage.setItem(keys.meta, JSON.stringify(this.l2Meta));
+        removeLegacyLearningStorage();
       } catch {
         this.l2Meta.lastError = 'storage-write-failed';
         // Storage is best-effort.
@@ -593,13 +675,15 @@ export class MarkdownPredictor {
 
   private loadFromLocalStorage(): void {
     try {
-      const compact = localStorage.getItem(L2_STORAGE_KEY);
+      const keys = this.storageKeys();
+      migrateLegacyLearningStorage(keys);
+      const compact = localStorage.getItem(keys.l2);
       if (compact) this.l2 = deserialize(compact);
-      const shortCompact = localStorage.getItem(SHORT_L2_STORAGE_KEY);
+      const shortCompact = localStorage.getItem(keys.shortL2);
       if (shortCompact) this.shortL2 = deserialize(shortCompact);
-      const meta = localStorage.getItem(L2_META_KEY);
+      const meta = localStorage.getItem(keys.meta);
       if (meta) this.l2Meta = normalizeL2Meta(JSON.parse(meta) as Partial<L2Meta>);
-      const acceptedLexicon = localStorage.getItem(ACCEPTED_LEXICON_STORAGE_KEY);
+      const acceptedLexicon = localStorage.getItem(keys.acceptedLexicon);
       if (acceptedLexicon) {
         const parsed = JSON.parse(acceptedLexicon) as unknown;
         this.acceptedLexicon = Array.isArray(parsed)

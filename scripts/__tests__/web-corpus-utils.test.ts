@@ -212,7 +212,7 @@ describe('web corpus training profiles', () => {
   });
 
   it('scans web-local clean files fragment by fragment without cross-fragment ngrams', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'markluck-web-corpus-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'JotLuck-web-corpus-'));
     const cleanDir = path.join(root, '_web-cache', '_clean', 'zh-cn', 'note');
     fs.mkdirSync(cleanDir, { recursive: true });
     const filePath = path.join(cleanDir, 'sample.md');
@@ -224,7 +224,7 @@ describe('web corpus training profiles', () => {
   });
 
   it('skips mixed-language clean fragments when requested', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'markluck-web-corpus-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'JotLuck-web-corpus-'));
     const cleanDir = path.join(root, '_web-cache', '_clean', 'zh-cn', 'note');
     fs.mkdirSync(cleanDir, { recursive: true });
     const filePath = path.join(cleanDir, 'sample.md');

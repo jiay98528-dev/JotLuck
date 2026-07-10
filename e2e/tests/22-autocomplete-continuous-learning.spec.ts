@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+﻿import { expect, test, type Page } from '@playwright/test';
 
 interface LearningStats {
   opportunities: number;
@@ -25,12 +25,15 @@ test.describe('autocomplete continuous local learning', () => {
     const crashErrors = collectGhostCrashErrors(page);
     await openApp(page);
     await page.evaluate(() => {
-      localStorage.removeItem('markluck:autocomplete:learningSignals:v1');
-      localStorage.removeItem('markluck:autocomplete:providerMetrics:v2');
-      localStorage.removeItem('markluck:ngram:v2');
-      localStorage.removeItem('markluck:ngram:short:v1');
-      localStorage.removeItem('markluck:ngram:meta');
-      localStorage.removeItem('markluck:autocomplete:acceptedLexicon:v1');
+      localStorage.removeItem('jotluck:autocomplete:learningSignals:v1');
+      localStorage.removeItem('jotluck:autocomplete:providerMetrics:v2');
+      localStorage.removeItem('jotluck:ngram:v2');
+      localStorage.removeItem('jotluck:ngram:short:v1');
+      localStorage.removeItem('jotluck:ngram:meta');
+      localStorage.removeItem('jotluck:autocomplete:acceptedLexicon:v1');
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith('jotluck:scope:')) localStorage.removeItem(key);
+      }
     });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await openApp(page);
@@ -121,7 +124,7 @@ function rate(value: number, total: number): number {
 }
 
 async function openApp(page: Page): Promise<void> {
-  await page.goto(process.env.MARKLUCK_E2E_BASE_URL ?? 'http://localhost:5173', {
+  await page.goto(process.env.JOTLUCK_E2E_BASE_URL ?? 'http://localhost:5173', {
     waitUntil: 'domcontentloaded',
   });
 
@@ -169,7 +172,7 @@ async function readPrediction(
   page: Page,
 ): Promise<{ sourceLayer?: string; providerId?: string } | null> {
   return page.evaluate(() => {
-    const prediction = window.__markluck_e2e?.editor?.getPrediction?.();
+    const prediction = window.__jotluck_e2e?.editor?.getPrediction?.();
     return prediction
       ? { sourceLayer: prediction.sourceLayer, providerId: prediction.providerId }
       : null;

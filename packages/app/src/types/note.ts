@@ -1,5 +1,5 @@
 // ============================================================
-// MarkLuck — Note 核心类型定义
+// JotLuck — Note 核心类型定义
 // ============================================================
 // Source: spec/types/note.ts + spec/types/editor.ts (BlockType)
 
@@ -40,7 +40,7 @@ export interface WikiLink {
   isValid: boolean;
 }
 
-/** MarkLuck 核心实体 — 笔记 */
+/** JotLuck 核心实体 — 笔记 */
 export interface Note {
   id: string;
   title: string;

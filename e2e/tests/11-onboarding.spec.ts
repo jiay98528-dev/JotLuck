@@ -11,7 +11,7 @@ async function clearStartupFlags(page: Page) {
   await page.evaluate(() => {
     for (let i = localStorage.length - 1; i >= 0; i -= 1) {
       const key = localStorage.key(i);
-      if (key?.startsWith('markluck:welcome')) localStorage.removeItem(key);
+      if (key?.startsWith('jotluck:welcome')) localStorage.removeItem(key);
     }
   });
 }
@@ -24,7 +24,7 @@ test.describe('启动体验', () => {
 
   test('01-首次访问不再显示欢迎向导', async ({ page }) => {
     await expect(page.locator('.welcome-overlay')).toHaveCount(0);
-    await expect(page.locator('#markluck-app')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#jotluck-app')).toBeVisible({ timeout: 5000 });
   });
 
   test('02-首次访问直接进入完整编辑工作区', async ({ page }) => {

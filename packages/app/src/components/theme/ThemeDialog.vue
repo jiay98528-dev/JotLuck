@@ -37,7 +37,7 @@
             <section class="theme-section">
               <div class="theme-section__head">
                 <h3>内置主题</h3>
-                <p>这些主题随 MarkLuck 一起提供，适合日常写作和整理。</p>
+                <p>这些主题随 JotLuck 一起提供，适合日常写作和整理。</p>
               </div>
 
               <div class="theme-grid">
@@ -208,7 +208,7 @@
               <div class="theme-import__risk" role="note">
                 <strong>本地代码主题可执行主题作者提供的代码。</strong>
                 <span>
-                  MarkLuck 不会把它当作社区市场内容审核；导入后主题可接管已暴露的 UX 插槽。
+                  JotLuck 不会把它当作社区市场内容审核；导入后主题可接管已暴露的 UX 插槽。
                 </span>
               </div>
               <label class="theme-import__confirm">
@@ -388,6 +388,9 @@ async function onImportFile(event: Event): Promise<void> {
 .theme-center {
   width: min(1080px, calc(100vw - var(--space-32)));
   max-height: min(820px, calc(100vh - var(--space-32)));
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -480,12 +483,12 @@ async function onImportFile(event: Event): Promise<void> {
 }
 
 .theme-center__body {
-  max-height: calc(100vh - 176px);
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
   gap: var(--space-18);
-  padding: var(--space-22) var(--space-24) var(--space-24);
-  overflow: auto;
+  padding: var(--space-22) var(--space-24) max(var(--space-24), env(safe-area-inset-bottom));
+  overflow: hidden;
   background: var(--paper-surface);
 }
 
@@ -497,6 +500,25 @@ async function onImportFile(event: Event): Promise<void> {
   min-width: 0;
   display: grid;
   gap: var(--space-16);
+}
+
+.theme-center__main,
+.theme-center__side {
+  align-content: start;
+  min-height: 0;
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  padding-block-end: var(--space-24);
+  scrollbar-gutter: stable;
+}
+
+.theme-center__main {
+  padding-inline-end: var(--space-4);
+}
+
+.theme-center__side {
+  padding-inline-start: var(--space-4);
+  padding-block-end: max(var(--space-32), env(safe-area-inset-bottom));
 }
 
 .theme-section {
@@ -620,6 +642,7 @@ async function onImportFile(event: Event): Promise<void> {
 .theme-card__actions {
   flex-wrap: wrap;
   gap: var(--space-8);
+  margin-top: var(--space-4);
 }
 
 .theme-pill {
@@ -678,6 +701,10 @@ async function onImportFile(event: Event): Promise<void> {
   border: var(--border-thin) solid var(--rule);
   border-radius: var(--radius-lg);
   background: var(--paper-raised);
+}
+
+.theme-import {
+  margin-block-end: var(--space-8);
 }
 
 .theme-detail__image {
@@ -816,6 +843,15 @@ async function onImportFile(event: Event): Promise<void> {
 @media (width <= 900px) {
   .theme-center__body {
     grid-template-columns: 1fr;
+    overflow: hidden auto;
+    scrollbar-gutter: stable;
+  }
+
+  .theme-center__main,
+  .theme-center__side {
+    overflow: visible;
+    padding-inline: 0;
+    padding-block-end: 0;
   }
 
   .theme-center__status,

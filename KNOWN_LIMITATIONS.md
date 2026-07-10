@@ -1,6 +1,6 @@
 # Known Limitations
 
-This document describes limitations for MarkLuck `v0.15.0-rc.1`. These are not
+This document describes limitations for JotLuck `v0.15.0-rc.1`. These are not
 marketing claims; they are the remaining release constraints and expected
 behavior boundaries.
 
@@ -33,7 +33,13 @@ behavior boundaries.
 ## Desktop App Limits
 
 - The RC installer path is
-  `packages/app/src-tauri/target/release/bundle/nsis/MarkLuck_0.15.0_x64-setup.exe`.
+  `packages/app/src-tauri/target/release/bundle/nsis/JotLuck_0.15.0_x64-setup.exe`.
+- Tauri shell access is limited to the scoped `shell:default` capability.
+  Unscoped `shell:allow-open`, `process:*`, and `fs:*` capabilities are not
+  granted in the default desktop capability file.
+- The native file watcher is a single active notebook watcher. Opening a new
+  notebook replaces the previous watcher; closing/unwatching requests the Rust
+  watcher to stop.
 - Each published installer must have its exact SHA256 recorded in the
   installed-app L4 report.
 - Windows release packaging and installed desktop GUI risk validation have been

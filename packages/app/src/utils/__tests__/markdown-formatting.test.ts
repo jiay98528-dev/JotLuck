@@ -5,7 +5,7 @@ import {
   detectParagraphPreset,
   toggleInlineFormat,
 } from '../markdown-formatting';
-import { normalizeFullwidthMarkdownSyntax, renderMarkdown } from '@markluck/renderer';
+import { normalizeFullwidthMarkdownSyntax, renderMarkdown } from '@jotluck/renderer';
 
 describe('markdown formatting', () => {
   it('重复加粗会移除选区外围定界符', () => {
@@ -60,5 +60,13 @@ describe('markdown formatting', () => {
     expect(normalizeFullwidthMarkdownSyntax('［链接］（https://example.com）')).toBe(
       '[链接](https://example.com)',
     );
+  });
+  it('renders bare JSON blocks as code blocks without flattening line breaks', () => {
+    const html = renderMarkdown('Before\n\n{\n  "done": [\n    "A",\n    "B"\n  ]\n}\n\nAfter');
+    expect(html).toContain('<pre><code class="language-json">');
+    expect(html).toContain('"done"');
+    expect(html).toContain('    "A"');
+    expect(html).toContain('<p>Before</p>');
+    expect(html).toContain('<p>After</p>');
   });
 });

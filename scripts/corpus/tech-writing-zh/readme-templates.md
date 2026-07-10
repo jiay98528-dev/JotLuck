@@ -4,13 +4,13 @@
 
 ---
 
-## MarkLuck
+## JotLuck
 
 轻量化、本地优先、离线可用的 Markdown 笔记工具。
 
 ### 核心理念
 
-世界上最好的笔记格式是纯文本。MarkLuck 让它好用，但不锁死它。每一条笔记就是一个 `.md` 文件，文件夹即笔记本。数据完全由用户掌控，不依赖任何云服务或专有格式。
+世界上最好的笔记格式是纯文本。JotLuck 让它好用，但不锁死它。每一条笔记就是一个 `.md` 文件，文件夹即笔记本。数据完全由用户掌控，不依赖任何云服务或专有格式。
 
 ### 特性
 
@@ -42,7 +42,7 @@
 
 ### 技术架构
 
-MarkLuck 采用 Vue 3 作为前端框架，CodeMirror 6 作为编辑器内核，marked 作为 Markdown 解析器，DOMPurify 确保渲染安全。桌面端通过 Tauri v2 提供原生体验，使用 Rust 实现文件系统 IO 和全文搜索。
+JotLuck 采用 Vue 3 作为前端框架，CodeMirror 6 作为编辑器内核，marked 作为 Markdown 解析器，DOMPurify 确保渲染安全。桌面端通过 Tauri v2 提供原生体验，使用 Rust 实现文件系统 IO 和全文搜索。
 
 ### 许可
 

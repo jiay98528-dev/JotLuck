@@ -11,7 +11,7 @@ import { SearchEngine } from './SearchEngine';
 import { parseFrontmatter, extractTitle } from './YAMLParser';
 
 const MAX_INDEXED_NOTE_FILES = 2000;
-const INDEX_LIMIT_ERROR = 'MARKLUCK_INDEX_LIMIT_EXCEEDED';
+const INDEX_LIMIT_ERROR = 'JOTLUCK_INDEX_LIMIT_EXCEEDED';
 const INDEX_FILE_CONCURRENCY = 16;
 
 async function runLimited<T>(

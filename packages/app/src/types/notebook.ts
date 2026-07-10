@@ -1,5 +1,5 @@
 // ============================================================
-// MarkLuck — Notebook / File System Types
+// JotLuck — Notebook / File System Types
 // ============================================================
 // Source: spec/types/notebook.ts
 
@@ -28,7 +28,7 @@ export interface FileTreeNode {
   isOpen: boolean;
 }
 
-/** 笔记本索引元数据（.markluck_index.json） */
+/** 笔记本索引元数据（.jotluck_index.json） */
 export interface NotebookMeta {
   version: string;
   lastIndexed: string;

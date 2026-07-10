@@ -1,5 +1,5 @@
 /**
- * 探索 MarkLuck 应用的 DOM 结构，输出选择器信息
+ * 探索 JotLuck 应用的 DOM 结构，输出选择器信息
  * 运行: npx tsx e2e/explore-dom.ts
  */
 import { chromium } from 'playwright';
@@ -10,7 +10,7 @@ async function main() {
 
   // Skip welcome
   await page.goto('http://localhost:5175');
-  await page.evaluate(() => localStorage.setItem('markluck_welcome_completed', 'true'));
+  await page.evaluate(() => localStorage.setItem('JotLuck_welcome_completed', 'true'));
   await page.goto('http://localhost:5175');
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(2000);

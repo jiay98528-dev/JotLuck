@@ -1,4 +1,4 @@
-# MarkLuck Rust 代码规范
+# JotLuck Rust 代码规范
 
 > 版本：v1.0 | 日期：2026-06-03
 > 关联文档：`doc/TAD.md`（Rust 模块架构）、`PRODUCT.md`（"精确"、"轻量是道德"）

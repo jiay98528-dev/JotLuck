@@ -17,7 +17,7 @@
 - Release notes and known limitations documents.
 - Final RC report at `memory/release-candidate-final-report.md`.
 - Windows NSIS release package output under `打包/`, with localized WebView2
-  dependency failure text, language selector, and MarkLuck icon assets.
+  dependency failure text, language selector, and JotLuck icon assets.
 
 ### Changed
 
@@ -41,7 +41,7 @@
   as notebook-root-relative paths instead of OS absolute paths.
 - Removed obsolete Tauri v2 `plugins.fs.scope` configuration that caused
   desktop startup panic.
-- Startup background version checks now respect `markluck:version:autoCheck`.
+- Startup background version checks now respect `jotluck:version:autoCheck`.
 - XLSX export without Markdown tables now generates a valid workbook instead of
   an empty `.xlsx` file.
 - Responsive modal and command palette constraints now avoid small-viewport
@@ -73,11 +73,11 @@
 
 ### Verification Snapshot
 
-- `pnpm.cmd --filter @markluck/app typecheck`: pass.
+- `pnpm.cmd --filter @jotluck/app typecheck`: pass.
 - `pnpm.cmd exec eslint packages/app/src packages/renderer/src`: pass.
-- `pnpm.cmd --filter @markluck/app lint:style`: pass.
-- `pnpm.cmd --filter @markluck/app exec vitest run`: pass, 156/156.
-- `pnpm.cmd --filter @markluck/app build`: pass.
+- `pnpm.cmd --filter @jotluck/app lint:style`: pass.
+- `pnpm.cmd --filter @jotluck/app exec vitest run`: pass, 156/156.
+- `pnpm.cmd --filter @jotluck/app build`: pass.
 - `pnpm.cmd audit --audit-level high`: pass; low/moderate advisories remain.
 - Chromium full E2E: pass, 167/167 before the final table padding tweak; the
   table journey was rechecked after that tweak.
@@ -89,7 +89,7 @@
   rendering, default documents, Chinese IME + Live Preview, Tab focus
   navigation, and welcome-page default-app guidance.
 - Tauri release build: pass, Windows NSIS installer generated at
-  `打包/MarkLuck-v0.15-windows-x64/MarkLuck_v0.15_x64-setup.exe`.
+  `打包/JotLuck-v0.15-windows-x64/JotLuck_v0.15_x64-setup.exe`.
 
 ### Known Environment Blockers
 

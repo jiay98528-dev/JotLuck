@@ -1,5 +1,5 @@
 /**
- * MarkLuck — Note 核心类型定义
+ * JotLuck — Note 核心类型定义
  *
  * 本文件定义与"笔记"相关的所有 TypeScript 类型/接口/枚举，
  * 覆盖实体、frontmatter、Wiki-link、块级编辑器等核心概念。
@@ -81,7 +81,7 @@ export enum InlineFormatType {
   /** 高亮 ==text== (GFM 扩展) */
   Highlight = 'highlight',
 
-  /** 行内 #tag 标签 (非标准 Markdown，MarkLuck 扩展) */
+  /** 行内 #tag 标签 (非标准 Markdown，JotLuck 扩展) */
   Tag = 'tag',
 }
 
@@ -147,11 +147,11 @@ export interface NoteFrontmatter {
   draft?: boolean;
 
   /**
-   * 自定义字段 (MarkLuck 不解析的任意 YAML key-value)。
+   * 自定义字段 (JotLuck 不解析的任意 YAML key-value)。
    *
    * 例如用户可能使用 Jekyll/Hugo/Obsidian 特有的 frontmatter 字段
    * (layout, permalink, aliases, cssclass 等)。
-   * MarkLuck 保留但不主动处理这些字段，以保证与其他工具的互操作性。
+   * JotLuck 保留但不主动处理这些字段，以保证与其他工具的互操作性。
    */
   [key: string]: unknown;
 }
@@ -217,7 +217,7 @@ export interface WikiLink {
 /**
  * 编辑器中的一个语法块。
  *
- * MarkLuck 的编辑器采用"块级混合编辑"模式:
+ * JotLuck 的编辑器采用"块级混合编辑"模式:
  * - 每个 Markdown 语法元素被解析为一个独立的 NoteBlock
  * - 用户可按 Tab 在源码/渲染模式间切换单个块
  * - 当语法结构遭到破坏 (如未闭合代码块) 时，`isValid` 置为 false
@@ -315,7 +315,7 @@ export interface NoteBlock {
 // ============================================================================
 
 /**
- * MarkLuck 核心实体 — 笔记。
+ * JotLuck 核心实体 — 笔记。
  *
  * 一条笔记对应文件系统中的一个支持格式纯文本笔记文件。
  * 当笔记在编辑器中打开时，Note.content 实时反映当前编辑内容；
@@ -339,7 +339,7 @@ export interface Note {
    * 例如: `"tutorials/javascript/闭包详解.md"`
    *
    * **设计决策**: 不使用 UUID 或数据库自增 ID — 文件路径即是 ID。
-   * 这保证了即使 `.markluck_index.json` 损坏/重建，笔记标识依然稳定。
+   * 这保证了即使 `.jotluck_index.json` 损坏/重建，笔记标识依然稳定。
    */
   id: string;
 
@@ -387,7 +387,7 @@ export interface Note {
    * 文件系统最后修改时间 (Unix 毫秒时间戳)。
    *
    * 来源: 文件的 `mtime`。
-   * 每次 MarkLuck 保存或外部修改时由文件监控更新。
+   * 每次 JotLuck 保存或外部修改时由文件监控更新。
    */
   modifiedAt: number;
 
@@ -408,7 +408,7 @@ export interface Note {
    *
    * 用途:
    * - 渲染时替换为可点击链接或死链标记
-   * - 构建反向链接图谱 (通过 `.markluck_index.json` 的 outlinks 字段)
+   * - 构建反向链接图谱 (通过 `.jotluck_index.json` 的 outlinks 字段)
    * - 知识图谱可视化 (节点 = 笔记，边 = 链接)
    */
   links: WikiLink[];

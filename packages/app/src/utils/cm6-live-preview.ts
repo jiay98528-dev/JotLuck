@@ -21,7 +21,7 @@ import {
 } from '@codemirror/view';
 import { StateField, StateEffect, type Range } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
-import { normalizeFullwidthMarkdownSyntax, renderMarkdown } from '@markluck/renderer';
+import { normalizeFullwidthMarkdownSyntax, renderMarkdown } from '@jotluck/renderer';
 import DOMPurify from 'dompurify';
 import { normalizeUrl } from '@/utils/urlUtils';
 
@@ -570,8 +570,19 @@ function renderBlockHtml(
         const raw = renderBlock(block.raw, block.type, refDefs, options);
         const checked = /^\s*[-*+]\s+\[[xX]\]\s/.test(block.raw);
         const toggle = `<input type="checkbox" class="cm-task-toggle" aria-label="${checked ? '标记为未完成' : '标记为完成'}" ${checked ? 'checked ' : ''}/>`;
-        const inner = raw.replace(/<\/?ul>\n?/g, '').replace(/<input[^>]*>/i, toggle);
-        return wrapBlockHtml(inner, block);
+        const inner = raw
+          .replace(/<\/?ul>\n?/g, '')
+          .replace(/<\/?li>/g, '')
+          .replace(/<input[^>]*>/i, '')
+          .trim();
+        const marker =
+          block.type === 'taskListItem'
+            ? toggle
+            : '<span class="cm-list-marker" aria-hidden="true">•</span>';
+        return wrapBlockHtml(
+          `<span class="cm-list-marker-slot">${marker}</span><span class="cm-list-content">${inner || '&nbsp;'}</span>`,
+          block,
+        );
       }
 
       case 'orderedListItem': {
@@ -584,8 +595,10 @@ function renderBlockHtml(
           .replace(/^<p>/, '')
           .replace(/<\/p>\n?$/, '');
         const num = block.itemIndex ?? 1;
-        const prefixed = `${num}.  ${text || ' '}`;
-        return wrapBlockHtml(prefixed, block);
+        return wrapBlockHtml(
+          `<span class="cm-list-marker-slot"><span class="cm-list-marker">${num}.</span></span><span class="cm-list-content">${text || '&nbsp;'}</span>`,
+          block,
+        );
       }
 
       case 'horizontalRule':

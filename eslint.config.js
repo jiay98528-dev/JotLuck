@@ -26,7 +26,7 @@ export default tseslint.config(
   {
     files: ['**/*.ts', '**/*.vue'],
     rules: {
-      // MarkLuck strict rules
+      // JotLuck strict rules
       'no-console': 'error',
       '@typescript-eslint/no-explicit-any': 'error',
 

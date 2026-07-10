@@ -1,12 +1,13 @@
-# MarkLuck 安装版 L4 人工验收记录模板
+# JotLuck 安装版 L4 人工验收记录模板
 
-> 复制本模板为单次发行记录，例如 `验收报告/2026-06-30-MarkLuck-0.15.0-installed-L4.md`。  
+> 复制本模板为单次发行记录，例如 `验收报告/2026-06-30-JotLuck-0.15.0-installed-L4.md`。
 > 所有 `状态` 必须填写 `PASS`，否则 `pnpm release:rc-gate` 必须阻断 RC 放行。任何失败项标记为 P0/P1/P2，不允许用 Web 自动化通过覆盖人工失败。
 
 ## 发行对象
 
 - L4-INSTALLER-PATH:
-- 安装包 SHA256:
+- L4-INSTALLER-SHA256:
+- L4-APP-VERSION:
 - 安装时间:
 - L4-WINDOWS-VERSION:
 - 验收人:

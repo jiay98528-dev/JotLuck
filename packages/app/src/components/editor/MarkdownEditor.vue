@@ -14,7 +14,7 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { EditorView, lineNumbers, keymap } from '@codemirror/view';
 import { EditorState, Compartment } from '@codemirror/state';
-import { markluckExtensions } from '@/utils/cm6-extensions';
+import { jotluckExtensions } from '@/utils/cm6-extensions';
 import { livePreviewExtension, unpinFocusedBlock } from '@/utils/cm6-live-preview';
 import { ghostTextPlugin } from '@/utils/cm6-ghost-text';
 import { MarkdownPredictor } from '@/services/MarkdownPredictor';
@@ -25,7 +25,7 @@ import {
   getInlineMarkers,
   isInlineFormatAction,
 } from '@/utils/markdown-formatting';
-import { getMarkluckE2EBridge } from '@/utils/e2e-bridge';
+import { getJotLuckE2EBridge } from '@/utils/e2e-bridge';
 
 const props = withDefaults(
   defineProps<{
@@ -138,6 +138,36 @@ function autocompleteExtensions() {
 const getEditorContentFn = () => view?.state.doc.toString() ?? '';
 const INSTANCE_ID = Math.random().toString(36).slice(2, 8);
 
+function registerE2EEditorBridge(): void {
+  const e2eBridge = getJotLuckE2EBridge();
+  if (!e2eBridge || !view) return;
+  e2eBridge.editor = {
+    id: INSTANCE_ID,
+    getContent: getEditorContentFn,
+    setContent: (content) => {
+      if (!view) return;
+      (
+        view.dom as HTMLElement & { __jotluckClearGhostText?: () => void }
+      ).__jotluckClearGhostText?.();
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: content },
+        selection: { anchor: content.length },
+      });
+      emit('update:modelValue', view.state.doc.toString());
+      refreshOpenedDocumentScan(content);
+      view.focus();
+    },
+    getCursor: () => view?.state.selection.main.head ?? 0,
+    getPrediction: () => {
+      const doc = view?.state.doc.toString() ?? '';
+      const cursor = view?.state.selection.main.head ?? doc.length;
+      return predictor.getGhostText(cursor, doc);
+    },
+    seedCompletionCorpus: (excerpts) => predictor.ingestExcerpts(excerpts),
+    setCompletionAblationMode: (mode) => predictor.setAblationMode(mode),
+  };
+}
+
 function createState(doc: string) {
   return EditorState.create({
     doc,
@@ -146,7 +176,7 @@ function createState(doc: string) {
       // is intercepted for ghost text acceptance before indentation logic.
       autocompleteCompartment.of(autocompleteExtensions()),
       keymap.of([{ key: 'Enter', run: handlePendingFormatEnter }]),
-      ...markluckExtensions(props.placeholder, props.sourceOnly),
+      ...jotluckExtensions(props.placeholder, props.sourceOnly),
       lineNumberCompartment.of(props.showLineNumbers ? lineNumbers() : []),
       livePreviewCompartment.of(
         props.livePreview
@@ -338,33 +368,9 @@ onMounted(() => {
   if (props.pendingFormat) applyPendingFormat(props.pendingFormat);
   // Register E2E helpers AFTER view creation and AFTER old component's onUnmounted cleanup.
   // Must be in onMounted, not setup: Vue 3 :key patching runs setup BEFORE old unmount.
-  const e2eBridge = getMarkluckE2EBridge();
-  if (e2eBridge) {
-    e2eBridge.editor = {
-      id: INSTANCE_ID,
-      getContent: getEditorContentFn,
-      setContent: (content) => {
-        if (!view) return;
-        (
-          view.dom as HTMLElement & { __markluckClearGhostText?: () => void }
-        ).__markluckClearGhostText?.();
-        view.dispatch({
-          changes: { from: 0, to: view.state.doc.length, insert: content },
-          selection: { anchor: content.length },
-        });
-        refreshOpenedDocumentScan(content);
-        view.focus();
-      },
-      getCursor: () => view?.state.selection.main.head ?? 0,
-      getPrediction: () => {
-        const doc = view?.state.doc.toString() ?? '';
-        const cursor = view?.state.selection.main.head ?? doc.length;
-        return predictor.getGhostText(cursor, doc);
-      },
-      seedCompletionCorpus: (excerpts) => predictor.ingestExcerpts(excerpts),
-      setCompletionAblationMode: (mode) => predictor.setAblationMode(mode),
-    };
-  }
+  registerE2EEditorBridge();
+  view.dom.addEventListener('mousedown', registerE2EEditorBridge);
+  view.contentDOM.addEventListener('focus', registerE2EEditorBridge);
 
   // Fire-and-forget predictor init (BUG-027 fix: 消除 async onMounted 导致的 view=null 窗口期).
   // predict.initialize() 下载 429KB baseline 文件可能耗时 200-500ms，
@@ -403,13 +409,15 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  const e2eBridge = getMarkluckE2EBridge();
+  const e2eBridge = getJotLuckE2EBridge();
   if (e2eBridge?.editor?.id === INSTANCE_ID) delete e2eBridge.editor;
   document.removeEventListener('selectionchange', onSelectionChange);
   if (view) {
     view.contentDOM.removeEventListener('compositionend', onCompositionEndApplyDeferred);
     view.contentDOM.removeEventListener('compositionstart', onCompositionStartRefreshScan);
     view.contentDOM.removeEventListener('compositionend', onCompositionEndRefreshScan);
+    view.dom.removeEventListener('mousedown', registerE2EEditorBridge);
+    view.contentDOM.removeEventListener('focus', registerE2EEditorBridge);
     suppressSync = true;
     view.destroy();
     view = null;

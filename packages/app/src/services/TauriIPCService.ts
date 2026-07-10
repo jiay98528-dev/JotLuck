@@ -39,7 +39,7 @@ interface RustFileChangeEvent {
 
 // ── Recent notebooks cache key ──
 
-const RECENT_KEY = 'markluck-recent-notebooks';
+const RECENT_KEY = 'jotluck-recent-notebooks';
 
 export function isLikelySystemNotebookScope(path: string): boolean {
   const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
@@ -69,6 +69,7 @@ export function sanitizeRecentNotebookPaths(paths: string[]): string[] {
 
 export class TauriIPCService implements IFileSystemService {
   private unwatchFns: TauriUnlistenFn[] = [];
+  private activeWatchRoot: string | null = null;
   // ====================================================================
   // Notebook Management
   // ====================================================================
@@ -216,7 +217,9 @@ export class TauriIPCService implements IFileSystemService {
   // ====================================================================
 
   async watch(rootPath: string, callback: (event: FileChangeEvent) => void): Promise<UnwatchFn> {
+    await this.unwatchAll();
     await invoke('start_file_watcher', { rootPath });
+    this.activeWatchRoot = rootPath;
     const unlisten = await listen<RustFileChangeEvent>('file-change', (event) => {
       const payload = event.payload;
       callback({
@@ -233,12 +236,26 @@ export class TauriIPCService implements IFileSystemService {
     return () => {
       unlisten();
       this.unwatchFns = this.unwatchFns.filter((fn) => fn !== unlisten);
+      if (this.activeWatchRoot === rootPath) {
+        this.activeWatchRoot = null;
+        void invoke('stop_file_watcher').catch((error) => {
+          // eslint-disable-next-line no-console
+          console.warn('[TauriIPCService] stop_file_watcher failed:', error);
+        });
+      }
     };
   }
 
   async unwatchAll(): Promise<void> {
     for (const unwatch of this.unwatchFns.splice(0)) {
       unwatch();
+    }
+    if (this.activeWatchRoot) {
+      this.activeWatchRoot = null;
+      await invoke('stop_file_watcher').catch((error) => {
+        // eslint-disable-next-line no-console
+        console.warn('[TauriIPCService] stop_file_watcher failed:', error);
+      });
     }
   }
 

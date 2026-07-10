@@ -1,8 +1,8 @@
 /**
- * MarkLuck — 搜索相关 TypeScript 类型定义
+ * JotLuck — 搜索相关 TypeScript 类型定义
  *
  * 涵盖：搜索查询、搜索结果、搜索匹配、倒排索引结构、日期范围过滤。
- * 索引数据存储在笔记本根目录的 `.markluck_index.json` 中。
+ * 索引数据存储在笔记本根目录的 `.jotluck_index.json` 中。
  *
  * @module spec/types/search
  */
@@ -110,7 +110,7 @@ export interface SearchResult {
 }
 
 // ---------------------------------------------------------------------------
-// 倒排索引 — SearchIndex (存储在 .markluck_index.json 中)
+// 倒排索引 — SearchIndex (存储在 .jotluck_index.json 中)
 // ---------------------------------------------------------------------------
 
 /**
@@ -175,7 +175,7 @@ export interface DocumentEntry {
 /**
  * 完整的搜索倒排索引结构。
  *
- * 持久化到笔记本根目录的 `.markluck_index.json` 中。
+ * 持久化到笔记本根目录的 `.jotluck_index.json` 中。
  * 包含两部分核心数据：
  * 1. `documents`     — 文档元数据索引（按路径查找文档信息）
  * 2. `invertedIndex` — 词条 → 过帐列表（支持快速全文检索）

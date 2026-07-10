@@ -12,7 +12,7 @@
         <div class="timer-bar" :class="{ 'is-running': ticking }" @animationend="onTimerEnd" />
 
         <!-- Header -->
-        <div class="card-header">🆕 MarkLuck {{ latestVersion }} 已发布</div>
+        <div class="card-header">🆕 {{ APP_NAME }} {{ latestVersion }} 已发布</div>
 
         <!-- Body: release notes (first 2-3 lines, ~120 chars max) -->
         <p v-if="displayNotes" class="card-body">{{ displayNotes }}</p>
@@ -46,6 +46,7 @@
  * @emits dismiss-version — user opts out of notifications for this version
  */
 import { ref, watch, onUnmounted, computed } from 'vue';
+import { APP_NAME } from '@/config/app-meta';
 import { normalizeUrl } from '@/utils/urlUtils';
 
 // ─── Props ────────────────────────────────────────────────────────────

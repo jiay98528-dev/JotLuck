@@ -1,11 +1,11 @@
-# MarkLuck 主题开发标准
+# JotLuck 主题开发标准
 
 版本：2026-06-27
 适用范围：Theme API v2、本地主题市场、`.mltheme` 导入包、官方主题模块、UX Theme Plugin
 
 ## 1. 规范地位
 
-本文档是 MarkLuck Theme API v2 的主题开发准则。后续新增或修改主题、主题 API、UX slot、`ThemeHostContext`、`ThemeDialog`、`ThemeRuntimeHost`、`ThemePackInstaller`、`ThemeRegistry`、主题 CSS 或 `.mltheme` 示例时，必须先阅读并遵守本文档。
+本文档是 JotLuck Theme API v2 的主题开发准则。后续新增或修改主题、主题 API、UX slot、`ThemeHostContext`、`ThemeDialog`、`ThemeRuntimeHost`、`ThemePackInstaller`、`ThemeRegistry`、主题 CSS 或 `.mltheme` 示例时，必须先阅读并遵守本文档。
 
 本文档以当前工作区已实现 API 为准，不把未实现的 vNext 能力写成强制规范。若代码需要新增 manifest 字段、slot、Host API、runtime 行为或包结构，必须在同一变更中同步更新本文档、类型定义和测试。
 
@@ -32,7 +32,7 @@ ThemePluginModule 代码组件 > UxComponentRecipe DSL > 宿主默认组件
 即便是 `trusted-code`，以下能力仍不属于主题直接接管范围：
 
 - Markdown 安全清洗链路（`marked` 后必须由宿主 `DOMPurify` 清洗）。
-- MarkLuck 文件 IO、最近笔记、真实文件系统适配和 Tauri 系统 API。
+- JotLuck 文件 IO、最近笔记、真实文件系统适配和 Tauri 系统 API。
 - 搜索索引、标签索引、后台训练和文件监听。
 - 导出服务、分享服务、系统保存/打开对话框。
 - 核心笔记内容持久化策略。
@@ -62,7 +62,7 @@ preview/*          可选预览图
 | 资产白名单        | `assets/` 与 `preview/` 仅允许 `.png`、`.jpg`、`.jpeg`、`.webp`、`.gif`、`.svg`。              |
 | checksum          | 格式必须为 `sha256-` + 64 位 hex。`theme.css` 和代码入口在声明 checksum 时会校验内容。         |
 | trusted-code 入口 | `runtime='trusted-code'` 时必须声明至少一个 `entrypoints`，且入口文件必须存在并通过 checksum。 |
-| 持久化            | 导入包存入 `localStorage` 的 `markluck:themes:installed:v2`。                                  |
+| 持久化            | 导入包存入 `localStorage` 的 `jotluck:themes:installed:v2`。                                   |
 
 最小包示例：
 
@@ -118,7 +118,7 @@ Manifest 类型权威来源是 `packages/app/src/types/theme-pack.ts` 的 `Theme
 
 官方主题模块的 `meta.previewImage` 会由 `ThemeRegistry` 写入 `manifest.previewImages` 与 `InstalledThemePack.previewImages`。正式内置主题必须提交真实首页截图缩略图；外部导入主题缺少预览图时，主题中心才允许使用低调 fallback。
 
-外部导入主题必须在 UI 上明确区分于官方内置主题。导入入口不得暗示 MarkLuck 已审核主题包内容；若主题包包含 `trusted-code`，用户必须先看到“可执行本地主题代码”的说明。
+外部导入主题必须在 UI 上明确区分于官方内置主题。导入入口不得暗示 JotLuck 已审核主题包内容；若主题包包含 `trusted-code`，用户必须先看到“可执行本地主题代码”的说明。
 
 当前能力枚举：
 
@@ -356,17 +356,17 @@ interface ThemeHostContext {
 
 子 API：
 
-| API        | 当前方法                                     | 语义                                                        |
-| ---------- | -------------------------------------------- | ----------------------------------------------------------- |
-| `actions`  | `list()`、`dispatch(actionId)`               | 读取和触发宿主 action。                                     |
-| `slots`    | `has(slot)`                                  | 判断当前主题是否已注册代码 slot 组件。                      |
-| `storage`  | `get(key)`、`set(key, value)`、`remove(key)` | 主题私有 localStorage，前缀为 `markluck:theme:<themeId>:`。 |
-| `editor`   | `getContent()`、`setContent?()`、`focus?()`  | 编辑器受控能力，由宿主按当前页面状态注入。                  |
-| `dialogs`  | `open(slot)`、`close(slot)`                  | 打开/关闭已暴露的 dialog slot。                             |
-| `toast`    | `show(message)`                              | 展示宿主 toast。                                            |
-| `commerce` | `ThemeCommerceProvider`                      | 读取主题目录、授权状态、购买/兑换/刷新契约。                |
-| `appState` | readonly record                              | 只读应用状态快照。                                          |
-| `ui`       | record                                       | 宿主传给 runtime 的扩展 UI API 容器。                       |
+| API        | 当前方法                                     | 语义                                                       |
+| ---------- | -------------------------------------------- | ---------------------------------------------------------- |
+| `actions`  | `list()`、`dispatch(actionId)`               | 读取和触发宿主 action。                                    |
+| `slots`    | `has(slot)`                                  | 判断当前主题是否已注册代码 slot 组件。                     |
+| `storage`  | `get(key)`、`set(key, value)`、`remove(key)` | 主题私有 localStorage，前缀为 `jotluck:theme:<themeId>:`。 |
+| `editor`   | `getContent()`、`setContent?()`、`focus?()`  | 编辑器受控能力，由宿主按当前页面状态注入。                 |
+| `dialogs`  | `open(slot)`、`close(slot)`                  | 打开/关闭已暴露的 dialog slot。                            |
+| `toast`    | `show(message)`                              | 展示宿主 toast。                                           |
+| `commerce` | `ThemeCommerceProvider`                      | 读取主题目录、授权状态、购买/兑换/刷新契约。               |
+| `appState` | readonly record                              | 只读应用状态快照。                                         |
+| `ui`       | record                                       | 宿主传给 runtime 的扩展 UI API 容器。                      |
 
 兼容别名：
 
@@ -563,11 +563,11 @@ interface ThemeCommerceProvider {
 涉及 Theme API、slot、Host API 或包协议变更时，最低自动化检查：
 
 ```bash
-pnpm.cmd --filter @markluck/app typecheck
+pnpm.cmd --filter @jotluck/app typecheck
 npx.cmd eslint packages/app/src/ packages/renderer/src/
-pnpm.cmd --filter @markluck/app lint:style
-pnpm.cmd --filter @markluck/app exec vitest run
-pnpm.cmd --filter @markluck/app build
+pnpm.cmd --filter @jotluck/app lint:style
+pnpm.cmd --filter @jotluck/app exec vitest run
+pnpm.cmd --filter @jotluck/app build
 ```
 
 仅修改本文档或元指令时，可只执行文档一致性与格式检查。

@@ -10,21 +10,20 @@
  */
 
 import { ref, computed } from 'vue';
+import { APP_RELEASES_API_URL, APP_VERSION } from '@/config/app-meta';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const CURRENT_VERSION = '0.15.0';
-const GITHUB_API_URL = 'https://api.github.com/repos/jiay98528-dev/MarkLuck/releases/latest';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const LS_KEYS = {
-  lastCheck: 'markluck:version:lastCheck',
-  latestInfo: 'markluck:version:latestInfo',
-  autoCheck: 'markluck:version:autoCheck',
-  autoInstall: 'markluck:version:autoInstall',
-  dismissedVersion: 'markluck:version:dismissedVersion',
+  lastCheck: 'jotluck:version:lastCheck',
+  latestInfo: 'jotluck:version:latestInfo',
+  autoCheck: 'jotluck:version:autoCheck',
+  autoInstall: 'jotluck:version:autoInstall',
+  dismissedVersion: 'jotluck:version:dismissedVersion',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -56,7 +55,7 @@ interface GitHubRelease {
 
 const hasUpdate = ref(false);
 const latestVersion = ref('');
-const currentVersion = ref(CURRENT_VERSION);
+const currentVersion = ref(APP_VERSION);
 const releaseUrl = ref('');
 const releaseNotes = ref('');
 const checking = ref(false);
@@ -183,7 +182,7 @@ function applyLatestInfo(info: CachedLatestInfo): void {
   releaseNotes.value = info.releaseNotes;
   lastChecked.value = info.checkedAt;
 
-  if (isNewer(info.latest, CURRENT_VERSION) && !isDismissed(info.latest)) {
+  if (isNewer(info.latest, APP_VERSION) && !isDismissed(info.latest)) {
     hasUpdate.value = true;
   } else {
     hasUpdate.value = false;
@@ -234,7 +233,7 @@ export function useVersionCheck() {
 
     pendingCheck = (async () => {
       try {
-        const response = await fetch(GITHUB_API_URL, {
+        const response = await fetch(APP_RELEASES_API_URL, {
           headers: {
             Accept: 'application/vnd.github.v3+json',
           },
@@ -297,7 +296,7 @@ export function useVersionCheck() {
     hasUpdate,
     /** Latest version string from GitHub (e.g. '0.2.0') */
     latestVersion,
-    /** Current app version (hardcoded) */
+    /** Current app version from app-meta */
     currentVersion,
     /** URL to the GitHub release page */
     releaseUrl,

@@ -1,11 +1,11 @@
-# MarkLuck 文字补全功能规格
+# JotLuck 文字补全功能规格
 
 > 版本：v1.2 | 日期：2026-07-06 | 状态：✅ 已实现（Provider + web-local baseline）
 > 关联文档：`doc/PRD.md` §F-17、`doc/TAD.md` §3.10、`spec/decisions.md` ADR-011、`plans/openapi-delightful-sunrise.md`
 
 ## 一、概述
 
-MarkLuck 编辑器内置的轻量级文字补全系统。通过统一幽灵文本管道，在光标后显示一条灰色斜体的最佳预测，用户按 `Tab` 一键接受或继续输入自然覆盖。**无弹出菜单、无下拉选择框。**
+JotLuck 编辑器内置的轻量级文字补全系统。通过统一幽灵文本管道，在光标后显示一条灰色斜体的最佳预测，用户按 `Tab` 一键接受或继续输入自然覆盖。**无弹出菜单、无下拉选择框。**
 
 ## 二、架构
 
@@ -39,7 +39,7 @@ MarkdownPredictor (服务层)        ← 融合决策
 
 | 层  | 位置               | 来源                    |     大小      | 生命周期       |
 | --- | ------------------ | ----------------------- | :-----------: | -------------- |
-| L0  | IndexStore (Pinia) | .markluck_index.json    |       —       | 应用启动→关闭  |
+| L0  | IndexStore (Pinia) | .jotluck_index.json     |       —       | 应用启动→关闭  |
 | L1  | 内存               | scanDocument(当前文档)  |    ~300KB     | 文档打开→关闭  |
 | L2  | localStorage       | 用户历史/全局积累       | ~500KB-3.5MB  | 持久化         |
 | L3  | public static file | 预训练 baseline compact | ≤6MB hard cap | 发布包静态资源 |
@@ -58,9 +58,9 @@ MarkdownPredictor (服务层)        ← 融合决策
 ### 持久化格式
 
 ```
-localStorage key: "markluck:ngram:v2"      # 兼容旧键名，内容为 v3 JSONL
+localStorage key: "jotluck:ngram:v2"      # 兼容旧键名，内容为 v3 JSONL
 格式: 每行一个 JSON tuple: [ctxHex, [[predHex,count], ...], flag]
-meta:  "markluck:ngram:meta" → {
+meta:  "jotluck:ngram:meta" → {
   "schemaVersion": 3,
   "docs": N,
   "totalEntries": N,
@@ -247,7 +247,7 @@ ContextBuilder → Provider[] → Resolver
 2. **预测非生成** — 不创造新内容，只基于已有模式推荐
 3. **拒绝成本为零** — 继续输入即可覆盖
 4. **数据不离开浏览器** — 纯 localStorage，不上传任何数据
-5. **永远不主动扫描用户文件** — 只读用户显式打开的文档和 .markluck_index.json
+5. **永远不主动扫描用户文件** — 只读用户显式打开的文档和 .jotluck_index.json
 6. **预训练和用户历史分层** — L3 baseline 是发布资产，L2 只保存本地用户历史，二者不合并写回。
 
 ## 九、Provider Pipeline v2

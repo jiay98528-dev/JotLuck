@@ -4,6 +4,7 @@ import {
   loadTrainingMeta,
   stripUntrainableMarkdown,
   TRAINING_META_KEY,
+  trainingMetaKeyForScope,
 } from '../CompletionTrainingService';
 import { MarkdownPredictor } from '../MarkdownPredictor';
 import type { DirEntry, IFileSystemService } from '@/types';
@@ -114,7 +115,7 @@ describe('CompletionTrainingService', () => {
     expect(meta.status).toBe('done');
     expect(meta.fileCount).toBe(1);
     expect(meta.trainedPaths['/a.md']).toEqual({ mtime: 1, size: 80 });
-    expect(localStorage.getItem(TRAINING_META_KEY)).not.toBeNull();
+    expect(localStorage.getItem(trainingMetaKeyForScope())).not.toBeNull();
   });
 
   it('records partial training failures without reporting done', async () => {

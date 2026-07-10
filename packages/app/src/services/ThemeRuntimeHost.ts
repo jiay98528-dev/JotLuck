@@ -30,6 +30,7 @@ export interface TrustedThemeRegistration {
 
 const registrations = new Map<string, TrustedThemeRegistration>();
 const objectUrls = new Map<string, string>();
+const activationGenerations = new Map<string, number>();
 export const themeRuntimeVersion = shallowRef(0);
 
 function bumpRuntimeVersion(): void {
@@ -42,12 +43,44 @@ function normalizeComponents(
   return (components ?? {}) as Partial<Record<ThemeSlotId, Component>>;
 }
 
+function nextActivationGeneration(themeId: string): number {
+  const next = (activationGenerations.get(themeId) ?? 0) + 1;
+  activationGenerations.set(themeId, next);
+  return next;
+}
+
+function isCurrentActivation(themeId: string, generation: number): boolean {
+  return activationGenerations.get(themeId) === generation;
+}
+
+function disposeTrustedTheme(themeId: string): void {
+  const existing = registrations.get(themeId);
+  if (existing) {
+    existing.dispose();
+    registrations.delete(themeId);
+    bumpRuntimeVersion();
+  }
+  const objectUrl = objectUrls.get(themeId);
+  if (objectUrl) {
+    URL.revokeObjectURL(objectUrl);
+    objectUrls.delete(themeId);
+  }
+}
+
 export function registerTrustedTheme(
   themeId: string,
   module: TrustedThemeModule,
   api: ThemeHostApi,
+  generation = nextActivationGeneration(themeId),
 ): TrustedThemeRegistration {
-  unregisterTrustedTheme(themeId);
+  if (!isCurrentActivation(themeId, generation)) {
+    return {
+      themeId,
+      components: {},
+      dispose: () => undefined,
+    };
+  }
+  disposeTrustedTheme(themeId);
   const cleanup = module.activate?.(api);
   const registration: TrustedThemeRegistration = {
     themeId,
@@ -62,16 +95,8 @@ export function registerTrustedTheme(
 }
 
 export function unregisterTrustedTheme(themeId: string): void {
-  const existing = registrations.get(themeId);
-  if (!existing) return;
-  existing.dispose();
-  registrations.delete(themeId);
-  bumpRuntimeVersion();
-  const objectUrl = objectUrls.get(themeId);
-  if (objectUrl) {
-    URL.revokeObjectURL(objectUrl);
-    objectUrls.delete(themeId);
-  }
+  nextActivationGeneration(themeId);
+  disposeTrustedTheme(themeId);
 }
 
 export function getTrustedThemeComponent(
@@ -97,7 +122,7 @@ export function createThemeHostApi(
 ): ThemeHostApi {
   const themeId = pack.manifest.id;
   const actionMap = new Map(actions.map((action) => [action.id, action]));
-  const storagePrefix = `markluck:theme:${themeId}:`;
+  const storagePrefix = `jotluck:theme:${themeId}:`;
   const dispatch = (actionId: ThemeActionId): void => {
     void actionMap.get(actionId)?.run();
   };
@@ -166,11 +191,14 @@ export async function activateTrustedThemeRuntime(
   ui: Record<string, unknown> = {},
   commerce?: ThemeCommerceProvider,
 ): Promise<void> {
+  const generation = nextActivationGeneration(pack.manifest.id);
   if (pack.module?.plugin) {
+    disposeTrustedTheme(pack.manifest.id);
     registerTrustedTheme(
       pack.manifest.id,
       pack.module.plugin,
       createThemeHostApi(pack, pack.manifest.permissions ?? [], actions, chrome, ui, commerce),
+      generation,
     );
     return;
   }
@@ -185,11 +213,24 @@ export async function activateTrustedThemeRuntime(
   const source = pack.codeBundles?.[entrypoint.module];
   if (!source) throw new Error(`Theme code bundle is not installed: ${entrypoint.module}`);
 
-  unregisterTrustedTheme(pack.manifest.id);
+  disposeTrustedTheme(pack.manifest.id);
   const objectUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
   objectUrls.set(pack.manifest.id, objectUrl);
 
-  const imported = (await import(/* @vite-ignore */ objectUrl)) as Record<string, unknown>;
+  let imported: Record<string, unknown>;
+  try {
+    imported = (await import(/* @vite-ignore */ objectUrl)) as Record<string, unknown>;
+  } catch (error) {
+    if (isCurrentActivation(pack.manifest.id, generation)) throw error;
+    return;
+  }
+  if (!isCurrentActivation(pack.manifest.id, generation)) {
+    if (objectUrls.get(pack.manifest.id) === objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+      objectUrls.delete(pack.manifest.id);
+    }
+    return;
+  }
   const exported = imported[entrypoint.exportName ?? 'default'] ?? imported.default;
   if (!isTrustedThemeModule(exported)) {
     throw new Error(`Theme code entrypoint did not export ThemePluginModule: ${pack.manifest.id}`);
@@ -199,6 +240,7 @@ export async function activateTrustedThemeRuntime(
     pack.manifest.id,
     exported,
     createThemeHostApi(pack, pack.manifest.permissions ?? [], actions, chrome, ui, commerce),
+    generation,
   );
 }
 

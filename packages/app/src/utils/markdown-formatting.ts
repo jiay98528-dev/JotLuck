@@ -1,5 +1,5 @@
 import type { FormatAction, ParagraphPreset } from '@/types';
-import { normalizeFullwidthMarkdownSyntax } from '@markluck/renderer';
+import { normalizeFullwidthMarkdownSyntax } from '@jotluck/renderer';
 
 export interface FormattingEdit {
   changes: { from: number; to: number; insert: string };

@@ -5,7 +5,7 @@ This baseline corpus is publishable project material.
 ## Included Verbatim Sources
 
 - Project-owned synthetic notes and technical examples in this directory.
-- Existing MarkLuck project documents referenced by `../../doc/` and `../../spec/`.
+- Existing JotLuck project documents referenced by `../../doc/` and `../../spec/`.
 
 ## Public Web Policy
 

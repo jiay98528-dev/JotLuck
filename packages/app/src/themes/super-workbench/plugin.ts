@@ -40,7 +40,7 @@ const SuperTopBar = defineComponent({
       h('header', { class: 'super-topbar', 'data-theme-plugin-slot': 'topbar' }, [
         h('div', { class: 'super-topbar__launch' }, actionStrip(props.leftActions, true)),
         h('div', { class: 'super-topbar__title' }, [
-          h('span', { class: 'super-kicker' }, props.notebookName || 'MarkLuck'),
+          h('span', { class: 'super-kicker' }, props.notebookName || 'JotLuck'),
           h('strong', props.noteTitle || '未命名工作台'),
         ]),
         h('div', { class: 'super-topbar__center' }, actionStrip(props.centerActions)),

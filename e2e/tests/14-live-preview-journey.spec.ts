@@ -196,7 +196,7 @@ test.describe('即时模式 (Live Preview)', () => {
     expect(newContent).toContain('## 里程碑');
 
     // 验证不再是"快速入门"内容
-    expect(newContent).not.toContain('欢迎使用 MarkLuck');
+    expect(newContent).not.toContain('欢迎使用 JotLuck');
   });
 
   // ==========================================================
@@ -221,7 +221,7 @@ test.describe('即时模式 (Live Preview)', () => {
 
     // 验证显示文本正确
     const linkText = await extLink.first().textContent();
-    expect(linkText).toContain('MarkLuck GitHub');
+    expect(linkText).toContain('JotLuck GitHub');
 
     // Step 4: 通过 JS 验证 window.open 在外部链接点击时被调用
     const called = await page.evaluate(() => {

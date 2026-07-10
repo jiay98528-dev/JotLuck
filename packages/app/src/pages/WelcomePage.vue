@@ -4,7 +4,7 @@
       <div v-if="visible" class="welcome-overlay" @click.self="close">
         <div class="welcome-card">
           <div class="welcome-brand">
-            <h1 class="welcome-brand-name">MarkLuck</h1>
+            <h1 class="welcome-brand-name">JotLuck</h1>
             <p class="welcome-brand-sub">轻量、本地、离线</p>
           </div>
 
@@ -52,7 +52,7 @@
                 <h2 class="welcome-step-title">把我设为默认编辑器？</h2>
                 <p class="welcome-step-text">
                   安装版可打开 Windows 默认应用设置，由你手动把 `.md`、`.markdown`、`.mdx` 关联到
-                  MarkLuck。
+                  JotLuck。
                 </p>
                 <div class="welcome-actions">
                   <Button variant="default" size="md" @click="onSetDefaultEditor">
@@ -119,10 +119,10 @@ import { isDesktopRuntime } from '@/utils/runtime';
 defineProps<{ visible: boolean }>();
 const emit = defineEmits<{ 'update:visible': [boolean]; complete: [] }>();
 
-const WELCOME_KEY = 'markluck:welcome:completed';
-const AUTO_CHECK_KEY = 'markluck:version:autoCheck';
-const AUTO_INSTALL_KEY = 'markluck:version:autoInstall';
-const DEFAULT_EDITOR_PROMPT_KEY = 'markluck:welcome:defaultEditorPrompted';
+const WELCOME_KEY = 'jotluck:welcome:completed';
+const AUTO_CHECK_KEY = 'jotluck:version:autoCheck';
+const AUTO_INSTALL_KEY = 'jotluck:version:autoInstall';
+const DEFAULT_EDITOR_PROMPT_KEY = 'jotluck:welcome:defaultEditorPrompted';
 const TOTAL_STEPS = 6;
 
 const currentStep = ref(1);
@@ -165,14 +165,14 @@ async function onSetDefaultEditor(): Promise<void> {
 
   if (!isDesktopRuntime()) {
     defaultEditorNotice.value =
-      '当前是 Web 预览环境。安装版会尝试打开 Windows 默认应用设置，最终仍需你手动选择 MarkLuck。';
+      '当前是 Web 预览环境。安装版会尝试打开 Windows 默认应用设置，最终仍需你手动选择 JotLuck。';
     return;
   }
 
   try {
     await openExternal('ms-settings:defaultapps');
     defaultEditorNotice.value =
-      '已打开 Windows 默认应用设置。请搜索 .md、.markdown 或 .mdx，并选择 MarkLuck。';
+      '已打开 Windows 默认应用设置。请搜索 .md、.markdown 或 .mdx，并选择 JotLuck。';
   } catch {
     defaultEditorNotice.value =
       '无法自动打开系统设置。请手动进入 Windows 设置 > 应用 > 默认应用，并关联 Markdown 文件。';

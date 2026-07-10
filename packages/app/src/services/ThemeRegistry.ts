@@ -11,7 +11,7 @@ import type {
   ThemeTokenSet,
 } from '@/types/theme-pack';
 
-export const ACTIVE_THEME_STYLE_ID = 'markluck-active-theme';
+export const ACTIVE_THEME_STYLE_ID = 'jotluck-active-theme';
 export const DEFAULT_THEME_ID = 'paper';
 export const APP_THEME_VERSION = '0.15.0';
 
@@ -73,7 +73,7 @@ function moduleToPack(
       runtime: 'official-code',
       minAppVersion: APP_THEME_VERSION,
       name: mod.name,
-      author: 'MarkLuck',
+      author: 'JotLuck',
       description: mod.meta.story,
       capabilities: mod.capabilities,
       permissions: ['shell-layout', 'component-replace', 'visual-effects', 'theme-storage'],
@@ -94,11 +94,11 @@ function moduleToPack(
       catalogUrl: '/v1/themes/catalog',
       bundleUrl: `local://themes/${mod.id}`,
       publisher: {
-        id: 'markluck',
-        name: 'MarkLuck',
+        id: 'JotLuck',
+        name: 'JotLuck',
         verified: true,
       },
-      releaseNotes: 'Bundled with the local MarkLuck theme catalog.',
+      releaseNotes: 'Bundled with the local JotLuck theme catalog.',
       compatibility: {
         minAppVersion: APP_THEME_VERSION,
         themeApi: 2,

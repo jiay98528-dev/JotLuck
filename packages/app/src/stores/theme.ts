@@ -25,8 +25,8 @@ import {
   validateThemePackage,
 } from '@/services/ThemePackInstaller';
 
-const THEME_STATE_KEY = 'markluck:theme-state:v2';
-export const THEME_CENTER_SHOW_DEV_THEMES_KEY = 'markluck:theme-center:show-dev-themes';
+const THEME_STATE_KEY = 'jotluck:theme-state:v2';
+export const THEME_CENTER_SHOW_DEV_THEMES_KEY = 'jotluck:theme-center:show-dev-themes';
 
 const SAFE_LOCAL_CHROME_STATE: ThemeChromeState = {
   official: false,

@@ -1,6 +1,6 @@
 import type { CompletionCandidate, CompletionContext } from './types';
 
-export const LEARNING_SIGNALS_STORAGE_KEY = 'markluck:autocomplete:learningSignals:v1';
+export const LEARNING_SIGNALS_STORAGE_KEY = 'jotluck:autocomplete:learningSignals:v1';
 
 const MAX_SIGNAL_ENTRIES = 800;
 

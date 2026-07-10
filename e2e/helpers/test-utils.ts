@@ -1,5 +1,5 @@
-/**
- * MarkLuck E2E Test Utilities
+﻿/**
+ * JotLuck E2E Test Utilities
  *
  * 共享辅助函数，用于 Playwright E2E 测试。
  * 提供编辑器操作、等待策略等常用封装。
@@ -15,16 +15,22 @@ import { expect } from '@playwright/test';
 export async function getEditorContent(page: Page): Promise<string> {
   await ensureEditorReady(page);
   return page.evaluate(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const content = (window as any).__markluck_e2e?.editor?.getContent?.();
-    if (typeof content === 'string') return content;
-
     const lines = Array.from(document.querySelectorAll('.cm-content .cm-line')).map(
       (line) => line.textContent ?? '',
     );
     if (lines.length > 0) return lines.join('\n');
 
     return document.querySelector('.cm-content')?.textContent ?? '';
+  });
+}
+
+/** 明确读取 E2E bridge 内容。仅用于诊断 bridge 本身或补全专项测试。 */
+export async function getEditorContentFromBridge(page: Page): Promise<string> {
+  await ensureEditorReady(page);
+  return page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const content = (window as any).__jotluck_e2e?.editor?.getContent?.();
+    return typeof content === 'string' ? content : '';
   });
 }
 
@@ -85,7 +91,7 @@ export async function waitForMockFileContent(
     .poll(
       () =>
         page.evaluate((targetPath) => {
-          const raw = localStorage.getItem('markluck-mockfs');
+          const raw = localStorage.getItem('jotluck-mockfs');
           if (!raw) return '';
           const data = JSON.parse(raw) as { files?: Record<string, { content?: string }> };
           return data.files?.[targetPath]?.content ?? '';
@@ -170,12 +176,12 @@ export async function openExportDialog(page: Page): Promise<void> {
 
 /** 等待应用初始化完成 (跳过欢迎页) */
 export async function waitForAppReady(page: Page): Promise<void> {
-  const APP_URL = process.env.MARKLUCK_E2E_BASE_URL ?? 'http://localhost:5173';
+  const APP_URL = process.env.JOTLUCK_E2E_BASE_URL ?? 'http://localhost:5173';
   // CRITICAL: addInitScript runs BEFORE any page JavaScript (including Vue's onMounted).
   // This ensures App.vue reads the flag before deciding to show the welcome overlay.
   // Without this, the welcome overlay intercepts all pointer events in tests.
   await page.addInitScript(() => {
-    localStorage.setItem('markluck:welcome:completed', '1');
+    localStorage.setItem('jotluck:welcome:completed', '1');
   });
   await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await waitForShellReady(page);
@@ -185,7 +191,7 @@ export async function waitForAppReady(page: Page): Promise<void> {
 /**
  * 重置应用状态为初始基线（用于需要干净隔离的测试）。
  *
- * 清除所有 MarkLuck 相关的 localStorage 键，重新加载页面，
+ * 清除所有 JotLuck 相关的 localStorage 键，重新加载页面，
  * 并重新应用欢迎页跳过标记，确保 MockFS 数据和设置回到默认值。
  *
  * 注意：此操作会清除用户设置/训练数据/笔记内容，
@@ -196,13 +202,13 @@ export async function resetAppState(page: Page): Promise<void> {
     const keysToRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && key.startsWith('markluck')) {
+      if (key && (key.startsWith('JotLuck') || key.startsWith('jotluck'))) {
         keysToRemove.push(key);
       }
     }
     keysToRemove.forEach((k) => localStorage.removeItem(k));
     sessionStorage.clear();
-    localStorage.setItem('markluck:welcome:completed', '1');
+    localStorage.setItem('jotluck:welcome:completed', '1');
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForShellReady(page);
@@ -211,7 +217,7 @@ export async function resetAppState(page: Page): Promise<void> {
 
 async function waitForShellReady(page: Page): Promise<void> {
   await expect(page.locator('.welcome-overlay')).toHaveCount(0);
-  await expect(page.locator('#markluck-app')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('#jotluck-app')).toBeVisible({ timeout: 10000 });
   await expect
     .poll(
       () =>

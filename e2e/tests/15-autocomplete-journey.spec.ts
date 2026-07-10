@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import {
   ensureEditorReady,
   getEditorContent,
+  getEditorContentFromBridge,
   waitForAppReady,
   waitForAutoSave,
 } from '../helpers/test-utils';
@@ -33,7 +34,7 @@ async function replaceEditorTextByTyping(
 test.describe('offline autocomplete user journeys', () => {
   async function seedAsciiProbe(page: import('@playwright/test').Page): Promise<void> {
     await page.evaluate(() => {
-      (window as any).__markluck_e2e?.editor?.seedCompletionCorpus([
+      (window as any).__jotluck_e2e?.editor?.seedCompletionCorpus([
         'Alpha beta gamma delta. Alpha beta gamma delta. Alpha beta gamma delta.',
         '测试文本可以继续。测试文本可以继续。测试文本可以继续。',
       ]);
@@ -48,7 +49,7 @@ test.describe('offline autocomplete user journeys', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.setItem(
-        'markluck:autocomplete:settings',
+        'jotluck:autocomplete:settings',
         JSON.stringify({
           enabled: true,
           aggressiveness: 'balanced',
@@ -58,7 +59,7 @@ test.describe('offline autocomplete user journeys', () => {
           showDebugStats: false,
         }),
       );
-      localStorage.setItem('markluck:autocomplete:enabled', 'true');
+      localStorage.setItem('jotluck:autocomplete:enabled', 'true');
     });
     await waitForAppReady(page);
     await ensureEditorReady(page);
@@ -115,12 +116,12 @@ test.describe('offline autocomplete user journeys', () => {
 
   test('settings clears local autocomplete learning data', async ({ page }) => {
     await page.evaluate(() => {
-      localStorage.setItem('markluck:ngram:v2', 'cached-model');
-      localStorage.setItem('markluck:ngram:short:v1', 'cached-short-model');
-      localStorage.setItem('markluck:ngram:meta', '{"schemaVersion":3,"docs":1}');
-      localStorage.setItem('markluck:autocomplete:acceptedLexicon:v1', '["转化成本"]');
+      localStorage.setItem('jotluck:ngram:v2', 'cached-model');
+      localStorage.setItem('jotluck:ngram:short:v1', 'cached-short-model');
+      localStorage.setItem('jotluck:ngram:meta', '{"schemaVersion":3,"docs":1}');
+      localStorage.setItem('jotluck:autocomplete:acceptedLexicon:v1', '["转化成本"]');
       localStorage.setItem(
-        'markluck:autocomplete:trainingMeta',
+        'jotluck:autocomplete:trainingMeta',
         JSON.stringify({
           version: 2,
           status: 'done',
@@ -145,13 +146,13 @@ test.describe('offline autocomplete user journeys', () => {
     await expect
       .poll(() =>
         page.evaluate(() => ({
-          l2: localStorage.getItem('markluck:ngram:v2'),
-          short: localStorage.getItem('markluck:ngram:short:v1'),
-          meta: localStorage.getItem('markluck:ngram:meta'),
-          lexicon: localStorage.getItem('markluck:autocomplete:acceptedLexicon:v1'),
-          training: JSON.parse(
-            localStorage.getItem('markluck:autocomplete:trainingMeta') ?? '{}',
-          ) as { status?: string; fileCount?: number },
+          l2: localStorage.getItem('jotluck:ngram:v2'),
+          short: localStorage.getItem('jotluck:ngram:short:v1'),
+          meta: localStorage.getItem('jotluck:ngram:meta'),
+          lexicon: localStorage.getItem('jotluck:autocomplete:acceptedLexicon:v1'),
+          training: Object.keys(localStorage)
+            .filter((key) => key.endsWith(':autocomplete:trainingMeta'))
+            .map((key) => JSON.parse(localStorage.getItem(key) ?? '{}') as unknown),
         })),
       )
       .toMatchObject({
@@ -159,7 +160,7 @@ test.describe('offline autocomplete user journeys', () => {
         short: null,
         meta: null,
         lexicon: null,
-        training: { status: 'idle', fileCount: 0 },
+        training: [{ status: 'idle', fileCount: 0 }],
       });
   });
 
@@ -169,7 +170,7 @@ test.describe('offline autocomplete user journeys', () => {
 
     await expect
       .poll(() =>
-        page.evaluate(() => (window as any).__markluck_e2e?.editor?.getPrediction?.()?.text ?? ''),
+        page.evaluate(() => (window as any).__jotluck_e2e?.editor?.getPrediction?.()?.text ?? ''),
       )
       .toBe('第三条、第三天');
 
@@ -178,7 +179,7 @@ test.describe('offline autocomplete user journeys', () => {
     await expect(ghost).toHaveText('第三条、第三天');
 
     await page.keyboard.press('Tab');
-    await expect.poll(() => getEditorContent(page)).toContain(`${seed}第三条、第三天`);
+    await expect.poll(() => getEditorContentFromBridge(page)).toContain(`${seed}第三条、第三天`);
   });
 
   test('Tab keeps native focus navigation outside editor and accepts ghost text inside editor', async ({
@@ -222,6 +223,8 @@ test.describe('offline autocomplete user journeys', () => {
     // that can bypass CodeMirror's contenteditable keydown flow. After an
     // explicit editor click, page.keyboard.press mirrors the real user gesture.
     await page.keyboard.press('Tab');
-    await expect.poll(() => getEditorContent(page)).toContain(`${editorProbe}${suggestion}`);
+    await expect
+      .poll(() => getEditorContentFromBridge(page))
+      .toContain(`${editorProbe}${suggestion}`);
   });
 });

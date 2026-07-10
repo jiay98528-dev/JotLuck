@@ -70,14 +70,14 @@ const chrome: ThemeChromeState = {
 describe('ThemeRuntimeHost', () => {
   beforeEach(() => {
     localStorage.clear();
-    unregisterTrustedTheme('markluck.test-plugin');
+    unregisterTrustedTheme('jotluck.test-plugin');
   });
 
   it('activates an official full UX plugin and unregisters slot components', async () => {
     const TopbarPlugin = defineComponent({ name: 'TopbarPlugin', template: '<div />' });
     let disposed = false;
     const module: OfficialThemeModule = {
-      id: 'markluck.test-plugin',
+      id: 'jotluck.test-plugin',
       name: 'Test Plugin',
       tags: ['test'],
       capabilities: ['tokens', 'layout-preset', 'ux-components', 'trusted-code'],
@@ -119,7 +119,7 @@ describe('ThemeRuntimeHost', () => {
         runtime: 'official-code',
         minAppVersion: '0.15.0',
         name: module.name,
-        author: 'MarkLuck',
+        author: 'JotLuck',
         capabilities: module.capabilities,
         permissions: ['shell-layout', 'component-replace', 'visual-effects', 'theme-storage'],
         layoutPreset: 'atelier',
@@ -134,7 +134,7 @@ describe('ThemeRuntimeHost', () => {
     await activateTrustedThemeRuntime(pack, [], chrome);
 
     expect(getThemeSlotComponent(module.id, 'topbar')).toBe(TopbarPlugin);
-    expect(localStorage.getItem(`markluck:theme:${module.id}:activated`)).toBe(module.id);
+    expect(localStorage.getItem(`jotluck:theme:${module.id}:activated`)).toBe(module.id);
 
     unregisterTrustedTheme(module.id);
 

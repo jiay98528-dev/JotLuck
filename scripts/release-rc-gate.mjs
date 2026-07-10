@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = new Set(process.argv.slice(2));
+const packageJson = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
+const appVersion = String(packageJson.version ?? '');
 
 const defaultInstallerPath = path.join(
   rootDir,
@@ -16,11 +19,14 @@ const defaultInstallerPath = path.join(
   'release',
   'bundle',
   'nsis',
-  'MarkLuck_0.15.0_x64-setup.exe',
+  'JotLuck_0.15.0_x64-setup.exe',
 );
 
-const installerPath = path.resolve(rootDir, process.env.MARKLUCK_INSTALLER_PATH ?? defaultInstallerPath);
-const allowDirty = process.env.MARKLUCK_RELEASE_ALLOW_DIRTY === '1';
+const installerPath = path.resolve(
+  rootDir,
+  process.env.JotLuck_INSTALLER_PATH ?? defaultInstallerPath,
+);
+const allowDirty = process.env.JotLuck_RELEASE_ALLOW_DIRTY === '1';
 const reportPath = resolveReportPath();
 
 const requiredMarkers = [
@@ -28,6 +34,8 @@ const requiredMarkers = [
   'L4-GIT-AFTER',
   'L4-WINDOWS-VERSION',
   'L4-INSTALLER-PATH',
+  'L4-INSTALLER-SHA256',
+  'L4-APP-VERSION',
   'L4-RUST-AUDIT',
   'L4-01-INSTALL-START-CRUD',
   'L4-02-REAL-FOLDER',
@@ -51,7 +59,7 @@ if (args.has('--print-report-template')) {
   process.exit(0);
 }
 
-console.log('[release:rc-gate] MarkLuck real installer RC gate');
+console.log('[release:rc-gate] JotLuck real installer RC gate');
 console.log(`[release:rc-gate] installer: ${installerPath}`);
 console.log(`[release:rc-gate] report: ${reportPath ?? '(not found)'}`);
 
@@ -62,25 +70,30 @@ console.log(status || '(clean)');
 if (status && !allowDirty) {
   fail(
     2,
-    '工作区存在未提交或未跟踪文件。发布 RC 闸门必须在执行前后记录并解释 git status；如需临时审计脏树，设置 MARKLUCK_RELEASE_ALLOW_DIRTY=1。',
+    '工作区存在未提交或未跟踪文件。发布 RC 闸门必须在执行前后记录并解释 git status；如需临时审计脏树，设置 JotLuck_RELEASE_ALLOW_DIRTY=1。',
   );
 }
 
 if (!existsSync(installerPath)) {
   fail(
     3,
-    '未找到真实安装包。默认要求 MarkLuck_0.15.0_x64-setup.exe；可用 MARKLUCK_INSTALLER_PATH 指向实际 RC 安装包。',
+    '未找到真实安装包。默认要求 JotLuck_0.15.0_x64-setup.exe；可用 JotLuck_INSTALLER_PATH 指向实际 RC 安装包。',
   );
 }
+
+const installerStat = statSync(installerPath);
+const installerSha256 = sha256File(installerPath);
+console.log(`[release:rc-gate] installer sha256: ${installerSha256}`);
 
 if (!reportPath || !existsSync(reportPath)) {
   fail(
     4,
-    '未找到安装版 L4 人工验收记录。请复制 doc/release-installed-l4-template.md 填写后，用 MARKLUCK_L4_REPORT 指向该记录。',
+    '未找到安装版 L4 人工验收记录。请复制 doc/release-installed-l4-template.md 填写后，用 JotLuck_L4_REPORT 指向该记录。',
   );
 }
 
 const report = readFileSync(reportPath, 'utf8');
+const reportStat = statSync(reportPath);
 const missingMarkers = requiredMarkers.filter((marker) => !report.includes(marker));
 
 if (missingMarkers.length > 0) {
@@ -91,13 +104,45 @@ if (!/L4-CONCLUSION:\s*PASS\b/i.test(report)) {
   fail(6, '安装版 L4 记录未声明 L4-CONCLUSION: PASS。未完成前只能称为“自动化候选通过”。');
 }
 
+const reportInstallerPath = readMarkerValue(report, 'L4-INSTALLER-PATH');
+const reportInstallerSha256 = readMarkerValue(report, 'L4-INSTALLER-SHA256')
+  .replace(/[^a-fA-F0-9]/g, '')
+  .toLowerCase();
+const reportAppVersion = readMarkerValue(report, 'L4-APP-VERSION');
+const normalizedReportInstallerPath = normalizeReportPath(reportInstallerPath);
+
+if (normalizedReportInstallerPath !== path.normalize(installerPath)) {
+  fail(
+    7,
+    `安装版 L4 记录中的安装包路径不匹配。记录=${normalizedReportInstallerPath} 当前=${path.normalize(installerPath)}`,
+  );
+}
+
+if (!reportAppVersion.includes(appVersion)) {
+  fail(7, `安装版 L4 记录中的版本不匹配。记录=${reportAppVersion || '(empty)'} 当前=${appVersion}`);
+}
+
+if (reportInstallerSha256 !== installerSha256) {
+  fail(
+    7,
+    `安装版 L4 记录中的 SHA256 不匹配。记录=${reportInstallerSha256 || '(empty)'} 当前=${installerSha256}`,
+  );
+}
+
+if (reportStat.mtimeMs + 1000 < installerStat.mtimeMs) {
+  fail(7, '安装版 L4 记录早于当前安装包生成时间，可能是旧报告，必须重新验收并记录。');
+}
+
 const blockingStatusPattern = /状态\s*[:：]\s*(TODO|FAIL|BLOCKED|PENDING|未测|失败|阻塞)/i;
 if (blockingStatusPattern.test(report)) {
-  fail(7, '安装版 L4 记录仍包含 TODO/FAIL/BLOCKED/PENDING/未测/失败/阻塞 状态。');
+  fail(8, '安装版 L4 记录仍包含 TODO/FAIL/BLOCKED/PENDING/未测/失败/阻塞 状态。');
 }
 
 if (!/(pnpm audit:rust|cargo audit|CI\s*job|https?:\/\/\S+)/i.test(report)) {
-  fail(8, '安装版 L4 记录必须包含本机 pnpm audit:rust/cargo audit 结果，或明确的 CI job URL 与通过状态。');
+  fail(
+    9,
+    '安装版 L4 记录必须包含本机 pnpm audit:rust/cargo audit 结果，或明确的 CI job URL 与通过状态。',
+  );
 }
 
 console.log('\n[release:rc-gate] PASS: 真实安装包 L4 记录和安装包路径已满足 RC 闸门。');
@@ -111,8 +156,8 @@ function getGitStatus() {
 }
 
 function resolveReportPath() {
-  if (process.env.MARKLUCK_L4_REPORT) {
-    return path.resolve(rootDir, process.env.MARKLUCK_L4_REPORT);
+  if (process.env.JotLuck_L4_REPORT) {
+    return path.resolve(rootDir, process.env.JotLuck_L4_REPORT);
   }
 
   const reportDir = path.join(rootDir, '验收报告');
@@ -131,21 +176,37 @@ function resolveReportPath() {
   return candidates[0]?.fullPath ?? null;
 }
 
+function sha256File(filePath) {
+  return createHash('sha256').update(readFileSync(filePath)).digest('hex');
+}
+
+function readMarkerValue(report, marker) {
+  const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = report.match(new RegExp(`${escaped}\\s*:\\s*(.+)`, 'i'));
+  return match?.[1]?.trim() ?? '';
+}
+
+function normalizeReportPath(value) {
+  if (!value) return '';
+  const cleaned = value.replace(/^["'`]+|["'`]+$/g, '');
+  return path.normalize(path.isAbsolute(cleaned) ? cleaned : path.resolve(rootDir, cleaned));
+}
+
 function fail(code, message) {
   console.error(`\n[release:rc-gate] FAIL: ${message}`);
   process.exit(code);
 }
 
 function printHelp() {
-  console.log(`MarkLuck real installer RC gate
+  console.log(`JotLuck real installer RC gate
 
 Usage:
   pnpm release:rc-gate
 
 Environment:
-  MARKLUCK_INSTALLER_PATH        Path to MarkLuck_0.15.0_x64-setup.exe.
-  MARKLUCK_L4_REPORT            Path to the completed installed-app L4 report.
-  MARKLUCK_RELEASE_ALLOW_DIRTY=1 Allows auditing a dirty tree, but the report must explain git status.
+  JotLuck_INSTALLER_PATH        Path to JotLuck_0.15.0_x64-setup.exe.
+  JotLuck_L4_REPORT            Path to the completed installed-app L4 report.
+  JotLuck_RELEASE_ALLOW_DIRTY=1 Allows auditing a dirty tree, but the report must explain git status.
 
 Helpers:
   node scripts/release-rc-gate.mjs --print-report-template

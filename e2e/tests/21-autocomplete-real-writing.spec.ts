@@ -292,7 +292,7 @@ test.describe('autocomplete real Chinese writing score', () => {
 });
 
 async function openAppWithoutInternalBridge(page: Page): Promise<void> {
-  await page.goto(process.env.MARKLUCK_E2E_BASE_URL ?? 'http://localhost:5173', {
+  await page.goto(process.env.JOTLUCK_E2E_BASE_URL ?? 'http://localhost:5173', {
     waitUntil: 'domcontentloaded',
   });
 

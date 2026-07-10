@@ -140,7 +140,7 @@ const pinned = reactive<Record<ThemeDrawerSide, boolean>>({
   bottom: false,
 });
 
-const storageKey = computed(() => `markluck:theme:${props.themeId}:drawer-shell-pins:v1`);
+const storageKey = computed(() => `jotluck:theme:${props.themeId}:drawer-shell-pins:v1`);
 
 const shellStyle = computed<Record<string, string>>(() => ({
   '--single-drawer-left-size': `${clampDrawerSize(props.drawerShell.left)}px`,

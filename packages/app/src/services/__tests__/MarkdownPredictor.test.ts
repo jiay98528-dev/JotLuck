@@ -17,6 +17,10 @@ import { loadCompletionMetrics } from '../completion/metrics';
 import { LEARNING_SIGNALS_STORAGE_KEY } from '../completion/learning-signals';
 
 // ---- helpers ----
+const SCOPED_NGRAM_KEY = 'jotluck:scope:unscoped:ngram:v2';
+const SCOPED_SHORT_NGRAM_KEY = 'jotluck:scope:unscoped:ngram:short:v1';
+const SCOPED_NGRAM_META_KEY = 'jotluck:scope:unscoped:ngram:meta';
+const SCOPED_ACCEPTED_LEXICON_KEY = 'jotluck:scope:unscoped:autocomplete:acceptedLexicon:v1';
 
 function createPredictor(n: number = 4): MarkdownPredictor {
   return new MarkdownPredictor(n);
@@ -629,7 +633,7 @@ describe('MarkdownPredictor', () => {
       expect(result!.providerId).toBe('lexicon');
       expect(result!.text).toBe('成本');
       expect(localStorage.setItem).toHaveBeenCalledWith(
-        'markluck:autocomplete:acceptedLexicon:v1',
+        SCOPED_ACCEPTED_LEXICON_KEY,
         expect.any(String),
       );
       vi.unstubAllGlobals();
@@ -641,17 +645,18 @@ describe('MarkdownPredictor', () => {
       p.acceptCompletion('项目', '转化成本');
       p.ingestDocument('note.md', '项目复盘需要记录转化成本。转化成本需要持续观察。');
 
-      expect(localStorage.getItem('markluck:ngram:v2')).not.toBeNull();
-      expect(localStorage.getItem(ACCEPTED_LEXICON_STORAGE_KEY)).not.toBeNull();
+      expect(localStorage.getItem(SCOPED_NGRAM_KEY)).not.toBeNull();
+      expect(localStorage.getItem(SCOPED_ACCEPTED_LEXICON_KEY)).not.toBeNull();
 
       p.clearLearningData();
 
-      expect(localStorage.removeItem).toHaveBeenCalledWith('markluck:ngram:v2');
-      expect(localStorage.removeItem).toHaveBeenCalledWith('markluck:ngram:short:v1');
-      expect(localStorage.removeItem).toHaveBeenCalledWith('markluck:ngram:meta');
+      expect(localStorage.removeItem).toHaveBeenCalledWith(SCOPED_NGRAM_KEY);
+      expect(localStorage.removeItem).toHaveBeenCalledWith(SCOPED_SHORT_NGRAM_KEY);
+      expect(localStorage.removeItem).toHaveBeenCalledWith(SCOPED_NGRAM_META_KEY);
+      expect(localStorage.removeItem).toHaveBeenCalledWith(SCOPED_ACCEPTED_LEXICON_KEY);
       expect(localStorage.removeItem).toHaveBeenCalledWith(ACCEPTED_LEXICON_STORAGE_KEY);
-      expect(localStorage.getItem('markluck:ngram:v2')).toBeNull();
-      expect(localStorage.getItem(ACCEPTED_LEXICON_STORAGE_KEY)).toBeNull();
+      expect(localStorage.getItem(SCOPED_NGRAM_KEY)).toBeNull();
+      expect(localStorage.getItem(SCOPED_ACCEPTED_LEXICON_KEY)).toBeNull();
       vi.unstubAllGlobals();
     });
 
@@ -844,7 +849,7 @@ describe('MarkdownPredictor', () => {
       p.acceptCompletion('This ', 'note');
 
       expect(priv(p).l2.size).toBe(0);
-      expect(localStorage.getItem(ACCEPTED_LEXICON_STORAGE_KEY)).toContain('note');
+      expect(localStorage.getItem(SCOPED_ACCEPTED_LEXICON_KEY)).toContain('note');
     });
 
     it('clears learning signals with local learning data', () => {
@@ -1059,7 +1064,7 @@ describe('MarkdownPredictor', () => {
       p.closeDocument();
 
       // After closeDocument, L2 is saved to localStorage
-      expect(localStorage.getItem('markluck:ngram:v2')).not.toBeNull();
+      expect(localStorage.getItem(SCOPED_NGRAM_KEY)).not.toBeNull();
     });
 
     it('loadFromLocalStorage 恢复之前保存的数据', () => {
@@ -1201,7 +1206,7 @@ describe('MarkdownPredictor', () => {
       p1.closeDocument();
 
       // Verify storage has data before proceeding
-      const stored = localStorage.getItem('markluck:ngram:v2');
+      const stored = localStorage.getItem(SCOPED_NGRAM_KEY);
       expect(stored).not.toBeNull();
       expect(stored!.length).toBeGreaterThan(0);
 

@@ -25,15 +25,15 @@ describe('useThemeStore', () => {
     expect(theme.activeThemeId).toBe(DEFAULT_THEME_ID);
     expect(theme.activeThemeLabel).toBe('羽翼布局');
     expect(theme.themes.length).toBeGreaterThanOrEqual(4);
-    expect(publicIds).toEqual(['markluck.lumen-field', 'paper']);
-    expect(developerIds).toEqual(['markluck.ability-lab', 'markluck.super-workbench']);
+    expect(publicIds).toEqual(['jotluck.lumen-field', 'paper']);
+    expect(developerIds).toEqual(['jotluck.ability-lab', 'jotluck.super-workbench']);
     expect(theme.themeCenterCatalogThemes.map((pack) => pack.manifest.id).sort()).toEqual(
       publicIds,
     );
-    expect(theme.marketThemes.some((pack) => pack.manifest.id === 'markluck.ability-lab')).toBe(
+    expect(theme.marketThemes.some((pack) => pack.manifest.id === 'jotluck.ability-lab')).toBe(
       true,
     );
-    expect(theme.marketThemes.some((pack) => pack.manifest.id === 'markluck.lumen-field')).toBe(
+    expect(theme.marketThemes.some((pack) => pack.manifest.id === 'jotluck.lumen-field')).toBe(
       true,
     );
     expect(theme.activeChromeState.layoutPreset).toBe('winged');
@@ -51,9 +51,9 @@ describe('useThemeStore', () => {
 
     expect(theme.showDeveloperThemesInCatalog).toBe(true);
     expect(theme.themeCenterCatalogThemes.map((pack) => pack.manifest.id).sort()).toEqual([
-      'markluck.ability-lab',
-      'markluck.lumen-field',
-      'markluck.super-workbench',
+      'jotluck.ability-lab',
+      'jotluck.lumen-field',
+      'jotluck.super-workbench',
       'paper',
     ]);
   });
@@ -62,7 +62,7 @@ describe('useThemeStore', () => {
     const theme = useThemeStore();
     theme.init();
 
-    for (const themeId of ['paper', 'markluck.lumen-field']) {
+    for (const themeId of ['paper', 'jotluck.lumen-field']) {
       const pack = theme.themes.find((item) => item.manifest.id === themeId);
 
       expect(pack?.previewImages?.length).toBe(1);
@@ -75,12 +75,12 @@ describe('useThemeStore', () => {
     const theme = useThemeStore();
 
     theme.init();
-    theme.previewThemeById('markluck.ability-lab');
+    theme.previewThemeById('jotluck.ability-lab');
 
     expect(theme.activeThemeId).toBe(DEFAULT_THEME_ID);
-    expect(theme.previewThemeId).toBe('markluck.ability-lab');
+    expect(theme.previewThemeId).toBe('jotluck.ability-lab');
     expect(theme.activeChromeState.layoutPreset).toBe('atelier');
-    expect(document.documentElement.getAttribute('data-theme-id')).toBe('markluck.ability-lab');
+    expect(document.documentElement.getAttribute('data-theme-id')).toBe('jotluck.ability-lab');
     expect(document.documentElement.getAttribute('data-active-theme-id')).toBe(DEFAULT_THEME_ID);
   });
 
@@ -88,27 +88,27 @@ describe('useThemeStore', () => {
     const theme = useThemeStore();
 
     theme.init();
-    theme.activateTheme('markluck.ability-lab');
+    theme.activateTheme('jotluck.ability-lab');
 
-    expect(theme.activeThemeId).toBe('markluck.ability-lab');
+    expect(theme.activeThemeId).toBe('jotluck.ability-lab');
     expect(theme.previewThemeId).toBeNull();
     expect(theme.activeUxRecipes.topbar?.slot).toBe('topbar');
-    expect(document.documentElement.getAttribute('data-theme-id')).toBe('markluck.ability-lab');
+    expect(document.documentElement.getAttribute('data-theme-id')).toBe('jotluck.ability-lab');
 
     setActivePinia(createPinia());
     const restored = useThemeStore();
     restored.init();
 
-    expect(restored.activeThemeId).toBe('markluck.ability-lab');
+    expect(restored.activeThemeId).toBe('jotluck.ability-lab');
   });
 
   it('activates the lumen field single-page drawer recipe', () => {
     const theme = useThemeStore();
 
     theme.init();
-    theme.activateTheme('markluck.lumen-field');
+    theme.activateTheme('jotluck.lumen-field');
 
-    expect(theme.activeThemeId).toBe('markluck.lumen-field');
+    expect(theme.activeThemeId).toBe('jotluck.lumen-field');
     expect(theme.activeChromeState.layoutPreset).toBe('single-page');
     expect(theme.activeChromeState.workspaceIntent).toBe('studio');
     expect(theme.activeChromeState.defaultViewMode).toBe('live');
@@ -141,7 +141,7 @@ describe('useThemeStore', () => {
     expect(theme.activeTheme.manifest.slots).toEqual(
       expect.arrayContaining(['left-wing', 'right-wing', 'editor-control', 'status-bar']),
     );
-    expect(document.documentElement.getAttribute('data-theme-id')).toBe('markluck.lumen-field');
+    expect(document.documentElement.getAttribute('data-theme-id')).toBe('jotluck.lumen-field');
     expect(document.documentElement.getAttribute('data-layout-preset')).toBe('single-page');
     expect(document.documentElement.getAttribute('data-drawer-shell')).toBe('enabled');
   });
@@ -150,22 +150,22 @@ describe('useThemeStore', () => {
     const theme = useThemeStore();
 
     theme.init();
-    theme.activateTheme('markluck.super-workbench');
+    theme.activateTheme('jotluck.super-workbench');
 
-    expect(theme.activeThemeId).toBe('markluck.super-workbench');
+    expect(theme.activeThemeId).toBe('jotluck.super-workbench');
     expect(theme.activeTheme.manifest.slots).toContain('app-shell');
     expect(theme.activeTheme.manifest.slots).toContain('command-palette');
     expect(theme.activeTheme.manifest.slots).toContain('scratch-exit-dialog');
 
-    const checkout = await theme.createCheckout('markluck.super-workbench');
+    const checkout = await theme.createCheckout('jotluck.super-workbench');
     expect(checkout.state).toBe('local-mock');
 
     await theme.redeemThemeLicense({
-      themeId: 'markluck.super-workbench',
+      themeId: 'jotluck.super-workbench',
       licenseKey: 'ML-SUPER',
     });
 
-    expect(theme.entitlementFor('markluck.super-workbench').state).toBe('owned');
+    expect(theme.entitlementFor('jotluck.super-workbench').state).toBe('owned');
   });
 
   it('rejects switching to unknown themes', () => {

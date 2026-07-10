@@ -1,4 +1,4 @@
-// MarkLuck Tauri Backend
+// JotLuck Tauri Backend
 //
 // M6: Full-platform Rust backend with:
 //   M6-03: fs_ops — file read/write/delete/list with atomic writes
@@ -84,7 +84,7 @@ fn startup_log_path() -> Option<PathBuf> {
     let base = std::env::var_os("LOCALAPPDATA")
         .or_else(|| std::env::var_os("TMP"))
         .map(PathBuf::from)?;
-    let dir = base.join("MarkLuck").join("logs");
+    let dir = base.join("JotLuck").join("logs");
     if fs::create_dir_all(&dir).is_err() {
         return None;
     }
@@ -103,7 +103,7 @@ fn write_startup_error(message: &str) {
 
 fn install_panic_hook() {
     std::panic::set_hook(Box::new(|info| {
-        write_startup_error(&format!("panic while running MarkLuck: {info}"));
+        write_startup_error(&format!("panic while running jotluck: {info}"));
     }));
 }
 
@@ -120,6 +120,8 @@ pub fn run() {
 
     if let Err(error) = tauri::Builder::default()
         .manage(fs_ops::NotebookRoot::new())
+        .manage(fs_ops::ExternalAccessRoots::new())
+        .manage(file_watcher::FileWatcherState::new())
         .manage(Mutex::new(indexer::SearchIndex::new()))
         .setup(|app| {
             app.handle().plugin(
@@ -130,10 +132,13 @@ pub fn run() {
 
             // Emit opened-file event to frontend after setup
             if let Some(ref opened_file) = *OPENED_FILE.lock().unwrap() {
+                let _ = app
+                    .state::<fs_ops::ExternalAccessRoots>()
+                    .allow_root_path(&opened_file.notebook_root);
                 let _ = app.emit("opened-file", opened_file.clone());
             }
 
-            log::info!("MarkLuck Tauri backend initialized");
+            log::info!("JotLuck Tauri backend initialized");
             Ok(())
         })
         .plugin(tauri_plugin_fs::init())
@@ -142,6 +147,9 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if let Some(opened_file) = capture_opened_file_from_args(&argv) {
                 *OPENED_FILE.lock().unwrap() = Some(opened_file.clone());
+                let _ = app
+                    .state::<fs_ops::ExternalAccessRoots>()
+                    .allow_root_path(&opened_file.notebook_root);
                 let _ = app.emit("opened-file", opened_file);
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
@@ -160,6 +168,7 @@ pub fn run() {
             fs_ops::read_external_note_file,
             fs_ops::write_file,
             fs_ops::read_external_markdown_file,
+            fs_ops::register_external_access_root,
             fs_ops::write_external_markdown_file,
             fs_ops::write_external_note_file,
             fs_ops::read_binary_file,
@@ -174,6 +183,7 @@ pub fn run() {
             indexer::search_index,
             // M6-05: File watcher
             file_watcher::start_file_watcher,
+            file_watcher::stop_file_watcher,
             // M6-06: Template
             template::render_template,
             template::get_builtin_template,
@@ -182,7 +192,7 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
     {
-        write_startup_error(&format!("error while running MarkLuck: {error:?}"));
+        write_startup_error(&format!("error while running jotluck: {error:?}"));
     }
 }
 
@@ -192,7 +202,7 @@ mod tests {
 
     #[test]
     fn opened_file_payload_uses_parent_as_notebook_root() {
-        let root = std::env::temp_dir().join("markluck-opened-file-test");
+        let root = std::env::temp_dir().join("JotLuck-opened-file-test");
         let _ = fs::create_dir_all(&root);
         let note_path = root.join("target.md");
         fs::write(&note_path, "# Target").unwrap();

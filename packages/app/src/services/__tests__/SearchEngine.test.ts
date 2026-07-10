@@ -332,8 +332,8 @@ describe('SearchEngine', () => {
     const engine = new SearchEngine();
     const docs = makeDocs([{ path: '/readme.md', title: 'README' }]);
     engine.buildIndex(docs);
-    engine.updateDocument('/readme.md', docs['/readme.md']!, '# README\n\nWelcome to MarkLuck!');
-    const results = engine.search({ text: 'MarkLuck' });
+    engine.updateDocument('/readme.md', docs['/readme.md']!, '# README\n\nWelcome to JotLuck!');
+    const results = engine.search({ text: 'JotLuck' });
     expect(results).toHaveLength(1);
     const r = results[0]!;
     expect(r).toHaveProperty('notePath');

@@ -1,10 +1,10 @@
-# MarkLuck 基准 L3 语料目录
+# JotLuck 基准 L3 语料目录
 
 > 语料规范 v3.0 | 本目录用于离线 N-gram baseline，不用于 LLM 训练。
 
 ## 定位
 
-MarkLuck 的补全目标是短、准、快、安静。基线语料只训练常见笔记语感，不训练长篇续写。结构化补全由 Provider 处理，语料只补足普通文本的短句搭配。默认发布模型是 `web-local` compact；L2 只代表用户历史和全局本地积累，L3 才是预训练 baseline。
+JotLuck 的补全目标是短、准、快、安静。基线语料只训练常见笔记语感，不训练长篇续写。结构化补全由 Provider 处理，语料只补足普通文本的短句搭配。默认发布模型是 `web-local` compact；L2 只代表用户历史和全局本地积累，L3 才是预训练 baseline。
 
 ## 目录结构
 

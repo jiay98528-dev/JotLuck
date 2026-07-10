@@ -7,7 +7,7 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { SearchResult } from '@/types';
 
-const HISTORY_KEY = 'markluck-search-history';
+const HISTORY_KEY = 'jotluck-search-history';
 const MAX_HISTORY = 10;
 
 export const useSearchStore = defineStore('search', () => {

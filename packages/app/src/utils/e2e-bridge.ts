@@ -1,7 +1,7 @@
 import type { PredictionResult } from '@/utils/ngram-engine';
 import type { CompletionAblationMode } from '@/services/completion/types';
 
-export interface MarkluckE2EOpenedFile {
+export interface JotLuckE2EOpenedFile {
   absolutePath?: string;
   absolute_path?: string;
   notebookRoot?: string;
@@ -10,7 +10,7 @@ export interface MarkluckE2EOpenedFile {
   relative_path?: string;
 }
 
-export interface MarkluckE2EEditorBridge {
+export interface JotLuckE2EEditorBridge {
   id: string;
   getContent: () => string;
   setContent: (content: string) => void;
@@ -20,24 +20,31 @@ export interface MarkluckE2EEditorBridge {
   setCompletionAblationMode: (mode: CompletionAblationMode) => void;
 }
 
-export interface MarkluckE2EBridge {
-  editor?: MarkluckE2EEditorBridge;
-  mockOpenedFile?: MarkluckE2EOpenedFile;
+export interface JotLuckE2EBridge {
+  editor?: JotLuckE2EEditorBridge;
+  mockOpenedFile?: JotLuckE2EOpenedFile;
   externalFiles?: Record<string, string>;
   externalWrites?: Array<{ absolutePath: string; content: string; time: number }>;
+  debugState?: () => {
+    activePath: string;
+    currentContent: string;
+    externalSessionMode: string;
+    isDirty: boolean;
+    isExternalEditing: boolean;
+  };
 }
 
-export function isMarkluckE2EBridgeEnabled(): boolean {
+export function isJotLuckE2EBridgeEnabled(): boolean {
   return import.meta.env.MODE === 'e2e';
 }
 
-export function getMarkluckE2EBridge(): MarkluckE2EBridge | null {
-  if (!isMarkluckE2EBridgeEnabled()) return null;
-  window.__markluck_e2e = window.__markluck_e2e ?? {};
-  return window.__markluck_e2e;
+export function getJotLuckE2EBridge(): JotLuckE2EBridge | null {
+  if (!isJotLuckE2EBridgeEnabled()) return null;
+  window.__jotluck_e2e = window.__jotluck_e2e ?? {};
+  return window.__jotluck_e2e;
 }
 
-export function peekMarkluckE2EBridge(): MarkluckE2EBridge | null {
-  if (!isMarkluckE2EBridgeEnabled()) return null;
-  return window.__markluck_e2e ?? null;
+export function peekJotLuckE2EBridge(): JotLuckE2EBridge | null {
+  if (!isJotLuckE2EBridgeEnabled()) return null;
+  return window.__jotluck_e2e ?? null;
 }

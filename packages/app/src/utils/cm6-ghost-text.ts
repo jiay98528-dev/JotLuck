@@ -72,7 +72,7 @@ interface DebounceState {
 }
 
 interface GhostDebugHost extends HTMLElement {
-  __markluckClearGhostText?: () => void;
+  __jotluckClearGhostText?: () => void;
 }
 
 // ---- ViewPlugin ----
@@ -107,7 +107,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
 
       constructor(view: EditorView) {
         this.editorView = view;
-        (view.dom as GhostDebugHost).__markluckClearGhostText = () => {
+        (view.dom as GhostDebugHost).__jotluckClearGhostText = () => {
           this.clearPendingTimers();
           this.clearGhost(view, true, true);
         };
@@ -462,7 +462,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         this.clearPendingTimers();
         if (this.editorView) {
           this.clearGhost(this.editorView, true, true);
-          delete (this.editorView.dom as GhostDebugHost).__markluckClearGhostText;
+          delete (this.editorView.dom as GhostDebugHost).__jotluckClearGhostText;
           const dom = this.editorView.contentDOM;
           if (this.__compStart) dom.removeEventListener('compositionstart', this.__compStart);
           if (this.__compEnd) dom.removeEventListener('compositionend', this.__compEnd);

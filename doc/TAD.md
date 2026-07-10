@@ -1,4 +1,4 @@
-# MarkLuck TAD
+# JotLuck TAD
 
 版本：2026-06-27
 
@@ -34,7 +34,7 @@ Vue 3 + Pinia + Vite
 
 ## 边界
 
-- 主题可以接管 MarkLuck Shell 级 UX 与主要弹窗入口。
+- 主题可以接管 JotLuck Shell 级 UX 与主要弹窗入口。
 - 主题开发必须遵守 `doc/standards-theme-development.md`；不得新增未文档化 slot、Host API、Manifest 字段或宿主层 theme-id 特判。
 - 主题不得直接替换 Markdown 清洗、文件 IO、搜索索引、导出服务或系统 API；这些能力通过宿主 action/API 间接触发。
 - 商业化当前只提供接口和 mock 状态，不做真实支付、远程下载、账号体系或社区审核。

@@ -1,7 +1,7 @@
 import type { CompletionCandidate, CompletionSourceLayer } from './types';
 
-const LEGACY_METRICS_KEY = 'markluck:autocomplete:providerMetrics:v1';
-const METRICS_KEY = 'markluck:autocomplete:providerMetrics:v2';
+const LEGACY_METRICS_KEY = 'jotluck:autocomplete:providerMetrics:v1';
+const METRICS_KEY = 'jotluck:autocomplete:providerMetrics:v2';
 const MAX_LATENCY_SAMPLES = 40;
 
 export interface ProviderMetrics {

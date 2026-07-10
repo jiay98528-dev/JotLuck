@@ -46,7 +46,7 @@ const LumenLeftWing = defineComponent({
   setup(props) {
     return () =>
       h('aside', { class: 'lumen-left', 'data-theme-plugin-slot': 'left-wing' }, [
-        h('div', { class: 'lumen-left__header' }, [h('strong', 'MarkLuck'), h('span', '本地笔记')]),
+        h('div', { class: 'lumen-left__header' }, [h('strong', 'JotLuck'), h('span', '本地笔记')]),
         actionStrip(props.actions, true),
         h(
           'div',

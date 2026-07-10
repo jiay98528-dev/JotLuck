@@ -24,7 +24,7 @@ type MockFsData = {
   dirs: Record<string, string[]>;
 };
 
-const MOCK_FS_KEY = 'markluck-mockfs';
+const MOCK_FS_KEY = 'jotluck-mockfs';
 const MOCK_FS_VERSION = 4;
 const STARTUP_READY_BUDGET_MS = 3000;
 const LARGE_WORKSPACE_DRAWER_BUDGET_MS = 5000;
@@ -189,7 +189,7 @@ function buildLargeDocumentWorkspace(lineCount: number): MockFsData {
 async function seedMockFs(page: Page, data: MockFsData): Promise<void> {
   await page.addInitScript(
     ({ key, fixture }) => {
-      localStorage.setItem('markluck:welcome:completed', '1');
+      localStorage.setItem('jotluck:welcome:completed', '1');
       if (!localStorage.getItem(key)) {
         localStorage.setItem(key, JSON.stringify(fixture));
       }
@@ -210,7 +210,7 @@ async function closeOverlayIfOpen(page: Page): Promise<void> {
 
 async function waitForEditableShell(page: Page): Promise<void> {
   await expect(page.locator('.welcome-overlay')).toHaveCount(0);
-  await expect(page.locator('#markluck-app')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('#jotluck-app')).toBeVisible({ timeout: 10000 });
   await expect(page.locator('.cm-content')).toBeVisible({ timeout: 10000 });
 }
 
@@ -388,7 +388,7 @@ test.describe('blackbox boundary and performance release gate', () => {
     await expect.poll(() => getEditorContent(page), { timeout: 10000 }).toContain(editMarker);
 
     const persisted = await page.evaluate(() => {
-      const raw = localStorage.getItem('markluck-mockfs');
+      const raw = localStorage.getItem('jotluck-mockfs');
       const data = raw ? (JSON.parse(raw) as MockFsData) : undefined;
       return {
         note005: data?.files['/cluster/note-005.md']?.content ?? '',
@@ -421,7 +421,7 @@ test.describe('blackbox boundary and performance release gate', () => {
     });
 
     await page.addInitScript((key) => {
-      localStorage.setItem('markluck:welcome:completed', '1');
+      localStorage.setItem('jotluck:welcome:completed', '1');
       localStorage.setItem(key, '{ invalid json');
     }, MOCK_FS_KEY);
 

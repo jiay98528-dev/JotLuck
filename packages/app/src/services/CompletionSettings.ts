@@ -9,9 +9,9 @@ export interface CompletionSettings {
   showDebugStats: boolean;
 }
 
-export const COMPLETION_SETTINGS_KEY = 'markluck:autocomplete:settings';
-export const LEGACY_AUTOCOMPLETE_ENABLED_KEY = 'markluck:autocomplete:enabled';
-export const COMPLETION_SETTINGS_EVENT = 'markluck:completion-settings-changed';
+export const COMPLETION_SETTINGS_KEY = 'jotluck:autocomplete:settings';
+export const LEGACY_AUTOCOMPLETE_ENABLED_KEY = 'jotluck:autocomplete:enabled';
+export const COMPLETION_SETTINGS_EVENT = 'jotluck:completion-settings-changed';
 
 export const DEFAULT_COMPLETION_SETTINGS: CompletionSettings = {
   enabled: true,

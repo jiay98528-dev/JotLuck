@@ -1,21 +1,21 @@
-# MarkLuck 真实安装包 RC 闸门
+# JotLuck 真实安装包 RC 闸门
 
 从 `0.15.0` RC 起，Web 自动化全绿只能表述为“自动化候选通过”，不能表述为“最终发布通过”。最终发布通过必须额外满足真实安装包 L4。
 
 ## 两层 GUI 验收
 
 - Web GUI 烟测: 只用于验证本轮前端交互修复。
-- 安装版 L4: 必须基于 `MarkLuck_0.15.0_x64-setup.exe` 安装后的真实应用。
+- 安装版 L4: 必须基于 `JotLuck_0.15.0_x64-setup.exe` 安装后的真实应用。
 
 ## 执行顺序
 
 1. 运行既有自动化: L1/L2/coverage/build/Rust check/test、三引擎 E2E、`tauri:build`。
-2. 生成并定位 `MarkLuck_0.15.0_x64-setup.exe`。默认路径为 `packages/app/src-tauri/target/release/bundle/nsis/MarkLuck_0.15.0_x64-setup.exe`。
+2. 生成并定位 `JotLuck_0.15.0_x64-setup.exe`。默认路径为 `packages/app/src-tauri/target/release/bundle/nsis/JotLuck_0.15.0_x64-setup.exe`。
 3. 复制并填写 [release-installed-l4-template.md](./release-installed-l4-template.md)。
-4. 在 L4 记录中粘贴执行前后的 `git status --short`。任何未提交/未跟踪文件必须清理、提交或解释。
-5. 运行 `pnpm release:rc-gate`。默认要求工作区干净、安装包存在、L4 记录完整且 `L4-CONCLUSION: PASS`。
+4. 在 L4 记录中粘贴执行前后的 `git status --short`，并填写 `L4-APP-VERSION`、`L4-INSTALLER-PATH`、`L4-INSTALLER-SHA256`。任何未提交/未跟踪文件必须清理、提交或解释。
+5. 运行 `pnpm release:rc-gate`。默认要求工作区干净、安装包存在、L4 记录完整、版本匹配、路径匹配、SHA256 重新计算一致，且 `L4-CONCLUSION: PASS`。
 
-如必须临时审计脏工作区，可设置 `MARKLUCK_RELEASE_ALLOW_DIRTY=1`，但正式放行前仍必须回到干净工作区。
+如必须临时审计脏工作区，可设置 `JotLuck_RELEASE_ALLOW_DIRTY=1`，但正式放行前仍必须回到干净工作区。
 
 ## 安装版 L4 必测路径
 

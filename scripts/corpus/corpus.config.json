@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "MarkLuck offline autocomplete baseline corpus configuration",
+  "description": "JotLuck offline autocomplete baseline corpus configuration",
   "ngramN": 4,
   "minCount": 3,
   "maxPredsPerContext": 3,

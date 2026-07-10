@@ -8,7 +8,7 @@ import type {
 } from '@/types/theme-pack';
 import { APP_THEME_VERSION } from './ThemeRegistry';
 
-const STORAGE_KEY = 'markluck:themes:installed:v2';
+const STORAGE_KEY = 'jotluck:themes:installed:v2';
 const MAX_THEME_PACKAGE_BYTES = 8 * 1024 * 1024;
 const MAX_CSS_BYTES = 256 * 1024;
 const ALLOWED_ASSET_RE = /\.(png|jpe?g|webp|gif|svg)$/i;
@@ -135,7 +135,7 @@ export function validateThemePackage(input: ThemePackageInput): ThemeValidationI
   if (manifest.minAppVersion > APP_THEME_VERSION) {
     issues.push({
       code: 'min-app-version',
-      message: `主题要求 MarkLuck ${manifest.minAppVersion} 或更高版本。`,
+      message: `主题要求 JotLuck ${manifest.minAppVersion} 或更高版本。`,
       path: 'manifest.minAppVersion',
     });
   }
@@ -155,11 +155,47 @@ function stripCssComments(css: string): string {
 }
 
 function selectorHasThemeScope(selector: string, themeId: string): boolean {
-  return (
-    selector.includes(`[data-theme-id="${themeId}"]`) ||
-    selector.includes(`[data-theme-id='${themeId}']`) ||
-    selector.includes(`[data-theme-id=${themeId}]`)
+  const trimmed = selector.trim();
+  const scopes = [
+    `[data-theme-id="${themeId}"]`,
+    `[data-theme-id='${themeId}']`,
+    `[data-theme-id=${themeId}]`,
+  ];
+  return scopes.some(
+    (scope) => trimmed.startsWith(scope) || trimmed.startsWith(`:where(${scope})`),
   );
+}
+
+function splitSelectorList(prelude: string): string[] {
+  const selectors: string[] = [];
+  let start = 0;
+  let squareDepth = 0;
+  let parenDepth = 0;
+  let quote: '"' | "'" | null = null;
+
+  for (let i = 0; i < prelude.length; i++) {
+    const char = prelude[i];
+    const previous = prelude[i - 1];
+    if (quote) {
+      if (char === quote && previous !== '\\') quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '[') squareDepth++;
+    else if (char === ']') squareDepth = Math.max(0, squareDepth - 1);
+    else if (char === '(') parenDepth++;
+    else if (char === ')') parenDepth = Math.max(0, parenDepth - 1);
+    else if (char === ',' && squareDepth === 0 && parenDepth === 0) {
+      selectors.push(prelude.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+
+  selectors.push(prelude.slice(start).trim());
+  return selectors.filter(Boolean);
 }
 
 function findUnscopedCssSelector(css: string, themeId: string): string | null {
@@ -184,10 +220,9 @@ function findUnscopedCssSelector(css: string, themeId: string): string | null {
       ) {
         keyframesDepth = depth + 1;
       } else if (prelude && !prelude.startsWith('@')) {
-        const unscoped = prelude
-          .split(',')
-          .map((selector) => selector.trim())
-          .find((selector) => selector.length > 0 && !selectorHasThemeScope(selector, themeId));
+        const unscoped = splitSelectorList(prelude).find(
+          (selector) => !selectorHasThemeScope(selector, themeId),
+        );
         if (unscoped) return unscoped;
       }
 

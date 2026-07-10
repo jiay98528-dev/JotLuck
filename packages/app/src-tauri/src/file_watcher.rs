@@ -1,14 +1,16 @@
 // M6-05: File system watcher
 //
-// Monitors the notebook directory for changes (create, modify, delete, rename)
-// and emits events to the frontend via Tauri's event system.
+// Monitors the active notebook directory for changes and emits simplified
+// events to the frontend. The watcher is a replaceable singleton so switching
+// notebooks does not leak OS watcher handles.
 
 use notify::event::{CreateKind, ModifyKind, RenameMode};
 use notify::{Event, EventKind, RecursiveMode, Watcher};
 use std::path::PathBuf;
-use std::sync::mpsc;
+use std::sync::{mpsc, Mutex};
 use std::thread;
-use tauri::{AppHandle, Emitter};
+use std::time::Duration;
+use tauri::{AppHandle, Emitter, State};
 
 /// File change event emitted to the frontend.
 #[derive(Clone, serde::Serialize)]
@@ -18,23 +20,81 @@ pub struct FileChangeEvent {
     pub old_path: Option<String>, // for rename events
 }
 
+pub struct FileWatcherState {
+    guard: Mutex<Option<WatcherGuard>>,
+}
+
+impl FileWatcherState {
+    pub fn new() -> Self {
+        Self {
+            guard: Mutex::new(None),
+        }
+    }
+
+    fn replace(&self, guard: WatcherGuard) -> Result<(), String> {
+        let mut current = self
+            .guard
+            .lock()
+            .map_err(|_| "file watcher state lock poisoned".to_string())?;
+        if let Some(existing) = current.take() {
+            existing.stop();
+        }
+        *current = Some(guard);
+        Ok(())
+    }
+
+    fn stop(&self) -> Result<bool, String> {
+        let mut current = self
+            .guard
+            .lock()
+            .map_err(|_| "file watcher state lock poisoned".to_string())?;
+        let Some(existing) = current.take() else {
+            return Ok(false);
+        };
+        existing.stop();
+        Ok(true)
+    }
+}
+
+struct WatcherGuard {
+    stop_tx: mpsc::Sender<()>,
+}
+
+impl WatcherGuard {
+    fn stop(self) {
+        let _ = self.stop_tx.send(());
+    }
+}
+
 /// Start watching a directory for file changes.
 /// Events are emitted to the frontend via the `file-change` event.
-pub fn start_watching(app_handle: AppHandle, root_path: PathBuf) -> Result<(), String> {
+fn start_watching(app_handle: AppHandle, root_path: PathBuf) -> Result<WatcherGuard, String> {
     let (tx, rx) = mpsc::channel::<Result<Event, notify::Error>>();
+    let (stop_tx, stop_rx) = mpsc::channel::<()>();
 
     let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
         let _ = tx.send(res);
     })
-    .map_err(|e| format!("创建文件监控失败: {}", e))?;
+    .map_err(|e| format!("failed to create file watcher: {e}"))?;
 
     watcher
         .watch(&root_path, RecursiveMode::Recursive)
-        .map_err(|e| format!("启动文件监控失败: {}", e))?;
+        .map_err(|e| format!("failed to start file watcher: {e}"))?;
 
-    // Spawn a thread to process events
     thread::spawn(move || {
-        for event_result in rx {
+        let _watcher = watcher;
+
+        loop {
+            if stop_rx.try_recv().is_ok() {
+                break;
+            }
+
+            let event_result = match rx.recv_timeout(Duration::from_millis(200)) {
+                Ok(result) => result,
+                Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            };
+
             let event = match event_result {
                 Ok(e) => e,
                 Err(_) => continue,
@@ -54,10 +114,7 @@ pub fn start_watching(app_handle: AppHandle, root_path: PathBuf) -> Result<(), S
         }
     });
 
-    // Keep watcher alive by leaking it (it lives for the app lifetime)
-    std::mem::forget(watcher);
-
-    Ok(())
+    Ok(WatcherGuard { stop_tx })
 }
 
 /// Convert a notify Event to our simplified FileChangeEvent.
@@ -126,18 +183,62 @@ fn is_supported_path(path: &PathBuf) -> bool {
     )
 }
 
-/// Stop watching. Called when the app closes.
-#[allow(dead_code)]
-pub fn stop_watching() {
-    // Watcher is dropped when the app exits.
-    // The thread will terminate when the channel closes.
+#[tauri::command]
+pub fn start_file_watcher(
+    app_handle: AppHandle,
+    state: State<'_, FileWatcherState>,
+    root_path: String,
+) -> Result<(), String> {
+    let path = PathBuf::from(&root_path);
+    if !path.exists() || !path.is_dir() {
+        return Err(format!("invalid watcher root path: {root_path}"));
+    }
+    let guard = start_watching(app_handle, path)?;
+    state.replace(guard)
 }
 
 #[tauri::command]
-pub fn start_file_watcher(app_handle: AppHandle, root_path: String) -> Result<(), String> {
-    let path = PathBuf::from(&root_path);
-    if !path.exists() || !path.is_dir() {
-        return Err(format!("无效的监控路径: {}", root_path));
+pub fn stop_file_watcher(state: State<'_, FileWatcherState>) -> Result<(), String> {
+    let _ = state.stop()?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn guard_with_receiver() -> (WatcherGuard, mpsc::Receiver<()>) {
+        let (stop_tx, stop_rx) = mpsc::channel();
+        (WatcherGuard { stop_tx }, stop_rx)
     }
-    start_watching(app_handle, path)
+
+    #[test]
+    fn replacing_watcher_stops_previous_guard() {
+        let state = FileWatcherState::new();
+        let (first, first_rx) = guard_with_receiver();
+        let (second, _second_rx) = guard_with_receiver();
+
+        state.replace(first).unwrap();
+        state.replace(second).unwrap();
+
+        assert!(first_rx.recv_timeout(Duration::from_millis(200)).is_ok());
+    }
+
+    #[test]
+    fn stopping_idle_watcher_is_noop() {
+        let state = FileWatcherState::new();
+
+        assert!(!state.stop().unwrap());
+    }
+
+    #[test]
+    fn stopping_active_watcher_sends_stop_signal() {
+        let state = FileWatcherState::new();
+        let (guard, stop_rx) = guard_with_receiver();
+
+        state.replace(guard).unwrap();
+
+        assert!(state.stop().unwrap());
+        assert!(stop_rx.recv_timeout(Duration::from_millis(200)).is_ok());
+    }
 }

@@ -1,5 +1,5 @@
 // ============================================================
-// MarkLuck — Export & Share Types
+// JotLuck — Export & Share Types
 // ============================================================
 // Source: spec/types/export.ts
 

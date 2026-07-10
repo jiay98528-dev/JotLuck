@@ -243,7 +243,7 @@ test.describe('文件操作', () => {
 
   test('should show toast notification on operations', async ({ page }) => {
     // 清除格式提示标记——让首次选中文字时触发 Toast
-    await page.evaluate(() => localStorage.removeItem('markluck:formatBubble:hintShown'));
+    await page.evaluate(() => localStorage.removeItem('jotluck:formatBubble:hintShown'));
 
     // 先切换到一篇笔记
     await page.locator('.wing-bookmark-dot[aria-label="快速入门"]').click();

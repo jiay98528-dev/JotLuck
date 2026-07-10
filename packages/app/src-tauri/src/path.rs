@@ -119,7 +119,7 @@ mod tests {
 
     #[test]
     fn test_safe_path_within_root() {
-        let root = env::temp_dir().join("markluck-test-safe");
+        let root = env::temp_dir().join("JotLuck-test-safe");
         let _ = std::fs::create_dir_all(root.join("notes"));
         let target = Path::new("notes/test.md");
         assert!(is_safe_path(&root, target));
@@ -128,7 +128,7 @@ mod tests {
 
     #[test]
     fn test_reject_traversal() {
-        let root = env::temp_dir().join("markluck-test-traversal");
+        let root = env::temp_dir().join("JotLuck-test-traversal");
         let _ = std::fs::create_dir_all(&root);
         let target = Path::new("../../etc/passwd");
         assert!(!is_safe_path(&root, target));
@@ -137,7 +137,7 @@ mod tests {
 
     #[test]
     fn test_resolve_notebook_root_marker() {
-        let root = env::temp_dir().join("markluck-test-root-marker");
+        let root = env::temp_dir().join("JotLuck-test-root-marker");
         let _ = std::fs::create_dir_all(root.join("notes"));
         let resolved = resolve_safe_path(&root, "/notes/test.md").unwrap();
         assert_eq!(resolved, root.join("notes/test.md"));
@@ -148,9 +148,9 @@ mod tests {
 
     #[test]
     fn test_reject_absolute_path_after_normalization() {
-        let root = env::temp_dir().join("markluck-test-absolute");
+        let root = env::temp_dir().join("JotLuck-test-absolute");
         let _ = std::fs::create_dir_all(&root);
-        let outside = env::temp_dir().join("markluck-outside.md");
+        let outside = env::temp_dir().join("JotLuck-outside.md");
         let outside_str = outside.to_string_lossy().to_string();
         let result = resolve_safe_path(&root, &outside_str);
         assert!(result.is_err());
@@ -159,8 +159,8 @@ mod tests {
 
     #[test]
     fn test_reject_symlink_or_junction_escape_when_available() {
-        let root = env::temp_dir().join("markluck-test-link-root");
-        let outside = env::temp_dir().join("markluck-test-link-outside");
+        let root = env::temp_dir().join("JotLuck-test-link-root");
+        let outside = env::temp_dir().join("JotLuck-test-link-outside");
         let link = root.join("linked");
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&outside);

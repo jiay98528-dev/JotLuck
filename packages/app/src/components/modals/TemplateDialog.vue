@@ -78,9 +78,16 @@
 
             <!-- Save as template -->
             <div v-if="currentContent" class="save-as-template">
-              <button class="save-toggle" @click="showSaveForm = !showSaveForm">
+              <button
+                class="save-toggle"
+                :disabled="!canSaveCustomTemplate"
+                @click="showSaveForm = !showSaveForm"
+              >
                 + 保存为自定义模板
               </button>
+              <p v-if="!canSaveCustomTemplate && customTemplateDisabledReason" class="save-note">
+                {{ customTemplateDisabledReason }}
+              </p>
               <div v-if="showSaveForm" class="save-form">
                 <input v-model="tplName" class="save-form-input" placeholder="模板名称" />
                 <input v-model="tplDesc" class="save-form-input" placeholder="模板描述（可选）" />
@@ -88,7 +95,12 @@
                   <Button variant="secondary" size="sm" @click="showSaveForm = false">
                     取消
                   </Button>
-                  <Button variant="default" size="sm" :disabled="!tplName" @click="doSaveTemplate">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    :disabled="!tplName || !canSaveCustomTemplate"
+                    @click="doSaveTemplate"
+                  >
                     保存
                   </Button>
                 </div>
@@ -141,13 +153,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
-import {
-  getBuiltInTemplates,
-  getCustomTemplates,
-  saveCustomTemplate,
-  deleteCustomTemplate,
-  previewTemplate,
-} from '@/services/TemplateEngine';
+import { getBuiltInTemplates, previewTemplate } from '@/services/TemplateEngine';
 import type { TemplateItem } from '@/types';
 import Button from '@/components/common/Button.vue';
 
@@ -162,6 +168,9 @@ interface RichTemplateItem extends TemplateItem {
 const props = defineProps<{
   visible: boolean;
   currentContent?: string;
+  customTemplates?: RichTemplateItem[];
+  canSaveCustomTemplate?: boolean;
+  customTemplateDisabledReason?: string;
 }>();
 
 // ── Emits ──────────────────────────────────────────────
@@ -169,6 +178,8 @@ const emit = defineEmits<{
   'update:visible': [boolean];
   select: [template: RichTemplateItem, content: string];
   'create-blank': [];
+  'save-template': [name: string, description: string];
+  'delete-template': [id: string];
   cancel: [];
 }>();
 
@@ -176,7 +187,6 @@ const overlayRef = ref<HTMLDivElement | null>(null);
 
 // ── State ──────────────────────────────────────────────
 const templates = getBuiltInTemplates() as RichTemplateItem[];
-const customTemplates = ref<RichTemplateItem[]>(getCustomTemplates() as RichTemplateItem[]);
 const selectedId = ref<string | null>(null);
 const selectedTpl = ref<RichTemplateItem | null>(null);
 
@@ -194,6 +204,8 @@ const renderedPreview = computed<string>(() => {
   // Show first 6 lines for preview
   return rendered.split('\n').slice(0, 6).join('\n');
 });
+const customTemplates = computed<RichTemplateItem[]>(() => props.customTemplates ?? []);
+const canSaveCustomTemplate = computed(() => props.canSaveCustomTemplate !== false);
 
 // ── Methods ────────────────────────────────────────────
 function cancel(): void {
@@ -218,19 +230,16 @@ function emitSelect(): void {
 
 function doSaveTemplate(): void {
   const name = tplName.value.trim();
-  if (!name) return;
+  if (!name || !canSaveCustomTemplate.value) return;
   const desc = tplDesc.value.trim();
-  const content = props.currentContent || '';
-  const tpl = saveCustomTemplate(name, desc, content) as RichTemplateItem;
-  customTemplates.value.push(tpl);
+  emit('save-template', name, desc);
   showSaveForm.value = false;
   tplName.value = '';
   tplDesc.value = '';
 }
 
 function deleteTemplate(id: string): void {
-  deleteCustomTemplate(id);
-  customTemplates.value = customTemplates.value.filter((t) => t.id !== id);
+  emit('delete-template', id);
   if (selectedId.value === id) {
     selectedId.value = null;
     selectedTpl.value = null;
@@ -243,8 +252,6 @@ function resetState(): void {
   showSaveForm.value = false;
   tplName.value = '';
   tplDesc.value = '';
-  // Reload custom templates on each open
-  customTemplates.value = getCustomTemplates() as RichTemplateItem[];
 }
 
 // ── Watch visible to reset on open ─────────────────────
@@ -257,6 +264,13 @@ watch(
     }
   },
 );
+
+watch(customTemplates, (templatesValue) => {
+  if (!selectedId.value) return;
+  if (templatesValue.some((tpl) => tpl.id === selectedId.value)) return;
+  selectedId.value = null;
+  selectedTpl.value = null;
+});
 </script>
 
 <style scoped>
@@ -454,6 +468,24 @@ watch(
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-soft);
+}
+
+.save-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.save-toggle:disabled:hover {
+  border-color: var(--rule);
+  color: var(--ink-muted);
+  background: transparent;
+}
+
+.save-note {
+  margin: var(--space-6) 0 0;
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+  line-height: var(--lh-compact);
 }
 
 .save-form {

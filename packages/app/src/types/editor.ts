@@ -1,5 +1,5 @@
 // ============================================================
-// MarkLuck — Editor / Block Types
+// JotLuck — Editor / Block Types
 // ============================================================
 // Source: spec/types/editor.ts (authoritative for BlockType)
 

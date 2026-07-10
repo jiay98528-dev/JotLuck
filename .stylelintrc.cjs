@@ -1,5 +1,5 @@
 /**
- * MarkLuck Stylelint 配置
+ * JotLuck Stylelint 配置
  *
  * 强制 Design Token 约束：
  * 1. 禁止硬编码色值（hex/rgb/rgba/hsl），必须使用 var(--clr-*) 或 oklch()

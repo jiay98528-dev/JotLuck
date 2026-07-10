@@ -3,13 +3,14 @@
  *
  * 支持 7 种占位符: {{date}} {{time}} {{year}} {{month}} {{day}} {{datetime}} {{week}}
  * 3 套内置模板: 日记 / 会议纪要 / 周报
- * 自定义模板: localStorage 持久化
+ * 自定义模板: 当前笔记本内 .jotluck/templates 文件持久化
  *
  * @see migration-map.md §4
  */
-import type { TemplateItem } from '@/types';
+import type { IFileSystemService, TemplateItem } from '@/types';
 
-const CUSTOM_TEMPLATES_KEY = 'markluck-custom-templates';
+const CUSTOM_TEMPLATES_KEY = 'jotluck-custom-templates';
+export const CUSTOM_TEMPLATE_DIR = '/.jotluck/templates';
 
 // === Placeholder Replacement ===
 
@@ -151,7 +152,59 @@ export function getBuiltInTemplateContent(templatePath: string): string {
   return tpl?.content ?? '';
 }
 
-// === Custom Templates (localStorage) ===
+// === Custom Templates (notebook files) ===
+
+function sanitizeTemplateFileName(name: string): string {
+  const safe = name
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, '-')
+    .replace(/\s+/g, ' ')
+    .slice(0, 80);
+  return `${safe || '自定义模板'}.md`;
+}
+
+function customTemplatePath(name: string): string {
+  return `${CUSTOM_TEMPLATE_DIR}/${sanitizeTemplateFileName(name)}`;
+}
+
+function serializeCustomTemplate(name: string, description: string, content: string): string {
+  const meta = JSON.stringify({ name, description });
+  return `<!-- jotluck-template ${meta} -->\n${content}`;
+}
+
+function parseCustomTemplateFile(path: string, raw: string): TemplateItem {
+  const firstLineEnd = raw.indexOf('\n');
+  const firstLine = firstLineEnd >= 0 ? raw.slice(0, firstLineEnd).trim() : raw.trim();
+  const body = firstLine.startsWith('<!-- jotluck-template ') ? raw.slice(firstLineEnd + 1) : raw;
+  let name =
+    path
+      .split('/')
+      .pop()
+      ?.replace(/\.(md|markdown|mdx|txt)$/i, '') || '自定义模板';
+  let description = '';
+  const match = firstLine.match(/^<!-- jotluck-template (.+) -->$/);
+  if (match) {
+    try {
+      const meta = JSON.parse(match[1]!) as { name?: unknown; description?: unknown };
+      if (typeof meta.name === 'string' && meta.name.trim()) name = meta.name.trim();
+      if (typeof meta.description === 'string') description = meta.description;
+    } catch {
+      // User-editable template files are allowed to have a broken marker.
+    }
+  }
+  return {
+    id: path,
+    name,
+    description,
+    content: body,
+    isBuiltin: false,
+  };
+}
+
+async function ensureCustomTemplateDirectory(fs: IFileSystemService): Promise<void> {
+  await fs.createDirectory('/.jotluck');
+  await fs.createDirectory(CUSTOM_TEMPLATE_DIR);
+}
 
 function loadCustomTemplates(): TemplateItem[] {
   try {
@@ -162,43 +215,61 @@ function loadCustomTemplates(): TemplateItem[] {
   }
 }
 
-function saveCustomTemplates(templates: TemplateItem[]): void {
-  localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(templates));
+export async function loadCustomTemplatesFromFiles(
+  fs: IFileSystemService,
+): Promise<TemplateItem[]> {
+  try {
+    const entries = await fs.listDirectory(CUSTOM_TEMPLATE_DIR);
+    const templateFiles = entries.filter((entry) => entry.isFile);
+    const templates: TemplateItem[] = [];
+    for (const entry of templateFiles) {
+      const raw = await fs.readFile(entry.path);
+      templates.push(parseCustomTemplateFile(entry.path, raw));
+    }
+    return templates.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+  } catch {
+    return [];
+  }
 }
 
-export function getCustomTemplates(): TemplateItem[] {
-  return loadCustomTemplates();
+export async function migrateLegacyCustomTemplates(fs: IFileSystemService): Promise<void> {
+  const legacy = loadCustomTemplates();
+  if (legacy.length === 0) return;
+  await ensureCustomTemplateDirectory(fs);
+  for (const template of legacy) {
+    const path = customTemplatePath(template.name);
+    await fs.writeFile(
+      path,
+      serializeCustomTemplate(template.name, template.description ?? '', template.content),
+    );
+  }
+  localStorage.removeItem(CUSTOM_TEMPLATES_KEY);
 }
 
-export function getCustomTemplateContent(templatePath: string): string {
-  const templates = loadCustomTemplates();
-  const tpl = templates.find((t) => t.id === templatePath);
-  return tpl?.content ?? '';
-}
-
-export function saveCustomTemplate(
+export async function saveCustomTemplateToFiles(
+  fs: IFileSystemService,
   name: string,
   description: string,
   content: string,
-): TemplateItem {
-  const templates = loadCustomTemplates();
-  const item: TemplateItem = {
-    id: `custom-${Date.now()}`,
+): Promise<TemplateItem> {
+  await ensureCustomTemplateDirectory(fs);
+  const path = customTemplatePath(name);
+  await fs.writeFile(path, serializeCustomTemplate(name, description, content));
+  return {
+    id: path,
     name,
     description,
     content,
     isBuiltin: false,
   };
-  templates.push(item);
-  saveCustomTemplates(templates);
-  return item;
 }
 
-export function deleteCustomTemplate(id: string): boolean {
-  const templates = loadCustomTemplates();
-  const idx = templates.findIndex((t) => t.id === id);
-  if (idx === -1) return false;
-  templates.splice(idx, 1);
-  saveCustomTemplates(templates);
-  return true;
+export async function deleteCustomTemplateFile(
+  fs: IFileSystemService,
+  templatePath: string,
+): Promise<void> {
+  if (!templatePath.startsWith(`${CUSTOM_TEMPLATE_DIR}/`)) {
+    throw new Error('模板路径不在受控目录内');
+  }
+  await fs.deleteFile(templatePath);
 }

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+﻿import { expect, test, type Page } from '@playwright/test';
 
 interface BlackboxCase {
   id: string;
@@ -182,7 +182,7 @@ function isGhostCrash(text: string): boolean {
 }
 
 async function openAppWithoutInternalBridge(page: Page): Promise<void> {
-  await page.goto(process.env.MARKLUCK_E2E_BASE_URL ?? 'http://localhost:5173', {
+  await page.goto(process.env.JOTLUCK_E2E_BASE_URL ?? 'http://localhost:5173', {
     waitUntil: 'domcontentloaded',
   });
 

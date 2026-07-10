@@ -1,5 +1,5 @@
 /**
- * train-baseline.ts — MarkLuck 基准 L2 语料训练工具
+ * train-baseline.ts — JotLuck 基准 L2 语料训练工具
  *
  * 读取 corpus/ 目录下的语料文件 → N-gram 扫描 → 合并 → 输出 compact.txt
  * 仅 P0 格式闭合规则硬编码，语言习惯全部来自语料。
@@ -733,7 +733,7 @@ function sampleTrainingUnits(units: string[], maxUnits: number | undefined): str
 // ---- 主流程 ----
 
 export function runTraining(argv: string[] = process.argv.slice(2)): TrainReport {
-  console.log('🧠 MarkLuck 基准 L3 训练工具');
+  console.log('🧠 JotLuck 基准 L3 训练工具');
   console.log('═══════════════════════════════\n');
   const profile = parseProfile(argv);
 

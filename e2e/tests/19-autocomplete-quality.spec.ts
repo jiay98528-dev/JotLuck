@@ -440,7 +440,7 @@ test.describe('autocomplete quality score', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.setItem(
-        'markluck:autocomplete:settings',
+        'jotluck:autocomplete:settings',
         JSON.stringify({
           enabled: true,
           aggressiveness: 'balanced',
@@ -450,7 +450,7 @@ test.describe('autocomplete quality score', () => {
           showDebugStats: true,
         }),
       );
-      localStorage.setItem('markluck:autocomplete:enabled', 'true');
+      localStorage.setItem('jotluck:autocomplete:enabled', 'true');
     });
     await waitForAppReady(page);
     await ensureEditorReady(page);
@@ -819,7 +819,7 @@ async function runStructuredProbes(
 
 async function seedCompletionCorpus(page: Page, excerpts: string[]): Promise<void> {
   await page.evaluate((items) => {
-    window.__markluck_e2e?.editor?.seedCompletionCorpus?.(items);
+    window.__jotluck_e2e?.editor?.seedCompletionCorpus?.(items);
   }, excerpts);
 }
 
@@ -828,7 +828,7 @@ async function setAblationMode(
   mode: 'full-stack' | 'provider-only' | 'l1-only' | 'l2-only' | 'l3-only',
 ): Promise<void> {
   await page.evaluate((nextMode) => {
-    window.__markluck_e2e?.editor?.setCompletionAblationMode?.(nextMode);
+    window.__jotluck_e2e?.editor?.setCompletionAblationMode?.(nextMode);
   }, mode);
 }
 
@@ -862,14 +862,14 @@ async function warmUpAutocomplete(page: Page): Promise<void> {
 }
 
 async function getEditorContentFromBridge(page: Page): Promise<string> {
-  return page.evaluate(() => window.__markluck_e2e?.editor?.getContent?.() ?? '');
+  return page.evaluate(() => window.__jotluck_e2e?.editor?.getContent?.() ?? '');
 }
 
 async function getPredictionMeta(
   page: Page,
 ): Promise<{ providerId?: string; sourceLayer?: string }> {
   return page.evaluate(() => {
-    const prediction = window.__markluck_e2e?.editor?.getPrediction?.();
+    const prediction = window.__jotluck_e2e?.editor?.getPrediction?.();
     return {
       providerId: prediction?.providerId,
       sourceLayer: prediction?.sourceLayer,
@@ -881,9 +881,9 @@ async function resetAutocompleteModelCache(page: Page): Promise<void> {
   await page.evaluate(() => {
     for (const key of Object.keys(localStorage)) {
       if (
-        key.startsWith('markluck:autocomplete:') &&
-        key !== 'markluck:autocomplete:settings' &&
-        key !== 'markluck:autocomplete:enabled'
+        key.startsWith('jotluck:autocomplete:') &&
+        key !== 'jotluck:autocomplete:settings' &&
+        key !== 'jotluck:autocomplete:enabled'
       ) {
         localStorage.removeItem(key);
       }
@@ -953,7 +953,7 @@ async function runManualRegression(page: Page): Promise<{
 
 async function replaceEditorText(page: Page, text: string): Promise<void> {
   await page.evaluate((content) => {
-    window.__markluck_e2e?.editor?.setContent?.(content);
+    window.__jotluck_e2e?.editor?.setContent?.(content);
   }, text);
   await expect(page.locator('.cm-content')).toBeFocused();
   await expect(page.locator('.cm-ghost-text'))

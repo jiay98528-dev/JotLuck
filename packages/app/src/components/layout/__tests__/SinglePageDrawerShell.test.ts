@@ -24,7 +24,7 @@ const drawerShell: ThemeDrawerShellRecipe = {
   },
 };
 
-function mountShell(themeId = 'markluck.lumen-field') {
+function mountShell(themeId = 'jotluck.lumen-field') {
   return mount(SinglePageDrawerShell, {
     props: {
       themeId,
@@ -94,7 +94,7 @@ describe('SinglePageDrawerShell', () => {
     await pinButton!.trigger('click');
 
     expect(wrapper.find('.single-page-drawer--right').classes()).toContain('is-pinned');
-    expect(localStorage.getItem('markluck:theme:markluck.lumen-field:drawer-shell-pins:v1')).toBe(
+    expect(localStorage.getItem('jotluck:theme:jotluck.lumen-field:drawer-shell-pins:v1')).toBe(
       JSON.stringify({ left: false, right: true, bottom: false }),
     );
 
@@ -107,7 +107,7 @@ describe('SinglePageDrawerShell', () => {
   });
 
   it('does not leak pinned state across themes', async () => {
-    const wrapper = mountShell('markluck.lumen-field');
+    const wrapper = mountShell('jotluck.lumen-field');
 
     await wrapper.find('.single-page-drawer-handle--bottom').trigger('click');
     const pinButton = wrapper

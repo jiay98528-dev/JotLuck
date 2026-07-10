@@ -1,5 +1,5 @@
 /**
- * MarkLuck — 笔记本/文件系统相关类型定义
+ * JotLuck — 笔记本/文件系统相关类型定义
  *
  * 本文件定义笔记本实体、文件树节点、索引元数据及最近笔记的类型接口。
  * 与 spec/frontend/components.md 中同步定义保持一致，此处为权威源。
@@ -23,7 +23,7 @@ type IndexStatus = 'idle' | 'scanning' | 'indexing' | 'ready' | 'error';
  * 笔记本实体 —— 代表用户打开的一个本地文件夹（笔记本根目录）。
  *
  * 一个笔记本包含若干支持格式笔记文件和子文件夹（子笔记本）。
- * 所有数据存储在文件系统中，由 .markluck_index.json 维护索引。
+ * 所有数据存储在文件系统中，由 .jotluck_index.json 维护索引。
  */
 interface Notebook {
   /** 笔记本唯一标识（根路径的哈希值，用于快速索引查找） */
@@ -35,7 +35,7 @@ interface Notebook {
   /** 笔记本根目录的绝对路径（平台相关，仅 Tauri 后端使用；Web 端使用相对路径） */
   path: string;
 
-  /** 笔记本内的笔记文件路径列表（相对路径，如 "项目笔记/MarkLuck 架构设计.md"） */
+  /** 笔记本内的笔记文件路径列表（相对路径，如 "项目笔记/JotLuck 架构设计.md"） */
   notes: NotePath[];
 
   /** 子文件夹路径列表（相对路径，如 "学习日记/", "_templates/"） */
@@ -72,11 +72,11 @@ interface FileTreeNode {
 }
 
 // ============================================================================
-// NotebookMeta — .markluck_index.json 元数据
+// NotebookMeta — .jotluck_index.json 元数据
 // ============================================================================
 
 /**
- * 笔记本索引元数据，存储在笔记本根目录的 .markluck_index.json 中。
+ * 笔记本索引元数据，存储在笔记本根目录的 .jotluck_index.json 中。
  *
  * 该文件维护标签、反向链接、全文索引等结构化元数据，
  * 避免每次启动时全量扫描所有支持格式笔记文件。
@@ -103,7 +103,7 @@ interface NotebookMeta {
 /**
  * 最近编辑/打开过的笔记记录。
  *
- * 存储在 .markluck_index.json 的 `recentNotes` 字段中，
+ * 存储在 .jotluck_index.json 的 `recentNotes` 字段中，
  * 用于"最近编辑"列表（RecentNotes 组件）快速访问近期工作。
  * 按 lastOpenedAt 倒序排列，默认显示最近 20 条。
  */

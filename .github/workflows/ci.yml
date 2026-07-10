@@ -44,7 +44,7 @@ jobs:
         run: pnpm format
 
       - name: Stylelint
-        run: pnpm --filter @markluck/app lint:style
+        run: pnpm --filter @jotluck/app lint:style
 
   test:
     name: Unit Tests
@@ -76,7 +76,7 @@ jobs:
         run: pnpm test:coverage
 
       - name: Build app
-        run: pnpm --filter @markluck/app build
+        run: pnpm --filter @jotluck/app build
 
   e2e:
     name: E2E Tests
@@ -111,12 +111,12 @@ jobs:
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
       - name: Run E2E tests
-        run: pnpm --filter @markluck/app exec playwright test --project=${{ matrix.browser }} --workers=1
+        run: pnpm --filter @jotluck/app exec playwright test --project=${{ matrix.browser }} --workers=1
 
-  rust-audit:
-    name: Rust Dependency Audit
+  rust:
+    name: Rust Check, Test & Audit
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -125,8 +125,44 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Rust check
+        run: cargo check --manifest-path packages/app/src-tauri/Cargo.toml
+
+      - name: Rust tests
+        run: cargo test --manifest-path packages/app/src-tauri/Cargo.toml
+
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
 
       - name: Audit Rust dependencies
         run: cargo audit --file packages/app/src-tauri/Cargo.lock
+
+  tauri-build-windows:
+    name: Windows Tauri Build
+    runs-on: windows-latest
+    timeout-minutes: 30
+    needs: [lint-and-typecheck, test, rust]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri installer
+        run: pnpm --filter @jotluck/app tauri:build

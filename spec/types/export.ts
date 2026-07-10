@@ -1,5 +1,5 @@
 // ============================================================
-// MarkLuck — Export & Share Type Definitions
+// JotLuck — Export & Share Type Definitions
 // ============================================================
 
 /**

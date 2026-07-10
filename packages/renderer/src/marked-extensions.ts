@@ -110,8 +110,5 @@ export const tagExtension: TokenizerAndRendererExtension = {
   },
 };
 
-/** All MarkLuck custom marked extensions */
-export const markluckExtensions: TokenizerAndRendererExtension[] = [
-  wikiLinkExtension,
-  tagExtension,
-];
+/** All JotLuck custom marked extensions */
+export const jotluckExtensions: TokenizerAndRendererExtension[] = [wikiLinkExtension, tagExtension];

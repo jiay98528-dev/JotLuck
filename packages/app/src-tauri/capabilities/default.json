@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "MarkLuck default capabilities - dialog and shell only; file I/O uses custom Rust commands",
+  "description": "JotLuck default capabilities - dialog and shell only; file I/O uses custom Rust commands",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -10,7 +10,6 @@
     "dialog:allow-save",
     "dialog:allow-message",
     "dialog:allow-ask",
-    "shell:default",
-    "shell:allow-open"
+    "shell:default"
   ]
 }
