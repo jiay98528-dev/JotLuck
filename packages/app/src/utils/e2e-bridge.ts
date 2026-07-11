@@ -1,5 +1,7 @@
 import type { PredictionResult } from '@/utils/ngram-engine';
+import type { CompletionRequestDiagnostics } from '@/services/MarkdownPredictor';
 import type { CompletionAblationMode } from '@/services/completion/types';
+import type { HybridRetrievalHealthDiagnostics } from '@/services/completion/hybrid-retrieval-types';
 
 export interface JotLuckE2EOpenedFile {
   absolutePath?: string;
@@ -16,7 +18,21 @@ export interface JotLuckE2EEditorBridge {
   setContent: (content: string) => void;
   getCursor: () => number;
   getPrediction: () => PredictionResult | null;
+  getVisiblePredictionDiagnostics: () => {
+    prediction: PredictionResult;
+    elapsedMs: number;
+    cursor: number;
+    documentLength: number;
+  } | null;
+  requestCompletionDiagnostics: (
+    content: string,
+    cursorOffset?: number,
+    deadlineMs?: number,
+  ) => Promise<CompletionRequestDiagnostics>;
   seedCompletionCorpus: (excerpts: string[]) => void;
+  seedWorkspaceDocuments: (documents: Array<{ path: string; content: string }>) => Promise<void>;
+  getHybridRetrievalHealth: () => HybridRetrievalHealthDiagnostics;
+  seedPersonalCompletion: (context: string, acceptedText: string) => Promise<void>;
   setCompletionAblationMode: (mode: CompletionAblationMode) => void;
 }
 
@@ -32,6 +48,8 @@ export interface JotLuckE2EBridge {
     isDirty: boolean;
     isExternalEditing: boolean;
   };
+  listNotePaths?: () => string[];
+  selectNote?: (path: string) => Promise<void>;
 }
 
 export function isJotLuckE2EBridgeEnabled(): boolean {

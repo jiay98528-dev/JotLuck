@@ -19,6 +19,7 @@
     "test:e2e:stable": "playwright test --project=chromium --workers=1",
     "test:e2e:autocomplete-quality": "playwright test 19-autocomplete-quality.spec.ts --project=chromium --workers=1",
     "test:e2e:autocomplete-layers": "playwright test 19-autocomplete-quality.spec.ts --project=chromium --workers=1 --grep \"layered ablation\"",
+    "test:e2e:autocomplete-rc": "playwright test 24-autocomplete-formal-holdout.spec.ts 25-autocomplete-runtime-evidence.spec.ts --project=chromium --workers=1",
     "test:e2e:chromium": "playwright test --project=chromium --workers=1",
     "test:e2e:firefox": "playwright test --project=firefox --workers=1",
     "test:e2e:webkit": "playwright test --project=webkit --workers=1",

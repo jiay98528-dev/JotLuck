@@ -1,0 +1,98 @@
+name: Autocomplete RC Evidence
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: autocomplete-final-v2
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  autocomplete-rc:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      JOTLUCK_AUTOCOMPLETE_RC: '1'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm exec playwright install chromium
+
+      - name: Verify checked-in fail-closed state
+        run: node scripts/verify-autocomplete-evidence.mjs --mode=ci
+
+      - name: Generate exact synthetic-only pool
+        run: pnpm generate-autocomplete-synthetic-corpus
+
+      - name: Build deterministic validation candidates
+        run: pnpm train-autocomplete-learning-curve
+
+      - name: Measure exact candidate models through the production Router
+        run: pnpm exec tsx scripts/run-autocomplete-runtime-candidates.ts
+
+      - name: Finalize validation learning curve with model-bound runtime evidence
+        run: pnpm exec tsx scripts/run-autocomplete-learning-curve.ts --runtime-evidence=scripts/corpus/_web-cache/autocomplete-candidates/runtime-evidence.json
+
+      - name: Identify frozen workspace final-v2
+        shell: pwsh
+        run: |
+          $sha = (pnpm --silent exec tsx scripts/print-autocomplete-final-holdout-sha.ts).Trim()
+          if ($sha -notmatch '^[a-f0-9]{64}$') { throw "Invalid final holdout SHA: $sha" }
+          "FINAL_HOLDOUT_SHA=$sha" >> $env:GITHUB_ENV
+
+      - name: Claim workspace final-v2 locally without opening target samples
+        run: pnpm exec tsx scripts/run-autocomplete-workspace-final-runtime.ts --claim-only
+
+      - name: Persist the one-shot claim as an atomic repository ref
+        shell: pwsh
+        run: |
+          gh api --method POST "repos/$env:GITHUB_REPOSITORY/git/refs" `
+            -f ref="refs/tags/autocomplete-final-consumed-$env:FINAL_HOLDOUT_SHA" `
+            -f sha="$env:GITHUB_SHA"
+
+      - name: Upload immutable final consumption receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: autocomplete-final-consumed-${{ env.FINAL_HOLDOUT_SHA }}
+          path: scripts/corpus/_web-cache/autocomplete-candidates/final-v2-consumption/${{ env.FINAL_HOLDOUT_SHA }}.json
+          if-no-files-found: error
+
+      - name: Consume workspace final-v2 through the production Router once
+        run: pnpm exec tsx scripts/run-autocomplete-workspace-final-runtime.ts --resume-claimed
+
+      - name: Build, smoke, restore, and atomically publish the selected candidate
+        run: pnpm exec tsx scripts/run-autocomplete-post-final-rc.ts
+
+      - name: Verify complete RC evidence bindings
+        run: node scripts/release-rc-gate.mjs --autocomplete-only
+
+      - name: Upload autocomplete evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: autocomplete-rc-evidence
+          path: scripts/corpus/_web-cache/autocomplete-candidates/
+          if-no-files-found: warn

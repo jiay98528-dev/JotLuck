@@ -1,0 +1,107 @@
+{
+  "generatedAt": "2026-07-10T00:00:00.000Z",
+  "profile": "web-local",
+  "verifiedOnly": true,
+  "outputFile": "../../packages/app/public/baseline-ngram.web-local.compact.txt",
+  "manifestFile": "../../packages/app/public/baseline-ngram.web-local.compact.manifest.json",
+  "sourceCount": 5,
+  "documentCount": 36,
+  "rawFragmentCount": 2189,
+  "canonicalFragmentCount": 2139,
+  "exactDuplicatesMerged": 47,
+  "nearDuplicatesRemoved": 3,
+  "rawExactDuplicateRate": 0.02147099132023755,
+  "rawNearDuplicateRate": 0.0013704888076747373,
+  "residualExactDuplicateRate": 0,
+  "residualNearDuplicateRate": 0,
+  "cleanPoolBytes": 107797,
+  "trainingHoldoutOverlap": 0,
+  "modelBytes": 116068,
+  "totalEntries": 3013,
+  "totalPredictions": 3637,
+  "categoryDistribution": {
+    "en-tech-docs": {
+      "weightedBytes": 29894000,
+      "ratio": "27.8%"
+    },
+    "markdown-structure": {
+      "weightedBytes": 4889000,
+      "ratio": "4.5%"
+    },
+    "zh-natural-notes": {
+      "weightedBytes": 17374000,
+      "ratio": "16.1%"
+    },
+    "zh-note-patterns": {
+      "weightedBytes": 34083000,
+      "ratio": "31.7%"
+    },
+    "zh-tech-notes": {
+      "weightedBytes": 21439000,
+      "ratio": "19.9%"
+    }
+  },
+  "webDomainDistribution": {},
+  "governance": {
+    "safetyGatePassed": false,
+    "hardLimitPassed": true,
+    "softTargetPassed": true,
+    "qualityGatePassed": false,
+    "releaseEligible": false,
+    "degradedAllowed": true,
+    "errors": [
+      "Legacy v3 model exceeds the raw exact-duplicate gate and has no bound holdout evidence; rebuild with the v4 pipeline."
+    ],
+    "warnings": []
+  },
+  "inputManifestHash": "284eee5ea7bc0d6895196c5369ebb1773ffbc187c2ef68c1bd28322841671e9f",
+  "modelSha256": "6495ab353f95594abf021ec0a6e19c9c60605e2f7ecd4d2cabd3f2cebc8bf7b1",
+  "sourceInputs": [
+    {
+      "id": "curated-code-doc-en",
+      "path": "code-doc-en/",
+      "kind": "curated",
+      "category": "en-tech-docs",
+      "licenseId": "MIT",
+      "contentSha256": "e757cdc61de1837b78e00577434a196ec52e1af470c79e5ab4dd9766a15eff7a",
+      "files": 7
+    },
+    {
+      "id": "curated-markdown-structures",
+      "path": "markdown-structures/",
+      "kind": "curated",
+      "category": "markdown-structure",
+      "licenseId": "MIT",
+      "contentSha256": "7141c710a18165b4ea963fd30a78658acb3e0bc8a4ee586bac24fd36423c5a9a",
+      "files": 3
+    },
+    {
+      "id": "curated-natural-zh",
+      "path": "creative-zh/",
+      "kind": "curated",
+      "category": "zh-natural-notes",
+      "licenseId": "MIT",
+      "contentSha256": "9d5f3aa10622dc040de73ee1a1dff0f9a2fece6d8478b564bdc3ebaa1853e616",
+      "files": 6
+    },
+    {
+      "id": "curated-note-patterns-zh",
+      "path": "note-patterns-zh/",
+      "kind": "curated",
+      "category": "zh-note-patterns",
+      "licenseId": "MIT",
+      "contentSha256": "a21e3ed88d8327ed95c7d4885475d86d4c27458b636ec09361b86020e232db3c",
+      "files": 11
+    },
+    {
+      "id": "curated-tech-zh",
+      "path": "tech-writing-zh/",
+      "kind": "curated",
+      "category": "zh-tech-notes",
+      "licenseId": "MIT",
+      "contentSha256": "90e084cbe9b4e3970bc8d934a134d542b170cd985d5bac4340952cb717e26f6c",
+      "files": 9
+    }
+  ],
+  "fullModelFindings": []
+}

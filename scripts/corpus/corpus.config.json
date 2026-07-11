@@ -1,78 +1,151 @@
 {
-  "version": 1,
-  "description": "JotLuck offline autocomplete baseline corpus configuration",
+  "version": 4,
+  "description": "JotLuck verified-only offline autocomplete baseline configuration",
   "ngramN": 4,
-  "minCount": 3,
+  "ngramOrders": [2, 3, 4],
+  "wordNgramOrders": [1, 2],
   "maxPredsPerContext": 3,
-  "outputFile": "../../packages/app/public/baseline-ngram.v1.compact.txt",
-  "reportFile": "training-report.json",
-  "hardcodedFormatRules": {
-    "enabled": true,
-    "description": "P0 Markdown structural rules. Language habits still come from corpus."
+  "hardMaxBytes": 6291456,
+  "modelTargetBytes": 5976883,
+  "maxCleanPoolBytes": 31457280,
+  "learningCurveBytes": [104858, 524288, 1048576, 3145728, 8388608, 16777216, 25165824],
+  "exactDuplicateRateLimit": 0.01,
+  "nearDuplicateRateLimit": 0.03,
+  "categoryDominanceLimit": 0.4,
+  "webDomainDominanceLimit": 0.05,
+  "provenanceFile": "provenance.json",
+  "holdoutFile": "formal-holdout.json",
+  "qualityGate": {
+    "minOpportunities": 200,
+    "minTriggerRate": 0.35,
+    "maxTriggerRate": 0.42,
+    "minUsableRate": 0.35,
+    "maxFalseTriggerRate": 0.03,
+    "maxMixedCandidateRate": 0,
+    "maxP90Ms": 140
+  },
+  "excludedTrainingFiles": [
+    "code-doc-en/software-development-patterns.md",
+    "note-patterns-zh/autocomplete-regression-notes.md",
+    "note-patterns-zh/short-anchors.md"
+  ],
+  "profiles": {
+    "release": {
+      "outputFile": "../../packages/app/public/baseline-ngram.v1.compact.txt",
+      "manifestFile": "../../packages/app/public/baseline-ngram.v1.compact.manifest.json",
+      "reportFile": "training-report.json"
+    },
+    "web-local": {
+      "outputFile": "../../packages/app/public/baseline-ngram.web-local.compact.txt",
+      "manifestFile": "../../packages/app/public/baseline-ngram.web-local.compact.manifest.json",
+      "reportFile": "training-report.web-local.json"
+    }
   },
   "sources": [
     {
+      "id": "curated-natural-zh",
       "path": "creative-zh/",
-      "weight": 1.2,
-      "description": "Lightweight Chinese prose for natural phrasing only; not long-form narrative."
+      "weightMilli": 1000,
+      "category": "zh-natural-notes",
+      "language": "zh",
+      "kind": "curated",
+      "minDocumentFrequency": 2,
+      "description": "Project-owned natural Chinese notes without long-form narrative."
     },
     {
+      "id": "curated-tech-zh",
       "path": "tech-writing-zh/",
-      "weight": 2.5,
-      "description": "Chinese technical notes, bug analysis, architecture notes, release and config writing."
+      "weightMilli": 1000,
+      "category": "zh-tech-notes",
+      "language": "zh",
+      "kind": "curated",
+      "minDocumentFrequency": 2,
+      "description": "Project-owned Chinese technical notes."
     },
     {
-      "path": "code-doc-en/",
-      "weight": 0.5,
-      "description": "English programming docs, kept lower to avoid cross-language bleed."
-    },
-    {
-      "path": "code-doc-en/software-development-patterns.md",
-      "weight": 1.6,
-      "category": "en-tech-docs",
-      "language": "en",
-      "description": "High-value English software development note patterns; intentionally boosted to reduce generic web English drift."
-    },
-    {
-      "path": "code-doc-en/debugging-notes.md",
-      "weight": 1.4,
-      "category": "en-tech-docs",
-      "language": "en",
-      "description": "Focused English debugging note anchors; boosted so useful software phrases survive web-local pruning."
-    },
-    {
-      "path": "code-doc-en/release-checklist.md",
-      "weight": 1.2,
-      "category": "en-tech-docs",
-      "language": "en",
-      "description": "Focused English release and project status phrases for quiet software-note completion."
-    },
-    {
-      "path": "code-doc-en/software-note-anchors.md",
-      "weight": 1.3,
-      "category": "en-tech-docs",
-      "language": "en",
-      "description": "Focused English software-note anchors for review, implementation, validation, and quality reports."
-    },
-    {
-      "path": "markdown-structures/",
-      "weight": 2.0,
-      "description": "Markdown list, table, quote, and task structures."
-    },
-    {
+      "id": "curated-note-patterns-zh",
       "path": "note-patterns-zh/",
-      "weight": 4.0,
-      "description": "Realistic short-note corpus: daily notes, meeting notes, project logs, book notes, task lists."
+      "weightMilli": 1000,
+      "category": "zh-note-patterns",
+      "language": "zh",
+      "kind": "curated",
+      "minDocumentFrequency": 2,
+      "description": "Project-owned short-note, meeting, task, and review patterns."
     },
     {
-      "path": "../../doc/",
-      "weight": 0.2,
-      "description": "Project documents, very low weight to avoid spec-like prose dominating notes."
+      "id": "curated-markdown-structures",
+      "path": "markdown-structures/",
+      "weightMilli": 1000,
+      "category": "markdown-structure",
+      "language": "zh",
+      "kind": "curated",
+      "minDocumentFrequency": 2,
+      "description": "Project-owned Markdown-adjacent prose and note structures."
     },
     {
-      "path": "../../spec/",
-      "weight": 0.2,
-      "description": "Project specs, very low weight to keep baseline note-like."
+      "id": "curated-code-doc-en",
+      "path": "code-doc-en/",
+      "weightMilli": 1000,
+      "category": "en-tech-docs",
+      "language": "en",
+      "kind": "curated",
+      "minDocumentFrequency": 2,
+      "description": "Project-owned English software-note examples."
+    },
+    {
+      "id": "synthetic-natural-zh",
+      "path": "_web-cache/generated-project-owned/synthetic-natural-zh/",
+      "weightMilli": 1000,
+      "category": "zh-natural-notes",
+      "language": "zh",
+      "kind": "curated",
+      "minDocumentFrequency": 2,
+      "documentFormat": "jsonl",
+      "description": "Deterministic project-owned synthetic natural Chinese short notes."
+    },
+    {
+      "id": "synthetic-project-zh",
+      "path": "_web-cache/generated-project-owned/synthetic-project-zh/",
+      "weightMilli": 1000,
+      "category": "zh-project-notes",
+      "language": "zh",
+      "kind": "curated",
+      "minDocumentFrequency": 2,
+      "documentFormat": "jsonl",
+      "description": "Deterministic project-owned synthetic project and review notes."
+    },
+    {
+      "id": "synthetic-technical-zh",
+      "path": "_web-cache/generated-project-owned/synthetic-technical-zh/",
+      "weightMilli": 1000,
+      "category": "zh-tech-notes",
+      "language": "zh",
+      "kind": "curated",
+      "minDocumentFrequency": 2,
+      "documentFormat": "jsonl",
+      "description": "Deterministic project-owned synthetic Chinese diagnostic notes."
+    },
+    {
+      "id": "synthetic-workflow-en",
+      "path": "_web-cache/generated-project-owned/synthetic-workflow-en/",
+      "weightMilli": 1000,
+      "category": "en-workflow-notes",
+      "language": "en",
+      "kind": "curated",
+      "minDocumentFrequency": 2,
+      "documentFormat": "jsonl",
+      "description": "Deterministic project-owned synthetic English workflow notes."
+    },
+    {
+      "id": "synthetic-technical-en",
+      "path": "_web-cache/generated-project-owned/synthetic-technical-en/",
+      "weightMilli": 1000,
+      "category": "en-tech-docs",
+      "language": "en",
+      "kind": "curated",
+      "minDocumentFrequency": 2,
+      "documentFormat": "jsonl",
+      "description": "Deterministic project-owned synthetic English diagnostic notes."
     }
   ]
 }

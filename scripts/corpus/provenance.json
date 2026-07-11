@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "description": "Approved, content-addressed inputs for verified-only autocomplete baselines.",
+  "sources": [
+    {
+      "id": "curated-natural-zh",
+      "path": "creative-zh/",
+      "kind": "curated",
+      "owner": "JotLuck project",
+      "licenseId": "MIT",
+      "licenseEvidence": "../../LICENSE",
+      "acquiredAt": "2026-07-10T00:00:00.000Z",
+      "cleanerVersion": "jotluck-corpus-v5",
+      "approval": "approved",
+      "contentSha256": "9d5f3aa10622dc040de73ee1a1dff0f9a2fece6d8478b564bdc3ebaa1853e616"
+    },
+    {
+      "id": "curated-tech-zh",
+      "path": "tech-writing-zh/",
+      "kind": "curated",
+      "owner": "JotLuck project",
+      "licenseId": "MIT",
+      "licenseEvidence": "../../LICENSE",
+      "acquiredAt": "2026-07-10T00:00:00.000Z",
+      "cleanerVersion": "jotluck-corpus-v5",
+      "approval": "approved",
+      "contentSha256": "90e084cbe9b4e3970bc8d934a134d542b170cd985d5bac4340952cb717e26f6c"
+    },
+    {
+      "id": "curated-note-patterns-zh",
+      "path": "note-patterns-zh/",
+      "kind": "curated",
+      "owner": "JotLuck project",
+      "licenseId": "MIT",
+      "licenseEvidence": "../../LICENSE",
+      "acquiredAt": "2026-07-10T00:00:00.000Z",
+      "cleanerVersion": "jotluck-corpus-v5",
+      "approval": "approved",
+      "contentSha256": "f9ec890ea6cebb9d9b0dbd8f2ee5134fb0ab8af528d24b9da72c4b6178b9e2a6"
+    },
+    {
+      "id": "curated-markdown-structures",
+      "path": "markdown-structures/",
+      "kind": "curated",
+      "owner": "JotLuck project",
+      "licenseId": "MIT",
+      "licenseEvidence": "../../LICENSE",
+      "acquiredAt": "2026-07-10T00:00:00.000Z",
+      "cleanerVersion": "jotluck-corpus-v5",
+      "approval": "approved",
+      "contentSha256": "7141c710a18165b4ea963fd30a78658acb3e0bc8a4ee586bac24fd36423c5a9a"
+    },
+    {
+      "id": "curated-code-doc-en",
+      "path": "code-doc-en/",
+      "kind": "curated",
+      "owner": "JotLuck project",
+      "licenseId": "MIT",
+      "licenseEvidence": "../../LICENSE",
+      "acquiredAt": "2026-07-10T00:00:00.000Z",
+      "cleanerVersion": "jotluck-corpus-v5",
+      "approval": "approved",
+      "contentSha256": "7ce364855ef47b92881977d7fe024d25fa112bc41883dac189c74f699a20533c"
+    },
+    {
+      "id": "synthetic-natural-zh",
+      "path": "_web-cache/generated-project-owned/synthetic-natural-zh/",
+      "kind": "curated",
+      "owner": "JotLuck project",
+      "licenseId": "MIT",
+      "licenseEvidence": "../../LICENSE",
+      "acquiredAt": "2026-07-11T00:00:00.000Z",
+      "cleanerVersion": "jotluck-synthetic-short-notes-v1",
+      "approval": "approved",
+      "contentSha256": "3b948cc26515931e1693e53af293a632fabe241996392f9f95170c23ee0eec62"
+    },
+    {
+      "id": "synthetic-project-zh",
+      "path": "_web-cache/generated-project-owned/synthetic-project-zh/",
+      "kind": "curated",
+      "owner": "JotLuck project",
+      "licenseId": "MIT",
+      "licenseEvidence": "../../LICENSE",
+      "acquiredAt": "2026-07-11T00:00:00.000Z",
+      "cleanerVersion": "jotluck-synthetic-short-notes-v1",
+      "approval": "approved",
+      "contentSha256": "ed0786beb79db93b30b3ca243684a54f3aacd0df7432d80d2ef0a45573201040"
+    },
+    {
+      "id": "synthetic-technical-zh",
+      "path": "_web-cache/generated-project-owned/synthetic-technical-zh/",
+      "kind": "curated",
+      "owner": "JotLuck project",
+      "licenseId": "MIT",
+      "licenseEvidence": "../../LICENSE",
+      "acquiredAt": "2026-07-11T00:00:00.000Z",
+      "cleanerVersion": "jotluck-synthetic-short-notes-v1",
+      "approval": "approved",
+      "contentSha256": "68ca5628116ef8311b256d1f534a26ac62746b61035ab0c4fd761d2725cc6fe0"
+    },
+    {
+      "id": "synthetic-workflow-en",
+      "path": "_web-cache/generated-project-owned/synthetic-workflow-en/",
+      "kind": "curated",
+      "owner": "JotLuck project",
+      "licenseId": "MIT",
+      "licenseEvidence": "../../LICENSE",
+      "acquiredAt": "2026-07-11T00:00:00.000Z",
+      "cleanerVersion": "jotluck-synthetic-short-notes-v1",
+      "approval": "approved",
+      "contentSha256": "e87a27a6b35f1182757f75d4079836e350edaa7bf2cd5641ec207acbd7ec5eff"
+    },
+    {
+      "id": "synthetic-technical-en",
+      "path": "_web-cache/generated-project-owned/synthetic-technical-en/",
+      "kind": "curated",
+      "owner": "JotLuck project",
+      "licenseId": "MIT",
+      "licenseEvidence": "../../LICENSE",
+      "acquiredAt": "2026-07-11T00:00:00.000Z",
+      "cleanerVersion": "jotluck-synthetic-short-notes-v1",
+      "approval": "approved",
+      "contentSha256": "8e86ab622d799c91a1c6c334969bee6da7274d82ec7fd8229343c0bbf9fb6edb"
+    }
+  ]
+}

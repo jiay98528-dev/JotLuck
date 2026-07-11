@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "profile": "web-local",
+  "modelFile": "baseline-ngram.web-local.compact.txt",
+  "serialization": "jsonl-hex-v3-fixed-int",
+  "order": "lexicographic-context-hex",
+  "ngramN": 4,
+  "modelBytes": 116068,
+  "entryCount": 3013,
+  "sha256": "6495ab353f95594abf021ec0a6e19c9c60605e2f7ecd4d2cabd3f2cebc8bf7b1",
+  "trainingInputHash": "284eee5ea7bc0d6895196c5369ebb1773ffbc187c2ef68c1bd28322841671e9f",
+  "verifiedOnly": true,
+  "runtimeEligible": false,
+  "qualityGatePassed": false,
+  "releaseEligible": false,
+  "softTargetPassed": true,
+  "hardLimitPassed": true,
+  "generatedAt": "2026-07-10T00:00:00.000Z",
+  "sourceCount": 5,
+  "degradedReason": "legacy-model-requires-v4-rebuild-and-holdout"
+}

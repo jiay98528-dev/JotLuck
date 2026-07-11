@@ -26,6 +26,7 @@ import {
   isInlineFormatAction,
 } from '@/utils/markdown-formatting';
 import { getJotLuckE2EBridge } from '@/utils/e2e-bridge';
+import { flushCompletionStorageMutations } from '@/services/completion/learning-repository';
 
 const props = withDefaults(
   defineProps<{
@@ -39,6 +40,8 @@ const props = withDefaults(
     placeholder?: string;
     enableAutocomplete?: boolean;
     completionSettings?: CompletionSettings;
+    /** Workspace-owned predictor. Passing it keeps L3/L2 alive across keyed editor remounts. */
+    predictor?: MarkdownPredictor;
     onLivePreviewExternalLinkClick?: (href: string) => void;
     onLivePreviewTagClick?: (tag: string) => void;
     onLivePreviewWikiLinkClick?: (note: string, anchor: null | string) => void;
@@ -58,6 +61,7 @@ const props = withDefaults(
     placeholder: '开始书写…',
     enableAutocomplete: true,
     completionSettings: undefined,
+    predictor: undefined,
     onLivePreviewExternalLinkClick: undefined,
     onLivePreviewTagClick: undefined,
     onLivePreviewWikiLinkClick: undefined,
@@ -73,8 +77,10 @@ const lineNumberCompartment = new Compartment();
 const livePreviewCompartment = new Compartment();
 const autocompleteCompartment = new Compartment();
 
-// Shared predictor instance for ghost text + structured knowledge
-const predictor = new MarkdownPredictor(4);
+// NotebookHome owns the predictor in the product path. The fallback keeps the
+// component independently mountable in unit tests and isolated previews.
+const ownsPredictor = props.predictor === undefined;
+const predictor = props.predictor ?? new MarkdownPredictor(4);
 
 const emit = defineEmits<{
   'update:modelValue': [value: string];
@@ -159,11 +165,59 @@ function registerE2EEditorBridge(): void {
     },
     getCursor: () => view?.state.selection.main.head ?? 0,
     getPrediction: () => {
-      const doc = view?.state.doc.toString() ?? '';
-      const cursor = view?.state.selection.main.head ?? doc.length;
-      return predictor.getGhostText(cursor, doc);
+      if (!view) return null;
+      return (
+        (
+          view.dom as HTMLElement & {
+            __jotluckGetVisibleGhostPrediction?: () => ReturnType<
+              MarkdownPredictor['getGhostText']
+            >;
+          }
+        ).__jotluckGetVisibleGhostPrediction?.() ?? null
+      );
     },
-    seedCompletionCorpus: (excerpts) => predictor.ingestExcerpts(excerpts),
+    getVisiblePredictionDiagnostics: () => {
+      if (!view) return null;
+      return (
+        (
+          view.dom as HTMLElement & {
+            __jotluckGetVisibleGhostDiagnostics?: () => {
+              prediction: NonNullable<ReturnType<MarkdownPredictor['getGhostText']>>;
+              elapsedMs: number;
+              cursor: number;
+              documentLength: number;
+            } | null;
+          }
+        ).__jotluckGetVisibleGhostDiagnostics?.() ?? null
+      );
+    },
+    requestCompletionDiagnostics: (content, cursorOffset = content.length, deadlineMs = 110) =>
+      predictor.requestGhostTextWithDiagnostics(cursorOffset, content, { deadlineMs }),
+    seedCompletionCorpus: (excerpts) => {
+      // N2 intentionally requires cross-document support. Mirror two distinct
+      // notebook files per excerpt instead of inflating one synthetic file.
+      excerpts.forEach((excerpt, index) => {
+        predictor.replaceDocumentContribution(`__e2e_seed__/${index}-a.md`, excerpt);
+        predictor.replaceDocumentContribution(`__e2e_seed__/${index}-b.md`, excerpt);
+      });
+    },
+    seedWorkspaceDocuments: async (documents) => {
+      // Independent workspace evaluation provides distinct support documents.
+      // Reset first so legacy exact-copy fixtures cannot leak into the result.
+      predictor.resetNotebookContributions();
+      for (const document of documents) {
+        predictor.replaceDocumentContribution(document.path, document.content);
+      }
+      await predictor.flushHybridRetrievalMutations();
+    },
+    getHybridRetrievalHealth: () => predictor.getHybridRetrievalHealth(),
+    seedPersonalCompletion: async (context, acceptedText) => {
+      // Reset the last-candidate metadata through the requested L2-only probe,
+      // then record the explicit acceptance exactly as the product path does.
+      predictor.getGhostText(context.length, context);
+      predictor.acceptCompletion(context, acceptedText, { learn: true });
+      await flushCompletionStorageMutations();
+    },
     setCompletionAblationMode: (mode) => predictor.setAblationMode(mode),
   };
 }
@@ -423,9 +477,10 @@ onUnmounted(() => {
     view = null;
   }
   clearOpenedDocumentScanTimer();
-  // Persist L1→L2 before component is destroyed.
-  // Without this, L2 never accumulates and ghost text always cold-starts.
-  predictor.closeDocument();
+  // A workspace-owned predictor survives keyed editor remounts. Only an
+  // isolated component instance owns (and therefore disposes) its fallback,
+  // including the V2 Worker and pending async requests.
+  if (ownsPredictor) void predictor.dispose();
 });
 
 // External modelValue change → sync to editor (suppress feedback to avoid re-dirtying)

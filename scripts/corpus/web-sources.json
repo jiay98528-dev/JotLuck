@@ -1,6 +1,7 @@
 {
   "version": 2,
-  "description": "Public web text sources for local-only autocomplete pretraining. No license gate is applied; privacy scrubbing and fragmentation are mandatory.",
+  "description": "Candidate web sources. Collection fails closed until every enabled source has approved license evidence; candidates are never automatic training inputs.",
+  "licensePolicy": "Each enabled source requires license.status=approved, licenseId, evidence, and explicit path scope before any request or write.",
   "defaults": {
     "weight": 1,
     "depth": 1,

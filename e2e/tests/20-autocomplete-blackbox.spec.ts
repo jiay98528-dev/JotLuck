@@ -1,5 +1,7 @@
 ﻿import { expect, test, type Page } from '@playwright/test';
 
+import { ensureEditorReady, waitForAppReady } from '../helpers/test-utils';
+
 interface BlackboxCase {
   id: string;
   title: string;
@@ -137,6 +139,32 @@ test.describe('autocomplete blackbox regression', () => {
 
       const startedAt = Date.now();
       const ghost = page.locator('.cm-ghost-text');
+      const appearedQuickly = await ghost
+        .waitFor({ state: 'visible', timeout: 1000 })
+        .then(() => true)
+        .catch(() => false);
+      if (!appearedQuickly) {
+        const diagnostics = await page.evaluate(() => ({
+          editorId: window.__jotluck_e2e?.editor?.id,
+          content: window.__jotluck_e2e?.editor?.getContent?.() ?? '',
+          cursor: window.__jotluck_e2e?.editor?.getCursor?.() ?? -1,
+          directPrediction: window.__jotluck_e2e?.editor?.getPrediction?.() ?? null,
+        }));
+        console.log(
+          JSON.stringify(
+            {
+              id: item.id,
+              contentMatches: diagnostics.content === item.input,
+              contentTail: diagnostics.content.slice(-160),
+              contentLength: diagnostics.content.length,
+              expectedLength: item.input.length,
+              ...diagnostics,
+            },
+            null,
+            2,
+          ),
+        );
+      }
       await expect(ghost).toBeVisible({ timeout: 3000 });
       const visibleLatency = Date.now() - startedAt;
       const suggestion = ((await ghost.textContent()) ?? '').trimStart();
@@ -145,7 +173,7 @@ test.describe('autocomplete blackbox regression', () => {
       expect(suggestion).not.toContain('可以');
       if (item.language === 'en') expect(suggestion).not.toMatch(/[\u3400-\u9fff]/u);
       expect(item.expected).toContain(suggestion);
-      expect(visibleLatency).toBeLessThanOrEqual(230);
+      expect(visibleLatency).toBeLessThanOrEqual(140);
 
       await page.keyboard.press('Tab');
       await expect(page.locator('.cm-content')).toContainText(item.expected, { timeout: 3000 });
@@ -182,26 +210,9 @@ function isGhostCrash(text: string): boolean {
 }
 
 async function openAppWithoutInternalBridge(page: Page): Promise<void> {
-  await page.goto(process.env.JOTLUCK_E2E_BASE_URL ?? 'http://localhost:5173', {
-    waitUntil: 'domcontentloaded',
-  });
-
-  const welcome = page.locator('.welcome-overlay');
-  if (await welcome.isVisible({ timeout: 1000 }).catch(() => false)) {
-    await page.locator('.welcome-skip-link').click();
-    await expect(welcome).not.toBeVisible({ timeout: 3000 });
-  }
-
-  if (
-    !(await page
-      .locator('.cm-content')
-      .isVisible()
-      .catch(() => false))
-  ) {
-    const bookmark = page.locator('.wing-bookmark-dot').first();
-    await expect(bookmark).toBeVisible({ timeout: 5000 });
-    await bookmark.click();
-  }
+  await waitForAppReady(page);
+  await ensureEditorReady(page);
+  await stabilizeNotebookEditor(page);
 
   if (
     !(await page
@@ -214,6 +225,21 @@ async function openAppWithoutInternalBridge(page: Page): Promise<void> {
 
   await expect(page.locator('.split-left .cm-content')).toBeVisible({ timeout: 10000 });
   await expect(page.locator('.cm-content')).toBeVisible({ timeout: 10000 });
+}
+
+async function stabilizeNotebookEditor(page: Page): Promise<void> {
+  await expect
+    .poll(() => page.evaluate(() => window.__jotluck_e2e?.listNotePaths?.().length ?? 0), {
+      timeout: 10000,
+    })
+    .toBeGreaterThan(0);
+  const targetPath = await page.evaluate(() => window.__jotluck_e2e?.listNotePaths?.()[0] ?? '');
+  await page.evaluate((path) => window.__jotluck_e2e?.selectNote?.(path), targetPath);
+  await expect
+    .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().activePath ?? ''), {
+      timeout: 10000,
+    })
+    .toBe(targetPath);
 }
 
 async function replaceEditorTextByKeyboard(page: Page, text: string): Promise<void> {

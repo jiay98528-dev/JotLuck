@@ -1,12 +1,15 @@
 import {
   type NGramTable,
-  predict as ngramPredict,
+  predictMany as ngramPredictMany,
   type PredictionResult,
 } from '@/utils/ngram-engine';
+import { predictWordCompletions, type WordNGramTable } from '@/utils/word-ngram-engine';
+import { getLocalLanguageHint } from './context';
 import type {
   CompletionCandidate,
   CompletionAblationMode,
   CompletionContext,
+  CompletionLanguageHint,
   CompletionProvider,
   CompletionSourceLayer,
 } from './types';
@@ -94,7 +97,7 @@ const SHORT_EN_FALLBACKS: Array<[string, string]> = [
   ['current ', 'state now'],
   ['risk ', 'needs review'],
   ['the risk ', 'needs review'],
-  ['the main risk ', 'is config'],
+  ['the main risk ', 'needs review'],
   ['the goal ', 'is clear'],
   ['the result ', 'is ready'],
   ['the issue ', 'needs review'],
@@ -122,15 +125,32 @@ export type QualityGate = (
 export interface NgramProviderState {
   n: number;
   l1: NGramTable;
-  l2: NGramTable;
+  /** Personal feedback model. Prefer this field over the legacy `l2` alias. */
+  personalL2?: NGramTable;
+  /** Current notebook model derived from workspace documents. */
+  notebook?: NGramTable;
+  /** @deprecated Compatibility alias for the historical combined L2 table. */
+  l2?: NGramTable;
   l3: NGramTable;
+  /** English word bigram/trigram baseline. */
+  wordL3?: WordNGramTable;
+  /** Integer fixed-point scale used by the public model counts. */
+  l3CountScale?: number;
   shortL1: NGramTable;
-  shortL2: NGramTable;
+  /** Personal short-context model. Prefer this field over `shortL2`. */
+  shortPersonalL2?: NGramTable;
+  /** Current notebook short-context model. */
+  shortNotebook?: NGramTable;
+  /** @deprecated Compatibility alias for the historical combined short L2 table. */
+  shortL2?: NGramTable;
   ablationMode: CompletionAblationMode;
   recentPhrases: readonly string[];
   lexiconTerms: readonly string[];
   qualityGate: QualityGate;
 }
+
+type LongNgramLayer = 'l1' | 'l2' | 'notebook' | 'l3';
+type ShortNgramLayer = 'short-l1' | 'short-l2' | 'short-notebook';
 
 const PHRASE_SLOT_FALLBACKS: Array<[RegExp, string, number]> = [
   [/我认为$/u, '，', 0.74],
@@ -153,6 +173,11 @@ const PHRASE_SLOT_FALLBACKS: Array<[RegExp, string, number]> = [
   [/但是$/u, '，', 0.66],
   [/同时$/u, '，', 0.66],
   [/另外$/u, '，', 0.66],
+  [
+    /^(?:回到|等到|到了|完成|结束|离开|进入|开始|下次|再次|每次)[^。！？；，]{1,10}(?:以后|之后|之前|时)$/u,
+    '，',
+    0.7,
+  ],
   [/这说明$/u, '，', 0.66],
   [/这种情况$/u, '需要', 0.66],
   [/这件事$/u, '需要', 0.66],
@@ -187,16 +212,12 @@ export class FormatClosureProvider implements CompletionProvider {
     const marker = context.syntax.openMarker;
     if (!marker) return null;
     const prefix = context.syntax.prefix.trim();
-    const placeholders: Record<string, string> = {
-      '**': '粗体**',
-      '*': '斜体*',
-      '`': 'code`',
-      __: '强调__',
-    };
+    if (!prefix) return null;
     return structuredCandidate({
+      context,
       providerId: this.id,
-      text: prefix.length > 0 ? marker : (placeholders[marker] ?? marker),
-      confidence: prefix.length > 0 ? 0.92 : 0.85,
+      text: marker,
+      confidence: 0.92,
       syntaxType: 'markdown-format',
       priority: this.priority,
     });
@@ -213,13 +234,15 @@ export class MarkdownStructureProvider implements CompletionProvider {
 
   provide(context: CompletionContext): CompletionCandidate | null {
     const prefix = context.syntax.prefix;
-    const text =
-      prefix.startsWith('-') || prefix.startsWith('*') || prefix.startsWith('+')
+    const text = /^\d{1,9}[.)、．]$/u.test(prefix)
+      ? ' '
+      : prefix.startsWith('-') || prefix.startsWith('*') || prefix.startsWith('+')
         ? '[ ] '
         : prefix.startsWith('#')
           ? '标题'
           : '引用';
     return structuredCandidate({
+      context,
       providerId: this.id,
       text,
       confidence: 0.82,
@@ -247,6 +270,7 @@ export class WikiLinkProvider implements CompletionProvider {
     const best = matches[0];
     if (!best) return null;
     return structuredCandidate({
+      context,
       providerId: this.id,
       text: best.slice(prefix.length) + ']]',
       confidence: matches.length === 1 ? 0.95 : 0.75,
@@ -273,6 +297,7 @@ export class TagProvider implements CompletionProvider {
     const best = matches[0];
     if (!best) return null;
     return structuredCandidate({
+      context,
       providerId: this.id,
       text: best.slice(prefix.length) + ' ',
       confidence: prefix.length > 0 ? 0.9 : 0.7,
@@ -300,6 +325,7 @@ export class FilePathProvider implements CompletionProvider {
     const best = paths[0];
     if (!best) return null;
     return structuredCandidate({
+      context,
       providerId: this.id,
       text: best.slice(prefix.length) + ')',
       confidence: paths.length === 1 ? 0.9 : 0.65,
@@ -314,7 +340,7 @@ export class SequencePatternProvider implements CompletionProvider {
   readonly priority = SEQUENCE_PRIORITY;
 
   canProvide(context: CompletionContext): boolean {
-    return context.syntax.type === 'general' && context.atEndOfLine;
+    return context.syntax.type === 'general' && context.atEndOfLine && isWritingBlock(context);
   }
 
   provide(context: CompletionContext): CompletionCandidate | null {
@@ -349,7 +375,8 @@ export class LineEchoProvider implements CompletionProvider {
       context.syntax.type === 'general' &&
       !context.emptyLine &&
       context.atEndOfLine &&
-      context.languageHint !== 'mixed'
+      context.languageHint !== 'mixed' &&
+      isWritingBlock(context)
     );
   }
 
@@ -407,19 +434,27 @@ export class LexiconProvider implements CompletionProvider {
 
   provideMany(context: CompletionContext): CompletionCandidate[] {
     const state = this.getState();
+    const prefix = getLexiconPrefix(context);
+    const prefixKey = context.languageHint === 'en' ? prefix.toLocaleLowerCase('en-US') : prefix;
     const terms = uniqueTerms([
       ...state.lexiconTerms,
       ...(context.indexData?.getAllNoteTitles() ?? []),
       ...(context.indexData?.getRecentNoteTitles?.() ?? []),
       ...(context.indexData?.getAllTags() ?? []),
       ...context.recentTokens,
-    ]).filter((term) => passesLexiconLanguage(term, context));
+    ])
+      .filter((term) => passesLexiconLanguage(term, context))
+      .filter((term) => {
+        if (!prefix) return true;
+        const termKey = context.languageHint === 'en' ? term.toLocaleLowerCase('en-US') : term;
+        return termKey.startsWith(prefixKey) && term.length > prefix.length;
+      })
+      .slice(0, 80);
     if (terms.length === 0) return [];
 
-    const prefix = getLexiconPrefix(context);
     const candidates: CompletionCandidate[] = [];
     for (const term of terms) {
-      if (prefix && term.startsWith(prefix) && term.length > prefix.length) {
+      if (prefix) {
         candidates.push(
           lexiconCandidate(term.slice(prefix.length, prefix.length + 8), context, 0.73),
         );
@@ -488,24 +523,26 @@ export class RecentPhraseProvider implements CompletionProvider {
   constructor(private readonly getState: () => NgramProviderState) {}
 
   canProvide(context: CompletionContext): boolean {
-    return context.syntax.type === 'general' && !context.emptyLine && context.atEndOfLine;
+    return (
+      context.syntax.type === 'general' &&
+      !context.emptyLine &&
+      context.atEndOfLine &&
+      isWritingBlock(context)
+    );
   }
 
   provide(context: CompletionContext): CompletionCandidate | null {
     const state = this.getState();
-    const tail = context.doc.slice(Math.max(0, context.cursorPos - 16), context.cursorPos);
-    if (tail.length < 2) return null;
-    const phrase = state.recentPhrases.find(
-      (item) => item.startsWith(tail) && item.length > tail.length,
-    );
-    if (!phrase) return null;
+    const beforeCursor = context.doc.slice(0, context.cursorPos);
+    const match = findRecentPhraseMatch(state.recentPhrases, beforeCursor, context.languageHint);
+    if (!match) return null;
     return {
-      text: phrase.slice(tail.length),
+      text: match.phrase.slice(match.prefixLength),
       confidence: 0.78,
       from: context.cursorPos,
       providerId: this.id,
       source: 'recent',
-      sourceLayer: 'provider',
+      sourceLayer: 'l2',
       syntaxType: 'recent-phrase',
       learnable: true,
       priority: this.priority,
@@ -520,28 +557,48 @@ export class ShortChineseProvider implements CompletionProvider {
   constructor(private readonly getState: () => NgramProviderState) {}
 
   canProvide(context: CompletionContext): boolean {
-    return context.syntax.type === 'general' && !context.emptyLine && context.atEndOfLine;
+    return (
+      context.syntax.type === 'general' &&
+      !context.emptyLine &&
+      context.atEndOfLine &&
+      isWritingBlock(context)
+    );
   }
 
   provide(context: CompletionContext): CompletionCandidate | null {
+    const candidates = [...this.provideMany(context)];
+    candidates.sort((a, b) => {
+      if (b.priority !== a.priority) return b.priority - a.priority;
+      return compareLayeredCandidates(a, b, ['short-l1', 'short-l2', 'short-notebook', 'fallback']);
+    });
+    return candidates[0] ?? null;
+  }
+
+  provideMany(context: CompletionContext): CompletionCandidate[] {
     const state = this.getState();
     const beforeCursor = context.doc.slice(Math.max(0, context.cursorPos - 8), context.cursorPos);
     const ctx2 = context.doc.slice(Math.max(0, context.cursorPos - 2), context.cursorPos);
     const ctx3 = context.doc.slice(Math.max(0, context.cursorPos - 3), context.cursorPos);
-    if (!/[\u3400-\u9fff]/.test(ctx2 + ctx3)) return null;
+    if (!/[\u3400-\u9fff]/.test(ctx2 + ctx3)) return [];
 
-    const candidates = [
-      {
-        layer: 'short-l1' as const,
-        result: ngramPredict(state.shortL1, context.cursorPos, context.doc, 2, 6, 0.55),
-      },
-      {
-        layer: 'short-l2' as const,
-        result: ngramPredict(state.shortL2, context.cursorPos, context.doc, 2, 6, 0.55),
-      },
-    ]
+    const personalTable = state.shortPersonalL2 ?? state.shortL2;
+    const layers: Array<{ layer: ShortNgramLayer; table: NGramTable | undefined }> = [
+      { layer: 'short-l1', table: state.shortL1 },
+      { layer: 'short-l2', table: personalTable },
+      { layer: 'short-notebook', table: state.shortNotebook },
+    ];
+    const candidates = layers
       .filter((item) => isLayerEnabled(item.layer, state.ablationMode))
-      .filter((item): item is { layer: 'short-l1' | 'short-l2'; result: PredictionResult } =>
+      .filter(
+        (item): item is { layer: ShortNgramLayer; table: NGramTable } => item.table !== undefined,
+      )
+      .flatMap(({ layer, table }) =>
+        ngramPredictMany(table, context.cursorPos, context.doc, 2, 6, 0.55, 2, 2).map((result) => ({
+          layer,
+          result,
+        })),
+      )
+      .filter((item): item is { layer: ShortNgramLayer; result: PredictionResult } =>
         Boolean(item.result),
       )
       .map(({ layer, result }) => ({
@@ -556,7 +613,7 @@ export class ShortChineseProvider implements CompletionProvider {
         layer,
         result: state.qualityGate(result, context.cursorPos, context.doc),
       }))
-      .filter((item): item is { layer: 'short-l1' | 'short-l2'; result: PredictionResult } =>
+      .filter((item): item is { layer: ShortNgramLayer; result: PredictionResult } =>
         Boolean(item.result),
       )
       .map(({ layer, result }) => this.toCandidate(result, context, layer));
@@ -578,18 +635,13 @@ export class ShortChineseProvider implements CompletionProvider {
         priority: FIXED_FALLBACK_PRIORITY,
       });
     }
-
-    candidates.sort((a, b) => {
-      if (b.priority !== a.priority) return b.priority - a.priority;
-      return compareLayeredCandidates(a, b, ['short-l1', 'short-l2', 'fallback']);
-    });
-    return candidates[0] ?? null;
+    return candidates;
   }
 
   private toCandidate(
     result: PredictionResult,
     context: CompletionContext,
-    sourceLayer: 'short-l1' | 'short-l2',
+    sourceLayer: ShortNgramLayer,
   ): CompletionCandidate {
     return {
       text: result.text,
@@ -614,7 +666,8 @@ export class ShortEnglishProvider implements CompletionProvider {
       context.syntax.type === 'general' &&
       context.languageHint === 'en' &&
       !context.emptyLine &&
-      context.atEndOfLine
+      context.atEndOfLine &&
+      isWritingBlock(context)
     );
   }
 
@@ -644,61 +697,71 @@ export class NgramProvider implements CompletionProvider {
   constructor(private readonly getState: () => NgramProviderState) {}
 
   canProvide(context: CompletionContext): boolean {
-    return context.syntax.type === 'general' && !context.emptyLine && context.atEndOfLine;
+    return (
+      context.syntax.type === 'general' &&
+      !context.emptyLine &&
+      context.atEndOfLine &&
+      isWritingBlock(context)
+    );
   }
 
   provide(context: CompletionContext): CompletionCandidate | null {
-    const state = this.getState();
-    if (
-      context.doc.slice(Math.max(0, context.cursorPos - state.n), context.cursorPos).length <
-      state.n
-    )
-      return null;
+    const candidates = [...this.provideMany(context)];
+    candidates.sort((a, b) => compareLayeredCandidates(a, b, ['l1', 'l2', 'notebook', 'l3']));
+    return candidates[0] ?? null;
+  }
 
-    const candidates = [
-      {
-        layer: 'l1' as const,
-        result: ngramPredict(
-          state.l1,
-          context.cursorPos,
-          context.doc,
-          state.n,
-          context.settings.maxSuggestionLength,
-          context.settings.minConfidence,
-        ),
-      },
-      {
-        layer: 'l2' as const,
-        result: ngramPredict(
-          state.l2,
-          context.cursorPos,
-          context.doc,
-          state.n,
-          context.settings.maxSuggestionLength,
-          context.settings.minConfidence,
-        ),
-      },
-      {
-        layer: 'l3' as const,
-        result: ngramPredict(
-          state.l3,
-          context.cursorPos,
-          context.doc,
-          state.n,
-          context.settings.maxSuggestionLength,
-          context.settings.minConfidence,
-        ),
-      },
-    ]
+  provideMany(context: CompletionContext): CompletionCandidate[] {
+    const state = this.getState();
+    const languageHint = getLocalLanguageHint(context);
+    const insideEnglishWord =
+      languageHint === 'en' && isInsideUnfinishedEnglishWord(context.doc, context.cursorPos);
+    const minimumContextLength = languageHint === 'zh' ? 2 : state.n;
+    const hasCharacterContext =
+      Array.from(context.doc.slice(0, context.cursorPos)).slice(-state.n).length >=
+      minimumContextLength;
+
+    const personalTable = state.personalL2 ?? state.l2;
+    const layers: Array<{ layer: LongNgramLayer; table: NGramTable | undefined }> = [
+      { layer: 'l1', table: state.l1 },
+      { layer: 'l2', table: personalTable },
+      { layer: 'notebook', table: state.notebook },
+      { layer: 'l3', table: state.l3 },
+    ];
+    const characterCandidates = (hasCharacterContext ? layers : [])
+      .filter(({ layer }) => !(languageHint === 'en' && !insideEnglishWord && layer === 'l3'))
       .filter((item) => isLayerEnabled(item.layer, state.ablationMode))
-      .filter((item): item is { layer: 'l1' | 'l2' | 'l3'; result: PredictionResult } =>
+      .filter(
+        (item): item is { layer: LongNgramLayer; table: NGramTable } => item.table !== undefined,
+      )
+      .flatMap(({ layer, table }) =>
+        ngramPredictMany(
+          table,
+          context.cursorPos,
+          context.doc,
+          state.n,
+          context.settings.maxSuggestionLength,
+          context.settings.minConfidence,
+          layer === 'l3' && languageHint === 'zh' ? 2 : state.n,
+          2,
+          layer === 'l3' ? (state.l3CountScale ?? 1) : 1,
+        ).map((result) => ({ layer, result })),
+      )
+      .filter((item): item is { layer: LongNgramLayer; result: PredictionResult } =>
+        Boolean(item.result),
+      )
+      .map(({ layer, result }) => ({
+        layer,
+        result: languageHint === 'en' ? toEnglishSpellingResult(result) : result,
+      }))
+      .filter((item): item is { layer: LongNgramLayer; result: PredictionResult } =>
         Boolean(item.result),
       )
       .map(({ layer, result }) => ({
         layer,
         result: state.qualityGate(result, context.cursorPos, context.doc),
       }))
-      .filter((item): item is { layer: 'l1' | 'l2' | 'l3'; result: PredictionResult } =>
+      .filter((item): item is { layer: LongNgramLayer; result: PredictionResult } =>
         Boolean(item.result),
       )
       .map(({ layer, result }) => ({
@@ -713,8 +776,41 @@ export class NgramProvider implements CompletionProvider {
         priority: this.priority,
       }));
 
-    candidates.sort((a, b) => compareLayeredCandidates(a, b, ['l1', 'l2', 'l3']));
-    return candidates[0] ?? null;
+    if (languageHint === 'en' && !insideEnglishWord) {
+      return [...characterCandidates, ...this.provideEnglishWordCandidates(context, state)];
+    }
+    return characterCandidates;
+  }
+
+  private provideEnglishWordCandidates(
+    context: CompletionContext,
+    state: NgramProviderState,
+  ): CompletionCandidate[] {
+    if (!state.wordL3 || !isLayerEnabled('l3', state.ablationMode)) return [];
+    return predictWordCompletions(
+      state.wordL3,
+      context.cursorPos,
+      context.doc,
+      3,
+      context.settings.minConfidence,
+      3,
+      state.l3CountScale ?? 1,
+    )
+      .map((result) =>
+        state.qualityGate({ ...result, syntaxType: 'word-en' }, context.cursorPos, context.doc),
+      )
+      .filter((result): result is PredictionResult => Boolean(result))
+      .map((result) => ({
+        text: result.text,
+        confidence: result.confidence,
+        from: result.from,
+        providerId: this.id,
+        source: 'ngram' as const,
+        sourceLayer: 'l3' as const,
+        syntaxType: 'word-en',
+        learnable: true,
+        priority: this.priority,
+      }));
   }
 }
 
@@ -722,22 +818,40 @@ function isLayerEnabled(sourceLayer: CompletionSourceLayer, mode: CompletionAbla
   if (mode === 'full-stack') return true;
   if (mode === 'provider-only') return sourceLayer === 'provider' || sourceLayer === 'fallback';
   if (mode === 'l1-only') return sourceLayer === 'l1' || sourceLayer === 'short-l1';
-  if (mode === 'l2-only') return sourceLayer === 'l2' || sourceLayer === 'short-l2';
+  if (mode === 'l2-only') {
+    return (
+      sourceLayer === 'l2' ||
+      sourceLayer === 'notebook' ||
+      sourceLayer === 'short-l2' ||
+      sourceLayer === 'short-notebook'
+    );
+  }
   if (mode === 'l3-only') return sourceLayer === 'l3' || sourceLayer === 'short-l3';
   return true;
 }
 
-export class LLMProvider implements CompletionProvider {
-  readonly id = 'llm';
-  readonly priority = 10;
+function findRecentPhraseMatch(
+  phrases: readonly string[],
+  beforeCursor: string,
+  languageHint: CompletionLanguageHint,
+): { phrase: string; prefixLength: number } | null {
+  if (beforeCursor.length < 2) return null;
+  const caseInsensitive = languageHint === 'en';
+  const comparableBefore = caseInsensitive ? beforeCursor.toLocaleLowerCase('en-US') : beforeCursor;
+  let best: { phrase: string; prefixLength: number } | null = null;
 
-  canProvide(): boolean {
-    return false;
+  for (const phrase of phrases) {
+    if (phrase.length < 3) continue;
+    const comparablePhrase = caseInsensitive ? phrase.toLocaleLowerCase('en-US') : phrase;
+    const maxPrefixLength = Math.min(comparableBefore.length, comparablePhrase.length - 1);
+    for (let length = maxPrefixLength; length >= 2; length--) {
+      if (!comparableBefore.endsWith(comparablePhrase.slice(0, length))) continue;
+      if (!best || length > best.prefixLength) best = { phrase, prefixLength: length };
+      break;
+    }
   }
 
-  provide(): CompletionCandidate | null {
-    return null;
-  }
+  return best;
 }
 
 function findLongestSuffixFallback(
@@ -850,7 +964,8 @@ function inferNextSequenceText(lines: readonly string[]): string | null {
   if (!isStrictSequence(series)) return null;
 
   const last = series[series.length - 1]!;
-  return renderSequencePattern(last, last.tokens[0]!.value + 1);
+  const nextValue = last.tokens[0]!.value + 1;
+  return nextValue <= 9999 ? renderSequencePattern(last, nextValue) : null;
 }
 
 function parseSequencePatternLine(line: string): SequencePatternLine | null {
@@ -929,7 +1044,7 @@ function extractChineseSequenceTokens(segment: string): SequencePatternToken[] {
     const value = parseChineseNumber(numeral);
     if (!value || value < 1) return [];
     tokens.push({
-      kind: 'zh',
+      kind: /^\d+$/u.test(numeral) ? 'arabic' : 'zh',
       value,
       unit,
       numeralStart: index + 1,
@@ -983,33 +1098,73 @@ function renderSequencePattern(pattern: SequencePatternLine, nextValue: number):
 }
 
 function parseChineseNumber(value: string): number | null {
-  if (/^\d+$/u.test(value)) return Number(value);
-  if (value === '十') return 10;
-
-  const tenIndex = value.indexOf('十');
-  if (tenIndex >= 0) {
-    const tensText = value.slice(0, tenIndex);
-    const onesText = value.slice(tenIndex + 1);
-    const tens = tensText ? CHINESE_DIGITS[tensText] : 1;
-    const ones = onesText ? CHINESE_DIGITS[onesText] : 0;
-    if (tens === undefined || ones === undefined) return null;
-    return tens * 10 + ones;
+  if (/^\d+$/u.test(value)) {
+    const parsed = Number(value);
+    return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= 9999 ? parsed : null;
   }
 
-  return CHINESE_DIGITS[value] ?? null;
+  if (!/[十百千]/u.test(value)) {
+    let digits = '';
+    for (const character of value) {
+      const digit = CHINESE_DIGITS[character];
+      if (digit === undefined) return null;
+      digits += String(digit);
+    }
+    const parsed = Number(digits);
+    return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= 9999 ? parsed : null;
+  }
+
+  const units: Record<string, number> = { 十: 10, 百: 100, 千: 1000 };
+  let total = 0;
+  let currentDigit: number | null = null;
+  let previousUnit = 10_000;
+  for (const character of value) {
+    const digit = CHINESE_DIGITS[character];
+    if (digit !== undefined) {
+      if (currentDigit !== null && currentDigit !== 0) return null;
+      currentDigit = digit;
+      continue;
+    }
+
+    const unit = units[character];
+    if (!unit || unit >= previousUnit) return null;
+    total += (currentDigit && currentDigit > 0 ? currentDigit : 1) * unit;
+    currentDigit = null;
+    previousUnit = unit;
+  }
+
+  total += currentDigit ?? 0;
+  return total >= 1 && total <= 9999 ? total : null;
 }
 
 function formatChineseNumber(value: number): string {
   const digits = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
-  if (value > 0 && value < 10) return digits[value]!;
-  if (value === 10) return '十';
-  if (value > 10 && value < 20) return `十${digits[value - 10]}`;
-  if (value > 10 && value < 100) {
-    const tens = Math.floor(value / 10);
-    const ones = value % 10;
-    return `${digits[tens]}十${ones === 0 ? '' : digits[ones]}`;
+  if (!Number.isInteger(value) || value < 1 || value > 9999) return String(value);
+
+  const places = [
+    { divisor: 1000, suffix: '千' },
+    { divisor: 100, suffix: '百' },
+    { divisor: 10, suffix: '十' },
+    { divisor: 1, suffix: '' },
+  ] as const;
+  let output = '';
+  let remainder = value;
+  let pendingZero = false;
+
+  for (const { divisor, suffix } of places) {
+    const digit = Math.floor(remainder / divisor);
+    remainder %= divisor;
+    if (digit === 0) {
+      if (output && remainder > 0) pendingZero = true;
+      continue;
+    }
+    if (pendingZero) output += '零';
+    if (!(divisor === 10 && digit === 1 && output === '')) output += digits[digit];
+    output += suffix;
+    pendingZero = false;
   }
-  return String(value);
+
+  return output;
 }
 
 function isWritingBlock(context: CompletionContext): boolean {
@@ -1020,16 +1175,28 @@ function isWritingBlock(context: CompletionContext): boolean {
   );
 }
 
+function isInsideUnfinishedEnglishWord(doc: string, cursorPos: number): boolean {
+  const beforeCursor = doc.slice(0, cursorPos);
+  return /[A-Za-z]+(?:['’-][A-Za-z]*)*$/u.test(beforeCursor);
+}
+
+function toEnglishSpellingResult(result: PredictionResult): PredictionResult | null {
+  const wordCharacters = result.text.match(/^[A-Za-z'’-]+/u)?.[0] ?? '';
+  if (!/[A-Za-z]/u.test(wordCharacters)) return null;
+  return { ...result, text: wordCharacters };
+}
+
 function uniqueTerms(items: readonly string[]): string[] {
   const seen = new Set<string>();
   const terms: string[] = [];
   for (const item of items) {
     const normalized = normalizeLexiconTerm(item);
-    if (!normalized || seen.has(normalized)) continue;
-    seen.add(normalized);
+    const key = /[A-Za-z]/u.test(normalized) ? normalized.toLocaleLowerCase('en-US') : normalized;
+    if (!normalized || seen.has(key)) continue;
+    seen.add(key);
     terms.push(normalized);
   }
-  return terms.slice(0, 80);
+  return terms;
 }
 
 function normalizeLexiconTerm(item: string): string {
@@ -1109,6 +1276,7 @@ function lexiconCandidate(
 }
 
 function structuredCandidate(args: {
+  context: CompletionContext;
   providerId: string;
   text: string;
   confidence: number;
@@ -1118,7 +1286,7 @@ function structuredCandidate(args: {
   return {
     text: args.text,
     confidence: args.confidence,
-    from: 0,
+    from: args.context.cursorPos,
     providerId: args.providerId,
     source: 'structured',
     sourceLayer: 'provider',

@@ -1,13 +1,15 @@
 import type { CompletionSettings } from '../CompletionSettings';
 
-export type CompletionSourceKind = 'structured' | 'ngram' | 'recent' | 'llm';
+export type CompletionSourceKind = 'structured' | 'ngram' | 'recent';
 export type CompletionLanguageHint = 'zh' | 'en' | 'mixed' | 'unknown';
 export type CompletionSourceLayer =
   | 'l1'
   | 'l2'
+  | 'notebook'
   | 'l3'
   | 'short-l1'
   | 'short-l2'
+  | 'short-notebook'
   | 'short-l3'
   | 'provider'
   | 'fallback';

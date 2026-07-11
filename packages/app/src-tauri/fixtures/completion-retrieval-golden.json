@@ -1,0 +1,150 @@
+{
+  "schema": "completion-retrieval-golden-v1",
+  "scenarios": [
+    {
+      "id": "atomic-unicode-ranking",
+      "workspaceScope": "golden-workspace",
+      "batches": [
+        {
+          "mutations": [
+            {
+              "operation": "replace",
+              "path": "notes/a.md",
+              "content": "项目计划需要确认风险。\nProject plan needs careful review."
+            },
+            {
+              "operation": "replace",
+              "path": "notes/b.md",
+              "content": "项目计划需要确认风险。\nProject plan needs careful review."
+            }
+          ],
+          "expected": {
+            "changed": true,
+            "documentCount": 2,
+            "revision": 1
+          },
+          "queries": [
+            {
+              "contextBeforeCursor": "项目计划",
+              "languageHint": "zh",
+              "expectedCandidates": [
+                {
+                  "text": "需要确认风险。",
+                  "confidence": 0.632121,
+                  "support": 2,
+                  "documentSupport": 2,
+                  "providerId": "hybrid-retrieval-zh",
+                  "sourceLayer": "notebook"
+                }
+              ]
+            },
+            {
+              "contextBeforeCursor": "Ｐｒｏｊｅｃｔ ｐｌａｎ ",
+              "languageHint": "en",
+              "expectedCandidates": [
+                {
+                  "text": "needs careful review",
+                  "confidence": 0.632121,
+                  "support": 2,
+                  "documentSupport": 2,
+                  "providerId": "hybrid-retrieval-en",
+                  "sourceLayer": "notebook"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mutations": [
+            {
+              "operation": "rename",
+              "oldPath": "notes/a.md",
+              "newPath": "notes/renamed.md"
+            }
+          ],
+          "expected": {
+            "changed": true,
+            "documentCount": 2,
+            "revision": 2
+          },
+          "queries": []
+        },
+        {
+          "mutations": [
+            {
+              "operation": "remove",
+              "path": "notes/missing.md"
+            }
+          ],
+          "expected": {
+            "changed": false,
+            "documentCount": 2,
+            "revision": 3
+          },
+          "queries": []
+        },
+        {
+          "mutations": [
+            {
+              "operation": "clear"
+            }
+          ],
+          "expected": {
+            "changed": true,
+            "documentCount": 0,
+            "revision": 4
+          },
+          "queries": [
+            {
+              "contextBeforeCursor": "项目计划",
+              "languageHint": "zh",
+              "expectedCandidates": []
+            }
+          ]
+        }
+      ],
+      "expectedDiagnostics": {
+        "documentCount": 0,
+        "inputBytes": 0,
+        "documentEntries": 0,
+        "budgetRejections": 0,
+        "committedRevision": 4
+      }
+    },
+    {
+      "id": "budget-rejection-preserves-snapshot",
+      "workspaceScope": "golden-budget",
+      "budget": {
+        "maxDocuments": 2,
+        "maxDocumentInputBytes": 8,
+        "maxTotalInputBytes": 16,
+        "maxDocumentEntries": 40,
+        "maxTotalDocumentEntries": 100
+      },
+      "batches": [
+        {
+          "mutations": [
+            {
+              "operation": "replace",
+              "path": "notes/oversized.md",
+              "content": "0123456789abcdef"
+            }
+          ],
+          "expected": {
+            "changed": false,
+            "documentCount": 0,
+            "revision": 1
+          },
+          "queries": []
+        }
+      ],
+      "expectedDiagnostics": {
+        "documentCount": 0,
+        "inputBytes": 0,
+        "documentEntries": 0,
+        "budgetRejections": 1,
+        "committedRevision": 1
+      }
+    }
+  ]
+}

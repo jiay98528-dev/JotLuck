@@ -1,5 +1,7 @@
 ﻿import { expect, test, type Page } from '@playwright/test';
 
+import { ensureEditorReady, waitForAppReady } from '../helpers/test-utils';
+
 interface WritingCheckpoint {
   marker: string;
 }
@@ -20,6 +22,7 @@ interface WritingStats {
   totalChars: number;
   latencies: number[];
   falseSamples: Array<{ id: string; marker: string; suggestion: string; remaining: string }>;
+  missingSamples: Array<{ id: string; marker: string; remaining: string }>;
 }
 
 const CASES: WritingCase[] = [
@@ -197,6 +200,7 @@ test.describe('autocomplete real Chinese writing score', () => {
       totalChars: 0,
       latencies: [],
       falseSamples: [],
+      missingSamples: [],
     };
 
     await openAppWithoutInternalBridge(page);
@@ -222,7 +226,14 @@ test.describe('autocomplete real Chinese writing score', () => {
 
         const startedAt = Date.now();
         const suggestion = await readGhostText(page, 520);
-        if (!suggestion) continue;
+        if (!suggestion) {
+          stats.missingSamples.push({
+            id: item.id,
+            marker: checkpoint.marker,
+            remaining: item.text.slice(cursor, cursor + 24),
+          });
+          continue;
+        }
 
         stats.triggers += 1;
         stats.latencies.push(Date.now() - startedAt);
@@ -268,6 +279,7 @@ test.describe('autocomplete real Chinese writing score', () => {
           accepted: stats.accepted,
           falseTriggers: stats.falseTriggers,
           falseSamples: stats.falseSamples,
+          missingSamples: stats.missingSamples,
           mixedTriggers: stats.mixedTriggers,
           triggerRate,
           usableRate,
@@ -282,36 +294,30 @@ test.describe('autocomplete real Chinese writing score', () => {
 
     expect(crashErrors).toEqual([]);
     expect(stats.mixedTriggers).toBe(0);
-    expect(falseTriggerRate).toBeLessThanOrEqual(0.04);
-    expect(triggerRate).toBeGreaterThanOrEqual(0.3);
-    expect(triggerRate).toBeLessThanOrEqual(0.45);
-    expect(usableRate).toBeGreaterThanOrEqual(0.3);
-    expect(usableRate).toBeLessThanOrEqual(0.35);
-    expect(p90).toBeLessThanOrEqual(130);
+    expect(falseTriggerRate).toBeLessThanOrEqual(0.03);
+    expect(triggerRate).toBeGreaterThanOrEqual(0.35);
+    expect(triggerRate).toBeLessThanOrEqual(0.42);
+    expect(usableRate).toBeGreaterThanOrEqual(0.35);
+    expect(usableRate).toBeLessThanOrEqual(0.4);
+    expect(p90).toBeLessThanOrEqual(140);
   });
 });
 
 async function openAppWithoutInternalBridge(page: Page): Promise<void> {
-  await page.goto(process.env.JOTLUCK_E2E_BASE_URL ?? 'http://localhost:5173', {
-    waitUntil: 'domcontentloaded',
-  });
-
-  const welcome = page.locator('.welcome-overlay');
-  if (await welcome.isVisible({ timeout: 1000 }).catch(() => false)) {
-    await page.locator('.welcome-skip-link').click();
-    await expect(welcome).not.toBeVisible({ timeout: 3000 });
-  }
-
-  if (
-    !(await page
-      .locator('.cm-content')
-      .isVisible()
-      .catch(() => false))
-  ) {
-    const bookmark = page.locator('.wing-bookmark-dot').first();
-    await expect(bookmark).toBeVisible({ timeout: 5000 });
-    await bookmark.click();
-  }
+  await waitForAppReady(page);
+  await ensureEditorReady(page);
+  await expect
+    .poll(() => page.evaluate(() => window.__jotluck_e2e?.listNotePaths?.().length ?? 0), {
+      timeout: 10000,
+    })
+    .toBeGreaterThan(0);
+  const targetPath = await page.evaluate(() => window.__jotluck_e2e?.listNotePaths?.()[0] ?? '');
+  await page.evaluate((path) => window.__jotluck_e2e?.selectNote?.(path), targetPath);
+  await expect
+    .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().activePath ?? ''), {
+      timeout: 10000,
+    })
+    .toBe(targetPath);
 
   if (
     !(await page

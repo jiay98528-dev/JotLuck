@@ -4,11 +4,25 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyAutocompleteEvidence } from './verify-autocomplete-evidence.mjs';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = new Set(process.argv.slice(2));
 const packageJson = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
 const appVersion = String(packageJson.version ?? '');
+const autocompleteModels = [
+  {
+    asset: path.join(rootDir, 'packages/app/public/baseline-ngram.web-local.compact.txt'),
+    manifest: path.join(
+      rootDir,
+      'packages/app/public/baseline-ngram.web-local.compact.manifest.json',
+    ),
+  },
+  {
+    asset: path.join(rootDir, 'packages/app/public/baseline-ngram.v1.compact.txt'),
+    manifest: path.join(rootDir, 'packages/app/public/baseline-ngram.v1.compact.manifest.json'),
+  },
+];
 
 const defaultInstallerPath = path.join(
   rootDir,
@@ -56,6 +70,13 @@ if (args.has('--help') || args.has('-h')) {
 
 if (args.has('--print-report-template')) {
   console.log(path.join(rootDir, 'doc', 'release-installed-l4-template.md'));
+  process.exit(0);
+}
+
+verifyAutocompleteReleaseModels();
+
+if (args.has('--autocomplete-only')) {
+  console.log('[release:rc-gate] PASS: autocomplete model quality evidence is release eligible.');
   process.exit(0);
 }
 
@@ -180,6 +201,113 @@ function sha256File(filePath) {
   return createHash('sha256').update(readFileSync(filePath)).digest('hex');
 }
 
+function verifyAutocompleteReleaseModels() {
+  try {
+    const verified = verifyAutocompleteEvidence({ rootDir, mode: 'rc' });
+    if (verified.models.length === autocompleteModels.length) return;
+  } catch (error) {
+    fail(
+      10,
+      `Autocomplete release evidence verification failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  for (const model of autocompleteModels) {
+    if (!existsSync(model.asset) || !existsSync(model.manifest)) {
+      fail(10, `文字补全发布模型或 manifest 缺失：${path.relative(rootDir, model.asset)}`);
+    }
+
+    let manifest;
+    try {
+      manifest = JSON.parse(readFileSync(model.manifest, 'utf8'));
+    } catch (error) {
+      fail(
+        10,
+        `文字补全 manifest 无法解析：${path.relative(rootDir, model.manifest)} (${error instanceof Error ? error.message : String(error)})`,
+      );
+    }
+
+    const bytes = statSync(model.asset).size;
+    const sha256 = sha256File(model.asset);
+    const modelText = readFileSync(model.asset, 'utf8');
+    const serializedEntryCount = modelText
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .filter(
+        (line) =>
+          line && line !== '# jotluck-baseline-v4' && line !== '[character]' && line !== '[word]',
+      ).length;
+    if (
+      manifest.verifiedOnly !== true ||
+      manifest.modelBytes !== bytes ||
+      !Number.isInteger(manifest.entryCount) ||
+      manifest.entryCount <= 0 ||
+      manifest.entryCount !== serializedEntryCount ||
+      manifest.sha256 !== sha256 ||
+      bytes > 6 * 1024 * 1024
+    ) {
+      fail(10, `文字补全模型完整性校验失败：${path.relative(rootDir, model.asset)}`);
+    }
+    if (
+      manifest.schemaVersion !== 2 ||
+      manifest.serialization !== 'sectioned-jsonl-hex-v4' ||
+      manifest.order !== 'section-profile-context-hex'
+    ) {
+      fail(
+        10,
+        `文字补全模型仍为 legacy 格式：${path.relative(rootDir, model.asset)}。必须用 verified-only 管线重建 v4 sectioned 模型，禁止恢复旧污染模型。`,
+      );
+    }
+    if (
+      !Number.isInteger(manifest.characterEntryCount) ||
+      manifest.characterEntryCount <= 0 ||
+      !Number.isInteger(manifest.wordEntryCount) ||
+      manifest.wordEntryCount < 0 ||
+      manifest.characterEntryCount + manifest.wordEntryCount !== manifest.entryCount ||
+      manifest.ngramN !== 4 ||
+      manifest.minNgramN !== 2 ||
+      !Array.isArray(manifest.wordNgramOrders) ||
+      manifest.wordNgramOrders.join(',') !== '1,2' ||
+      manifest.countScale !== 1000 ||
+      !modelText.startsWith('# jotluck-baseline-v4\n[character]\n')
+    ) {
+      fail(10, `文字补全模型完整性校验失败：${path.relative(rootDir, model.asset)}`);
+    }
+    if (manifest.runtimeEligible !== true) {
+      fail(
+        10,
+        `文字补全模型未取得运行时资格：${path.relative(rootDir, model.asset)}。不得由应用静默加载。`,
+      );
+    }
+    if (manifest.qualityGatePassed !== true || manifest.releaseEligible !== true) {
+      fail(
+        10,
+        `文字补全模型尚未达到正式发布门槛：${path.relative(rootDir, model.asset)}。请先通过绑定模型哈希的独立 holdout。`,
+      );
+    }
+    const evidenceHashes = [
+      ['holdoutSha256', manifest.holdoutSha256],
+      ['qualityEvidenceSha256', manifest.qualityEvidenceSha256],
+      ['learningCurveSha256', manifest.learningCurveSha256],
+    ];
+    const invalidEvidence = evidenceHashes
+      .filter(([, value]) => !/^[a-f0-9]{64}$/u.test(String(value ?? '')))
+      .map(([key]) => key);
+    const invalidBindings = [
+      ...(manifest.evaluatorVersion === 'offline-completion-evaluator-v2'
+        ? []
+        : ['evaluatorVersion']),
+      ...invalidEvidence,
+    ];
+    if (invalidBindings.length > 0) {
+      fail(
+        10,
+        `文字补全模型缺少绑定的 V2 质量证据：${path.relative(rootDir, model.manifest)} ` +
+          `(invalid: ${invalidBindings.join(', ')})`,
+      );
+    }
+  }
+}
+
 function readMarkerValue(report, marker) {
   const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const match = report.match(new RegExp(`${escaped}\\s*:\\s*(.+)`, 'i'));
@@ -210,6 +338,7 @@ Environment:
 
 Helpers:
   node scripts/release-rc-gate.mjs --print-report-template
+  node scripts/release-rc-gate.mjs --autocomplete-only
 
 Default installer:
   ${path.relative(rootDir, defaultInstallerPath)}

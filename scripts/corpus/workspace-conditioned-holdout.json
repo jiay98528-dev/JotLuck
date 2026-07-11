@@ -1,0 +1,2262 @@
+{
+  "schemaVersion": 1,
+  "datasetId": "workspace-conditioned-holdout-v1",
+  "classification": "workspace-conditioned-diagnostic-v1",
+  "releaseEvidence": false,
+  "frozenAt": "2026-07-11T00:00:00.000Z",
+  "description": "Independent support documents condition workspace retrieval without copying target sentences or full continuations.",
+  "supportDocuments": [
+    {
+      "id": "zh-support-01-a",
+      "path": "support/zh/01-a.md",
+      "language": "zh",
+      "text": "发布流程备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-01-b",
+      "path": "support/zh/01-b.md",
+      "language": "zh",
+      "text": "发布流程工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-02-a",
+      "path": "support/zh/02-a.md",
+      "language": "zh",
+      "text": "数据迁移备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-02-b",
+      "path": "support/zh/02-b.md",
+      "language": "zh",
+      "text": "数据迁移工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-03-a",
+      "path": "support/zh/03-a.md",
+      "language": "zh",
+      "text": "设备巡检备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-03-b",
+      "path": "support/zh/03-b.md",
+      "language": "zh",
+      "text": "设备巡检工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-04-a",
+      "path": "support/zh/04-a.md",
+      "language": "zh",
+      "text": "客服交接备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-04-b",
+      "path": "support/zh/04-b.md",
+      "language": "zh",
+      "text": "客服交接工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-05-a",
+      "path": "support/zh/05-a.md",
+      "language": "zh",
+      "text": "课程准备备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-05-b",
+      "path": "support/zh/05-b.md",
+      "language": "zh",
+      "text": "课程准备工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-06-a",
+      "path": "support/zh/06-a.md",
+      "language": "zh",
+      "text": "预算复核备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-06-b",
+      "path": "support/zh/06-b.md",
+      "language": "zh",
+      "text": "预算复核工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-07-a",
+      "path": "support/zh/07-a.md",
+      "language": "zh",
+      "text": "库存盘点备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-07-b",
+      "path": "support/zh/07-b.md",
+      "language": "zh",
+      "text": "库存盘点工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-08-a",
+      "path": "support/zh/08-a.md",
+      "language": "zh",
+      "text": "合同评审备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-08-b",
+      "path": "support/zh/08-b.md",
+      "language": "zh",
+      "text": "合同评审工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-09-a",
+      "path": "support/zh/09-a.md",
+      "language": "zh",
+      "text": "活动筹备备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-09-b",
+      "path": "support/zh/09-b.md",
+      "language": "zh",
+      "text": "活动筹备工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-10-a",
+      "path": "support/zh/10-a.md",
+      "language": "zh",
+      "text": "版本升级备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-10-b",
+      "path": "support/zh/10-b.md",
+      "language": "zh",
+      "text": "版本升级工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-11-a",
+      "path": "support/zh/11-a.md",
+      "language": "zh",
+      "text": "安全审计备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-11-b",
+      "path": "support/zh/11-b.md",
+      "language": "zh",
+      "text": "安全审计工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-12-a",
+      "path": "support/zh/12-a.md",
+      "language": "zh",
+      "text": "旅行规划备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-12-b",
+      "path": "support/zh/12-b.md",
+      "language": "zh",
+      "text": "旅行规划工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-13-a",
+      "path": "support/zh/13-a.md",
+      "language": "zh",
+      "text": "读书小组备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-13-b",
+      "path": "support/zh/13-b.md",
+      "language": "zh",
+      "text": "读书小组工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-14-a",
+      "path": "support/zh/14-a.md",
+      "language": "zh",
+      "text": "厨房整理备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-14-b",
+      "path": "support/zh/14-b.md",
+      "language": "zh",
+      "text": "厨房整理工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-15-a",
+      "path": "support/zh/15-a.md",
+      "language": "zh",
+      "text": "实验记录备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-15-b",
+      "path": "support/zh/15-b.md",
+      "language": "zh",
+      "text": "实验记录工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-16-a",
+      "path": "support/zh/16-a.md",
+      "language": "zh",
+      "text": "招聘安排备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-16-b",
+      "path": "support/zh/16-b.md",
+      "language": "zh",
+      "text": "招聘安排工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-17-a",
+      "path": "support/zh/17-a.md",
+      "language": "zh",
+      "text": "社区维护备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-17-b",
+      "path": "support/zh/17-b.md",
+      "language": "zh",
+      "text": "社区维护工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-18-a",
+      "path": "support/zh/18-a.md",
+      "language": "zh",
+      "text": "写作计划备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-18-b",
+      "path": "support/zh/18-b.md",
+      "language": "zh",
+      "text": "写作计划工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-19-a",
+      "path": "support/zh/19-a.md",
+      "language": "zh",
+      "text": "会议跟进备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-19-b",
+      "path": "support/zh/19-b.md",
+      "language": "zh",
+      "text": "会议跟进工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-20-a",
+      "path": "support/zh/20-a.md",
+      "language": "zh",
+      "text": "园艺维护备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-20-b",
+      "path": "support/zh/20-b.md",
+      "language": "zh",
+      "text": "园艺维护工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-21-a",
+      "path": "support/zh/21-a.md",
+      "language": "zh",
+      "text": "备份恢复备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-21-b",
+      "path": "support/zh/21-b.md",
+      "language": "zh",
+      "text": "备份恢复工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-22-a",
+      "path": "support/zh/22-a.md",
+      "language": "zh",
+      "text": "性能优化备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-22-b",
+      "path": "support/zh/22-b.md",
+      "language": "zh",
+      "text": "性能优化工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-23-a",
+      "path": "support/zh/23-a.md",
+      "language": "zh",
+      "text": "供应协调备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-23-b",
+      "path": "support/zh/23-b.md",
+      "language": "zh",
+      "text": "供应协调工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-24-a",
+      "path": "support/zh/24-a.md",
+      "language": "zh",
+      "text": "展览布置备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-24-b",
+      "path": "support/zh/24-b.md",
+      "language": "zh",
+      "text": "展览布置工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "zh-support-25-a",
+      "path": "support/zh/25-a.md",
+      "language": "zh",
+      "text": "研究整理备忘录说明，准备完成后安排交叉核验，随后记录负责人。团队将在周五复核边界条件，并更新各自的工作日志。"
+    },
+    {
+      "id": "zh-support-25-b",
+      "path": "support/zh/25-b.md",
+      "language": "zh",
+      "text": "研究整理工作札记提到，准备完成后安排小组走查，随后记录时间窗口。团队将在周五复核依赖关系，再发送简短的进展通知。"
+    },
+    {
+      "id": "en-support-01-a",
+      "path": "support/en/01-a.md",
+      "language": "en",
+      "text": "The release process memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-01-b",
+      "path": "support/en/01-b.md",
+      "language": "en",
+      "text": "A release process notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-02-a",
+      "path": "support/en/02-a.md",
+      "language": "en",
+      "text": "The data migration memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-02-b",
+      "path": "support/en/02-b.md",
+      "language": "en",
+      "text": "A data migration notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-03-a",
+      "path": "support/en/03-a.md",
+      "language": "en",
+      "text": "The device inspection memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-03-b",
+      "path": "support/en/03-b.md",
+      "language": "en",
+      "text": "A device inspection notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-04-a",
+      "path": "support/en/04-a.md",
+      "language": "en",
+      "text": "The support handover memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-04-b",
+      "path": "support/en/04-b.md",
+      "language": "en",
+      "text": "A support handover notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-05-a",
+      "path": "support/en/05-a.md",
+      "language": "en",
+      "text": "The course preparation memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-05-b",
+      "path": "support/en/05-b.md",
+      "language": "en",
+      "text": "A course preparation notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-06-a",
+      "path": "support/en/06-a.md",
+      "language": "en",
+      "text": "The budget review memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-06-b",
+      "path": "support/en/06-b.md",
+      "language": "en",
+      "text": "A budget review notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-07-a",
+      "path": "support/en/07-a.md",
+      "language": "en",
+      "text": "The inventory count memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-07-b",
+      "path": "support/en/07-b.md",
+      "language": "en",
+      "text": "A inventory count notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-08-a",
+      "path": "support/en/08-a.md",
+      "language": "en",
+      "text": "The contract review memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-08-b",
+      "path": "support/en/08-b.md",
+      "language": "en",
+      "text": "A contract review notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-09-a",
+      "path": "support/en/09-a.md",
+      "language": "en",
+      "text": "The event preparation memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-09-b",
+      "path": "support/en/09-b.md",
+      "language": "en",
+      "text": "A event preparation notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-10-a",
+      "path": "support/en/10-a.md",
+      "language": "en",
+      "text": "The version upgrade memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-10-b",
+      "path": "support/en/10-b.md",
+      "language": "en",
+      "text": "A version upgrade notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-11-a",
+      "path": "support/en/11-a.md",
+      "language": "en",
+      "text": "The security audit memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-11-b",
+      "path": "support/en/11-b.md",
+      "language": "en",
+      "text": "A security audit notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-12-a",
+      "path": "support/en/12-a.md",
+      "language": "en",
+      "text": "The travel planning memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-12-b",
+      "path": "support/en/12-b.md",
+      "language": "en",
+      "text": "A travel planning notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-13-a",
+      "path": "support/en/13-a.md",
+      "language": "en",
+      "text": "The reading group memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-13-b",
+      "path": "support/en/13-b.md",
+      "language": "en",
+      "text": "A reading group notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-14-a",
+      "path": "support/en/14-a.md",
+      "language": "en",
+      "text": "The kitchen cleanup memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-14-b",
+      "path": "support/en/14-b.md",
+      "language": "en",
+      "text": "A kitchen cleanup notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-15-a",
+      "path": "support/en/15-a.md",
+      "language": "en",
+      "text": "The experiment log memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-15-b",
+      "path": "support/en/15-b.md",
+      "language": "en",
+      "text": "A experiment log notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-16-a",
+      "path": "support/en/16-a.md",
+      "language": "en",
+      "text": "The hiring schedule memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-16-b",
+      "path": "support/en/16-b.md",
+      "language": "en",
+      "text": "A hiring schedule notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-17-a",
+      "path": "support/en/17-a.md",
+      "language": "en",
+      "text": "The community upkeep memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-17-b",
+      "path": "support/en/17-b.md",
+      "language": "en",
+      "text": "A community upkeep notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-18-a",
+      "path": "support/en/18-a.md",
+      "language": "en",
+      "text": "The writing plan memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-18-b",
+      "path": "support/en/18-b.md",
+      "language": "en",
+      "text": "A writing plan notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-19-a",
+      "path": "support/en/19-a.md",
+      "language": "en",
+      "text": "The meeting follow-up memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-19-b",
+      "path": "support/en/19-b.md",
+      "language": "en",
+      "text": "A meeting follow-up notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-20-a",
+      "path": "support/en/20-a.md",
+      "language": "en",
+      "text": "The garden care memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-20-b",
+      "path": "support/en/20-b.md",
+      "language": "en",
+      "text": "A garden care notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-21-a",
+      "path": "support/en/21-a.md",
+      "language": "en",
+      "text": "The backup recovery memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-21-b",
+      "path": "support/en/21-b.md",
+      "language": "en",
+      "text": "A backup recovery notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-22-a",
+      "path": "support/en/22-a.md",
+      "language": "en",
+      "text": "The performance tuning memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-22-b",
+      "path": "support/en/22-b.md",
+      "language": "en",
+      "text": "A performance tuning notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-23-a",
+      "path": "support/en/23-a.md",
+      "language": "en",
+      "text": "The supply coordination memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-23-b",
+      "path": "support/en/23-b.md",
+      "language": "en",
+      "text": "A supply coordination notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-24-a",
+      "path": "support/en/24-a.md",
+      "language": "en",
+      "text": "The exhibition setup memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-24-b",
+      "path": "support/en/24-b.md",
+      "language": "en",
+      "text": "A exhibition setup notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    },
+    {
+      "id": "en-support-25-a",
+      "path": "support/en/25-a.md",
+      "language": "en",
+      "text": "The research cleanup memo says preparation is complete, then schedules a cross-check and records the owner. The team reviews boundary conditions on Friday before updating its work log."
+    },
+    {
+      "id": "en-support-25-b",
+      "path": "support/en/25-b.md",
+      "language": "en",
+      "text": "A research cleanup notebook says preparation is complete, then schedules a peer walkthrough and records the time window. The team reviews dependencies on Friday before sending a short status note."
+    }
+  ],
+  "targets": [
+    {
+      "id": "zh-target-01",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于发布流程的记录指出，准备完成后安排灰度演练，随后记录验收结论。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-01-a", "zh-support-01-b"],
+      "checkpoints": [
+        {
+          "id": "zh-01-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排灰度演练，随后记录验收结论。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-01-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录验收结论。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-01-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-01-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-02",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于数据迁移的记录指出，准备完成后安排回滚演习，随后记录校验摘要。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-02-a", "zh-support-02-b"],
+      "checkpoints": [
+        {
+          "id": "zh-02-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排回滚演习，随后记录校验摘要。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-02-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录校验摘要。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-02-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-02-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-03",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于设备巡检的记录指出，准备完成后安排负载测试，随后记录温度曲线。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-03-a", "zh-support-03-b"],
+      "checkpoints": [
+        {
+          "id": "zh-03-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排负载测试，随后记录温度曲线。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-03-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录温度曲线。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-03-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-03-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-04",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于客服交接的记录指出，准备完成后安排轮班说明，随后记录问题清单。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-04-a", "zh-support-04-b"],
+      "checkpoints": [
+        {
+          "id": "zh-04-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排轮班说明，随后记录问题清单。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-04-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录问题清单。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-04-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-04-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-05",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于课程准备的记录指出，准备完成后安排课堂试讲，随后记录反馈要点。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-05-a", "zh-support-05-b"],
+      "checkpoints": [
+        {
+          "id": "zh-05-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排课堂试讲，随后记录反馈要点。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-05-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录反馈要点。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-05-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-05-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-06",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于预算复核的记录指出，准备完成后安排费用抽查，随后记录差异说明。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-06-a", "zh-support-06-b"],
+      "checkpoints": [
+        {
+          "id": "zh-06-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排费用抽查，随后记录差异说明。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-06-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录差异说明。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-06-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-06-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-07",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于库存盘点的记录指出，准备完成后安排货架复查，随后记录缺货明细。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-07-a", "zh-support-07-b"],
+      "checkpoints": [
+        {
+          "id": "zh-07-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排货架复查，随后记录缺货明细。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-07-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录缺货明细。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-07-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-07-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-08",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于合同评审的记录指出，准备完成后安排条款复核，随后记录风险备注。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-08-a", "zh-support-08-b"],
+      "checkpoints": [
+        {
+          "id": "zh-08-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排条款复核，随后记录风险备注。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-08-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录风险备注。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-08-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-08-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-09",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于活动筹备的记录指出，准备完成后安排现场彩排，随后记录物料状态。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-09-a", "zh-support-09-b"],
+      "checkpoints": [
+        {
+          "id": "zh-09-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排现场彩排，随后记录物料状态。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-09-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录物料状态。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-09-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-09-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-10",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于版本升级的记录指出，准备完成后安排兼容测试，随后记录异常记录。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-10-a", "zh-support-10-b"],
+      "checkpoints": [
+        {
+          "id": "zh-10-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排兼容测试，随后记录异常记录。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-10-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录异常记录。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-10-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-10-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-11",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于安全审计的记录指出，准备完成后安排权限复核，随后记录修复清单。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-11-a", "zh-support-11-b"],
+      "checkpoints": [
+        {
+          "id": "zh-11-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排权限复核，随后记录修复清单。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-11-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录修复清单。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-11-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-11-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-12",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于旅行规划的记录指出，准备完成后安排路线核查，随后记录预订状态。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-12-a", "zh-support-12-b"],
+      "checkpoints": [
+        {
+          "id": "zh-12-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排路线核查，随后记录预订状态。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-12-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录预订状态。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-12-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-12-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-13",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于读书小组的记录指出，准备完成后安排章节讨论，随后记录观点摘要。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-13-a", "zh-support-13-b"],
+      "checkpoints": [
+        {
+          "id": "zh-13-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排章节讨论，随后记录观点摘要。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-13-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录观点摘要。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-13-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-13-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-14",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于厨房整理的记录指出，准备完成后安排食材检查，随后记录补货清单。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-14-a", "zh-support-14-b"],
+      "checkpoints": [
+        {
+          "id": "zh-14-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排食材检查，随后记录补货清单。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-14-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录补货清单。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-14-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-14-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-15",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于实验记录的记录指出，准备完成后安排对照实验，随后记录测量结果。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-15-a", "zh-support-15-b"],
+      "checkpoints": [
+        {
+          "id": "zh-15-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排对照实验，随后记录测量结果。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-15-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录测量结果。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-15-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-15-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-16",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于招聘安排的记录指出，准备完成后安排面试校准，随后记录候选反馈。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-16-a", "zh-support-16-b"],
+      "checkpoints": [
+        {
+          "id": "zh-16-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排面试校准，随后记录候选反馈。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-16-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录候选反馈。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-16-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-16-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-17",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于社区维护的记录指出，准备完成后安排设备检查，随后记录维修进度。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-17-a", "zh-support-17-b"],
+      "checkpoints": [
+        {
+          "id": "zh-17-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排设备检查，随后记录维修进度。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-17-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录维修进度。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-17-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-17-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-18",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于写作计划的记录指出，准备完成后安排提纲复核，随后记录修改意见。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-18-a", "zh-support-18-b"],
+      "checkpoints": [
+        {
+          "id": "zh-18-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排提纲复核，随后记录修改意见。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-18-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录修改意见。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-18-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-18-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-19",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于会议跟进的记录指出，准备完成后安排行动检查，随后记录决策记录。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-19-a", "zh-support-19-b"],
+      "checkpoints": [
+        {
+          "id": "zh-19-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排行动检查，随后记录决策记录。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-19-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录决策记录。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-19-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-19-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-20",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于园艺维护的记录指出，准备完成后安排灌溉检查，随后记录生长观察。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-20-a", "zh-support-20-b"],
+      "checkpoints": [
+        {
+          "id": "zh-20-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排灌溉检查，随后记录生长观察。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-20-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录生长观察。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-20-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-20-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-21",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于备份恢复的记录指出，准备完成后安排恢复演练，随后记录完整性报告。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-21-a", "zh-support-21-b"],
+      "checkpoints": [
+        {
+          "id": "zh-21-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排恢复演练，随后记录完整性报告",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-21-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录完整性报告。团队将在",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-21-s",
+          "cursorOffset": 34,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-21-c",
+          "cursorOffset": 40,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-22",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于性能优化的记录指出，准备完成后安排压力测试，随后记录延迟分布。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-22-a", "zh-support-22-b"],
+      "checkpoints": [
+        {
+          "id": "zh-22-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排压力测试，随后记录延迟分布。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-22-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录延迟分布。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-22-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-22-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-23",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于供应协调的记录指出，准备完成后安排到货核查，随后记录交付备注。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-23-a", "zh-support-23-b"],
+      "checkpoints": [
+        {
+          "id": "zh-23-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排到货核查，随后记录交付备注。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-23-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录交付备注。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-23-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-23-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-24",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于展览布置的记录指出，准备完成后安排灯光彩排，随后记录现场记录。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-24-a", "zh-support-24-b"],
+      "checkpoints": [
+        {
+          "id": "zh-24-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排灯光彩排，随后记录现场记录。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-24-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录现场记录。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-24-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-24-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-target-25",
+      "language": "zh",
+      "category": "workspace-note",
+      "text": "关于研究整理的记录指出，准备完成后安排样本复核，随后记录分析摘要。团队将在周五复核结果，并把后续事项写入共享清单。",
+      "supportDocumentIds": ["zh-support-25-a", "zh-support-25-b"],
+      "checkpoints": [
+        {
+          "id": "zh-25-a",
+          "cursorOffset": 17,
+          "expectedSuffix": "安排样本复核，随后记录分析摘要。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-25-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "记录分析摘要。团队将在周",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-25-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-25-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "复核结果，并把后续事项写",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-01",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The release process note says preparation is complete, then schedules a staged rehearsal and records the acceptance notes. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-01-a", "en-support-01-b"],
+      "checkpoints": [
+        {
+          "id": "en-01-a",
+          "cursorOffset": 59,
+          "expectedSuffix": " schedules a staged rehe",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-01-b",
+          "cursorOffset": 92,
+          "expectedSuffix": " records the acceptance ",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-01-s",
+          "cursorOffset": 122,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-01-c",
+          "cursorOffset": 131,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-02",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The data migration note says preparation is complete, then schedules a rollback drill and records the validation summary. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-02-a", "en-support-02-b"],
+      "checkpoints": [
+        {
+          "id": "en-02-a",
+          "cursorOffset": 58,
+          "expectedSuffix": " schedules a rollback dr",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-02-b",
+          "cursorOffset": 89,
+          "expectedSuffix": " records the validation ",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-02-s",
+          "cursorOffset": 121,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-02-c",
+          "cursorOffset": 130,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-03",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The device inspection note says preparation is complete, then schedules a load test and records the temperature chart. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-03-a", "en-support-03-b"],
+      "checkpoints": [
+        {
+          "id": "en-03-a",
+          "cursorOffset": 61,
+          "expectedSuffix": " schedules a load test a",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-03-b",
+          "cursorOffset": 87,
+          "expectedSuffix": " records the temperature",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-03-s",
+          "cursorOffset": 118,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-03-c",
+          "cursorOffset": 127,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-04",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The support handover note says preparation is complete, then schedules a shift review and records the issue list. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-04-a", "en-support-04-b"],
+      "checkpoints": [
+        {
+          "id": "en-04-a",
+          "cursorOffset": 60,
+          "expectedSuffix": " schedules a shift revie",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-04-b",
+          "cursorOffset": 16,
+          "expectedSuffix": "over note says preparati",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-04-s",
+          "cursorOffset": 113,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-04-c",
+          "cursorOffset": 122,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-05",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The course preparation note says preparation is complete, then schedules a classroom rehearsal and records the feedback notes. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-05-a", "en-support-05-b"],
+      "checkpoints": [
+        {
+          "id": "en-05-a",
+          "cursorOffset": 62,
+          "expectedSuffix": " schedules a classroom r",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-05-b",
+          "cursorOffset": 98,
+          "expectedSuffix": " records the feedback no",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-05-s",
+          "cursorOffset": 126,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-05-c",
+          "cursorOffset": 135,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-06",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The budget review note says preparation is complete, then schedules an expense sample and records the variance summary. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-06-a", "en-support-06-b"],
+      "checkpoints": [
+        {
+          "id": "en-06-a",
+          "cursorOffset": 57,
+          "expectedSuffix": " schedules an expense sa",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-06-b",
+          "cursorOffset": 89,
+          "expectedSuffix": " records the variance su",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-06-s",
+          "cursorOffset": 119,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-06-c",
+          "cursorOffset": 128,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-07",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The inventory count note says preparation is complete, then schedules a shelf review and records the shortage list. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-07-a", "en-support-07-b"],
+      "checkpoints": [
+        {
+          "id": "en-07-a",
+          "cursorOffset": 59,
+          "expectedSuffix": " schedules a shelf revie",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-07-b",
+          "cursorOffset": 88,
+          "expectedSuffix": " records the shortage li",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-07-s",
+          "cursorOffset": 115,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-07-c",
+          "cursorOffset": 124,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-08",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The contract review note says preparation is complete, then schedules a clause check and records the risk notes. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-08-a", "en-support-08-b"],
+      "checkpoints": [
+        {
+          "id": "en-08-a",
+          "cursorOffset": 59,
+          "expectedSuffix": " schedules a clause chec",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-08-b",
+          "cursorOffset": 88,
+          "expectedSuffix": " records the risk notes.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-08-s",
+          "cursorOffset": 112,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-08-c",
+          "cursorOffset": 121,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-09",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The event preparation note says preparation is complete, then schedules an onsite rehearsal and records the material status. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-09-a", "en-support-09-b"],
+      "checkpoints": [
+        {
+          "id": "en-09-a",
+          "cursorOffset": 61,
+          "expectedSuffix": " schedules an onsite reh",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-09-b",
+          "cursorOffset": 95,
+          "expectedSuffix": " records the material st",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-09-s",
+          "cursorOffset": 124,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-09-c",
+          "cursorOffset": 133,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-10",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The version upgrade note says preparation is complete, then schedules a compatibility test and records the exception log. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-10-a", "en-support-10-b"],
+      "checkpoints": [
+        {
+          "id": "en-10-a",
+          "cursorOffset": 59,
+          "expectedSuffix": " schedules a compatibili",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-10-b",
+          "cursorOffset": 94,
+          "expectedSuffix": " records the exception l",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-10-s",
+          "cursorOffset": 121,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-10-c",
+          "cursorOffset": 130,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-11",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The security audit note says preparation is complete, then schedules an access review and records the remediation list. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-11-a", "en-support-11-b"],
+      "checkpoints": [
+        {
+          "id": "en-11-a",
+          "cursorOffset": 58,
+          "expectedSuffix": " schedules an access rev",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-11-b",
+          "cursorOffset": 89,
+          "expectedSuffix": " records the remediation",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-11-s",
+          "cursorOffset": 119,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-11-c",
+          "cursorOffset": 128,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-12",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The travel planning note says preparation is complete, then schedules a route check and records the booking status. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-12-a", "en-support-12-b"],
+      "checkpoints": [
+        {
+          "id": "en-12-a",
+          "cursorOffset": 59,
+          "expectedSuffix": " schedules a route check",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-12-b",
+          "cursorOffset": 87,
+          "expectedSuffix": " records the booking sta",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-12-s",
+          "cursorOffset": 115,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-12-c",
+          "cursorOffset": 124,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-13",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The reading group note says preparation is complete, then schedules a chapter discussion and records the viewpoint summary. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-13-a", "en-support-13-b"],
+      "checkpoints": [
+        {
+          "id": "en-13-a",
+          "cursorOffset": 57,
+          "expectedSuffix": " schedules a chapter dis",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-13-b",
+          "cursorOffset": 92,
+          "expectedSuffix": " records the viewpoint s",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-13-s",
+          "cursorOffset": 123,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-13-c",
+          "cursorOffset": 132,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-14",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The kitchen cleanup note says preparation is complete, then schedules an ingredient check and records the supply list. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-14-a", "en-support-14-b"],
+      "checkpoints": [
+        {
+          "id": "en-14-a",
+          "cursorOffset": 59,
+          "expectedSuffix": " schedules an ingredient",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-14-b",
+          "cursorOffset": 93,
+          "expectedSuffix": " records the supply list",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-14-s",
+          "cursorOffset": 118,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-14-c",
+          "cursorOffset": 127,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-15",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The experiment log note says preparation is complete, then schedules a control run and records the measurement results. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-15-a", "en-support-15-b"],
+      "checkpoints": [
+        {
+          "id": "en-15-a",
+          "cursorOffset": 58,
+          "expectedSuffix": " schedules a control run",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-15-b",
+          "cursorOffset": 86,
+          "expectedSuffix": " records the measurement",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-15-s",
+          "cursorOffset": 119,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-15-c",
+          "cursorOffset": 128,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-16",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The hiring schedule note says preparation is complete, then schedules an interview calibration and records the candidate feedback. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-16-a", "en-support-16-b"],
+      "checkpoints": [
+        {
+          "id": "en-16-a",
+          "cursorOffset": 59,
+          "expectedSuffix": " schedules an interview ",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-16-b",
+          "cursorOffset": 98,
+          "expectedSuffix": " records the candidate f",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-16-s",
+          "cursorOffset": 130,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-16-c",
+          "cursorOffset": 139,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-17",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The community upkeep note says preparation is complete, then schedules an equipment check and records the repair status. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-17-a", "en-support-17-b"],
+      "checkpoints": [
+        {
+          "id": "en-17-a",
+          "cursorOffset": 60,
+          "expectedSuffix": " schedules an equipment ",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-17-b",
+          "cursorOffset": 93,
+          "expectedSuffix": " records the repair stat",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-17-s",
+          "cursorOffset": 120,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-17-c",
+          "cursorOffset": 129,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-18",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The writing plan note says preparation is complete, then schedules an outline review and records the revision notes. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-18-a", "en-support-18-b"],
+      "checkpoints": [
+        {
+          "id": "en-18-a",
+          "cursorOffset": 56,
+          "expectedSuffix": " schedules an outline re",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-18-b",
+          "cursorOffset": 88,
+          "expectedSuffix": " records the revision no",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-18-s",
+          "cursorOffset": 116,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-18-c",
+          "cursorOffset": 125,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-19",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The meeting follow-up note says preparation is complete, then schedules an action review and records the decision log. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-19-a", "en-support-19-b"],
+      "checkpoints": [
+        {
+          "id": "en-19-a",
+          "cursorOffset": 61,
+          "expectedSuffix": " schedules an action rev",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-19-b",
+          "cursorOffset": 92,
+          "expectedSuffix": " records the decision lo",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-19-s",
+          "cursorOffset": 118,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-19-c",
+          "cursorOffset": 127,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-20",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The garden care note says preparation is complete, then schedules an irrigation check and records the growth notes. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-20-a", "en-support-20-b"],
+      "checkpoints": [
+        {
+          "id": "en-20-a",
+          "cursorOffset": 55,
+          "expectedSuffix": " schedules an irrigation",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-20-b",
+          "cursorOffset": 89,
+          "expectedSuffix": " records the growth note",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-20-s",
+          "cursorOffset": 115,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-20-c",
+          "cursorOffset": 124,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-21",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The backup recovery note says preparation is complete, then schedules a restore drill and records the integrity report. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-21-a", "en-support-21-b"],
+      "checkpoints": [
+        {
+          "id": "en-21-a",
+          "cursorOffset": 59,
+          "expectedSuffix": " schedules a restore dri",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-21-b",
+          "cursorOffset": 89,
+          "expectedSuffix": " records the integrity r",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-21-s",
+          "cursorOffset": 119,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-21-c",
+          "cursorOffset": 128,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-22",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The performance tuning note says preparation is complete, then schedules a stress test and records the latency distribution. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-22-a", "en-support-22-b"],
+      "checkpoints": [
+        {
+          "id": "en-22-a",
+          "cursorOffset": 62,
+          "expectedSuffix": " schedules a stress test",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-22-b",
+          "cursorOffset": 90,
+          "expectedSuffix": " records the latency dis",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-22-s",
+          "cursorOffset": 124,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-22-c",
+          "cursorOffset": 133,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-23",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The supply coordination note says preparation is complete, then schedules an arrival check and records the delivery notes. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-23-a", "en-support-23-b"],
+      "checkpoints": [
+        {
+          "id": "en-23-a",
+          "cursorOffset": 63,
+          "expectedSuffix": " schedules an arrival ch",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-23-b",
+          "cursorOffset": 94,
+          "expectedSuffix": " records the delivery no",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-23-s",
+          "cursorOffset": 122,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-23-c",
+          "cursorOffset": 131,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-24",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The exhibition setup note says preparation is complete, then schedules a lighting rehearsal and records the onsite record. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-24-a", "en-support-24-b"],
+      "checkpoints": [
+        {
+          "id": "en-24-a",
+          "cursorOffset": 60,
+          "expectedSuffix": " schedules a lighting re",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-24-b",
+          "cursorOffset": 95,
+          "expectedSuffix": " records the onsite reco",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-24-s",
+          "cursorOffset": 122,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-24-c",
+          "cursorOffset": 131,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-target-25",
+      "language": "en",
+      "category": "workspace-note",
+      "text": "The research cleanup note says preparation is complete, then schedules a sample review and records the analysis summary. The team reviews the result on Friday before adding follow-up items to the shared list.",
+      "supportDocumentIds": ["en-support-25-a", "en-support-25-b"],
+      "checkpoints": [
+        {
+          "id": "en-25-a",
+          "cursorOffset": 60,
+          "expectedSuffix": " schedules a sample revi",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-25-b",
+          "cursorOffset": 90,
+          "expectedSuffix": " records the analysis su",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-25-s",
+          "cursorOffset": 120,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-25-c",
+          "cursorOffset": 129,
+          "expectedSuffix": " reviews the result on F",
+          "expectedBehavior": "complete"
+        }
+      ]
+    }
+  ]
+}

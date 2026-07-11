@@ -12,11 +12,19 @@ export interface WebSourceConfig {
   depth?: number;
   maxPages?: number;
   enabled?: boolean;
+  license?: {
+    status: 'approved' | 'unverified' | 'rejected';
+    licenseId?: string;
+    evidence?: string;
+  };
+  allowPathPrefixes?: string[];
+  denyPathPrefixes?: string[];
 }
 
 export interface WebSourceManifest {
   version: number;
   description?: string;
+  licensePolicy?: string;
   defaults?: {
     weight?: number;
     depth?: number;
@@ -53,6 +61,9 @@ export interface CollectedPageResult {
   languageDistribution: Record<FragmentLanguage, number>;
   scrubHits: Record<string, number>;
   dropReasons: Record<string, number>;
+  licenseId?: string;
+  licenseEvidence?: string;
+  cleanSha256?: string;
   error?: string;
 }
 
@@ -70,6 +81,14 @@ const BOILERPLATE_PATTERNS = [
   /\b(click here|read more|sign up|log in|subscribe|download now)\b/i,
   /^目录$/,
   /^导航$/,
+  /you (?:switched accounts|signed out|signed in).*reload to refresh your session/i,
+  /you can[’']?t perform that action at this time/i,
+  /there was an error while loading.*reload this page/i,
+  /was this page helpful to you/i,
+  /press .* to (?:navigate between chapters|show this help|search in the book)/i,
+  /last updated on .*utc/i,
+  /菜鸟教程\s*--\s*学的不仅是技术/i,
+  /查看此页面.*报告此内容的问题/i,
 ];
 
 const WEB_TONE_PATTERNS = [
@@ -80,6 +99,11 @@ const WEB_TONE_PATTERNS = [
 
 const FIELD_PATTERNS: Array<[string, RegExp, string]> = [
   ['email', /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, ''],
+  [
+    'obfuscated-email',
+    /[A-Z0-9._%+-]+\s*(?:\(at\)|\[at\]|\sat\s|@)\s*[A-Z0-9.-]+\s*(?:\(dot\)|\[dot\]|\sdot\s|\.)\s*[A-Z]{2,}/gi,
+    '',
+  ],
   ['phone', /(?:(?:\+?86[-\s]?)?1[3-9]\d{9})|(?:0\d{2,3}[-\s]?\d{7,8}(?:-\d{1,6})?)/g, ''],
   ['id-number', /\b\d{15,19}[0-9Xx]?\b/g, ''],
   ['url', /https?:\/\/[^\s<>"'）)]+|www\.[^\s<>"'）)]+/gi, ''],
@@ -102,7 +126,7 @@ const FIELD_PATTERNS: Array<[string, RegExp, string]> = [
   ['english-person', /\b[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,}){1,2}\b/g, 'someone'],
   [
     'english-person-context',
-    /\b(?:by|from|with|including|introduced by|help from|comment by)\s+[A-Z][a-z]{2,}\b/gi,
+    /\b(?:by|from|with|including|introduced by|help from|comment by)\s+[A-Z][a-z]{2,}\b/g,
     'by someone',
   ],
   ['english-possessive-person', /\b[A-Z][a-z]{2,}[’']s\b/g, "someone's"],
@@ -116,7 +140,141 @@ const FIELD_PATTERNS: Array<[string, RegExp, string]> = [
     /(?<![\u4e00-\u9fa5])[\u4e00-\u9fa5]{2,4}(?:说|表示|指出|认为|介绍|称)/gu,
     '有人表示',
   ],
+  [
+    'identity-context',
+    /(?:我是|网名|笔名|作者|posted\s+by)[:：\s，,]*[\u4e00-\u9fa5A-Za-z·]{2,32}/giu,
+    '',
+  ],
 ];
+
+// The collector is intentionally aggressive: a false positive only discards one web
+// fragment. The release audit must be narrower because it scans authored, local corpus
+// text and must not mistake ordinary prose such as "written by design" for an identity.
+const RELEASE_PRIVACY_PATTERNS: Array<[string, RegExp]> = [
+  ['email', /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi],
+  [
+    'obfuscated-email',
+    /[A-Z0-9._%+-]+\s*(?:\(at\)|\[at\]|\sat\s|@)\s*[A-Z0-9.-]+\s*(?:\(dot\)|\[dot\]|\sdot\s|\.)\s*[A-Z]{2,}/gi,
+  ],
+  ['phone', /(?:(?:\+?86[-\s]?)?1[3-9]\d{9})|(?:0\d{2,3}[-\s]?\d{7,8}(?:-\d{1,6})?)/g],
+  ['id-number', /\b\d{15,19}[0-9Xx]?\b/g],
+  ['social-account', /@[A-Za-z0-9_\-\u4e00-\u9fa5]{2,24}/gu],
+  [
+    'contact-field',
+    /(?:^|[。！？!?\n])\s*(?:联系方式|联系人|联系电话|电话|手机|邮箱|邮编|QQ|微信|WeChat|VX|wx|qq)[:：\s]+[^。！？!?\n]{3,80}/giu,
+  ],
+  [
+    'byline',
+    /(?:^|\n)\s*(?:作者|编辑|记者|撰文|译者|校对|笔名|来源)[:：]\s*[\u4e00-\u9fa5A-Za-z·]{2,32}(?:\s|$)/gmu,
+  ],
+  [
+    'identity-context',
+    /(?:^|[。！？!?\n])\s*(?:我是|网名|笔名|posted\s+by)[:：\s]+[\u4e00-\u9fa5A-Za-z·]{2,32}(?:\s|$)/gimu,
+  ],
+];
+
+const RELEASE_BOILERPLATE_PATTERNS: Array<[string, RegExp]> = [
+  [
+    'github-session-banner',
+    /you (?:switched accounts|signed out|signed in).*reload to refresh your session/i,
+  ],
+  ['github-action-error', /you can[’']?t perform that action at this time/i],
+  ['github-load-error', /there was an error while loading.*reload this page/i],
+  ['mdn-feedback', /was this page helpful to you/i],
+  [
+    'rust-book-navigation',
+    /press .* to (?:navigate between chapters|show this help|search in the book)/i,
+  ],
+  ['last-updated-utc', /last updated on .*utc/i],
+  ['runoob-tagline', /菜鸟教程\s*--\s*学的不仅是技术/i],
+  ['report-page', /查看此页面.*报告此内容的问题/i],
+  ['auth-call-to-action', /^\s*(?:登录|注册|退出登录|忘记密码|log in|sign up)\s*$/imu],
+];
+
+const PLACEHOLDER_PATTERNS = [
+  /\bsomeone(?:'s)?\b/i,
+  /\ban organization\b/i,
+  /某机构/u,
+  /有人表示/u,
+];
+
+const DEFAULT_DENIED_PATH_PREFIXES = [
+  '/login',
+  '/logout',
+  '/signup',
+  '/register',
+  '/account',
+  '/settings',
+  '/notifications',
+];
+
+export interface CorpusTextFinding {
+  type: 'privacy' | 'boilerplate' | 'placeholder';
+  rule: string;
+}
+
+export function assertApprovedWebSources(manifest: WebSourceManifest): void {
+  const errors: string[] = [];
+  for (const source of manifest.sources.filter((item) => item.enabled ?? true)) {
+    const license = source.license;
+    if (
+      license?.status !== 'approved' ||
+      !license.licenseId ||
+      license.licenseId.toLowerCase() === 'unknown' ||
+      !license.evidence
+    ) {
+      errors.push(`${source.id ?? source.url}: missing approved license provenance`);
+    }
+  }
+  if (errors.length > 0) {
+    throw new Error(`Web corpus provenance rejected:\n${errors.join('\n')}`);
+  }
+}
+
+export function isAllowedCollectionUrl(urlValue: string, source: WebSourceConfig): boolean {
+  let url: URL;
+  let root: URL;
+  try {
+    url = new URL(urlValue);
+    root = new URL(source.url);
+  } catch {
+    return false;
+  }
+  if (url.origin !== root.origin || !/^https?:$/.test(url.protocol)) return false;
+  const pathname = url.pathname.toLowerCase();
+  const denied = [...DEFAULT_DENIED_PATH_PREFIXES, ...(source.denyPathPrefixes ?? [])];
+  if (denied.some((prefix) => pathname.startsWith(prefix.toLowerCase()))) return false;
+  const allowed = source.allowPathPrefixes;
+  if (allowed && allowed.length > 0) {
+    return allowed.some((prefix) => pathname.startsWith(prefix.toLowerCase()));
+  }
+  return true;
+}
+
+export function findForbiddenCorpusText(text: string): CorpusTextFinding[] {
+  const findings: CorpusTextFinding[] = [];
+  RELEASE_BOILERPLATE_PATTERNS.forEach(([name, pattern]) => {
+    pattern.lastIndex = 0;
+    if (pattern.test(text)) findings.push({ type: 'boilerplate', rule: name });
+  });
+  RELEASE_PRIVACY_PATTERNS.forEach(([name, pattern]) => {
+    pattern.lastIndex = 0;
+    if (pattern.test(text)) findings.push({ type: 'privacy', rule: name });
+  });
+  PLACEHOLDER_PATTERNS.forEach((pattern, index) => {
+    pattern.lastIndex = 0;
+    if (pattern.test(text)) findings.push({ type: 'placeholder', rule: `placeholder-${index}` });
+  });
+  return findings;
+}
+
+export function normalizeCorpusFragment(text: string): string {
+  return text.normalize('NFKC').toLowerCase().replace(/\s+/gu, '').trim();
+}
+
+export function nearDuplicateCorpusKey(text: string): string {
+  return normalizeCorpusFragment(text).replace(/[\p{P}\p{S}\d]/gu, '');
+}
 
 export function sourceKey(url: string): string {
   return crypto.createHash('sha256').update(url).digest('hex').slice(0, 12);
@@ -307,8 +465,8 @@ export function scrubPrivacy(fragment: string): ScrubResult {
   }
 
   const uniqueHits = new Set(hits);
-  if (uniqueHits.size >= 2) {
-    return { action: 'drop', text: '', hits, reason: 'multiple-privacy-hits' };
+  if (uniqueHits.size > 0) {
+    return { action: 'drop', text: '', hits, reason: 'privacy-hit' };
   }
 
   const normalized = normalizePlainText(text)

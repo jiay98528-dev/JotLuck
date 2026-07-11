@@ -1,13 +1,47 @@
+import { getLocalLanguageHint } from './context';
 import type { CompletionCandidate, CompletionContext, CompletionProvider } from './types';
 
 export interface CompletionResolverResult {
   candidate: CompletionCandidate | null;
   providerCount: number;
+  rankedCandidates: CompletionCandidate[];
 }
 
 export interface CompletionResolverOptions {
   getRejectionCount?: (candidate: CompletionCandidate, context: CompletionContext) => number;
   getBoost?: (candidate: CompletionCandidate, context: CompletionContext) => number;
+  trace?: CompletionResolverTrace;
+}
+
+export type CompletionResolverRejectionReason =
+  | 'empty'
+  | 'multiline'
+  | 'mid-line'
+  | 'language'
+  | 'information'
+  | 'low-value'
+  | 'low-confidence'
+  | 'rejected-suggestion';
+
+export interface CompletionResolverTrace {
+  rawCandidates: number;
+  normalizedCandidates: number;
+  deduplicatedCandidates: number;
+  rejectionReasons: Partial<Record<CompletionResolverRejectionReason, number>>;
+  winner: Pick<
+    CompletionCandidate,
+    'text' | 'providerId' | 'sourceLayer' | 'syntaxType' | 'confidence'
+  > | null;
+}
+
+export function createCompletionResolverTrace(): CompletionResolverTrace {
+  return {
+    rawCandidates: 0,
+    normalizedCandidates: 0,
+    deduplicatedCandidates: 0,
+    rejectionReasons: {},
+    winner: null,
+  };
 }
 
 export function resolveCompletion(
@@ -15,64 +49,177 @@ export function resolveCompletion(
   providers: CompletionProvider[],
   options: CompletionResolverOptions = {},
 ): CompletionResolverResult {
-  const candidates: CompletionCandidate[] = [];
+  return resolveCompletionCandidates(
+    context,
+    collectProviderCandidates(context, providers),
+    options,
+    providers.length,
+  );
+}
 
+export function collectProviderCandidates(
+  context: CompletionContext,
+  providers: CompletionProvider[],
+): CompletionCandidate[] {
+  const candidates: CompletionCandidate[] = [];
   for (const provider of providers) {
     if (!provider.canProvide(context)) continue;
-    const rawCandidates =
-      provider.provideMany?.(context) ?? [provider.provide(context)].filter(Boolean);
-    for (const candidate of rawCandidates) {
-      if (!candidate) continue;
-      const normalized = normalizeCandidate(candidate, context);
-      if (!normalized) continue;
-      if ((options.getRejectionCount?.(normalized, context) ?? 0) >= 2) continue;
-      const boost = options.getBoost?.(normalized, context) ?? 0;
-      candidates.push({
-        ...normalized,
-        confidence: Math.max(0, Math.min(0.99, normalized.confidence + boost)),
-        learningBoost: boost > 0 ? boost : normalized.learningBoost,
-        learningPenalty: boost < 0 ? Math.abs(boost) : normalized.learningPenalty,
-      });
+    const provided = provider.provideMany?.(context) ?? [provider.provide(context)];
+    for (const candidate of provided) {
+      if (candidate) candidates.push(candidate);
     }
   }
+  return candidates;
+}
 
-  if (candidates.length === 0) return { candidate: null, providerCount: providers.length };
+export function resolveCompletionCandidates(
+  context: CompletionContext,
+  rawCandidates: CompletionCandidate[],
+  options: CompletionResolverOptions = {},
+  providerCount = 0,
+): CompletionResolverResult {
+  const groupedCandidates = new Map<
+    string,
+    Array<{ candidate: CompletionCandidate; rejectionCount: number }>
+  >();
 
-  candidates.sort((a, b) => {
-    const priorityDelta = getEffectivePriority(b) - getEffectivePriority(a);
-    if (priorityDelta !== 0) return priorityDelta;
-    const aRank = rankCandidate(a);
-    const bRank = rankCandidate(b);
-    return bRank - aRank;
-  });
+  if (options.trace) options.trace.rawCandidates += rawCandidates.length;
+  for (const candidate of rawCandidates) {
+    const normalizedResult = normalizeCandidate(candidate, context);
+    if (!normalizedResult.candidate) {
+      recordResolverRejection(options.trace, normalizedResult.reason);
+      continue;
+    }
+    const normalized = normalizedResult.candidate;
+    if (options.trace) options.trace.normalizedCandidates++;
+    const rejectionCount = options.getRejectionCount?.(normalized, context) ?? 0;
+    const boost = options.getBoost?.(normalized, context) ?? 0;
+    const scored = {
+      ...normalized,
+      confidence: Math.max(0, Math.min(0.99, normalized.confidence + boost)),
+      learningBoost: boost > 0 ? boost : normalized.learningBoost,
+      learningPenalty: boost < 0 ? Math.abs(boost) : normalized.learningPenalty,
+    };
+    const key = normalizeSuggestionKey(scored.text);
+    const group = groupedCandidates.get(key) ?? [];
+    group.push({ candidate: scored, rejectionCount });
+    groupedCandidates.set(key, group);
+  }
 
-  return { candidate: candidates[0] ?? null, providerCount: providers.length };
+  const candidates: CompletionCandidate[] = [];
+  for (const group of groupedCandidates.values()) {
+    if (options.trace) {
+      options.trace.deduplicatedCandidates += Math.max(0, group.length - 1);
+    }
+    // A rejection belongs to the normalized suggestion, not to whichever provider
+    // happened to win the previous resolver pass.
+    if (group.some((entry) => entry.rejectionCount >= 2)) {
+      recordResolverRejection(options.trace, 'rejected-suggestion', group.length);
+      continue;
+    }
+    group.sort((a, b) => compareCandidates(a.candidate, b.candidate));
+    const winner = group[0]?.candidate;
+    if (winner) candidates.push(winner);
+  }
+
+  if (candidates.length === 0) {
+    return { candidate: null, providerCount, rankedCandidates: [] };
+  }
+
+  candidates.sort(compareCandidates);
+
+  const winner = candidates[0] ?? null;
+  if (options.trace && winner) {
+    options.trace.winner = {
+      text: winner.text,
+      providerId: winner.providerId,
+      sourceLayer: winner.sourceLayer,
+      syntaxType: winner.syntaxType,
+      confidence: winner.confidence,
+    };
+  }
+  return { candidate: winner, providerCount, rankedCandidates: candidates };
+}
+
+function normalizeSuggestionKey(text: string): string {
+  return text.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase('en-US');
+}
+
+function compareCandidates(a: CompletionCandidate, b: CompletionCandidate): number {
+  const tierDelta = getPriorityTier(b) - getPriorityTier(a);
+  if (tierDelta !== 0) return tierDelta;
+
+  // Priority selects a semantic tier, but learned confidence is allowed to
+  // reorder candidates inside that tier.
+  const rankDelta = rankCandidate(b) - rankCandidate(a);
+  if (rankDelta !== 0) return rankDelta;
+
+  const priorityDelta = b.priority - a.priority;
+  if (priorityDelta !== 0) return priorityDelta;
+  return a.providerId.localeCompare(b.providerId);
+}
+
+function getPriorityTier(candidate: CompletionCandidate): number {
+  if (candidate.source === 'structured') return 6;
+  if (candidate.priority >= 80) return 5;
+  if (candidate.priority >= 72) return 4;
+  if (candidate.priority >= 65) return 3;
+  // Curated English fallbacks are safer than a generic public L3 continuation,
+  // but remain below document and personal evidence.
+  if (candidate.providerId === 'short-english') return 2;
+  if (candidate.sourceLayer === 'fallback') return 1;
+  return 2;
 }
 
 function normalizeCandidate(
   candidate: CompletionCandidate,
   context: CompletionContext,
-): CompletionCandidate | null {
+): { candidate: CompletionCandidate | null; reason: CompletionResolverRejectionReason | null } {
   const text = refineCandidateText(candidate.text, context, candidate);
-  if (!text.trim()) return null;
-  if (text.includes('\r') || text.includes('\n')) return null;
-  if (!context.atEndOfLine && candidate.source !== 'structured') return null;
+  if (!text.trim()) return rejectedCandidate('empty');
+  if (text.includes('\r') || text.includes('\n')) return rejectedCandidate('multiline');
+  if (!context.atEndOfLine && candidate.source !== 'structured') {
+    return rejectedCandidate('mid-line');
+  }
 
   const isStructured = candidate.source === 'structured';
-  if (!isStructured && !passesLanguageGate(text, candidate, context)) return null;
+  if (!isStructured && !passesLanguageGate(text, context)) return rejectedCandidate('language');
   const informationScore = isStructured ? 1 : getInformationScore(text, candidate, context);
   if (!isStructured && !passesInformationGate(informationScore, text, candidate, context)) {
-    return null;
+    return rejectedCandidate('information');
   }
-  if (!isStructured && isLowValueCandidate(text, candidate, context)) return null;
-  if (!isStructured && candidate.confidence < context.settings.minConfidence) return null;
+  if (!isStructured && isLowValueCandidate(text, candidate, context)) {
+    return rejectedCandidate('low-value');
+  }
+  if (!isStructured && candidate.confidence < context.settings.minConfidence) {
+    return rejectedCandidate('low-confidence');
+  }
 
   return {
-    ...candidate,
-    text,
-    informationScore,
-    priority: candidate.priority,
+    candidate: {
+      ...candidate,
+      text,
+      informationScore,
+      priority: candidate.priority,
+    },
+    reason: null,
   };
+}
+
+function rejectedCandidate(reason: CompletionResolverRejectionReason): {
+  candidate: null;
+  reason: CompletionResolverRejectionReason;
+} {
+  return { candidate: null, reason };
+}
+
+function recordResolverRejection(
+  trace: CompletionResolverTrace | undefined,
+  reason: CompletionResolverRejectionReason | null,
+  count = 1,
+): void {
+  if (!trace || !reason) return;
+  trace.rejectionReasons[reason] = (trace.rejectionReasons[reason] ?? 0) + count;
 }
 
 function refineCandidateText(
@@ -80,17 +227,24 @@ function refineCandidateText(
   context: CompletionContext,
   candidate: CompletionCandidate,
 ): string {
+  const languageHint = getLocalLanguageHint(context);
   const maxLength =
-    context.languageHint === 'zh' &&
+    languageHint === 'zh' &&
     candidate.source !== 'structured' &&
     candidate.syntaxType !== 'line-echo'
       ? Math.min(8, context.settings.maxSuggestionLength)
       : context.settings.maxSuggestionLength;
-  const text = rawText.slice(0, maxLength);
+  const rawPoints = Array.from(rawText);
+  let text = rawPoints.slice(0, maxLength).join('');
+  if (languageHint === 'en' && rawPoints.length > maxLength && /\s/u.test(rawText)) {
+    const boundary = text.lastIndexOf(' ');
+    if (boundary > 0) text = text.slice(0, boundary);
+  }
   if (
-    context.languageHint !== 'en' ||
+    languageHint !== 'en' ||
     candidate.source === 'structured' ||
-    candidate.providerId !== 'ngram'
+    candidate.providerId !== 'ngram' ||
+    candidate.syntaxType === 'word-en'
   ) {
     return text;
   }
@@ -100,21 +254,23 @@ function refineCandidateText(
   return trimmed.length >= 2 ? trimmed : text;
 }
 
-function passesLanguageGate(
-  text: string,
-  candidate: CompletionCandidate,
-  context: CompletionContext,
-): boolean {
+function passesLanguageGate(text: string, context: CompletionContext): boolean {
   const trimmed = text.trim();
   const hasCjk = /[\u3400-\u9fff]/u.test(trimmed);
   const hasLatin = /[A-Za-z]/.test(trimmed);
+  const languageHint = getLocalLanguageHint(context);
 
-  if (context.languageHint === 'mixed') return false;
-  if (context.languageHint === 'en' && hasCjk) return false;
-  if (context.languageHint === 'zh' && /^[A-Za-z]/.test(trimmed) && !isMarkdownToken(trimmed)) {
+  if (hasCjk && hasLatin) return false;
+  if (context.languageHint === 'mixed' && languageHint === 'unknown') return false;
+  if (languageHint === 'mixed') return false;
+  if (languageHint === 'en' && hasCjk) return false;
+  if (
+    languageHint === 'zh' &&
+    /^[A-Za-z]/.test(trimmed) &&
+    (context.languageHint === 'mixed' || !isMarkdownToken(trimmed))
+  ) {
     return false;
   }
-  if (hasCjk && hasLatin && candidate.syntaxType !== 'markdown-structure') return false;
   return true;
 }
 
@@ -125,10 +281,11 @@ function isLowValueCandidate(
 ): boolean {
   const trimmed = text.trim();
   if (!trimmed) return true;
+  const languageHint = getLocalLanguageHint(context);
 
   if (
     (candidate.providerId === 'ngram' || candidate.providerId === 'short-chinese') &&
-    context.languageHint === 'zh' &&
+    languageHint === 'zh' &&
     /^[的了在和与及或而但并就都很更再也还又把被对为以中上下一是有用个]$/u.test(trimmed)
   ) {
     return true;
@@ -142,7 +299,16 @@ function isLowValueCandidate(
     return true;
   }
 
-  if (context.languageHint === 'en') {
+  if (languageHint === 'en') {
+    const beforeCursor = context.line?.beforeCursor ?? '';
+    if (
+      candidate.providerId === 'ngram' &&
+      candidate.sourceLayer === 'l3' &&
+      ((/[A-Za-z]$/u.test(beforeCursor) && /^[A-Za-z]/u.test(text)) ||
+        (/\b(?:a|an|the)$/iu.test(beforeCursor) && /^\s+[A-Za-z]/u.test(text)))
+    ) {
+      return true;
+    }
     if (/[\u3000-\u303f\uff00-\uffef]/u.test(trimmed)) return true;
     if (candidate.providerId === 'ngram' && isWebBoilerplateContext(context)) return true;
     if (/^(and|or|but|the|a|an|to|of|in|on|for|with|is|are|was|were|status)$/i.test(trimmed)) {
@@ -172,41 +338,24 @@ function isMarkdownToken(text: string): boolean {
 function rankCandidate(candidate: CompletionCandidate): number {
   const layerBonus = getSourceLayerBonus(candidate);
   const informationBonus = (candidate.informationScore ?? 0.5) * 0.08;
-  return candidate.confidence + informationBonus + layerBonus;
-}
-
-function getEffectivePriority(candidate: CompletionCandidate): number {
-  if (candidate.source === 'structured') return candidate.priority;
-  if (candidate.providerId === 'short-chinese-fallback') return candidate.priority + 12;
-  if (candidate.providerId === 'short-english') return candidate.priority - 7;
-  switch (candidate.sourceLayer) {
-    case 'l1':
-    case 'short-l1':
-      return candidate.priority + 4;
-    case 'l2':
-    case 'short-l2':
-    case 'provider':
-      return candidate.priority + 2;
-    case 'l3':
-      return candidate.priority - 3;
-    case 'fallback':
-      return candidate.priority - 25;
-    default:
-      return candidate.priority;
-  }
+  const providerBonus = candidate.providerId === 'short-english' ? 0.16 : 0;
+  return candidate.confidence + informationBonus + layerBonus + providerBonus;
 }
 
 function getSourceLayerBonus(candidate: CompletionCandidate): number {
   switch (candidate.sourceLayer) {
     case 'l1':
     case 'short-l1':
-      return 0.05;
+      return 0.07;
     case 'l2':
     case 'short-l2':
     case 'provider':
+      return 0.05;
+    case 'notebook':
+    case 'short-notebook':
       return 0.03;
     case 'l3':
-      return -0.03;
+      return -0.04;
     case 'fallback':
       return -0.06;
     default:
@@ -227,8 +376,9 @@ function getInformationScore(
       : 0.08;
   }
 
-  if (context.languageHint === 'en') return getEnglishInformationScore(trimmed);
-  if (context.languageHint === 'zh') return getChineseInformationScore(trimmed, candidate);
+  const languageHint = getLocalLanguageHint(context);
+  if (languageHint === 'en') return getEnglishInformationScore(trimmed);
+  if (languageHint === 'zh') return getChineseInformationScore(trimmed, candidate);
   return Math.min(0.72, 0.2 + Math.min(trimmed.length, 10) / 20);
 }
 
@@ -275,10 +425,14 @@ function passesInformationGate(
   if (candidate.sourceLayer === 'l2' || candidate.sourceLayer === 'short-l2') {
     return informationScore >= 0.16;
   }
+  if (candidate.sourceLayer === 'notebook' || candidate.sourceLayer === 'short-notebook') {
+    return informationScore >= 0.16;
+  }
   if (candidate.sourceLayer === 'l3') return informationScore >= 0.34;
   if (candidate.sourceLayer === 'fallback') {
-    if (context.languageHint === 'en' && isGenericEnglishFragment(text.trim())) return false;
-    if (context.languageHint === 'zh') return informationScore >= 0.24;
+    const languageHint = getLocalLanguageHint(context);
+    if (languageHint === 'en' && isGenericEnglishFragment(text.trim())) return false;
+    if (languageHint === 'zh') return informationScore >= 0.24;
     return informationScore >= 0.42;
   }
   return informationScore >= 0.24;

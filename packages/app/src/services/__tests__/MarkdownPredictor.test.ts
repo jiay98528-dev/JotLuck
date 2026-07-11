@@ -10,17 +10,53 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   ACCEPTED_LEXICON_STORAGE_KEY,
+  configureBaselineLoaderForTests,
   MarkdownPredictor,
+  resetBaselineLoaderForTests,
   type PredictorIndexData,
 } from '../MarkdownPredictor';
 import { loadCompletionMetrics } from '../completion/metrics';
-import { LEARNING_SIGNALS_STORAGE_KEY } from '../completion/learning-signals';
+import { learningSignalsStorageKey } from '../completion/learning-signals';
+import { flushCompletionStorageMutationsForTests } from '../completion/learning-repository';
+import {
+  HybridRetrievalService,
+  LocalHybridRetrievalBackend,
+  type HybridRetrievalBackend,
+} from '../completion/hybrid-retrieval-backend';
+import type { HybridRetrievalResponse } from '../completion/hybrid-retrieval-types';
 
 // ---- helpers ----
-const SCOPED_NGRAM_KEY = 'jotluck:scope:unscoped:ngram:v2';
-const SCOPED_SHORT_NGRAM_KEY = 'jotluck:scope:unscoped:ngram:short:v1';
-const SCOPED_NGRAM_META_KEY = 'jotluck:scope:unscoped:ngram:meta';
+const SCOPED_NGRAM_KEY = 'jotluck:scope:unscoped:autocomplete:ngram:v4';
+const SCOPED_NGRAM_META_KEY = 'jotluck:scope:unscoped:autocomplete:meta:v4';
 const SCOPED_ACCEPTED_LEXICON_KEY = 'jotluck:scope:unscoped:autocomplete:acceptedLexicon:v1';
+const TEST_BASELINE_HASH = 'a'.repeat(64);
+
+function baselineManifest(
+  model: string,
+  entryCount: number,
+  profile: 'web-local' | 'release' = 'web-local',
+) {
+  return JSON.stringify({
+    schemaVersion: 1,
+    profile,
+    modelFile:
+      profile === 'web-local'
+        ? 'baseline-ngram.web-local.compact.txt'
+        : 'baseline-ngram.v1.compact.txt',
+    serialization: 'jsonl-hex-v3-fixed-int',
+    order: 'lexicographic-context-hex',
+    ngramN: 4,
+    modelBytes: new TextEncoder().encode(model).byteLength,
+    entryCount,
+    sha256: TEST_BASELINE_HASH,
+    trainingInputHash: 'b'.repeat(64),
+    verifiedOnly: true,
+    runtimeEligible: true,
+    qualityGatePassed: true,
+    releaseEligible: true,
+    hardLimitPassed: true,
+  });
+}
 
 function createPredictor(n: number = 4): MarkdownPredictor {
   return new MarkdownPredictor(n);
@@ -538,6 +574,25 @@ describe('MarkdownPredictor', () => {
       expect(result!.text).not.toMatch(/[\u3400-\u9fff]/u);
     });
 
+    it.each([
+      ['今日随访重点是观察症状变化和用药反应。', '今日随访重点是'],
+      ['本节课需要加强阅读理解和课堂表达。', '本节课需要'],
+      ['主要风险在于付款节点和违约责任约定。', '主要风险在于'],
+      ['复盘重点是报名转化率和渠道投放成本。', '复盘重点是'],
+      ['Release risk is configuration drift before the final check.', 'Release risk is'],
+      ['The observation suggests a stronger baseline is required.', 'The observation suggests'],
+      ['Next step is to confirm the migration window and owner.', 'Next step is'],
+      ['Morning plan includes temple visits and a quiet lunch nearby.', 'Morning plan includes'],
+      ['Key driver is demand softness and margin pressure.', 'Key driver is'],
+    ])('echoes repeated domain lines: %s', (line, prefix) => {
+      const p = createPredictor(4);
+      const doc = `# Diagnostic\n\n${line}\n${line}\n${prefix}`;
+      const result = p.getGhostText(doc.length, doc);
+
+      expect(result).toMatchObject({ providerId: 'line-echo' });
+      expect(line.slice(prefix.length)).toContain(result!.text.trimEnd());
+    });
+
     it('does not cross blank lines when echoing repeated text', () => {
       const p = createPredictor(4);
       const doc =
@@ -651,7 +706,6 @@ describe('MarkdownPredictor', () => {
       p.clearLearningData();
 
       expect(localStorage.removeItem).toHaveBeenCalledWith(SCOPED_NGRAM_KEY);
-      expect(localStorage.removeItem).toHaveBeenCalledWith(SCOPED_SHORT_NGRAM_KEY);
       expect(localStorage.removeItem).toHaveBeenCalledWith(SCOPED_NGRAM_META_KEY);
       expect(localStorage.removeItem).toHaveBeenCalledWith(SCOPED_ACCEPTED_LEXICON_KEY);
       expect(localStorage.removeItem).toHaveBeenCalledWith(ACCEPTED_LEXICON_STORAGE_KEY);
@@ -673,7 +727,7 @@ describe('MarkdownPredictor', () => {
       expect(p.getGhostText(doc.length, doc)?.providerId).not.toBe('phrase-slot');
     });
 
-    it('suppresses a rejected provider across the current paragraph only', () => {
+    it('suppresses the rejected text in the current paragraph only', () => {
       const p = createPredictor(4);
       const firstDoc = '原因是';
       const first = p.getGhostText(firstDoc.length, firstDoc);
@@ -683,13 +737,11 @@ describe('MarkdownPredictor', () => {
       p.getGhostText(firstDoc.length, firstDoc);
       p.rejectCompletion('原因是', first!.text);
 
-      const sameParagraph = '原因是这里还需要继续说明。接下来';
-      expect(p.getGhostText(sameParagraph.length, sameParagraph)?.providerId).not.toBe(
-        'phrase-slot',
-      );
+      const sameParagraph = '这里还需要继续说明。原因是';
+      expect(p.getGhostText(sameParagraph.length, sameParagraph)?.text).not.toBe(first!.text);
 
-      const nextParagraph = '原因是这里还需要继续说明。\n\n接下来';
-      expect(p.getGhostText(nextParagraph.length, nextParagraph)?.providerId).toBe('phrase-slot');
+      const nextParagraph = '这里还需要继续说明。\n\n原因是';
+      expect(p.getGhostText(nextParagraph.length, nextParagraph)?.text).toBe(first!.text);
     });
   });
 
@@ -704,32 +756,32 @@ describe('MarkdownPredictor', () => {
 
     it('marks L1/L2/L3 ngram candidates with sourceLayer', () => {
       const p = createPredictor(2);
-      priv(p).l1 = new Map([['ab', new Map([['x', 1]])]]);
-      expect(p.getGhostText(2, 'ab')?.sourceLayer).toBe('l1');
+      priv(p).l1 = new Map([['o ', new Map([['x', 1]])]]);
+      expect(p.getGhostText(3, 'go ')?.sourceLayer).toBe('l1');
 
       priv(p).l1 = new Map();
-      priv(p).l2 = new Map([['ab', new Map([['y', 1]])]]);
-      expect(p.getGhostText(2, 'ab')?.sourceLayer).toBe('l2');
+      priv(p).l2 = new Map([['o ', new Map([['y', 1]])]]);
+      expect(p.getGhostText(3, 'go ')?.sourceLayer).toBe('l2');
 
       priv(p).l2 = new Map();
-      priv(p).l3 = new Map([['ab', new Map([['z', 1]])]]);
-      expect(p.getGhostText(2, 'ab')?.sourceLayer).toBe('l3');
+      priv(p).l3Word = new Map([['go', new Map([['z', 1]])]]);
+      expect(p.getGhostText(3, 'go ')?.sourceLayer).toBe('l3');
     });
 
     it('prefers L1 over L3 when confidence is close', () => {
       const p = createPredictor(2);
       priv(p).l1 = new Map([
         [
-          'ab',
+          'o ',
           new Map([
             ['x', 6],
             ['q', 4],
           ]),
         ],
       ]);
-      priv(p).l3 = new Map([
+      priv(p).l3Word = new Map([
         [
-          'ab',
+          'go',
           new Map([
             ['z', 7],
             ['q', 3],
@@ -737,7 +789,7 @@ describe('MarkdownPredictor', () => {
         ],
       ]);
 
-      const result = p.getGhostText(2, 'ab');
+      const result = p.getGhostText(3, 'go ');
       expect(result?.text).toBe('x');
       expect(result?.sourceLayer).toBe('l1');
     });
@@ -746,16 +798,16 @@ describe('MarkdownPredictor', () => {
       const p = createPredictor(2);
       priv(p).l1 = new Map([
         [
-          'ab',
+          'o ',
           new Map([
             ['x', 6],
             ['q', 4],
           ]),
         ],
       ]);
-      priv(p).l3 = new Map([
+      priv(p).l3Word = new Map([
         [
-          'ab',
+          'go',
           new Map([
             ['z', 8],
             ['q', 2],
@@ -763,7 +815,7 @@ describe('MarkdownPredictor', () => {
         ],
       ]);
 
-      const result = p.getGhostText(2, 'ab');
+      const result = p.getGhostText(3, 'go ');
       expect(result?.text).toBe('z');
       expect(result?.sourceLayer).toBe('l3');
     });
@@ -819,7 +871,7 @@ describe('MarkdownPredictor', () => {
 
       const third = p.getGhostText(2, 'ab');
       expect(third?.learningBoost).toBeGreaterThan(0);
-      expect(localStorage.getItem(LEARNING_SIGNALS_STORAGE_KEY)).toContain('accepted');
+      expect(localStorage.getItem(learningSignalsStorageKey())).toContain('accepted');
     });
 
     it('applies persistent learning penalty to repeatedly rejected weak fallback contexts', () => {
@@ -858,16 +910,22 @@ describe('MarkdownPredictor', () => {
 
       const result = p.getGhostText(2, 'ab');
       p.acceptCompletion('ab', result!.text);
-      expect(localStorage.getItem(LEARNING_SIGNALS_STORAGE_KEY)).not.toBeNull();
+      expect(localStorage.getItem(learningSignalsStorageKey())).not.toBeNull();
 
       p.clearLearningData();
-      expect(localStorage.getItem(LEARNING_SIGNALS_STORAGE_KEY)).toBeNull();
+      expect(localStorage.getItem(learningSignalsStorageKey())).toBeNull();
     });
 
     it('lets high-information L1 candidates beat weak fallback candidates', () => {
       const p = createPredictor(4);
       const doc = 'This ';
-      priv(p).l1 = new Map([['his ', new Map([['local plan', 1]])]]);
+      priv(p).l1 = new Map([
+        ['his ', new Map([['l', 6]])],
+        ['is l', new Map([['o', 6]])],
+        ['s lo', new Map([['c', 6]])],
+        [' loc', new Map([['a', 6]])],
+        ['loca', new Map([['l', 6]])],
+      ]);
 
       const result = p.getGhostText(doc.length, doc);
       expect(result?.providerId).toBe('ngram');
@@ -956,6 +1014,19 @@ describe('MarkdownPredictor', () => {
       const doc = 'When ';
       const result = p.getGhostText(doc.length, doc);
       expect(result?.text ?? '').not.toMatch(/[\u3400-\u9fff]/u);
+    });
+
+    it('uses the nearest English segment in mixed technical writing without emitting mixed text', async () => {
+      const { scanWordText } = await import('@/utils/word-ngram-engine');
+      const p = createPredictor(4);
+      priv(p).l3Word = scanWordText('API result before. API result before.');
+      const doc = '这里的 API ';
+
+      expect(p.getGhostText(doc.length, doc)).toMatchObject({
+        text: 'result',
+        sourceLayer: 'l3',
+        syntaxType: 'word-en',
+      });
     });
 
     it('rejects polluted English history that would produce CJK after "is"', () => {
@@ -1055,83 +1126,169 @@ describe('MarkdownPredictor', () => {
       vi.unstubAllGlobals();
     });
 
-    it('scanOpenedDocument + closeDocument 持久化到 localStorage', () => {
+    it('scanOpenedDocument + closeDocument 不把正文写入 Personal L2', () => {
       const p = createPredictor(4);
       p.setIndexData(mockIndexData());
-      // Use highly repetitive text so entries survive pruneTable(minCount=3)
       const rep = Array.from({ length: 20 }, () => 'hello world').join(' ');
       p.scanOpenedDocument(rep);
       p.closeDocument();
 
-      // After closeDocument, L2 is saved to localStorage
-      expect(localStorage.getItem(SCOPED_NGRAM_KEY)).not.toBeNull();
+      expect(priv(p).l2.size).toBe(0);
+      expect(localStorage.getItem(SCOPED_NGRAM_KEY)).toBeNull();
     });
 
-    it('loadFromLocalStorage 恢复之前保存的数据', () => {
+    it('loadFromLocalStorage 只恢复显式接受形成的 Personal L2', () => {
       const p1 = createPredictor(4);
-      p1.setIndexData(mockIndexData());
-      const rep = Array.from({ length: 20 }, () => 'hello world').join(' ');
-      p1.scanOpenedDocument(rep);
-      p1.closeDocument();
+      p1.acceptCompletion('hell', 'o world');
 
       const p2 = createPredictor(4);
-      // Access private loadFromLocalStorage
       priv(p2).loadFromLocalStorage();
-      // L2 should have data now
       expect(priv(p2).l2.size).toBeGreaterThan(0);
     });
 
-    it('initialize 从 localStorage 加载（无需 fetch baseline）', async () => {
-      // Pre-populate localStorage with repetitive data
+    it('serializes concurrent-tab acceptance events without losing either update', async () => {
+      vi.stubGlobal('navigator', {
+        locks: {
+          request: vi.fn(async (_name: string, callback: () => unknown) => callback()),
+        },
+      });
+      const first = createPredictor(4);
+      const second = createPredictor(4);
+
+      first.acceptCompletion('aaaa', ' first');
+      second.acceptCompletion('bbbb', ' second');
+      await flushCompletionStorageMutationsForTests();
+
+      const reloaded = createPredictor(4);
+      priv(reloaded).loadFromLocalStorage();
+      expect(priv(reloaded).l2.has('aaaa')).toBe(true);
+      expect(priv(reloaded).l2.has('bbbb')).toBe(true);
+    });
+
+    it('isolates personal learning and clearing between workspace scopes', async () => {
+      const predictor = createPredictor(4);
+      predictor.setStorageScope('workspace-a');
+      predictor.acceptCompletion('aaaa', ' first');
+      await flushCompletionStorageMutationsForTests();
+
+      predictor.setStorageScope('workspace-b');
+      expect(priv(predictor).l2.has('aaaa')).toBe(false);
+      predictor.acceptCompletion('bbbb', ' second');
+      await flushCompletionStorageMutationsForTests();
+
+      predictor.setStorageScope('workspace-a');
+      expect(priv(predictor).l2.has('aaaa')).toBe(true);
+      expect(priv(predictor).l2.has('bbbb')).toBe(false);
+      predictor.clearLearningData();
+      await flushCompletionStorageMutationsForTests();
+
+      predictor.setStorageScope('workspace-b');
+      expect(priv(predictor).l2.has('bbbb')).toBe(true);
+    });
+
+    it('does not reload a stale personal snapshot while a newer acceptance is pending', async () => {
+      const releases: Array<() => void> = [];
+      vi.stubGlobal('navigator', {
+        locks: {
+          request: vi.fn(async (name: string, callback: () => unknown) => {
+            if (!name.includes(':personal:')) return callback();
+            await new Promise<void>((resolve) => releases.push(resolve));
+            return callback();
+          }),
+        },
+      });
+      const predictor = createPredictor(4);
+
+      predictor.acceptCompletion('aaaa', ' first');
+      await vi.waitFor(() => expect(releases).toHaveLength(1));
+      releases.shift()?.();
+      await flushCompletionStorageMutationsForTests();
+
+      predictor.acceptCompletion('bbbb', ' second');
+      expect(predictor.getGhostText(4, 'bbbb')).toMatchObject({
+        text: ' second',
+        sourceLayer: 'l2',
+      });
+      await vi.waitFor(() => expect(releases).toHaveLength(1));
+      releases.shift()?.();
+      await flushCompletionStorageMutationsForTests();
+    });
+
+    it('initialize 在 L3 不可用时仍恢复 Personal L2', async () => {
       const p1 = createPredictor(4);
-      p1.setIndexData(mockIndexData());
-      const rep = Array.from({ length: 20 }, () => 'test content').join('\n');
-      p1.scanOpenedDocument(rep);
-      p1.closeDocument();
+      p1.acceptCompletion('test', ' content');
 
       const p2 = createPredictor(4);
-      // Mock fetch to fail so we know it uses localStorage
       vi.stubGlobal(
         'fetch',
         vi.fn(() => Promise.reject(new Error('no network'))),
       );
       await p2.initialize();
-      // L2 should have data from localStorage
-      const l2Size = priv(p2).l2.size;
-      // With enough repetition, l2 should have entries after deserialization
-      if (l2Size === 0) {
-        // fallback: closeDocument may not persist if pruneTable removed everything;
-        // the important thing is initialize didn't crash
-        expect(true).toBe(true);
-      }
-      expect(l2Size).toBeGreaterThanOrEqual(0);
+      expect(priv(p2).l2.size).toBeGreaterThan(0);
       vi.unstubAllGlobals();
       setupLocalStorageMock();
     });
 
-    it('forceEliminate 缩减表大小', () => {
-      const p = createPredictor(4);
-      // Build a large L2
-      const longText = Array.from(
-        { length: 200 },
-        (_, i) => `line ${i}: The quick brown fox jumps over the lazy dog`,
-      ).join('\n');
-      p.scanOpenedDocument(longText);
-      p.closeDocument();
+    it('v4 migration discards aggregated n-gram but preserves the legal accepted lexicon', () => {
+      localStorage.setItem('jotluck:ngram:v2', 'legacy aggregated body');
+      localStorage.setItem('jotluck:ngram:short:v1', 'legacy short body');
+      localStorage.setItem('jotluck:ngram:meta', JSON.stringify({ schemaVersion: 2 }));
+      localStorage.setItem(ACCEPTED_LEXICON_STORAGE_KEY, JSON.stringify(['owner review']));
 
-      const sizeBefore = priv(p).l2.size;
-      if (sizeBefore > 0) {
-        // force eliminate targeting a very small size
-        priv(p).forceEliminate(100); // target 100 bytes
-        const sizeAfter = priv(p).l2.size;
-        expect(sizeAfter).toBeLessThanOrEqual(sizeBefore);
+      const p = createPredictor(4);
+      p.setStorageScope('notebook-a');
+      priv(p).loadFromLocalStorage();
+
+      expect(priv(p).l2.size).toBe(0);
+      expect(priv(p).personalShort2.size).toBe(0);
+      expect(priv(p).personalShort3.size).toBe(0);
+      expect(priv(p).acceptedLexicon).toEqual(['owner review']);
+      expect(localStorage.getItem('jotluck:ngram:v2')).toBeNull();
+      expect(localStorage.getItem(ACCEPTED_LEXICON_STORAGE_KEY)).toBeNull();
+      expect(localStorage.getItem('jotluck:scope:notebook-a:autocomplete:acceptedLexicon:v1')).toBe(
+        JSON.stringify(['owner review']),
+      );
+    });
+
+    it('forceEliminate 在 5000 entries 下 200ms 内覆盖 long/short2/short3', () => {
+      const p = createPredictor(4);
+      const long = new Map<string, Map<string, number>>();
+      const short2 = new Map<string, Map<string, number>>();
+      const short3 = new Map<string, Map<string, number>>();
+      for (let index = 0; index < 4000; index++) {
+        long.set(`x${index.toString(36).padStart(3, '0')}`, new Map([['a', 1]]));
       }
+      for (let index = 0; index < 500; index++) {
+        short2.set(String.fromCodePoint(0x4e00 + index, 0x600 + index), new Map([['甲', 1]]));
+        short3.set(
+          String.fromCodePoint(0x4e00 + index, 0x600 + index, 0x900 + index),
+          new Map([['乙', 1]]),
+        );
+      }
+      priv(p).l2 = long;
+      priv(p).personalShort2 = short2;
+      priv(p).personalShort3 = short3;
+      priv(p).rebuildPersonalShortTable();
+
+      const startedAt = performance.now();
+      priv(p).forceEliminate(1024);
+      const elapsed = performance.now() - startedAt;
+
+      expect(elapsed).toBeLessThanOrEqual(200);
+      expect(priv(p).l2.size).toBeLessThan(4000);
+      expect(priv(p).personalShort2.size).toBeLessThan(500);
+      expect(priv(p).personalShort3.size).toBeLessThan(500);
     });
   });
 
   // ============ 边界 ============
 
   describe('边界', () => {
+    afterEach(() => {
+      resetBaselineLoaderForTests();
+      vi.unstubAllGlobals();
+    });
+
     it('constructor 设置 n 值', () => {
       const p = createPredictor(5);
       expect(priv(p).n).toBe(5);
@@ -1144,66 +1301,283 @@ describe('MarkdownPredictor', () => {
 
     it('loadBaseline fetch 失败时不崩溃', async () => {
       const p = createPredictor(4);
-      vi.stubGlobal(
-        'fetch',
-        vi.fn(() => Promise.reject(new Error('network error'))),
-      );
+      const fetcher = vi.fn(() => Promise.reject(new Error('network error')));
+      configureBaselineLoaderForTests({ fetcher: fetcher as unknown as typeof fetch, cache: null });
       await p.loadBaseline();
-      // Should not throw — L2 remains empty
-      expect(priv(p).l2.size).toBe(0);
-      vi.unstubAllGlobals();
+      expect(priv(p).l3.size).toBe(0);
     });
 
     it('loadBaseline fetch 成功时加载基准数据', async () => {
       const p = createPredictor(4);
-      // Create a minimal serialized table
-      const { serialize } = await import('@/utils/ngram-engine');
-      const { scanText } = await import('@/utils/ngram-engine');
+      const { serialize, scanText } = await import('@/utils/ngram-engine');
       const table = scanText('hello world', 4);
       const compact = serialize(table);
-
-      vi.stubGlobal(
-        'fetch',
-        vi.fn(() =>
-          Promise.resolve({ ok: true, text: () => Promise.resolve(compact) } as Response),
-        ),
+      const manifest = baselineManifest(compact, table.size);
+      const fetcher = vi.fn((url: string) =>
+        Promise.resolve({
+          ok: true,
+          text: () => Promise.resolve(url.endsWith('.manifest.json') ? manifest : compact),
+        } as Response),
       );
+      configureBaselineLoaderForTests({
+        fetcher: fetcher as unknown as typeof fetch,
+        cache: null,
+        sha256: async () => TEST_BASELINE_HASH,
+        minEntryCount: 1,
+      });
       await p.loadBaseline();
-      expect(fetch).toHaveBeenCalledWith('/baseline-ngram.web-local.compact.txt');
+      expect(fetcher).toHaveBeenCalledWith('/baseline-ngram.web-local.compact.manifest.json');
+      expect(fetcher).toHaveBeenCalledWith('/baseline-ngram.web-local.compact.txt');
       expect(priv(p).l3.size).toBeGreaterThan(0);
-      // Benchmark entries should be flagged 'b'
-      for (const ctx of priv(p).l3.keys()) {
-        expect(priv(p).entryFlags.get(ctx)).toBe('b');
-      }
-      vi.unstubAllGlobals();
+      expect(priv(p).entryFlags.size).toBe(0);
+    });
+
+    it('rejects an unreleased sectioned candidate in the production loader', async () => {
+      const { mergeInto, scanText } = await import('@/utils/ngram-engine');
+      const { scanWordText, serializeBaselineTables } = await import('@/utils/word-ngram-engine');
+      const character = scanText('这是测试完成', 4);
+      mergeInto(character, scanText('这是测试完成', 3));
+      mergeInto(character, scanText('这是测试完成', 2));
+      const word = scanWordText('Compare the result before release.');
+      const compact = serializeBaselineTables({ character, word });
+      const manifest = JSON.stringify({
+        schemaVersion: 2,
+        profile: 'web-local',
+        modelFile: 'baseline-ngram.web-local.compact.txt',
+        serialization: 'sectioned-jsonl-hex-v4',
+        order: 'section-profile-context-hex',
+        ngramN: 4,
+        minNgramN: 2,
+        wordNgramOrders: [1, 2],
+        countScale: 1000,
+        modelBytes: new TextEncoder().encode(compact).byteLength,
+        entryCount: character.size + word.size,
+        characterEntryCount: character.size,
+        wordEntryCount: word.size,
+        sha256: TEST_BASELINE_HASH,
+        trainingInputHash: 'b'.repeat(64),
+        verifiedOnly: true,
+        runtimeEligible: true,
+        qualityGatePassed: false,
+        releaseEligible: false,
+        hardLimitPassed: true,
+      });
+      const fetcher = vi.fn((url: string) =>
+        Promise.resolve({
+          ok: true,
+          text: () => Promise.resolve(url.endsWith('.manifest.json') ? manifest : compact),
+        } as Response),
+      );
+      configureBaselineLoaderForTests({
+        fetcher: fetcher as unknown as typeof fetch,
+        cache: null,
+        sha256: async () => TEST_BASELINE_HASH,
+        minEntryCount: 1,
+      });
+      const predictor = createPredictor(4);
+
+      await predictor.loadBaseline();
+
+      expect(priv(predictor).l3.size).toBe(0);
+      expect(priv(predictor).l3Word.size).toBe(0);
+      expect(predictor.getBaselineParseDiagnostics().chunks).toBe(0);
+      expect(predictor.getLoadedBaselineIdentity()).toBeNull();
     });
 
     it('loadBaseline 默认模型失败时回退 v1 baseline', async () => {
       const p = createPredictor(4);
       const { serialize, scanText } = await import('@/utils/ngram-engine');
-      const compact = serialize(scanText('fallback baseline works', 4));
-      const fetchSpy = vi
-        .fn()
-        .mockResolvedValueOnce({ ok: false } as Response)
-        .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(compact) } as Response);
-
-      vi.stubGlobal('fetch', fetchSpy);
+      const table = scanText('fallback baseline works', 4);
+      const compact = serialize(table);
+      const manifest = baselineManifest(compact, table.size, 'release');
+      const fetchSpy = vi.fn((url: string) => {
+        if (url.includes('web-local')) return Promise.resolve({ ok: false } as Response);
+        return Promise.resolve({
+          ok: true,
+          text: () => Promise.resolve(url.endsWith('.manifest.json') ? manifest : compact),
+        } as Response);
+      });
+      configureBaselineLoaderForTests({
+        fetcher: fetchSpy as unknown as typeof fetch,
+        cache: null,
+        sha256: async () => TEST_BASELINE_HASH,
+        minEntryCount: 1,
+      });
       await p.loadBaseline();
 
-      expect(fetchSpy).toHaveBeenNthCalledWith(1, '/baseline-ngram.web-local.compact.txt');
-      expect(fetchSpy).toHaveBeenNthCalledWith(2, '/baseline-ngram.v1.compact.txt');
+      expect(fetchSpy).toHaveBeenCalledWith('/baseline-ngram.v1.compact.manifest.json');
+      expect(fetchSpy).toHaveBeenCalledWith('/baseline-ngram.v1.compact.txt');
       expect(priv(p).l3.size).toBeGreaterThan(0);
-      vi.unstubAllGlobals();
     });
 
-    it('initialize 在 localStorage 有数据时不调 fetch', async () => {
+    it('rejects an oversized manifest before downloading its model body', async () => {
+      const oversizedManifest = JSON.stringify({
+        ...JSON.parse(baselineManifest('x', 1)),
+        modelBytes: 7 * 1024 * 1024,
+      });
+      const fetcher = vi.fn((url: string) => {
+        if (url === '/baseline-ngram.web-local.compact.manifest.json') {
+          return Promise.resolve({ ok: true, text: async () => oversizedManifest } as Response);
+        }
+        return Promise.resolve({ ok: false } as Response);
+      });
+      configureBaselineLoaderForTests({
+        fetcher: fetcher as unknown as typeof fetch,
+        cache: null,
+      });
+
+      const predictor = createPredictor(4);
+      await predictor.loadBaseline();
+
+      expect(fetcher).not.toHaveBeenCalledWith('/baseline-ngram.web-local.compact.txt');
+      expect(predictor.getLoadedBaselineIdentity()).toBeNull();
+    });
+
+    it('does not silently load a governance-ineligible legacy baseline', async () => {
+      const ineligibleManifest = JSON.stringify({
+        ...JSON.parse(baselineManifest('x', 1)),
+        runtimeEligible: false,
+      });
+      const fetcher = vi.fn((url: string) => {
+        if (url === '/baseline-ngram.web-local.compact.manifest.json') {
+          return Promise.resolve({ ok: true, text: async () => ineligibleManifest } as Response);
+        }
+        return Promise.resolve({ ok: false } as Response);
+      });
+      configureBaselineLoaderForTests({
+        fetcher: fetcher as unknown as typeof fetch,
+        cache: null,
+      });
+
+      await createPredictor(4).loadBaseline();
+
+      expect(fetcher).not.toHaveBeenCalledWith('/baseline-ngram.web-local.compact.txt');
+    });
+
+    it('rejects a manifest-valid model whose context length does not match n', async () => {
+      const { serialize, scanText } = await import('@/utils/ngram-engine');
+      const compact = serialize(scanText('short context model', 2));
+      const manifest = baselineManifest(compact, scanText('short context model', 2).size);
+      const fetcher = vi.fn((url: string) => {
+        if (url.includes('web-local')) {
+          return Promise.resolve({
+            ok: true,
+            text: async () => (url.endsWith('.manifest.json') ? manifest : compact),
+          } as Response);
+        }
+        return Promise.resolve({ ok: false } as Response);
+      });
+      configureBaselineLoaderForTests({
+        fetcher: fetcher as unknown as typeof fetch,
+        cache: null,
+        sha256: async () => TEST_BASELINE_HASH,
+        minEntryCount: 1,
+      });
+      const predictor = createPredictor(4);
+
+      await predictor.loadBaseline();
+
+      expect(priv(predictor).l3.size).toBe(0);
+    });
+
+    it('writes a verified network baseline through the injectable cache adapter', async () => {
+      const { serialize, scanText } = await import('@/utils/ngram-engine');
+      const table = scanText('cache baseline works', 4);
+      const compact = serialize(table);
+      const manifest = baselineManifest(compact, table.size);
+      const cache = { read: vi.fn(async () => null), write: vi.fn(async () => undefined) };
+      const fetcher = vi.fn((url: string) =>
+        Promise.resolve({
+          ok: true,
+          text: () => Promise.resolve(url.endsWith('.manifest.json') ? manifest : compact),
+        } as Response),
+      );
+      configureBaselineLoaderForTests({
+        fetcher: fetcher as unknown as typeof fetch,
+        cache,
+        sha256: async () => TEST_BASELINE_HASH,
+        minEntryCount: 1,
+      });
+
+      await createPredictor(4).loadBaseline();
+      expect(cache.write).toHaveBeenCalledTimes(1);
+      expect(cache.read).not.toHaveBeenCalled();
+    });
+
+    it('uses and revalidates cached baseline when network fails', async () => {
+      const { serialize, scanText } = await import('@/utils/ngram-engine');
+      const table = scanText('offline cache baseline works', 4);
+      const compact = serialize(table);
+      const manifest = baselineManifest(compact, table.size);
+      const cache = {
+        read: vi.fn(async () => ({ manifest, model: compact })),
+        write: vi.fn(async () => undefined),
+      };
+      configureBaselineLoaderForTests({
+        fetcher: vi.fn(() => Promise.reject(new Error('offline'))) as unknown as typeof fetch,
+        cache,
+        sha256: async () => TEST_BASELINE_HASH,
+        minEntryCount: 1,
+      });
+      const predictor = createPredictor(4);
+
+      await predictor.loadBaseline();
+      expect(priv(predictor).l3.size).toBe(table.size);
+      expect(cache.read).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects bad cached main model and falls back to a valid cached release model', async () => {
+      const { serialize, scanText } = await import('@/utils/ngram-engine');
+      const table = scanText('cached release fallback works', 4);
+      const compact = serialize(table);
+      const releaseManifest = baselineManifest(compact, table.size, 'release');
+      const cache = {
+        read: vi.fn(async (_manifestUrl: string, modelUrl: string) =>
+          modelUrl.includes('web-local')
+            ? { manifest: baselineManifest('broken', 1), model: 'broken' }
+            : { manifest: releaseManifest, model: compact },
+        ),
+        write: vi.fn(async () => undefined),
+      };
+      configureBaselineLoaderForTests({
+        fetcher: vi.fn(() => Promise.reject(new Error('offline'))) as unknown as typeof fetch,
+        cache,
+        sha256: async () => TEST_BASELINE_HASH,
+        minEntryCount: 1,
+      });
+      const predictor = createPredictor(4);
+
+      await predictor.loadBaseline();
+      expect(priv(predictor).l3.size).toBe(table.size);
+      expect(cache.read).toHaveBeenCalledTimes(2);
+    });
+
+    it('shares one verified L3 load across predictor instances', async () => {
+      const { serialize, scanText } = await import('@/utils/ngram-engine');
+      const table = scanText('application singleton baseline', 4);
+      const compact = serialize(table);
+      const manifest = baselineManifest(compact, table.size);
+      const fetcher = vi.fn((url: string) =>
+        Promise.resolve({
+          ok: true,
+          text: () => Promise.resolve(url.endsWith('.manifest.json') ? manifest : compact),
+        } as Response),
+      );
+      configureBaselineLoaderForTests({
+        fetcher: fetcher as unknown as typeof fetch,
+        cache: null,
+        sha256: async () => TEST_BASELINE_HASH,
+        minEntryCount: 1,
+      });
+
+      await Promise.all([createPredictor(4).loadBaseline(), createPredictor(4).loadBaseline()]);
+      expect(fetcher).toHaveBeenCalledTimes(2);
+    });
+
+    it('initialize 恢复 Personal L2 并独立尝试 L3', async () => {
       setupLocalStorageMock();
       const p1 = createPredictor(4);
-      p1.setIndexData(mockIndexData());
-      // Use highly repetitive text so pruneTable keeps entries in L2
-      const rep = Array.from({ length: 20 }, () => 'hello world').join(' ');
-      p1.scanOpenedDocument(rep);
-      p1.closeDocument();
+      p1.acceptCompletion('hell', 'o world');
 
       // Verify storage has data before proceeding
       const stored = localStorage.getItem(SCOPED_NGRAM_KEY);
@@ -1215,26 +1589,26 @@ describe('MarkdownPredictor', () => {
 
       const p2 = createPredictor(4);
       await p2.initialize();
-      expect(fetchSpy).toHaveBeenNthCalledWith(1, '/baseline-ngram.web-local.compact.txt');
-      expect(fetchSpy).toHaveBeenNthCalledWith(2, '/baseline-ngram.v1.compact.txt');
+      expect(fetchSpy).toHaveBeenCalled();
       expect(priv(p2).l2.size).toBeGreaterThan(0);
 
       vi.unstubAllGlobals();
     });
 
-    it('ingestExcerpts 添加摘录到 L2', () => {
+    it('ingestExcerpts 仅添加标题 lexicon，不进入 N2 或 Personal L2', () => {
       const p = createPredictor(4);
-      const sizeBefore = priv(p).l2.size;
-      p.ingestExcerpts(['This is a sample text excerpt for training']);
-      const sizeAfter = priv(p).l2.size;
-      expect(sizeAfter).toBeGreaterThanOrEqual(sizeBefore);
+      p.ingestExcerpts(['Release Notes']);
+      expect(priv(p).excerptLexicon).toContain('Release Notes');
+      expect(priv(p).notebookLong.size).toBe(0);
+      expect(priv(p).notebookShort2.size).toBe(0);
+      expect(priv(p).notebookShort3.size).toBe(0);
+      expect(priv(p).l2.size).toBe(0);
     });
 
     it('ingestExcerpts 跳过过短的摘录', () => {
       const p = createPredictor(4);
-      const sizeBefore = priv(p).l2.size;
-      p.ingestExcerpts(['hi']); // length=2 < 10 → skipped
-      expect(priv(p).l2.size).toBe(sizeBefore);
+      p.ingestExcerpts(['x']);
+      expect(priv(p).excerptLexicon).toEqual([]);
     });
 
     it('setIndexData 存储引用', () => {
@@ -1297,6 +1671,286 @@ describe('MarkdownPredictor', () => {
       const size2 = priv(p).l1.size;
       // Smaller doc → smaller table
       expect(size2).toBeLessThan(size1);
+    });
+  });
+
+  describe('Notebook N2 budgets', () => {
+    it('rejects oversized synchronous N2 work and exposes bounded diagnostics', () => {
+      const p = createPredictor(4);
+      p.replaceDocumentContribution('/large.md', '界'.repeat(30_000));
+
+      expect(p.hasDocumentContribution('/large.md')).toBe(true);
+      expect(p.getNotebookModelDiagnostics()).toMatchObject({
+        documentCount: 1,
+        inputBytes: 0,
+        entryCount: 0,
+        budgetRejections: 1,
+        longTasksOver50Ms: 0,
+      });
+    });
+  });
+
+  describe('Completion Engine V2 async request', () => {
+    it('exposes read-only production diagnostics without recording shown or learning events', async () => {
+      const p = new MarkdownPredictor(
+        4,
+        new HybridRetrievalService({ backend: new LocalHybridRetrievalBackend() }),
+      );
+      p.setStorageScope('diagnostic-scope');
+      p.replaceDocumentContribution('/a.md', 'Project plan needs careful review.');
+      p.replaceDocumentContribution('/b.md', 'Project plan needs careful review.');
+      await vi.waitFor(() => expect(p.getHybridRetrievalHealth().pendingMutations).toBe(0));
+      const metricsBefore = JSON.stringify(loadCompletionMetrics('diagnostic-scope'));
+      const signalsBefore = localStorage.getItem(learningSignalsStorageKey('diagnostic-scope'));
+
+      const first = await p.requestGhostTextWithDiagnostics('Project plan'.length, 'Project plan');
+      const second = await p.requestGhostTextWithDiagnostics('Project plan'.length, 'Project plan');
+
+      expect(first.result).toMatchObject({
+        text: ' needs',
+        providerId: 'hybrid-retrieval-en',
+      });
+      expect(first.result?.feedbackToken).toBeUndefined();
+      expect(first.rankedCandidates.length).toBeLessThanOrEqual(8);
+      expect(first.rankedCandidates[0]?.providerId).toBe('hybrid-retrieval-en');
+      expect(first.resolverTrace.rawCandidates).toBeGreaterThan(0);
+      expect(first.elapsedMs).toBeGreaterThanOrEqual(0);
+      expect(first.hybrid).toMatchObject({ attempted: true, timedOut: false, fellBack: false });
+      expect(first.hybrid.health).toMatchObject({
+        backendKind: 'local-test',
+        workspaceScope: 'diagnostic-scope',
+        status: 'ready',
+      });
+      expect(second.result?.text).toBe(first.result?.text);
+      expect(JSON.stringify(loadCompletionMetrics('diagnostic-scope'))).toBe(metricsBefore);
+      expect(localStorage.getItem(learningSignalsStorageKey('diagnostic-scope'))).toBe(
+        signalsBefore,
+      );
+    });
+
+    it('reports an actual Hybrid deadline fallback through the production request path', async () => {
+      const backend: HybridRetrievalBackend = {
+        execute(request): Promise<HybridRetrievalResponse> {
+          if (request.operation === 'query') {
+            return new Promise(() => undefined);
+          }
+          return Promise.resolve({
+            operation: request.operation,
+            changed: true,
+            documentCount: 0,
+            revision: 0,
+          });
+        },
+        dispose() {},
+      };
+      const p = new MarkdownPredictor(4, new HybridRetrievalService({ backend }));
+
+      const diagnostics = await p.requestGhostTextWithDiagnostics(
+        'Project plan'.length,
+        'Project plan',
+        { deadlineMs: 1 },
+      );
+
+      expect(diagnostics.hybrid).toMatchObject({
+        attempted: true,
+        timedOut: true,
+        fellBack: true,
+      });
+      expect(Number.isFinite(diagnostics.elapsedMs)).toBe(true);
+      expect(diagnostics.elapsedMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('merges workspace phrase retrieval before the common Resolver', async () => {
+      const p = new MarkdownPredictor(
+        4,
+        new HybridRetrievalService({ backend: new LocalHybridRetrievalBackend() }),
+      );
+      p.setStorageScope('workspace-v2');
+      p.replaceDocumentContribution('/a.md', '项目计划需要复核风险。');
+      p.replaceDocumentContribution('/b.md', '项目计划需要复核风险。');
+      await vi.waitFor(() => expect(p.getHybridRetrievalHealth().pendingMutations).toBe(0));
+
+      const result = await p.requestGhostText('项目计划'.length, '项目计划');
+
+      expect(result).toMatchObject({
+        text: '需要复核风险。',
+        providerId: 'hybrid-retrieval-zh',
+        sourceLayer: 'notebook',
+        syntaxType: 'phrase-retrieval',
+      });
+    });
+
+    it('keeps hybrid notebook retrieval out of non-L2 ablation modes', async () => {
+      const execute = vi.fn(
+        async (request: Parameters<HybridRetrievalBackend['execute']>[0]) =>
+          ({
+            operation: request.operation,
+            ...(request.operation === 'query'
+              ? { candidates: [], committedRevision: 0, pendingMutations: 0, warming: false }
+              : { changed: true, documentCount: 0, revision: 0 }),
+          }) as HybridRetrievalResponse,
+      );
+      const backend: HybridRetrievalBackend = { execute, dispose() {} };
+      const p = new MarkdownPredictor(4, new HybridRetrievalService({ backend }));
+      p.setAblationMode('l3-only');
+
+      await p.requestGhostText('项目计划'.length, '项目计划');
+
+      expect(execute.mock.calls.some(([request]) => request.operation === 'query')).toBe(false);
+    });
+
+    it('does not carry notebook retrieval across an empty paragraph', async () => {
+      const execute = vi.fn(
+        async (request: Parameters<HybridRetrievalBackend['execute']>[0]) =>
+          ({
+            operation: request.operation,
+            ...(request.operation === 'query'
+              ? { candidates: [], committedRevision: 0, pendingMutations: 0, warming: false }
+              : { changed: true, documentCount: 0, revision: 0 }),
+          }) as HybridRetrievalResponse,
+      );
+      const backend: HybridRetrievalBackend = { execute, dispose() {} };
+      const p = new MarkdownPredictor(4, new HybridRetrievalService({ backend }));
+      const doc = '风从远处\n\n';
+
+      await p.requestGhostText(doc.length, doc);
+
+      expect(execute.mock.calls.some(([request]) => request.operation === 'query')).toBe(false);
+    });
+
+    it('returns no async result after cancellation', async () => {
+      const p = createPredictor(4);
+      const controller = new AbortController();
+      controller.abort('superseded');
+
+      await expect(
+        p.requestGhostText('项目计划'.length, '项目计划', { signal: controller.signal }),
+      ).resolves.toBeNull();
+    });
+
+    it('drops an old-workspace request instead of attributing it to the new scope', async () => {
+      let resolveQuery: ((response: HybridRetrievalResponse) => void) | null = null;
+      const backend: HybridRetrievalBackend = {
+        execute(request): Promise<HybridRetrievalResponse> {
+          if (request.operation === 'query') {
+            return new Promise((resolve) => {
+              resolveQuery = resolve;
+            });
+          }
+          return Promise.resolve({
+            operation: request.operation,
+            changed: true,
+            documentCount: 0,
+            revision: 0,
+          });
+        },
+        dispose() {},
+      };
+      const p = new MarkdownPredictor(4, new HybridRetrievalService({ backend }));
+      p.setStorageScope('workspace-a');
+      const pending = p.requestGhostText('下一步'.length, '下一步');
+      await vi.waitFor(() => expect(resolveQuery).not.toBeNull());
+
+      p.setStorageScope('workspace-b');
+      const resolve = resolveQuery as ((response: HybridRetrievalResponse) => void) | null;
+      resolve?.({
+        operation: 'query',
+        candidates: [],
+        committedRevision: 0,
+        pendingMutations: 0,
+        warming: false,
+      });
+
+      await expect(pending).resolves.toBeNull();
+      expect(loadCompletionMetrics('workspace-b').providers['phrase-slot']?.shown ?? 0).toBe(0);
+    });
+
+    it('drops retrieval candidates that finish after the soft deadline', async () => {
+      let now = 0;
+      const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => now);
+      try {
+        const backend: HybridRetrievalBackend = {
+          execute(request): Promise<HybridRetrievalResponse> {
+            if (request.operation === 'query') {
+              now = 10;
+              return Promise.resolve({
+                operation: 'query',
+                candidates: [
+                  {
+                    text: '需要确认。',
+                    confidence: 0.9,
+                    support: 2,
+                    documentSupport: 2,
+                    providerId: 'hybrid-retrieval-zh',
+                    sourceLayer: 'notebook',
+                  },
+                ],
+                committedRevision: 0,
+                pendingMutations: 0,
+                warming: false,
+              });
+            }
+            return Promise.resolve({
+              operation: request.operation,
+              changed: true,
+              documentCount: 0,
+              revision: 0,
+            });
+          },
+          dispose() {},
+        };
+        const p = new MarkdownPredictor(4, new HybridRetrievalService({ backend }));
+
+        const result = await p.requestGhostText('下一步'.length, '下一步', { deadlineMs: 5 });
+
+        expect(result?.providerId).not.toBe('hybrid-retrieval-zh');
+      } finally {
+        nowSpy.mockRestore();
+      }
+    });
+
+    it('binds feedback to the shown prediction token instead of mutable last-prediction state', () => {
+      setupLocalStorageMock();
+      try {
+        const p = createPredictor(4);
+        p.setIndexData(mockIndexData());
+        const wiki = p.getGhostText('[[Hello'.length, '[[Hello');
+        const tag = p.getGhostText('#rea'.length, '#rea');
+
+        expect(wiki?.feedbackToken).toBeTruthy();
+        expect(tag?.feedbackToken).toBeTruthy();
+        p.acceptCompletion('ello', wiki?.text ?? '', {
+          learn: false,
+          feedbackToken: wiki?.feedbackToken,
+        });
+
+        const metrics = loadCompletionMetrics();
+        expect(metrics.providers['wiki-link']?.accepted).toBe(1);
+        expect(metrics.providers['tag']?.accepted ?? 0).toBe(0);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('does not fall back to the latest candidate when an explicit feedback token is invalid', () => {
+      setupLocalStorageMock();
+      try {
+        const p = createPredictor(4);
+        p.setIndexData(mockIndexData());
+        p.getGhostText('[[Hello'.length, '[[Hello');
+        p.getGhostText('#rea'.length, '#rea');
+
+        p.acceptCompletion('ello', ' World]]', {
+          learn: false,
+          feedbackToken: 'missing-token',
+        });
+
+        const metrics = loadCompletionMetrics();
+        expect(metrics.providers['wiki-link']?.accepted ?? 0).toBe(0);
+        expect(metrics.providers['tag']?.accepted ?? 0).toBe(0);
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
   });
 });

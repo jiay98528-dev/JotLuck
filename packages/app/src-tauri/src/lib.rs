@@ -7,6 +7,7 @@
 //   M6-06: template — Rust template rendering
 //   M6-07: path — safe path validation
 
+mod completion_retrieval;
 mod file_watcher;
 mod fs_ops;
 mod indexer;
@@ -122,6 +123,7 @@ pub fn run() {
         .manage(fs_ops::NotebookRoot::new())
         .manage(fs_ops::ExternalAccessRoots::new())
         .manage(file_watcher::FileWatcherState::new())
+        .manage(completion_retrieval::CompletionRetrievalState::default())
         .manage(Mutex::new(indexer::SearchIndex::new()))
         .setup(|app| {
             app.handle().plugin(
@@ -181,6 +183,15 @@ pub fn run() {
             indexer::build_index,
             indexer::update_index_document,
             indexer::search_index,
+            // Completion Engine V2 in-memory retrieval
+            completion_retrieval::completion_v2_set_scope,
+            completion_retrieval::completion_v2_replace_document,
+            completion_retrieval::completion_v2_remove_document,
+            completion_retrieval::completion_v2_rename_document,
+            completion_retrieval::completion_v2_clear,
+            completion_retrieval::completion_v2_apply_batch,
+            completion_retrieval::completion_v2_query,
+            completion_retrieval::completion_v2_diagnostics,
             // M6-05: File watcher
             file_watcher::start_file_watcher,
             file_watcher::stop_file_watcher,

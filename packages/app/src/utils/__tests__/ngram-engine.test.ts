@@ -12,6 +12,7 @@ import {
   extractContext,
   predictNext,
   predict,
+  predictMany,
   learn,
   rejectPrediction,
   mergeInto,
@@ -19,8 +20,11 @@ import {
   pruneTable,
   serialize,
   deserialize,
+  deserializeAsync,
+  createParseDiagnostics,
   estimateSize,
   type NGramTable,
+  NGRAM_OTHER_MASS,
 } from '../ngram-engine';
 
 // ---- scanText ----
@@ -381,7 +385,6 @@ describe('serialize ↔ deserialize', () => {
   it('部分损坏的行被跳过', () => {
     const compact = 'invalid_line_without_pipes\n61626364|e,1||b\n';
     const restored = deserialize(compact);
-    expect(restored.size).toBeGreaterThanOrEqual(0);
     // "61626364" is hex for "abcd" → entry 'e' with count 1
     expect(restored.get('abcd')?.get('e')).toBe(1);
   });
@@ -420,12 +423,202 @@ it('skips invalid JSONL and invalid counts without throwing', () => {
     '["61626364",[["65",2]],"b"]',
     '["zz",[["65",2]],"b"]',
     '["61626364",[["66",-1],["67","NaN"]],"b"]',
+    '["61626364",[["68",0],["69",1.5],["6a","2.5"]],"b"]',
     '{bad json',
   ].join('\n');
   const restored = deserialize(compact);
   expect(restored.get('abcd')?.get('e')).toBe(2);
   expect(restored.get('abcd')?.has('b')).toBe(false);
   expect(restored.get('abcd')?.has('c')).toBe(false);
+  expect(restored.get('abcd')?.has('h')).toBe(false);
+  expect(restored.get('abcd')?.has('i')).toBe(false);
+  expect(restored.get('abcd')?.has('j')).toBe(false);
+});
+
+it('uses Unicode code points for non-BMP contexts and roundtrips them', () => {
+  const table = scanText('甲😀乙😀丙', 2);
+  expect(table.get('甲😀')?.get('乙')).toBe(1);
+  expect(table.get('😀乙')?.get('😀')).toBe(1);
+
+  const restored = deserialize(serialize(table));
+  expect(restored.get('甲😀')?.get('乙')).toBe(1);
+  expect(extractContext('前😀乙', '前😀乙'.length, 2)).toBe('😀乙');
+});
+
+it('deserializes large assets asynchronously without changing the table', async () => {
+  const compact = serialize(scanText('异步解析需要保持确定性。'.repeat(20), 4));
+
+  expect(serialize(await deserializeAsync(compact, 2))).toBe(compact);
+});
+
+it('reports parse chunks without an eager split long task', async () => {
+  const compact = serialize(scanText('分块解析诊断必须覆盖每一行。'.repeat(20), 4));
+  const diagnostics = createParseDiagnostics();
+  let tick = 0;
+
+  await deserializeAsync(compact, {
+    chunkLines: 2,
+    diagnostics,
+    now: () => tick++ * 10,
+  });
+
+  expect(diagnostics.lines).toBe(compact.split('\n').length);
+  expect(diagnostics.chunks).toBeGreaterThan(1);
+  expect(diagnostics.maxChunkMs).toBe(10);
+  expect(diagnostics.totalMs).toBeGreaterThanOrEqual(diagnostics.maxChunkMs);
+  expect(diagnostics.longTasksOver50Ms).toBe(0);
+});
+
+it('queries short 3-gram before falling back to short 2-gram', () => {
+  const table: NGramTable = new Map([
+    ['甲乙', new Map([['坏', 10]])],
+    ['上甲乙', new Map([['好', 10]])],
+  ]);
+
+  expect(predict(table, '上甲乙'.length, '上甲乙', 2)?.text).toBe('好');
+});
+
+it('stops deterministic multi-character cycles', () => {
+  const table: NGramTable = new Map([
+    ['abab', new Map([['a', 10]])],
+    ['baba', new Map([['b', 10]])],
+  ]);
+
+  expect(predictNext(table, 'abab', 20, 0.15)).toBe('ab');
+  expect(predictMany(table, 4, 'abab', 4, 20, 0.15, 4, 2)[0]?.text).toBe('ab');
+});
+
+it('stops at sentence punctuation and never emits a newline', () => {
+  const sentenceTable: NGramTable = new Map([
+    ['abcd', new Map([['。', 10]])],
+    ['bcd。', new Map([['下', 10]])],
+  ]);
+  const newlineTable: NGramTable = new Map([['abcd', new Map([['\n', 10]])]]);
+
+  expect(predictNext(sentenceTable, 'abcd', 20, 0.15)).toBe('。');
+  expect(predictNext(newlineTable, 'abcd', 20, 0.15)).toBe('');
+});
+
+it('predictMany expands deterministic complete candidates from first-step branches', () => {
+  const table: NGramTable = new Map([
+    [
+      'abcd',
+      new Map([
+        ['z', 3],
+        ['x', 6],
+        ['y', 4],
+      ]),
+    ],
+    ['bcdx', new Map([['甲', 6]])],
+    ['cdx甲', new Map([['。', 6]])],
+    ['bcdy', new Map([['乙', 4]])],
+    ['cdy乙', new Map([['。', 4]])],
+    ['bcdz', new Map([['丙', 3]])],
+    ['cdz丙', new Map([['。', 3]])],
+  ]);
+
+  const results = predictMany(table, 4, 'abcd', 4, 4, 0.15, 4, 3);
+
+  expect(results.map(({ text }) => text)).toEqual(['x甲。', 'y乙。', 'z丙。']);
+  expect(results.map(({ support }) => support)).toEqual([6, 4, 3]);
+  expect(results.every(({ totalSupport }) => totalSupport === 13)).toBe(true);
+});
+
+it('calibrates confidence by support so a singleton is not fully confident', () => {
+  const singleton: NGramTable = new Map([['abcd', new Map([['x', 1]])]]);
+  const repeated: NGramTable = new Map([['abcd', new Map([['x', 20]])]]);
+
+  const lowSupport = predict(singleton, 4, 'abcd', 4, 1, 0.15);
+  const highSupport = predict(repeated, 4, 'abcd', 4, 1, 0.15);
+
+  expect(lowSupport).toMatchObject({ text: 'x', support: 1, totalSupport: 1 });
+  expect(lowSupport!.confidence).toBeLessThan(0.5);
+  expect(highSupport!.confidence).toBeGreaterThan(lowSupport!.confidence);
+});
+
+it('calibrates fixed-point public counts using the declared support scale', () => {
+  const unitCounts: NGramTable = new Map([['abcd', new Map([['x', 2]])]]);
+  const milliCounts: NGramTable = new Map([['abcd', new Map([['x', 2000]])]]);
+
+  const unit = predict(unitCounts, 4, 'abcd', 4, 1, 0.15, 4, 1);
+  const milli = predict(milliCounts, 4, 'abcd', 4, 1, 0.15, 4, 1000);
+
+  expect(milli?.confidence).toBeCloseTo(unit!.confidence, 8);
+});
+
+it('keeps pruned probability mass in the confidence denominator without emitting it', () => {
+  const table: NGramTable = new Map([
+    [
+      'abcd',
+      new Map([
+        ['x', 6],
+        [NGRAM_OTHER_MASS, 4],
+      ]),
+    ],
+  ]);
+
+  expect(predict(table, 4, 'abcd', 4, 1, 0.15)).toMatchObject({
+    text: 'x',
+    support: 6,
+    totalSupport: 10,
+  });
+});
+
+it('uses a deterministic code-point tie break independent of Map insertion order', () => {
+  const first: NGramTable = new Map([
+    [
+      'abcd',
+      new Map([
+        ['y', 2],
+        ['x', 2],
+      ]),
+    ],
+  ]);
+  const second: NGramTable = new Map([
+    [
+      'abcd',
+      new Map([
+        ['x', 2],
+        ['y', 2],
+      ]),
+    ],
+  ]);
+
+  const predictTexts = (table: NGramTable) =>
+    predictMany(table, 4, 'abcd', 4, 1, 0.15, 4, 2).map(({ text }) => text);
+
+  expect(predictTexts(first)).toEqual(['x', 'y']);
+  expect(predictTexts(second)).toEqual(['x', 'y']);
+});
+
+it('supports explicit 4-to-3-to-2 fallback without changing the fixed-order default', () => {
+  const table: NGramTable = new Map([
+    ['cd', new Map([['x', 5]])],
+    ['cdx', new Map([['y', 5]])],
+  ]);
+
+  expect(predict(table, 4, 'abcd', 4, 4, 0.15)).toBeNull();
+  expect(predict(table, 4, 'abcd', 4, 4, 0.15, 2)?.text).toBe('xy');
+});
+
+it('predictMany preserves emoji as Unicode code points across branches', () => {
+  const doc = '甲😀乙';
+  const table: NGramTable = new Map([
+    [
+      doc,
+      new Map([
+        ['✨', 2],
+        ['🚀', 3],
+      ]),
+    ],
+    ['😀乙🚀', new Map([['好', 3]])],
+    ['😀乙✨', new Map([['棒', 2]])],
+  ]);
+
+  const results = predictMany(table, doc.length, doc, 3, 2, 0.15, 3, 2);
+
+  expect(results.map(({ text }) => text)).toEqual(['🚀好', '✨棒']);
+  expect(results.every(({ text }) => Array.from(text).length === 2)).toBe(true);
 });
 
 // ---- estimateSize ----

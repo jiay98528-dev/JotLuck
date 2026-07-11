@@ -69,6 +69,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify fail-closed autocomplete evidence
+        run: node scripts/verify-autocomplete-evidence.mjs --mode=ci
+
       - name: Run unit tests
         run: pnpm test
 
@@ -77,6 +80,9 @@ jobs:
 
       - name: Build app
         run: pnpm --filter @jotluck/app build
+
+      - name: Verify frozen V1 is absent from the production bundle
+        run: pnpm exec tsx scripts/autocomplete-v1-frozen-adapter.ts --check-production-isolation
 
   e2e:
     name: E2E Tests

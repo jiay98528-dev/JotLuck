@@ -53,7 +53,7 @@ test.describe('offline autocomplete user journeys', () => {
         JSON.stringify({
           enabled: true,
           aggressiveness: 'balanced',
-          backgroundTraining: true,
+          backgroundTraining: false,
           maxSuggestionLength: 12,
           minConfidence: 0.18,
           showDebugStats: false,
@@ -63,8 +63,24 @@ test.describe('offline autocomplete user journeys', () => {
     });
     await waitForAppReady(page);
     await ensureEditorReady(page);
+    await stabilizeNotebookEditor(page);
     await seedAsciiProbe(page);
   });
+
+  async function stabilizeNotebookEditor(page: import('@playwright/test').Page): Promise<void> {
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.listNotePaths?.().length ?? 0), {
+        timeout: 10000,
+      })
+      .toBeGreaterThan(0);
+    const targetPath = await page.evaluate(() => window.__jotluck_e2e?.listNotePaths?.()[0] ?? '');
+    await page.evaluate((path) => window.__jotluck_e2e?.selectNote?.(path), targetPath);
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().activePath ?? ''), {
+        timeout: 10000,
+      })
+      .toBe(targetPath);
+  }
 
   test('Chinese ghost text can be accepted and remains available after reload', async ({
     page,
@@ -83,6 +99,8 @@ test.describe('offline autocomplete user journeys', () => {
 
     await page.reload();
     await waitForAppReady(page);
+    await ensureEditorReady(page);
+    await stabilizeNotebookEditor(page);
     await replaceEditorText(page, probe);
     await expect(page.locator('.cm-ghost-text')).toBeVisible({ timeout: 3000 });
   });
@@ -182,6 +200,24 @@ test.describe('offline autocomplete user journeys', () => {
     await expect.poll(() => getEditorContentFromBridge(page)).toContain(`${seed}第三条、第三天`);
   });
 
+  test('V2 uses the real Web Worker notebook retrieval path', async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__jotluck_e2e?.editor?.seedCompletionCorpus(['海王星回声需要冻结缓存。']);
+    });
+    await replaceEditorText(page, '海王星回声');
+
+    await expect(page.locator('.cm-ghost-text')).toBeVisible({ timeout: 3000 });
+    await expect
+      .poll(() =>
+        page.evaluate(() => (window as any).__jotluck_e2e?.editor?.getPrediction?.() ?? null),
+      )
+      .toMatchObject({
+        text: '需要冻结缓存。',
+        providerId: 'hybrid-retrieval-zh',
+        sourceLayer: 'notebook',
+      });
+  });
+
   test('Tab keeps native focus navigation outside editor and accepts ghost text inside editor', async ({
     page,
     browserName,
@@ -226,5 +262,63 @@ test.describe('offline autocomplete user journeys', () => {
     await expect
       .poll(() => getEditorContentFromBridge(page))
       .toContain(`${editorProbe}${suggestion}`);
+  });
+
+  test('blur and Shift+Tab clear ghost text without changing the document', async ({
+    page,
+    browserName,
+  }) => {
+    const probe = probeText(browserName);
+    await replaceEditorText(page, probe);
+    await expect(page.locator('.cm-ghost-text')).toBeVisible({ timeout: 3000 });
+
+    // Programmatic focus reproduces the non-pointer blur path that previously
+    // accepted the visible suggestion without an explicit Tab gesture.
+    await page.locator('.wing-settings-btn').focus();
+    await expect(page.locator('.cm-ghost-text')).not.toBeVisible({ timeout: 1000 });
+    await expect.poll(() => getEditorContentFromBridge(page)).toBe(probe);
+
+    await replaceEditorText(page, probe);
+    await expect(page.locator('.cm-ghost-text')).toBeVisible({ timeout: 3000 });
+    await page.keyboard.press('Shift+Tab');
+    await expect.poll(() => getEditorContentFromBridge(page)).toBe(probe);
+  });
+
+  test('keyed note switches reuse the same baseline load', async ({ page }) => {
+    await page.addInitScript(() => {
+      const originalFetch = window.fetch.bind(window);
+      (window as any).__baselineFetchCount = 0;
+      window.fetch = async (...args) => {
+        const url = String(args[0] instanceof Request ? args[0].url : args[0]);
+        // An ineligible manifest is rejected before its model body is fetched.
+        // Count either manifest validation or body loading as a baseline attempt.
+        if (/baseline-ngram\..*\.compact\.(?:manifest\.json|txt)(?:\?|$)/.test(url)) {
+          (window as any).__baselineFetchCount += 1;
+        }
+        return originalFetch(...args);
+      };
+    });
+    await page.reload();
+    await waitForAppReady(page);
+    await ensureEditorReady(page);
+
+    await expect
+      .poll(() => page.evaluate(() => (window as any).__baselineFetchCount as number))
+      .toBeGreaterThan(0);
+    const initialCount = await page.evaluate(() => (window as any).__baselineFetchCount as number);
+    const notePaths = await page.evaluate(() => window.__jotluck_e2e?.listNotePaths?.() ?? []);
+    expect(notePaths.length).toBeGreaterThanOrEqual(2);
+
+    for (let i = 0; i < 20; i++) {
+      await page.evaluate(
+        (path) => window.__jotluck_e2e?.selectNote?.(path),
+        notePaths[i % Math.min(2, notePaths.length)],
+      );
+      await expect(page.locator('.cm-content').first()).toBeVisible({ timeout: 3000 });
+    }
+
+    await expect
+      .poll(() => page.evaluate(() => (window as any).__baselineFetchCount as number))
+      .toBe(initialCount);
   });
 });

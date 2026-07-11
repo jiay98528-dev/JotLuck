@@ -1,0 +1,1608 @@
+{
+  "schemaVersion": 2,
+  "datasetId": "formal-independent-writing-v2",
+  "frozenAt": "2026-07-11T00:00:00.000Z",
+  "description": "Document-level independent writing holdout. Checkpoints are evaluated independently and this file is never scanned as training input.",
+  "cases": [
+    {
+      "id": "zh-field-01",
+      "language": "zh",
+      "category": "field-observation",
+      "text": "晨雾散开后，北坡的土壤仍然湿润，叶尖没有新的虫咬痕迹。巡查员在木牌背面写下温度，并核对滴灌阀门的刻度。",
+      "checkpoints": [
+        {
+          "id": "zh-field-01-a",
+          "cursorOffset": 11,
+          "expectedSuffix": "仍然湿润，叶尖没有新的虫咬痕迹。巡查员在木牌背面",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-field-01-b",
+          "cursorOffset": 18,
+          "expectedSuffix": "没有新的虫咬痕迹。巡查员在木牌背面写下温度，并核",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-field-01-s",
+          "cursorOffset": 27,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-field-01-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "，并核对滴灌阀门的刻度。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-field-02",
+      "language": "zh",
+      "category": "field-observation",
+      "text": "午后风向转为西南，河滩上的芦苇向东倾斜，浅水区能看到两只白鹭。记录员拍下水位尺，并在地图上圈出新露出的沙洲。",
+      "checkpoints": [
+        {
+          "id": "zh-field-02-a",
+          "cursorOffset": 4,
+          "expectedSuffix": "转为西南，河滩上的芦苇向东倾斜，浅水区能看到两只",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-field-02-b",
+          "cursorOffset": 15,
+          "expectedSuffix": "向东倾斜，浅水区能看到两只白鹭。记录员拍下水位尺",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-field-02-s",
+          "cursorOffset": 31,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-field-02-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "，并在地图上圈出新露出的沙洲。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-field-03",
+      "language": "zh",
+      "category": "field-observation",
+      "text": "雨停半小时后，果园中段仍有积水，排水沟的落叶已经清理。值班人测量三处湿度，并把异常位置标在纸质表格上。",
+      "checkpoints": [
+        {
+          "id": "zh-field-03-a",
+          "cursorOffset": 11,
+          "expectedSuffix": "仍有积水，排水沟的落叶已经清理。值班人测量三处湿",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-field-03-b",
+          "cursorOffset": 22,
+          "expectedSuffix": "已经清理。值班人测量三处湿度，并把异常位置标在纸",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-field-03-s",
+          "cursorOffset": 27,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-field-03-c",
+          "cursorOffset": 36,
+          "expectedSuffix": "，并把异常位置标在纸质表格上。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-field-04",
+      "language": "zh",
+      "category": "field-observation",
+      "text": "日落前的海面较为平静，浮标灯按固定间隔闪烁，近岸没有漂浮垃圾。观察者记录浪高，并确认救生绳保持干燥。",
+      "checkpoints": [
+        {
+          "id": "zh-field-04-a",
+          "cursorOffset": 6,
+          "expectedSuffix": "较为平静，浮标灯按固定间隔闪烁，近岸没有漂浮垃圾",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-field-04-b",
+          "cursorOffset": 14,
+          "expectedSuffix": "按固定间隔闪烁，近岸没有漂浮垃圾。观察者记录浪高",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-field-04-s",
+          "cursorOffset": 31,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-field-04-c",
+          "cursorOffset": 38,
+          "expectedSuffix": "，并确认救生绳保持干燥。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-field-05",
+      "language": "zh",
+      "category": "field-observation",
+      "text": "清晨温室的玻璃略有水汽，东排幼苗高度接近，通风口没有明显异响。管理员读取湿度计，并调整第二组喷头的方向。",
+      "checkpoints": [
+        {
+          "id": "zh-field-05-a",
+          "cursorOffset": 7,
+          "expectedSuffix": "略有水汽，东排幼苗高度接近，通风口没有明显异响。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-field-05-b",
+          "cursorOffset": 16,
+          "expectedSuffix": "高度接近，通风口没有明显异响。管理员读取湿度计，",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-field-05-s",
+          "cursorOffset": 31,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-field-05-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "，并调整第二组喷头的方向。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-maintenance-01",
+      "language": "zh",
+      "category": "maintenance-log",
+      "text": "更换门轴后，储藏室木门连续开合顺畅，锁舌能够完全回位。维修员擦净金属碎屑，并在工单上登记零件编号。",
+      "checkpoints": [
+        {
+          "id": "zh-maintenance-01-a",
+          "cursorOffset": 11,
+          "expectedSuffix": "连续开合顺畅，锁舌能够完全回位。维修员擦净金属碎",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-maintenance-01-b",
+          "cursorOffset": 20,
+          "expectedSuffix": "能够完全回位。维修员擦净金属碎屑，并在工单上登记",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-maintenance-01-s",
+          "cursorOffset": 27,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-maintenance-01-c",
+          "cursorOffset": 36,
+          "expectedSuffix": "，并在工单上登记零件编号。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-maintenance-02",
+      "language": "zh",
+      "category": "maintenance-log",
+      "text": "清洗滤网后，南侧空调出风恢复均匀，控制面板没有再次报警。技师测量运行电流，并把旧滤网装入回收袋。",
+      "checkpoints": [
+        {
+          "id": "zh-maintenance-02-a",
+          "cursorOffset": 12,
+          "expectedSuffix": "恢复均匀，控制面板没有再次报警。技师测量运行电流",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-maintenance-02-b",
+          "cursorOffset": 21,
+          "expectedSuffix": "没有再次报警。技师测量运行电流，并把旧滤网装入回",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-maintenance-02-s",
+          "cursorOffset": 28,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-maintenance-02-c",
+          "cursorOffset": 36,
+          "expectedSuffix": "，并把旧滤网装入回收袋。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-maintenance-03",
+      "language": "zh",
+      "category": "maintenance-log",
+      "text": "紧固桌腿后，会议桌四角保持平稳，桌面受力时没有晃动。检查人贴上日期标签，并留下复查时间。",
+      "checkpoints": [
+        {
+          "id": "zh-maintenance-03-a",
+          "cursorOffset": 11,
+          "expectedSuffix": "保持平稳，桌面受力时没有晃动。检查人贴上日期标签",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-maintenance-03-b",
+          "cursorOffset": 21,
+          "expectedSuffix": "没有晃动。检查人贴上日期标签，并留下复查时间。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-maintenance-03-s",
+          "cursorOffset": 26,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-maintenance-03-c",
+          "cursorOffset": 35,
+          "expectedSuffix": "，并留下复查时间。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-maintenance-04",
+      "language": "zh",
+      "category": "maintenance-log",
+      "text": "替换电池后，走廊感应灯连续亮起十次，熄灭延迟符合设定。管理员记录电池批次，并清理灯罩内的灰尘。",
+      "checkpoints": [
+        {
+          "id": "zh-maintenance-04-a",
+          "cursorOffset": 11,
+          "expectedSuffix": "连续亮起十次，熄灭延迟符合设定。管理员记录电池批",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-maintenance-04-b",
+          "cursorOffset": 22,
+          "expectedSuffix": "符合设定。管理员记录电池批次，并清理灯罩内的灰尘",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-maintenance-04-s",
+          "cursorOffset": 27,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-maintenance-04-c",
+          "cursorOffset": 36,
+          "expectedSuffix": "，并清理灯罩内的灰尘。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-maintenance-05",
+      "language": "zh",
+      "category": "maintenance-log",
+      "text": "修补窗框后，西窗在小雨中没有渗水，密封条边缘保持贴合。住户拍下接缝照片，并约定一周后再次观察。",
+      "checkpoints": [
+        {
+          "id": "zh-maintenance-05-a",
+          "cursorOffset": 8,
+          "expectedSuffix": "在小雨中没有渗水，密封条边缘保持贴合。住户拍下接",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-maintenance-05-b",
+          "cursorOffset": 22,
+          "expectedSuffix": "保持贴合。住户拍下接缝照片，并约定一周后再次观察",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-maintenance-05-s",
+          "cursorOffset": 27,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-maintenance-05-c",
+          "cursorOffset": 35,
+          "expectedSuffix": "，并约定一周后再次观察。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-meeting-01",
+      "language": "zh",
+      "category": "meeting-note",
+      "text": "例会确认本周只处理两个阻塞项，接口文档由开发组整理，测试清单由验证组复核。会后秘书更新责任表，并把未决问题移到下次议程。",
+      "checkpoints": [
+        {
+          "id": "zh-meeting-01-a",
+          "cursorOffset": 14,
+          "expectedSuffix": "，接口文档由开发组整理，测试清单由验证组复核。会",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-meeting-01-b",
+          "cursorOffset": 19,
+          "expectedSuffix": "由开发组整理，测试清单由验证组复核。会后秘书更新",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-meeting-01-s",
+          "cursorOffset": 37,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-meeting-01-c",
+          "cursorOffset": 46,
+          "expectedSuffix": "，并把未决问题移到下次议程。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-meeting-02",
+      "language": "zh",
+      "category": "meeting-note",
+      "text": "评审会上先核对发布范围，桌面端保留导出功能，移动端延后离线缓存。主持人整理差异清单，并要求每项结论附上验证证据。",
+      "checkpoints": [
+        {
+          "id": "zh-meeting-02-a",
+          "cursorOffset": 11,
+          "expectedSuffix": "，桌面端保留导出功能，移动端延后离线缓存。主持人",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-meeting-02-b",
+          "cursorOffset": 15,
+          "expectedSuffix": "保留导出功能，移动端延后离线缓存。主持人整理差异",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-meeting-02-s",
+          "cursorOffset": 32,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-meeting-02-c",
+          "cursorOffset": 41,
+          "expectedSuffix": "，并要求每项结论附上验证证据。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-meeting-03",
+      "language": "zh",
+      "category": "meeting-note",
+      "text": "晨会记录三个进度变化，搜索模块已经完成回归，导入流程仍需补充异常测试。记录人更新看板状态，并标注今天需要协作的任务。",
+      "checkpoints": [
+        {
+          "id": "zh-meeting-03-a",
+          "cursorOffset": 10,
+          "expectedSuffix": "，搜索模块已经完成回归，导入流程仍需补充异常测试",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-meeting-03-b",
+          "cursorOffset": 15,
+          "expectedSuffix": "已经完成回归，导入流程仍需补充异常测试。记录人更",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-meeting-03-s",
+          "cursorOffset": 35,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-meeting-03-c",
+          "cursorOffset": 44,
+          "expectedSuffix": "，并标注今天需要协作的任务。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-meeting-04",
+      "language": "zh",
+      "category": "meeting-note",
+      "text": "讨论决定缩短提示文案，错误信息保留恢复步骤，成功提示减少重复出现。设计组整理新稿，并交由测试组检查键盘路径。",
+      "checkpoints": [
+        {
+          "id": "zh-meeting-04-a",
+          "cursorOffset": 10,
+          "expectedSuffix": "，错误信息保留恢复步骤，成功提示减少重复出现。设",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-meeting-04-b",
+          "cursorOffset": 15,
+          "expectedSuffix": "保留恢复步骤，成功提示减少重复出现。设计组整理新",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-meeting-04-s",
+          "cursorOffset": 33,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-meeting-04-c",
+          "cursorOffset": 40,
+          "expectedSuffix": "，并交由测试组检查键盘路径。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-meeting-05",
+      "language": "zh",
+      "category": "meeting-note",
+      "text": "项目同步会明确数据迁移顺序，先校验备份文件，再执行格式转换。负责人补充回滚条件，并安排独立人员复核结果。",
+      "checkpoints": [
+        {
+          "id": "zh-meeting-05-a",
+          "cursorOffset": 13,
+          "expectedSuffix": "，先校验备份文件，再执行格式转换。负责人补充回滚",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-meeting-05-b",
+          "cursorOffset": 21,
+          "expectedSuffix": "，再执行格式转换。负责人补充回滚条件，并安排独立",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-meeting-05-s",
+          "cursorOffset": 30,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-meeting-05-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "，并安排独立人员复核结果。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-reading-01",
+      "language": "zh",
+      "category": "reading-note",
+      "text": "这一章用旧地图解释记忆偏差，作者先展示缺失区域，再比较读者补全的细节。读者在页边写下疑问，并摘录两个需要查证的出处。",
+      "checkpoints": [
+        {
+          "id": "zh-reading-01-a",
+          "cursorOffset": 7,
+          "expectedSuffix": "解释记忆偏差，作者先展示缺失区域，再比较读者补全",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-reading-01-b",
+          "cursorOffset": 23,
+          "expectedSuffix": "，再比较读者补全的细节。读者在页边写下疑问，并摘",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-reading-01-s",
+          "cursorOffset": 35,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-reading-01-c",
+          "cursorOffset": 44,
+          "expectedSuffix": "，并摘录两个需要查证的出处。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-reading-02",
+      "language": "zh",
+      "category": "reading-note",
+      "text": "文章把城市噪声分成持续声和突发声，两类声音对注意力产生不同影响。笔记中保留实验条件，并用自己的通勤经历做对照。",
+      "checkpoints": [
+        {
+          "id": "zh-reading-02-a",
+          "cursorOffset": 7,
+          "expectedSuffix": "分成持续声和突发声，两类声音对注意力产生不同影响",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-reading-02-b",
+          "cursorOffset": 21,
+          "expectedSuffix": "对注意力产生不同影响。笔记中保留实验条件，并用自",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-reading-02-s",
+          "cursorOffset": 32,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-reading-02-c",
+          "cursorOffset": 41,
+          "expectedSuffix": "，并用自己的通勤经历做对照。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-reading-03",
+      "language": "zh",
+      "category": "reading-note",
+      "text": "报告通过三次访谈说明协作成本，样本虽小但问题描述很具体。阅读者标记限制条件，并列出可以继续追问的方向。",
+      "checkpoints": [
+        {
+          "id": "zh-reading-03-a",
+          "cursorOffset": 8,
+          "expectedSuffix": "说明协作成本，样本虽小但问题描述很具体。阅读者标",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-reading-03-b",
+          "cursorOffset": 19,
+          "expectedSuffix": "但问题描述很具体。阅读者标记限制条件，并列出可以",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-reading-03-s",
+          "cursorOffset": 28,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-reading-03-c",
+          "cursorOffset": 37,
+          "expectedSuffix": "，并列出可以继续追问的方向。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-reading-04",
+      "language": "zh",
+      "category": "reading-note",
+      "text": "散文从一把旧伞写到雨季结束，叙述没有直接给出人物背景。摘记只保留关键意象，并记录段落节奏的变化。",
+      "checkpoints": [
+        {
+          "id": "zh-reading-04-a",
+          "cursorOffset": 7,
+          "expectedSuffix": "写到雨季结束，叙述没有直接给出人物背景。摘记只保",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-reading-04-b",
+          "cursorOffset": 16,
+          "expectedSuffix": "没有直接给出人物背景。摘记只保留关键意象，并记录",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-reading-04-s",
+          "cursorOffset": 27,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-reading-04-c",
+          "cursorOffset": 36,
+          "expectedSuffix": "，并记录段落节奏的变化。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-reading-05",
+      "language": "zh",
+      "category": "reading-note",
+      "text": "手册先解释木材含水率，再列出不同环境下的保存方法。学习者抄下测量步骤，并准备周末做一次小实验。",
+      "checkpoints": [
+        {
+          "id": "zh-reading-05-a",
+          "cursorOffset": 10,
+          "expectedSuffix": "，再列出不同环境下的保存方法。学习者抄下测量步骤",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-reading-05-b",
+          "cursorOffset": 18,
+          "expectedSuffix": "下的保存方法。学习者抄下测量步骤，并准备周末做一",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-reading-05-s",
+          "cursorOffset": 25,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-reading-05-c",
+          "cursorOffset": 34,
+          "expectedSuffix": "，并准备周末做一次小实验。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-household-01",
+      "language": "zh",
+      "category": "household-plan",
+      "text": "周末清单包含整理阳台和清洗水壶，旧纸箱先按尺寸分类，玻璃瓶单独放置。完成后给绿植补水，并检查下周需要采购的用品。",
+      "checkpoints": [
+        {
+          "id": "zh-household-01-a",
+          "cursorOffset": 4,
+          "expectedSuffix": "包含整理阳台和清洗水壶，旧纸箱先按尺寸分类，玻璃",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-household-01-b",
+          "cursorOffset": 19,
+          "expectedSuffix": "先按尺寸分类，玻璃瓶单独放置。完成后给绿植补水，",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-household-01-s",
+          "cursorOffset": 34,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-household-01-c",
+          "cursorOffset": 42,
+          "expectedSuffix": "，并检查下周需要采购的用品。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-household-02",
+      "language": "zh",
+      "category": "household-plan",
+      "text": "晚餐准备两道热菜和一份凉拌菜，豆腐提前沥水，青菜最后下锅。开饭前擦净操作台，并把剩余食材贴上日期。",
+      "checkpoints": [
+        {
+          "id": "zh-household-02-a",
+          "cursorOffset": 2,
+          "expectedSuffix": "准备两道热菜和一份凉拌菜，豆腐提前沥水，青菜最后",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-household-02-b",
+          "cursorOffset": 17,
+          "expectedSuffix": "提前沥水，青菜最后下锅。开饭前擦净操作台，并把剩",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-household-02-s",
+          "cursorOffset": 29,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-household-02-c",
+          "cursorOffset": 37,
+          "expectedSuffix": "，并把剩余食材贴上日期。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-household-03",
+      "language": "zh",
+      "category": "household-plan",
+      "text": "出门前确认窗户和燃气阀门，备用钥匙留在固定抽屉，雨伞放进背包。到车站后查看班次，并通知家人预计到达时间。",
+      "checkpoints": [
+        {
+          "id": "zh-household-03-a",
+          "cursorOffset": 12,
+          "expectedSuffix": "，备用钥匙留在固定抽屉，雨伞放进背包。到车站后查",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-household-03-b",
+          "cursorOffset": 17,
+          "expectedSuffix": "留在固定抽屉，雨伞放进背包。到车站后查看班次，并",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-household-03-s",
+          "cursorOffset": 31,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-household-03-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "，并通知家人预计到达时间。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-household-04",
+      "language": "zh",
+      "category": "household-plan",
+      "text": "书桌整理从文件夹开始，票据按月份归档，充电线绕成松圈。收尾时清空废纸篓，并给台灯底座除尘。",
+      "checkpoints": [
+        {
+          "id": "zh-household-04-a",
+          "cursorOffset": 8,
+          "expectedSuffix": "开始，票据按月份归档，充电线绕成松圈。收尾时清空",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-household-04-b",
+          "cursorOffset": 13,
+          "expectedSuffix": "按月份归档，充电线绕成松圈。收尾时清空废纸篓，并",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-household-04-s",
+          "cursorOffset": 27,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-household-04-c",
+          "cursorOffset": 35,
+          "expectedSuffix": "，并给台灯底座除尘。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "zh-household-05",
+      "language": "zh",
+      "category": "household-plan",
+      "text": "旅行包只放三天所需衣物，药品装进透明小袋，证件放在内层口袋。睡前再次核对车票，并设置两个独立闹钟。",
+      "checkpoints": [
+        {
+          "id": "zh-household-05-a",
+          "cursorOffset": 3,
+          "expectedSuffix": "只放三天所需衣物，药品装进透明小袋，证件放在内层",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-household-05-b",
+          "cursorOffset": 20,
+          "expectedSuffix": "，证件放在内层口袋。睡前再次核对车票，并设置两个",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-household-05-s",
+          "cursorOffset": 30,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "zh-household-05-c",
+          "cursorOffset": 38,
+          "expectedSuffix": "，并设置两个独立闹钟。",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-field-01",
+      "language": "en",
+      "category": "field-observation",
+      "text": "Morning fog cleared above the east meadow, and the grass remained wet near the fence. The observer measured soil temperature, then marked the shaded plot on a paper map.",
+      "checkpoints": [
+        {
+          "id": "en-field-01-a",
+          "cursorOffset": 41,
+          "expectedSuffix": ", and the grass remained",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-field-01-b",
+          "cursorOffset": 56,
+          "expectedSuffix": " remained wet near the f",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-field-01-s",
+          "cursorOffset": 85,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-field-01-c",
+          "cursorOffset": 124,
+          "expectedSuffix": ", then marked the shaded",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-field-02",
+      "language": "en",
+      "category": "field-observation",
+      "text": "After the tide turned, small pools remained between the rocks, and no litter was visible near the steps. The volunteer noted the water line, then photographed the safest return path.",
+      "checkpoints": [
+        {
+          "id": "en-field-02-a",
+          "cursorOffset": 34,
+          "expectedSuffix": " remained between the ro",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-field-02-b",
+          "cursorOffset": 76,
+          "expectedSuffix": " was visible near the st",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-field-02-s",
+          "cursorOffset": 104,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-field-02-c",
+          "cursorOffset": 139,
+          "expectedSuffix": ", then photographed the ",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-field-03",
+      "language": "en",
+      "category": "field-observation",
+      "text": "Cloud cover increased before noon, while the western ridge stayed visible through the haze. The surveyor recorded wind speed, then checked the battery level of the handheld meter.",
+      "checkpoints": [
+        {
+          "id": "en-field-03-a",
+          "cursorOffset": 11,
+          "expectedSuffix": " increased before noon, ",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-field-03-b",
+          "cursorOffset": 58,
+          "expectedSuffix": " stayed visible through ",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-field-03-s",
+          "cursorOffset": 91,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-field-03-c",
+          "cursorOffset": 124,
+          "expectedSuffix": ", then checked the batte",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-field-04",
+      "language": "en",
+      "category": "field-observation",
+      "text": "The greenhouse roof dried slowly after sunrise, and two vents remained partly open. The gardener compared leaf color, then adjusted the timer for the northern row.",
+      "checkpoints": [
+        {
+          "id": "en-field-04-a",
+          "cursorOffset": 19,
+          "expectedSuffix": " dried slowly after sunr",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-field-04-b",
+          "cursorOffset": 61,
+          "expectedSuffix": " remained partly open. T",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-field-04-s",
+          "cursorOffset": 83,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-field-04-c",
+          "cursorOffset": 116,
+          "expectedSuffix": ", then adjusted the time",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-field-05",
+      "language": "en",
+      "category": "field-observation",
+      "text": "At dusk the harbor surface became calm, while the outer marker continued flashing at regular intervals. The watcher logged wave height, then confirmed that the safety rope was dry.",
+      "checkpoints": [
+        {
+          "id": "en-field-05-a",
+          "cursorOffset": 26,
+          "expectedSuffix": " became calm, while the ",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-field-05-b",
+          "cursorOffset": 62,
+          "expectedSuffix": " continued flashing at r",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-field-05-s",
+          "cursorOffset": 103,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-field-05-c",
+          "cursorOffset": 134,
+          "expectedSuffix": ", then confirmed that th",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-maintenance-01",
+      "language": "en",
+      "category": "maintenance-log",
+      "text": "After the hinge was replaced, the storage door moved smoothly and the latch returned fully. The technician removed metal dust, then wrote the part number on the work card.",
+      "checkpoints": [
+        {
+          "id": "en-maintenance-01-a",
+          "cursorOffset": 46,
+          "expectedSuffix": " moved smoothly and the ",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-maintenance-01-b",
+          "cursorOffset": 75,
+          "expectedSuffix": " returned fully. The tec",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-maintenance-01-s",
+          "cursorOffset": 91,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-maintenance-01-c",
+          "cursorOffset": 125,
+          "expectedSuffix": ", then wrote the part nu",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-maintenance-02",
+      "language": "en",
+      "category": "maintenance-log",
+      "text": "Once the filter was washed, airflow became even across the southern vent and the panel stopped showing alerts. The technician measured current draw, then sealed the old filter in a recycling bag.",
+      "checkpoints": [
+        {
+          "id": "en-maintenance-02-a",
+          "cursorOffset": 35,
+          "expectedSuffix": " became even across the ",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-maintenance-02-b",
+          "cursorOffset": 86,
+          "expectedSuffix": " stopped showing alerts.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-maintenance-02-s",
+          "cursorOffset": 110,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-maintenance-02-c",
+          "cursorOffset": 147,
+          "expectedSuffix": ", then sealed the old fi",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-maintenance-03",
+      "language": "en",
+      "category": "maintenance-log",
+      "text": "After the table leg was tightened, all four corners stayed level and the top no longer shifted under pressure. The inspector added a date label, then scheduled another check for next month.",
+      "checkpoints": [
+        {
+          "id": "en-maintenance-03-a",
+          "cursorOffset": 51,
+          "expectedSuffix": " stayed level and the to",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-maintenance-03-b",
+          "cursorOffset": 76,
+          "expectedSuffix": " no longer shifted under",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-maintenance-03-s",
+          "cursorOffset": 110,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-maintenance-03-c",
+          "cursorOffset": 143,
+          "expectedSuffix": ", then scheduled another",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-maintenance-04",
+      "language": "en",
+      "category": "maintenance-log",
+      "text": "With fresh batteries installed, the corridor sensor light activated ten times without delay. The caretaker logged the battery batch, then cleaned dust from the inside of the cover.",
+      "checkpoints": [
+        {
+          "id": "en-maintenance-04-a",
+          "cursorOffset": 57,
+          "expectedSuffix": " activated ten times wit",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-maintenance-04-b",
+          "cursorOffset": 77,
+          "expectedSuffix": " without delay. The care",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-maintenance-04-s",
+          "cursorOffset": 92,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-maintenance-04-c",
+          "cursorOffset": 131,
+          "expectedSuffix": ", then cleaned dust from",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-maintenance-05",
+      "language": "en",
+      "category": "maintenance-log",
+      "text": "After the window frame was sealed, no water appeared along the western sill during light rain. The resident photographed the joint, then planned another inspection after one week.",
+      "checkpoints": [
+        {
+          "id": "en-maintenance-05-a",
+          "cursorOffset": 43,
+          "expectedSuffix": " appeared along the west",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-maintenance-05-b",
+          "cursorOffset": 75,
+          "expectedSuffix": " during light rain. The ",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-maintenance-05-s",
+          "cursorOffset": 94,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-maintenance-05-c",
+          "cursorOffset": 130,
+          "expectedSuffix": ", then planned another i",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-meeting-01",
+      "language": "en",
+      "category": "meeting-note",
+      "text": "The weekly review limited work to two blockers, with documentation assigned to the platform group and regression checks assigned to quality staff. The coordinator updated the responsibility sheet, then moved open questions to the next agenda.",
+      "checkpoints": [
+        {
+          "id": "en-meeting-01-a",
+          "cursorOffset": 46,
+          "expectedSuffix": ", with documentation ass",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-meeting-01-b",
+          "cursorOffset": 97,
+          "expectedSuffix": " and regression checks a",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-meeting-01-s",
+          "cursorOffset": 146,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-meeting-01-c",
+          "cursorOffset": 195,
+          "expectedSuffix": ", then moved open questi",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-meeting-02",
+      "language": "en",
+      "category": "meeting-note",
+      "text": "During release review, the desktop export stayed in scope while mobile caching moved to a later milestone. The chair summarized the difference, then requested evidence for every decision.",
+      "checkpoints": [
+        {
+          "id": "en-meeting-02-a",
+          "cursorOffset": 41,
+          "expectedSuffix": " stayed in scope while m",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-meeting-02-b",
+          "cursorOffset": 78,
+          "expectedSuffix": " moved to a later milest",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-meeting-02-s",
+          "cursorOffset": 106,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-meeting-02-c",
+          "cursorOffset": 142,
+          "expectedSuffix": ", then requested evidenc",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-meeting-03",
+      "language": "en",
+      "category": "meeting-note",
+      "text": "The morning standup captured three changes, including a completed search regression and an unfinished import error test. The note taker updated the board, then highlighted tasks needing help today.",
+      "checkpoints": [
+        {
+          "id": "en-meeting-03-a",
+          "cursorOffset": 42,
+          "expectedSuffix": ", including a completed ",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-meeting-03-b",
+          "cursorOffset": 83,
+          "expectedSuffix": " and an unfinished impor",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-meeting-03-s",
+          "cursorOffset": 120,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-meeting-03-c",
+          "cursorOffset": 153,
+          "expectedSuffix": ", then highlighted tasks",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-meeting-04",
+      "language": "en",
+      "category": "meeting-note",
+      "text": "The discussion shortened warning copy, retained recovery steps, and reduced repeated success messages. The design group prepared a revision, then asked quality staff to verify the keyboard path.",
+      "checkpoints": [
+        {
+          "id": "en-meeting-04-a",
+          "cursorOffset": 37,
+          "expectedSuffix": ", retained recovery step",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-meeting-04-b",
+          "cursorOffset": 62,
+          "expectedSuffix": ", and reduced repeated s",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-meeting-04-s",
+          "cursorOffset": 102,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-meeting-04-c",
+          "cursorOffset": 139,
+          "expectedSuffix": ", then asked quality sta",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-meeting-05",
+      "language": "en",
+      "category": "meeting-note",
+      "text": "The project sync established a migration order, starting with backup validation before format conversion. The coordinator added rollback conditions, then assigned an independent result review.",
+      "checkpoints": [
+        {
+          "id": "en-meeting-05-a",
+          "cursorOffset": 46,
+          "expectedSuffix": ", starting with backup v",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-meeting-05-b",
+          "cursorOffset": 79,
+          "expectedSuffix": " before format conversio",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-meeting-05-s",
+          "cursorOffset": 105,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-meeting-05-c",
+          "cursorOffset": 147,
+          "expectedSuffix": ", then assigned an indep",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-reading-01",
+      "language": "en",
+      "category": "reading-note",
+      "text": "The chapter uses an old map to explain memory bias, first showing gaps and then comparing invented details. The reader wrote one question in the margin, then listed two sources that require verification.",
+      "checkpoints": [
+        {
+          "id": "en-reading-01-a",
+          "cursorOffset": 27,
+          "expectedSuffix": " to explain memory bias,",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-reading-01-b",
+          "cursorOffset": 70,
+          "expectedSuffix": " and then comparing inve",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-reading-01-s",
+          "cursorOffset": 107,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-reading-01-c",
+          "cursorOffset": 137,
+          "expectedSuffix": " in the margin, then lis",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-reading-02",
+      "language": "en",
+      "category": "reading-note",
+      "text": "The article separates city noise into continuous and sudden sounds, which affect attention in different ways. The notes preserve the experiment conditions, then compare them with an ordinary commute.",
+      "checkpoints": [
+        {
+          "id": "en-reading-02-a",
+          "cursorOffset": 32,
+          "expectedSuffix": " into continuous and sud",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-reading-02-b",
+          "cursorOffset": 66,
+          "expectedSuffix": ", which affect attention",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-reading-02-s",
+          "cursorOffset": 109,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-reading-02-c",
+          "cursorOffset": 154,
+          "expectedSuffix": ", then compare them with",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-reading-03",
+      "language": "en",
+      "category": "reading-note",
+      "text": "The report uses three interviews to describe coordination cost, and the small sample still provides concrete examples. The reader marked the limitations, then listed directions for another interview.",
+      "checkpoints": [
+        {
+          "id": "en-reading-03-a",
+          "cursorOffset": 32,
+          "expectedSuffix": " to describe coordinatio",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-reading-03-b",
+          "cursorOffset": 84,
+          "expectedSuffix": " still provides concrete",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-reading-03-s",
+          "cursorOffset": 118,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-reading-03-c",
+          "cursorOffset": 152,
+          "expectedSuffix": ", then listed directions",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-reading-04",
+      "language": "en",
+      "category": "reading-note",
+      "text": "The essay moves from an old umbrella to the end of the rainy season without giving direct character history. The notes retain the central image, then describe how the paragraph rhythm changes.",
+      "checkpoints": [
+        {
+          "id": "en-reading-04-a",
+          "cursorOffset": 36,
+          "expectedSuffix": " to the end of the rainy",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-reading-04-b",
+          "cursorOffset": 67,
+          "expectedSuffix": " without giving direct c",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-reading-04-s",
+          "cursorOffset": 108,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-reading-04-c",
+          "cursorOffset": 143,
+          "expectedSuffix": ", then describe how the ",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-reading-05",
+      "language": "en",
+      "category": "reading-note",
+      "text": "The manual explains wood moisture first, then lists storage methods for several environments. The learner copied the measurement steps, then planned a small weekend experiment.",
+      "checkpoints": [
+        {
+          "id": "en-reading-05-a",
+          "cursorOffset": 33,
+          "expectedSuffix": " first, then lists stora",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-reading-05-b",
+          "cursorOffset": 67,
+          "expectedSuffix": " for several environment",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-reading-05-s",
+          "cursorOffset": 93,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-reading-05-c",
+          "cursorOffset": 134,
+          "expectedSuffix": ", then planned a small w",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-household-01",
+      "language": "en",
+      "category": "household-plan",
+      "text": "The weekend list covers the balcony and the kettle, with cardboard sorted by size and glass kept separate. After cleanup, the plants receive water and the supply list is checked for next week.",
+      "checkpoints": [
+        {
+          "id": "en-household-01-a",
+          "cursorOffset": 16,
+          "expectedSuffix": " covers the balcony and ",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-household-01-b",
+          "cursorOffset": 66,
+          "expectedSuffix": " sorted by size and glas",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-household-01-s",
+          "cursorOffset": 106,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-household-01-c",
+          "cursorOffset": 132,
+          "expectedSuffix": " receive water and the s",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-household-02",
+      "language": "en",
+      "category": "household-plan",
+      "text": "Dinner includes two hot dishes and one cold salad, with tofu drained early and greens cooked last. Before serving, the counter is wiped and leftover ingredients receive date labels.",
+      "checkpoints": [
+        {
+          "id": "en-household-02-a",
+          "cursorOffset": 30,
+          "expectedSuffix": " and one cold salad, wit",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-household-02-b",
+          "cursorOffset": 60,
+          "expectedSuffix": " drained early and green",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-household-02-s",
+          "cursorOffset": 98,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-household-02-c",
+          "cursorOffset": 126,
+          "expectedSuffix": " is wiped and leftover i",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-household-03",
+      "language": "en",
+      "category": "household-plan",
+      "text": "Before leaving, the windows and gas valve are checked, while the spare key remains in its usual drawer. At the station, the traveler checks departures and sends an estimated arrival time home.",
+      "checkpoints": [
+        {
+          "id": "en-household-03-a",
+          "cursorOffset": 41,
+          "expectedSuffix": " are checked, while the ",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-household-03-b",
+          "cursorOffset": 74,
+          "expectedSuffix": " remains in its usual dr",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-household-03-s",
+          "cursorOffset": 103,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-household-03-c",
+          "cursorOffset": 150,
+          "expectedSuffix": " and sends an estimated ",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-household-04",
+      "language": "en",
+      "category": "household-plan",
+      "text": "Desk cleanup begins with folders, while receipts are grouped by month and charging cables are loosely coiled. At the end, the wastebasket is emptied and dust is removed from the lamp base.",
+      "checkpoints": [
+        {
+          "id": "en-household-04-a",
+          "cursorOffset": 32,
+          "expectedSuffix": ", while receipts are gro",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-household-04-b",
+          "cursorOffset": 48,
+          "expectedSuffix": " are grouped by month an",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-household-04-s",
+          "cursorOffset": 109,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-household-04-c",
+          "cursorOffset": 137,
+          "expectedSuffix": " is emptied and dust is ",
+          "expectedBehavior": "complete"
+        }
+      ]
+    },
+    {
+      "id": "en-household-05",
+      "language": "en",
+      "category": "household-plan",
+      "text": "The travel bag holds clothing for three days, with medicine in a clear pouch and documents in the inner pocket. Before sleep, the ticket is checked again and two separate alarms are set.",
+      "checkpoints": [
+        {
+          "id": "en-household-05-a",
+          "cursorOffset": 14,
+          "expectedSuffix": " holds clothing for thre",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-household-05-b",
+          "cursorOffset": 76,
+          "expectedSuffix": " and documents in the in",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-household-05-s",
+          "cursorOffset": 111,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        },
+        {
+          "id": "en-household-05-c",
+          "cursorOffset": 136,
+          "expectedSuffix": " is checked again and tw",
+          "expectedBehavior": "complete"
+        }
+      ]
+    }
+  ]
+}

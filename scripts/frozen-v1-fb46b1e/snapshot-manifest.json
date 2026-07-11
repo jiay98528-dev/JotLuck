@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "snapshotId": "v1-frozen-fb46b1e",
+  "commit": "fb46b1e",
+  "productionEligible": false,
+  "runnerId": "v1-frozen-fb46b1e-independent-runner-v2",
+  "model": {
+    "path": "model.compact.txt.gz",
+    "compression": "gzip-level-9-mtime-0",
+    "compressedBytes": 946173,
+    "compressedSha256": "f135a8c827dcfb5725aa52f61e0b7341d029769b5f0c73c79f2b8ff94e468196",
+    "uncompressedBytes": 5978321,
+    "uncompressedSha256": "1ab73f76357dc1e383990103aead0908213c042443cd541b906f3814d53882f5"
+  },
+  "sourceFiles": [
+    {
+      "upstreamPath": "packages/app/src/services/CompletionSettings.ts",
+      "snapshotPath": "src/services/CompletionSettings.ts",
+      "upstreamSha256": "a6ac28fd6d0a91076d42ffdb1367daa6bd93d6129d92a032ef28fc63e65ef25e",
+      "snapshotSha256": "a6ac28fd6d0a91076d42ffdb1367daa6bd93d6129d92a032ef28fc63e65ef25e",
+      "observationPatched": false
+    },
+    {
+      "upstreamPath": "packages/app/src/services/MarkdownPredictor.ts",
+      "snapshotPath": "src/services/MarkdownPredictor.ts",
+      "upstreamSha256": "6431027843630fa5338155c78dfdb9c01d18cb9dbb8297929551d45e97f4a6db",
+      "snapshotSha256": "6431027843630fa5338155c78dfdb9c01d18cb9dbb8297929551d45e97f4a6db",
+      "observationPatched": false
+    },
+    {
+      "upstreamPath": "packages/app/src/services/completion/context.ts",
+      "snapshotPath": "src/services/completion/context.ts",
+      "upstreamSha256": "2da06c9aa357ffed3a09213fa6e95d88bbfe6638dadb48f7564606ae61839ead",
+      "snapshotSha256": "2da06c9aa357ffed3a09213fa6e95d88bbfe6638dadb48f7564606ae61839ead",
+      "observationPatched": false
+    },
+    {
+      "upstreamPath": "packages/app/src/services/completion/providers.ts",
+      "snapshotPath": "src/services/completion/providers.ts",
+      "upstreamSha256": "6753b572d901447f9d8efb92a25bb916049313a1082603320789a4e0095f108f",
+      "snapshotSha256": "6753b572d901447f9d8efb92a25bb916049313a1082603320789a4e0095f108f",
+      "observationPatched": false
+    },
+    {
+      "upstreamPath": "packages/app/src/services/completion/resolver.ts",
+      "snapshotPath": "src/services/completion/resolver.ts",
+      "upstreamSha256": "1f2ae11428305cc5dea1b563a4879d5dc20e805a7f37aac077e84a0ecd4ab494",
+      "snapshotSha256": "d333c97e567d3e35524b83ee9795aab610c0be7c482cc96b114bd4f7a8741ea4",
+      "observationPatched": true
+    },
+    {
+      "upstreamPath": "packages/app/src/services/completion/types.ts",
+      "snapshotPath": "src/services/completion/types.ts",
+      "upstreamSha256": "38d6b26430c6cdb0ed3a355210ecbecdf1c6486ab78727beccc5da790db37f54",
+      "snapshotSha256": "38d6b26430c6cdb0ed3a355210ecbecdf1c6486ab78727beccc5da790db37f54",
+      "observationPatched": false
+    },
+    {
+      "upstreamPath": "packages/app/src/services/completion/metrics.ts",
+      "snapshotPath": "src/services/completion/metrics.ts",
+      "upstreamSha256": "c0f2cf48c19cc42d1fd69d3170a38c829d4049e562b36dc837b884118c58b874",
+      "snapshotSha256": "c0f2cf48c19cc42d1fd69d3170a38c829d4049e562b36dc837b884118c58b874",
+      "observationPatched": false
+    },
+    {
+      "upstreamPath": "packages/app/src/services/completion/learning-signals.ts",
+      "snapshotPath": "src/services/completion/learning-signals.ts",
+      "upstreamSha256": "dda7d8d0c466a4e3f2cf0f0447d797336c8ab5b8a46deefecd2e18502cff338d",
+      "snapshotSha256": "dda7d8d0c466a4e3f2cf0f0447d797336c8ab5b8a46deefecd2e18502cff338d",
+      "observationPatched": false
+    },
+    {
+      "upstreamPath": "packages/app/src/utils/ngram-engine.ts",
+      "snapshotPath": "src/utils/ngram-engine.ts",
+      "upstreamSha256": "9f09e4911a90e6d8b0cb4434b06b2c0c54ba6a00be94da03b87023dcc5cd34c7",
+      "snapshotSha256": "9f09e4911a90e6d8b0cb4434b06b2c0c54ba6a00be94da03b87023dcc5cd34c7",
+      "observationPatched": false
+    }
+  ],
+  "observationPatchSha256": "9df0e2e9e16ca639ef3750e42421ec97519930c76a88aaf666a55051d80ec16f",
+  "runnerSha256": "b702840997d7835c84f85034b5b0936b04c5041e4a5cfaacce0629840bc288a5",
+  "tsconfigSha256": "73f56e5b6d90ad26c2dcc3c297680b8171ad2da8dee2481eb88252e3ac533063",
+  "treeSha256": "19d07c9ee0520923d8bee5869bb761806b86f8fc867a0504b027c0caaa60befd"
+}

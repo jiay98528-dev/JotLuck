@@ -1,7 +1,16 @@
 import type { CompletionCandidate, CompletionSourceLayer } from './types';
+import {
+  normalizeCompletionScope,
+  parseJsonSafely,
+  readStorage,
+  removeStorage,
+  runCompletionStorageMutation,
+  scopedCompletionStorageKey,
+  writeStorage,
+} from './learning-repository';
 
 const LEGACY_METRICS_KEY = 'jotluck:autocomplete:providerMetrics:v1';
-const METRICS_KEY = 'jotluck:autocomplete:providerMetrics:v2';
+const GLOBAL_METRICS_KEY = 'jotluck:autocomplete:providerMetrics:v2';
 const MAX_LATENCY_SAMPLES = 40;
 
 export interface ProviderMetrics {
@@ -20,14 +29,28 @@ export interface MetricsStore {
   updatedAt: number;
 }
 
-export function recordProviderShown(candidate: CompletionCandidate, latencyMs: number): void {
-  updateMetrics(candidate.providerId, candidate.sourceLayer, candidate.syntaxType, (metrics) => {
-    metrics.shown++;
-    metrics.latencies.push(Math.max(0, Math.round(latencyMs)));
-    if (metrics.latencies.length > MAX_LATENCY_SAMPLES) {
-      metrics.latencies.splice(0, metrics.latencies.length - MAX_LATENCY_SAMPLES);
-    }
-  });
+export function completionMetricsStorageKey(scope = 'unscoped'): string {
+  return scopedCompletionStorageKey(scope, 'metrics:v2');
+}
+
+export function recordProviderShown(
+  candidate: CompletionCandidate,
+  latencyMs: number,
+  scope = 'unscoped',
+): void {
+  updateMetrics(
+    candidate.providerId,
+    candidate.sourceLayer,
+    candidate.syntaxType,
+    scope,
+    (metrics) => {
+      metrics.shown++;
+      metrics.latencies.push(Math.max(0, Math.round(latencyMs)));
+      if (metrics.latencies.length > MAX_LATENCY_SAMPLES) {
+        metrics.latencies.splice(0, metrics.latencies.length - MAX_LATENCY_SAMPLES);
+      }
+    },
+  );
 }
 
 export function recordProviderAccepted(
@@ -35,9 +58,10 @@ export function recordProviderAccepted(
   sourceLayer: CompletionSourceLayer | undefined,
   syntaxType: string | undefined,
   savedChars: number,
+  scope = 'unscoped',
 ): void {
   if (!providerId) return;
-  updateMetrics(providerId, sourceLayer, syntaxType, (metrics) => {
+  updateMetrics(providerId, sourceLayer, syntaxType, scope, (metrics) => {
     metrics.accepted++;
     metrics.savedChars += Math.max(0, savedChars);
   });
@@ -47,34 +71,38 @@ export function recordProviderRejected(
   providerId: string | null,
   sourceLayer?: CompletionSourceLayer,
   syntaxType?: string,
+  scope = 'unscoped',
 ): void {
   if (!providerId) return;
-  updateMetrics(providerId, sourceLayer, syntaxType, (metrics) => {
+  updateMetrics(providerId, sourceLayer, syntaxType, scope, (metrics) => {
     metrics.rejected++;
   });
 }
 
-export function loadCompletionMetrics(): MetricsStore {
-  return loadMetrics();
+export function loadCompletionMetrics(scope = 'unscoped'): MetricsStore {
+  return loadMetrics(scope);
 }
 
-export function clearCompletionMetrics(): void {
-  try {
-    localStorage.removeItem(METRICS_KEY);
-    localStorage.removeItem(LEGACY_METRICS_KEY);
-  } catch {
-    // Metrics are local best-effort diagnostics.
-  }
+export function clearCompletionMetrics(scope = 'unscoped'): void {
+  const normalizedScope = normalizeCompletionScope(scope);
+  runCompletionStorageMutation(`metrics:${normalizedScope}`, () => {
+    removeStorage(
+      completionMetricsStorageKey(normalizedScope),
+      ...(normalizedScope === 'unscoped' ? [GLOBAL_METRICS_KEY, LEGACY_METRICS_KEY] : []),
+    );
+  });
 }
 
 function updateMetrics(
   providerId: string,
   sourceLayer: CompletionSourceLayer | undefined,
   syntaxType: string | undefined,
+  scope: string,
   updater: (metrics: ProviderMetrics) => void,
 ): void {
-  try {
-    const store = loadMetrics();
+  const normalizedScope = normalizeCompletionScope(scope);
+  runCompletionStorageMutation(`metrics:${normalizedScope}`, () => {
+    const store = loadMetrics(normalizedScope);
     updater((store.providers[providerId] ??= createProviderMetrics()));
     updater(
       (store.layers[getLayerMetricsKey(providerId, sourceLayer)] ??= createProviderMetrics()),
@@ -84,54 +112,82 @@ function updateMetrics(
         createProviderMetrics()),
     );
     store.updatedAt = Date.now();
-    localStorage.setItem(METRICS_KEY, JSON.stringify(store));
-  } catch {
-    // Metrics are local best-effort diagnostics.
-  }
+    writeStorage(completionMetricsStorageKey(normalizedScope), JSON.stringify(store));
+  });
 }
 
-function loadMetrics(): MetricsStore {
-  const raw = localStorage.getItem(METRICS_KEY);
-  if (!raw) return loadLegacyMetrics();
-  const parsed = JSON.parse(raw) as {
-    version?: number;
-    providers?: MetricsStore['providers'];
-    layers?: MetricsStore['layers'];
-    syntaxTypes?: MetricsStore['syntaxTypes'];
-    updatedAt?: number;
-  };
-  if ((parsed.version !== 2 && parsed.version !== 3) || !parsed.providers) {
-    return createMetricsStore();
+function loadMetrics(scope: string): MetricsStore {
+  const targetKey = completionMetricsStorageKey(scope);
+  const targetRaw = readStorage(targetKey);
+  const current = normalizeMetricsStore(parseJsonSafely(targetRaw), false);
+  if (current) return current;
+  if (targetRaw !== null) removeStorage(targetKey);
+
+  const normalizedScope = normalizeCompletionScope(scope);
+  const legacyKeys = [
+    scopedCompletionStorageKey(normalizedScope, 'providerMetrics:v2'),
+    GLOBAL_METRICS_KEY,
+    LEGACY_METRICS_KEY,
+  ];
+  for (const legacyKey of legacyKeys) {
+    const migrated = normalizeMetricsStore(parseJsonSafely(readStorage(legacyKey)), true);
+    if (!migrated) continue;
+    writeStorage(targetKey, JSON.stringify(migrated));
+    removeStorage(...legacyKeys);
+    return migrated;
+  }
+  return createMetricsStore();
+}
+
+function normalizeMetricsStore(value: unknown, allowLegacy: boolean): MetricsStore | null {
+  if (!value || typeof value !== 'object') return null;
+  const parsed = value as Partial<MetricsStore> & { version?: number };
+  if (parsed.version !== 3 && !(allowLegacy && (parsed.version === 1 || parsed.version === 2))) {
+    return null;
+  }
+  if (
+    !parsed.providers ||
+    typeof parsed.providers !== 'object' ||
+    Array.isArray(parsed.providers)
+  ) {
+    return null;
   }
   return {
     version: 3,
-    providers: parsed.providers,
-    layers: parsed.layers ?? {},
-    syntaxTypes: parsed.syntaxTypes ?? {},
-    updatedAt: parsed.updatedAt ?? 0,
+    providers: normalizeMetricsMap(parsed.providers),
+    layers: normalizeMetricsMap(parsed.layers),
+    syntaxTypes: normalizeMetricsMap(parsed.syntaxTypes),
+    updatedAt: normalizeNonNegativeInteger(parsed.updatedAt),
   };
 }
 
-function loadLegacyMetrics(): MetricsStore {
-  const raw = localStorage.getItem(LEGACY_METRICS_KEY);
-  if (!raw) return createMetricsStore();
-  try {
-    const parsed = JSON.parse(raw) as Partial<{
-      version: number;
-      providers: MetricsStore['providers'];
-      updatedAt: number;
-    }>;
-    if (parsed.version !== 1 || !parsed.providers) return createMetricsStore();
-    return {
-      version: 3,
-      providers: parsed.providers,
-      layers: {},
-      syntaxTypes: {},
-      updatedAt: parsed.updatedAt ?? 0,
+function normalizeMetricsMap(value: unknown): Record<string, ProviderMetrics> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const normalized: Record<string, ProviderMetrics> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (!key || key.length > 192 || !entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      continue;
+    }
+    const source = entry as Partial<ProviderMetrics>;
+    normalized[key] = {
+      shown: normalizeNonNegativeInteger(source.shown),
+      accepted: normalizeNonNegativeInteger(source.accepted),
+      rejected: normalizeNonNegativeInteger(source.rejected),
+      savedChars: normalizeNonNegativeInteger(source.savedChars),
+      latencies: Array.isArray(source.latencies)
+        ? source.latencies
+            .filter((sample): sample is number => Number.isFinite(sample) && sample >= 0)
+            .map((sample) => Math.round(sample))
+            .slice(-MAX_LATENCY_SAMPLES)
+        : [],
     };
-  } catch {
-    return createMetricsStore();
   }
+  return normalized;
+}
+
+function normalizeNonNegativeInteger(value: unknown): number {
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number >= 0 ? number : 0;
 }
 
 function createMetricsStore(): MetricsStore {

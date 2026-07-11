@@ -7,14 +7,19 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { fileURLToPath, pathToFileURL } from 'url';
 import {
+  assertApprovedWebSources,
   buildCleanDocument,
   cleanFragment,
   type FragmentLanguage,
   extractReadableText,
   extractSameOriginLinks,
   fragmentText,
+  isAllowedCollectionUrl,
+  nearDuplicateCorpusKey,
+  normalizeCorpusFragment,
   resolveSourceDefaults,
   safeSegment,
   sourceKey,
@@ -48,19 +53,40 @@ const CACHE_DIR = path.join(CORPUS_DIR, '_web-cache');
 const RAW_DIR = path.join(CACHE_DIR, '_raw');
 const CLEAN_DIR = path.join(CACHE_DIR, '_clean');
 const REPORT_DIR = path.join(CACHE_DIR, '_reports');
+const MAX_PAGE_BYTES = 2 * 1024 * 1024;
+const MAX_CLEAN_POOL_BYTES = 30 * 1024 * 1024;
 
 export async function collectWebCorpus(options: CliOptions): Promise<CollectionReport> {
   const manifest = readManifest();
+  assertApprovedWebSources(manifest);
   ensureDirs();
 
   const enabledSources = manifest.sources.filter((source) => source.enabled ?? true);
   const selectedSources =
     options.limit && options.limit > 0 ? enabledSources.slice(0, options.limit) : enabledSources;
   const results: CollectedPageResult[] = [];
+  const globalExactFragments = new Set<string>();
+  const globalNearFragments = new Set<string>();
 
   for (const source of selectedSources) {
-    const sourceResults = await collectSource(source, manifest, options);
+    const sourceResults = await collectSource(source, manifest, options, {
+      exact: globalExactFragments,
+      near: globalNearFragments,
+    });
     results.push(...sourceResults);
+  }
+
+  const cleanPoolBytes = [...new Set(results.map((item) => item.cleanPath).filter(Boolean))].reduce(
+    (sum, relativePath) => {
+      const fullPath = path.resolve(CORPUS_DIR, relativePath!);
+      return sum + (fs.existsSync(fullPath) ? fs.statSync(fullPath).size : 0);
+    },
+    0,
+  );
+  if (cleanPoolBytes > MAX_CLEAN_POOL_BYTES) {
+    throw new Error(
+      `Clean corpus ${cleanPoolBytes} bytes exceeds ${MAX_CLEAN_POOL_BYTES} byte verified pool cap`,
+    );
   }
 
   const report: CollectionReport = {
@@ -82,6 +108,7 @@ async function collectSource(
   source: WebSourceConfig,
   manifest: WebSourceManifest,
   options: CliOptions,
+  globalFragments: { exact: Set<string>; near: Set<string> },
 ): Promise<CollectedPageResult[]> {
   const defaults = resolveSourceDefaults(source, manifest);
   const sourceId = source.id ?? `${safeSegment(source.category)}-${sourceKey(source.url)}`;
@@ -94,12 +121,14 @@ async function collectSource(
     if (!next || visited.has(next.url)) continue;
     visited.add(next.url);
 
+    if (!isAllowedCollectionUrl(next.url, source)) continue;
     const result = await collectPage({
       source,
       sourceId,
       url: next.url,
       weight: defaults.weight,
       timeoutMs: options.timeoutMs,
+      globalFragments,
     });
     results.push(result);
 
@@ -107,6 +136,7 @@ async function collectSource(
     try {
       const raw = fs.readFileSync(path.resolve(CORPUS_DIR, result.rawPath), 'utf-8');
       for (const link of extractSameOriginLinks(raw, next.url)) {
+        if (!isAllowedCollectionUrl(link, source)) continue;
         if (visited.has(link)) continue;
         queue.push({ url: link, depth: next.depth + 1 });
         if (visited.size + queue.length >= defaults.maxPages) break;
@@ -125,6 +155,7 @@ async function collectPage(args: {
   url: string;
   weight: number;
   timeoutMs: number;
+  globalFragments: { exact: Set<string>; near: Set<string> };
 }): Promise<CollectedPageResult> {
   const key = sourceKey(args.url);
   const category = safeSegment(args.source.category);
@@ -148,6 +179,8 @@ async function collectPage(args: {
     languageDistribution: { zh: 0, en: 0, mixed: 0, unknown: 0 },
     scrubHits: {},
     dropReasons: {},
+    licenseId: args.source.license?.licenseId,
+    licenseEvidence: args.source.license?.evidence,
   };
 
   try {
@@ -169,6 +202,18 @@ async function collectPage(args: {
       const clean = cleanFragment(fragment);
       for (const hit of clean.hits) scrubHits[hit] = (scrubHits[hit] ?? 0) + 1;
       if (clean.action === 'keep') {
+        const exactKey = normalizeCorpusFragment(clean.text);
+        const nearKey = nearDuplicateCorpusKey(clean.text);
+        if (args.globalFragments.exact.has(exactKey)) {
+          dropReasons['global-exact-duplicate'] = (dropReasons['global-exact-duplicate'] ?? 0) + 1;
+          continue;
+        }
+        if (nearKey.length >= 12 && args.globalFragments.near.has(nearKey)) {
+          dropReasons['global-near-duplicate'] = (dropReasons['global-near-duplicate'] ?? 0) + 1;
+          continue;
+        }
+        args.globalFragments.exact.add(exactKey);
+        if (nearKey.length >= 12) args.globalFragments.near.add(nearKey);
         cleanFragments.push(clean.text);
         languageDistribution[clean.language ?? 'unknown']++;
       } else {
@@ -180,10 +225,12 @@ async function collectPage(args: {
     const cleanDocument = buildCleanDocument(cleanFragments);
     const finalFragments = cleanDocument.trim() ? cleanDocument.trim().split(/\n{2,}/) : [];
 
+    let cleanSha256: string | undefined;
     if (finalFragments.length > 0) {
       fs.mkdirSync(cleanDir, { recursive: true });
       fs.writeFileSync(cleanPath, cleanDocument, 'utf-8');
       baseResult.cleanPath = toCorpusRelative(cleanPath);
+      cleanSha256 = crypto.createHash('sha256').update(cleanDocument).digest('hex');
     } else if (fs.existsSync(cleanPath)) {
       fs.unlinkSync(cleanPath);
     }
@@ -198,6 +245,7 @@ async function collectPage(args: {
       languageDistribution,
       scrubHits,
       dropReasons,
+      cleanSha256,
     };
   } catch (error) {
     return {
@@ -220,7 +268,24 @@ async function fetchText(url: string, timeoutMs: number): Promise<string> {
       },
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return await response.text();
+    const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+    if (
+      contentType &&
+      !contentType.includes('text/html') &&
+      !contentType.includes('application/xhtml+xml') &&
+      !contentType.includes('text/plain')
+    ) {
+      throw new Error(`Unsupported content type: ${contentType}`);
+    }
+    const declaredLength = Number(response.headers.get('content-length') ?? '0');
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_PAGE_BYTES) {
+      throw new Error(`Response exceeds ${MAX_PAGE_BYTES} bytes`);
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > MAX_PAGE_BYTES) {
+      throw new Error(`Response exceeds ${MAX_PAGE_BYTES} bytes`);
+    }
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   } finally {
     clearTimeout(timer);
   }

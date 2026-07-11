@@ -1,0 +1,2312 @@
+{
+  "schemaVersion": 2,
+  "datasetId": "workspace-conditioned-final-v2.1",
+  "frozenAt": "2026-07-11T00:00:00.000Z",
+  "classification": "workspace-conditioned-final-v2",
+  "releaseEvidence": true,
+  "description": "Manually curated, frozen workspace-conditioned final holdout. Support and target documents are disjoint; this dataset is consumed only after validation tier selection.",
+  "supportDocuments": [
+    {
+      "id": "zh-01-support-a",
+      "path": "support/zh/01-a.md",
+      "language": "zh",
+      "text": "北侧木桥已记录潮痕高度。"
+    },
+    {
+      "id": "zh-01-support-b",
+      "path": "support/zh/01-b.md",
+      "language": "zh",
+      "text": "北侧木桥：记录潮痕高度。"
+    },
+    {
+      "id": "zh-02-support-a",
+      "path": "support/zh/02-a.md",
+      "language": "zh",
+      "text": "朝南书房已检查密封胶条。"
+    },
+    {
+      "id": "zh-02-support-b",
+      "path": "support/zh/02-b.md",
+      "language": "zh",
+      "text": "朝南书房：检查密封胶条。"
+    },
+    {
+      "id": "zh-03-support-a",
+      "path": "support/zh/03-a.md",
+      "language": "zh",
+      "text": "社区阅览室已标出停顿位置。"
+    },
+    {
+      "id": "zh-03-support-b",
+      "path": "support/zh/03-b.md",
+      "language": "zh",
+      "text": "社区阅览室：标出停顿位置。"
+    },
+    {
+      "id": "zh-04-support-a",
+      "path": "support/zh/04-a.md",
+      "language": "zh",
+      "text": "测试工作区已核对字段映射。"
+    },
+    {
+      "id": "zh-04-support-b",
+      "path": "support/zh/04-b.md",
+      "language": "zh",
+      "text": "测试工作区：核对字段映射。"
+    },
+    {
+      "id": "zh-05-support-a",
+      "path": "support/zh/05-a.md",
+      "language": "zh",
+      "text": "西楼会议间已确认设备清单。"
+    },
+    {
+      "id": "zh-05-support-b",
+      "path": "support/zh/05-b.md",
+      "language": "zh",
+      "text": "西楼会议间：确认设备清单。"
+    },
+    {
+      "id": "zh-06-support-a",
+      "path": "support/zh/06-a.md",
+      "language": "zh",
+      "text": "东坡松林已测量落叶厚度。"
+    },
+    {
+      "id": "zh-06-support-b",
+      "path": "support/zh/06-b.md",
+      "language": "zh",
+      "text": "东坡松林：测量落叶厚度。"
+    },
+    {
+      "id": "zh-07-support-a",
+      "path": "support/zh/07-a.md",
+      "language": "zh",
+      "text": "下层冷藏格已核对食材日期。"
+    },
+    {
+      "id": "zh-07-support-b",
+      "path": "support/zh/07-b.md",
+      "language": "zh",
+      "text": "下层冷藏格：核对食材日期。"
+    },
+    {
+      "id": "zh-08-support-a",
+      "path": "support/zh/08-a.md",
+      "language": "zh",
+      "text": "历史资料室已分开事实与推断。"
+    },
+    {
+      "id": "zh-08-support-b",
+      "path": "support/zh/08-b.md",
+      "language": "zh",
+      "text": "历史资料室：分开事实与推断。"
+    },
+    {
+      "id": "zh-09-support-a",
+      "path": "support/zh/09-a.md",
+      "language": "zh",
+      "text": "离线演示环境已重放失败步骤。"
+    },
+    {
+      "id": "zh-09-support-b",
+      "path": "support/zh/09-b.md",
+      "language": "zh",
+      "text": "离线演示环境：重放失败步骤。"
+    },
+    {
+      "id": "zh-10-support-a",
+      "path": "support/zh/10-a.md",
+      "language": "zh",
+      "text": "活动服务台已确认交接时段。"
+    },
+    {
+      "id": "zh-10-support-b",
+      "path": "support/zh/10-b.md",
+      "language": "zh",
+      "text": "活动服务台：确认交接时段。"
+    },
+    {
+      "id": "zh-11-support-a",
+      "path": "support/zh/11-a.md",
+      "language": "zh",
+      "text": "第三排苗床已读取叶面温度。"
+    },
+    {
+      "id": "zh-11-support-b",
+      "path": "support/zh/11-b.md",
+      "language": "zh",
+      "text": "第三排苗床：读取叶面温度。"
+    },
+    {
+      "id": "zh-12-support-a",
+      "path": "support/zh/12-a.md",
+      "language": "zh",
+      "text": "阳台储物柜已补齐尺寸标签。"
+    },
+    {
+      "id": "zh-12-support-b",
+      "path": "support/zh/12-b.md",
+      "language": "zh",
+      "text": "阳台储物柜：补齐尺寸标签。"
+    },
+    {
+      "id": "zh-13-support-a",
+      "path": "support/zh/13-a.md",
+      "language": "zh",
+      "text": "物理自习桌已重画受力示意。"
+    },
+    {
+      "id": "zh-13-support-b",
+      "path": "support/zh/13-b.md",
+      "language": "zh",
+      "text": "物理自习桌：重画受力示意。"
+    },
+    {
+      "id": "zh-14-support-a",
+      "path": "support/zh/14-a.md",
+      "language": "zh",
+      "text": "干净测试目录已验证重命名事件。"
+    },
+    {
+      "id": "zh-14-support-b",
+      "path": "support/zh/14-b.md",
+      "language": "zh",
+      "text": "干净测试目录：验证重命名事件。"
+    },
+    {
+      "id": "zh-15-support-a",
+      "path": "support/zh/15-a.md",
+      "language": "zh",
+      "text": "编辑讨论区已整理追问顺序。"
+    },
+    {
+      "id": "zh-15-support-b",
+      "path": "support/zh/15-b.md",
+      "language": "zh",
+      "text": "编辑讨论区：整理追问顺序。"
+    },
+    {
+      "id": "zh-16-support-a",
+      "path": "support/zh/16-a.md",
+      "language": "zh",
+      "text": "雨水收集槽已查看沉积物分布。"
+    },
+    {
+      "id": "zh-16-support-b",
+      "path": "support/zh/16-b.md",
+      "language": "zh",
+      "text": "雨水收集槽：查看沉积物分布。"
+    },
+    {
+      "id": "zh-17-support-a",
+      "path": "support/zh/17-a.md",
+      "language": "zh",
+      "text": "走廊壁柜已重新划分层板。"
+    },
+    {
+      "id": "zh-17-support-b",
+      "path": "support/zh/17-b.md",
+      "language": "zh",
+      "text": "走廊壁柜：重新划分层板。"
+    },
+    {
+      "id": "zh-18-support-a",
+      "path": "support/zh/18-a.md",
+      "language": "zh",
+      "text": "安静工作角已删去重复转折。"
+    },
+    {
+      "id": "zh-18-support-b",
+      "path": "support/zh/18-b.md",
+      "language": "zh",
+      "text": "安静工作角：删去重复转折。"
+    },
+    {
+      "id": "zh-19-support-a",
+      "path": "support/zh/19-a.md",
+      "language": "zh",
+      "text": "浏览器测试页已读取生成文件。"
+    },
+    {
+      "id": "zh-19-support-b",
+      "path": "support/zh/19-b.md",
+      "language": "zh",
+      "text": "浏览器测试页：读取生成文件。"
+    },
+    {
+      "id": "zh-20-support-a",
+      "path": "support/zh/20-a.md",
+      "language": "zh",
+      "text": "财务协作页已标记异常条目。"
+    },
+    {
+      "id": "zh-20-support-b",
+      "path": "support/zh/20-b.md",
+      "language": "zh",
+      "text": "财务协作页：标记异常条目。"
+    },
+    {
+      "id": "zh-21-support-a",
+      "path": "support/zh/21-a.md",
+      "language": "zh",
+      "text": "校园南门已统计照明故障。"
+    },
+    {
+      "id": "zh-21-support-b",
+      "path": "support/zh/21-b.md",
+      "language": "zh",
+      "text": "校园南门：统计照明故障。"
+    },
+    {
+      "id": "zh-22-support-a",
+      "path": "support/zh/22-a.md",
+      "language": "zh",
+      "text": "厨房水槽旁已检查杯口细纹。"
+    },
+    {
+      "id": "zh-22-support-b",
+      "path": "support/zh/22-b.md",
+      "language": "zh",
+      "text": "厨房水槽旁：检查杯口细纹。"
+    },
+    {
+      "id": "zh-23-support-a",
+      "path": "support/zh/23-a.md",
+      "language": "zh",
+      "text": "移动学习卡已合并近义表达。"
+    },
+    {
+      "id": "zh-23-support-b",
+      "path": "support/zh/23-b.md",
+      "language": "zh",
+      "text": "移动学习卡：合并近义表达。"
+    },
+    {
+      "id": "zh-24-support-a",
+      "path": "support/zh/24-a.md",
+      "language": "zh",
+      "text": "桌面打包目录已确认资源可读。"
+    },
+    {
+      "id": "zh-24-support-b",
+      "path": "support/zh/24-b.md",
+      "language": "zh",
+      "text": "桌面打包目录：确认资源可读。"
+    },
+    {
+      "id": "zh-25-support-a",
+      "path": "support/zh/25-a.md",
+      "language": "zh",
+      "text": "线上白板已收集疑问主题。"
+    },
+    {
+      "id": "zh-25-support-b",
+      "path": "support/zh/25-b.md",
+      "language": "zh",
+      "text": "线上白板：收集疑问主题。"
+    },
+    {
+      "id": "en-01-support-a",
+      "path": "support/en/01-a.md",
+      "language": "en",
+      "text": "Compare the rope markers at the eastern pier."
+    },
+    {
+      "id": "en-01-support-b",
+      "path": "support/en/01-b.md",
+      "language": "en",
+      "text": "At the eastern pier: compare the rope markers."
+    },
+    {
+      "id": "en-02-support-a",
+      "path": "support/en/02-a.md",
+      "language": "en",
+      "text": "Check every wall anchor at the study alcove."
+    },
+    {
+      "id": "en-02-support-b",
+      "path": "support/en/02-b.md",
+      "language": "en",
+      "text": "At the study alcove: check every wall anchor."
+    },
+    {
+      "id": "en-03-support-a",
+      "path": "support/en/03-a.md",
+      "language": "en",
+      "text": "Mark each stressed syllable at the quiet practice booth."
+    },
+    {
+      "id": "en-03-support-b",
+      "path": "support/en/03-b.md",
+      "language": "en",
+      "text": "At the quiet practice booth: mark each stressed syllable."
+    },
+    {
+      "id": "en-04-support-a",
+      "path": "support/en/04-a.md",
+      "language": "en",
+      "text": "Compare the renamed fields at the isolated test folder."
+    },
+    {
+      "id": "en-04-support-b",
+      "path": "support/en/04-b.md",
+      "language": "en",
+      "text": "At the isolated test folder: compare the renamed fields."
+    },
+    {
+      "id": "en-05-support-a",
+      "path": "support/en/05-a.md",
+      "language": "en",
+      "text": "Confirm the equipment labels at the west conference room."
+    },
+    {
+      "id": "en-05-support-b",
+      "path": "support/en/05-b.md",
+      "language": "en",
+      "text": "At the west conference room: confirm the equipment labels."
+    },
+    {
+      "id": "en-06-support-a",
+      "path": "support/en/06-a.md",
+      "language": "en",
+      "text": "Measure the mulch depth at the shaded north bed."
+    },
+    {
+      "id": "en-06-support-b",
+      "path": "support/en/06-b.md",
+      "language": "en",
+      "text": "At the shaded north bed: measure the mulch depth."
+    },
+    {
+      "id": "en-07-support-a",
+      "path": "support/en/07-a.md",
+      "language": "en",
+      "text": "Review every open date at the lower storage drawer."
+    },
+    {
+      "id": "en-07-support-b",
+      "path": "support/en/07-b.md",
+      "language": "en",
+      "text": "At the lower storage drawer: review every open date."
+    },
+    {
+      "id": "en-08-support-a",
+      "path": "support/en/08-a.md",
+      "language": "en",
+      "text": "Separate claims from evidence at the local archive desk."
+    },
+    {
+      "id": "en-08-support-b",
+      "path": "support/en/08-b.md",
+      "language": "en",
+      "text": "At the local archive desk: separate claims from evidence."
+    },
+    {
+      "id": "en-09-support-a",
+      "path": "support/en/09-a.md",
+      "language": "en",
+      "text": "Replay the failed reload at the browser test profile."
+    },
+    {
+      "id": "en-09-support-b",
+      "path": "support/en/09-b.md",
+      "language": "en",
+      "text": "At the browser test profile: replay the failed reload."
+    },
+    {
+      "id": "en-10-support-a",
+      "path": "support/en/10-a.md",
+      "language": "en",
+      "text": "Confirm each handoff window at the event welcome table."
+    },
+    {
+      "id": "en-10-support-b",
+      "path": "support/en/10-b.md",
+      "language": "en",
+      "text": "At the event welcome table: confirm each handoff window."
+    },
+    {
+      "id": "en-11-support-a",
+      "path": "support/en/11-a.md",
+      "language": "en",
+      "text": "Record the leaf temperature at the third seedling row."
+    },
+    {
+      "id": "en-11-support-b",
+      "path": "support/en/11-b.md",
+      "language": "en",
+      "text": "At the third seedling row: record the leaf temperature."
+    },
+    {
+      "id": "en-12-support-a",
+      "path": "support/en/12-a.md",
+      "language": "en",
+      "text": "Replace missing size labels at the balcony cabinet."
+    },
+    {
+      "id": "en-12-support-b",
+      "path": "support/en/12-b.md",
+      "language": "en",
+      "text": "At the balcony cabinet: replace missing size labels."
+    },
+    {
+      "id": "en-13-support-a",
+      "path": "support/en/13-a.md",
+      "language": "en",
+      "text": "Redraw the force diagram at the library worktable."
+    },
+    {
+      "id": "en-13-support-b",
+      "path": "support/en/13-b.md",
+      "language": "en",
+      "text": "At the library worktable: redraw the force diagram."
+    },
+    {
+      "id": "en-14-support-a",
+      "path": "support/en/14-a.md",
+      "language": "en",
+      "text": "Verify the rename event at the clean workspace fixture."
+    },
+    {
+      "id": "en-14-support-b",
+      "path": "support/en/14-b.md",
+      "language": "en",
+      "text": "At the clean workspace fixture: verify the rename event."
+    },
+    {
+      "id": "en-15-support-a",
+      "path": "support/en/15-a.md",
+      "language": "en",
+      "text": "Reorder the follow-up questions at the editorial planning board."
+    },
+    {
+      "id": "en-15-support-b",
+      "path": "support/en/15-b.md",
+      "language": "en",
+      "text": "At the editorial planning board: reorder the follow-up questions."
+    },
+    {
+      "id": "en-16-support-a",
+      "path": "support/en/16-a.md",
+      "language": "en",
+      "text": "Inspect the sediment pattern at the rain collection channel."
+    },
+    {
+      "id": "en-16-support-b",
+      "path": "support/en/16-b.md",
+      "language": "en",
+      "text": "At the rain collection channel: inspect the sediment pattern."
+    },
+    {
+      "id": "en-17-support-a",
+      "path": "support/en/17-a.md",
+      "language": "en",
+      "text": "Reassign the shelf zones at the hallway wardrobe."
+    },
+    {
+      "id": "en-17-support-b",
+      "path": "support/en/17-b.md",
+      "language": "en",
+      "text": "At the hallway wardrobe: reassign the shelf zones."
+    },
+    {
+      "id": "en-18-support-a",
+      "path": "support/en/18-a.md",
+      "language": "en",
+      "text": "Remove repeated transitions at the corner writing desk."
+    },
+    {
+      "id": "en-18-support-b",
+      "path": "support/en/18-b.md",
+      "language": "en",
+      "text": "At the corner writing desk: remove repeated transitions."
+    },
+    {
+      "id": "en-19-support-a",
+      "path": "support/en/19-a.md",
+      "language": "en",
+      "text": "Read the generated workbook at the production preview page."
+    },
+    {
+      "id": "en-19-support-b",
+      "path": "support/en/19-b.md",
+      "language": "en",
+      "text": "At the production preview page: read the generated workbook."
+    },
+    {
+      "id": "en-20-support-a",
+      "path": "support/en/20-a.md",
+      "language": "en",
+      "text": "Flag each unusual entry at the shared finance sheet."
+    },
+    {
+      "id": "en-20-support-b",
+      "path": "support/en/20-b.md",
+      "language": "en",
+      "text": "At the shared finance sheet: flag each unusual entry."
+    },
+    {
+      "id": "en-21-support-a",
+      "path": "support/en/21-a.md",
+      "language": "en",
+      "text": "Count unstable lamps at the southern campus gate."
+    },
+    {
+      "id": "en-21-support-b",
+      "path": "support/en/21-b.md",
+      "language": "en",
+      "text": "At the southern campus gate: count unstable lamps."
+    },
+    {
+      "id": "en-22-support-a",
+      "path": "support/en/22-a.md",
+      "language": "en",
+      "text": "Review the rim marks at the kitchen drying rack."
+    },
+    {
+      "id": "en-22-support-b",
+      "path": "support/en/22-b.md",
+      "language": "en",
+      "text": "At the kitchen drying rack: review the rim marks."
+    },
+    {
+      "id": "en-23-support-a",
+      "path": "support/en/23-a.md",
+      "language": "en",
+      "text": "Merge overlapping expressions at the mobile study deck."
+    },
+    {
+      "id": "en-23-support-b",
+      "path": "support/en/23-b.md",
+      "language": "en",
+      "text": "At the mobile study deck: merge overlapping expressions."
+    },
+    {
+      "id": "en-24-support-a",
+      "path": "support/en/24-a.md",
+      "language": "en",
+      "text": "Confirm each packaged resource at the desktop release folder."
+    },
+    {
+      "id": "en-24-support-b",
+      "path": "support/en/24-b.md",
+      "language": "en",
+      "text": "At the desktop release folder: confirm each packaged resource."
+    },
+    {
+      "id": "en-25-support-a",
+      "path": "support/en/25-a.md",
+      "language": "en",
+      "text": "Group the unresolved questions at the remote whiteboard."
+    },
+    {
+      "id": "en-25-support-b",
+      "path": "support/en/25-b.md",
+      "language": "en",
+      "text": "At the remote whiteboard: group the unresolved questions."
+    }
+  ],
+  "targets": [
+    {
+      "id": "zh-01-target",
+      "path": "targets/zh/01.md",
+      "language": "zh",
+      "category": "field-observation",
+      "text": "本次河岸巡查发生在北侧木桥。记录者先记录潮痕高度，随后确认旧刻度仍清晰可辨。这份简短记录意味着下一班能够比较夜间水位。",
+      "supportDocumentIds": ["zh-01-support-a", "zh-01-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-01-a",
+          "cursorOffset": 10,
+          "expectedSuffix": "侧木桥。记录者先记录潮痕高度，随后确认旧刻度仍清晰可辨。这份简短记录意味着下一班能够比较夜间水位。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-01-b",
+          "cursorOffset": 27,
+          "expectedSuffix": "确认旧刻度仍清晰可辨。这份简短记录意味着下一班能够比较夜间水位。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-01-c",
+          "cursorOffset": 42,
+          "expectedSuffix": "记录意味着下一班能够比较夜间水位。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-01-silence",
+          "cursorOffset": 59,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-02-target",
+      "path": "targets/zh/02.md",
+      "language": "zh",
+      "category": "home-maintenance",
+      "text": "在朝南书房完成窗框保养时，值守人员决定检查密封胶条。现场结果显示转角处没有继续开裂，所以雨天复查会有明确参照。",
+      "supportDocumentIds": ["zh-02-support-a", "zh-02-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-02-a",
+          "cursorOffset": 9,
+          "expectedSuffix": "保养时，值守人员决定检查密封胶条。现场结果显示转角处没有继续开裂，所以雨天复查会有明确参照。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-02-b",
+          "cursorOffset": 25,
+          "expectedSuffix": "。现场结果显示转角处没有继续开裂，所以雨天复查会有明确参照。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-02-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "开裂，所以雨天复查会有明确参照。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-02-silence",
+          "cursorOffset": 55,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-03-target",
+      "path": "targets/zh/03.md",
+      "language": "zh",
+      "category": "learning-note",
+      "text": "口语练习笔记来自社区阅览室。工作人员按原定顺序标出停顿位置；核对后发现第二遍语速更加均匀，由此周末录音可以直接对照。",
+      "supportDocumentIds": ["zh-03-support-a", "zh-03-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-03-a",
+          "cursorOffset": 10,
+          "expectedSuffix": "阅览室。工作人员按原定顺序标出停顿位置；核对后发现第二遍语速更加均匀，由此周末录音可以直接对照。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-03-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "顿位置；核对后发现第二遍语速更加均匀，由此周末录音可以直接对照。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-03-c",
+          "cursorOffset": 41,
+          "expectedSuffix": "加均匀，由此周末录音可以直接对照。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-03-silence",
+          "cursorOffset": 58,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-04-target",
+      "path": "targets/zh/04.md",
+      "language": "zh",
+      "category": "project-log",
+      "text": "今天围绕接口迁移检查了测试工作区。第一步是核对字段映射，明确的观察结果为三条边界样例均已保留。因此评审时能追溯每项改动。",
+      "supportDocumentIds": ["zh-04-support-a", "zh-04-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-04-a",
+          "cursorOffset": 10,
+          "expectedSuffix": "了测试工作区。第一步是核对字段映射，明确的观察结果为三条边界样例均已保留。因此评审时能追溯每项改动。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-04-b",
+          "cursorOffset": 27,
+          "expectedSuffix": "，明确的观察结果为三条边界样例均已保留。因此评审时能追溯每项改动。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-04-c",
+          "cursorOffset": 43,
+          "expectedSuffix": "已保留。因此评审时能追溯每项改动。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-04-silence",
+          "cursorOffset": 60,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-05-target",
+      "path": "targets/zh/05.md",
+      "language": "zh",
+      "category": "meeting-note",
+      "text": "西楼会议间留下了一条场地协调记录：先确认设备清单，再复查周围条件。最终确认备用话筒已经贴好编号，并且布置人员不会重复领取。",
+      "supportDocumentIds": ["zh-05-support-a", "zh-05-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-05-a",
+          "cursorOffset": 10,
+          "expectedSuffix": "场地协调记录：先确认设备清单，再复查周围条件。最终确认备用话筒已经贴好编号，并且布置人员不会重复领取。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-05-b",
+          "cursorOffset": 28,
+          "expectedSuffix": "周围条件。最终确认备用话筒已经贴好编号，并且布置人员不会重复领取。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-05-c",
+          "cursorOffset": 43,
+          "expectedSuffix": "贴好编号，并且布置人员不会重复领取。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-05-silence",
+          "cursorOffset": 61,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-06-target",
+      "path": "targets/zh/06.md",
+      "language": "zh",
+      "category": "field-observation",
+      "text": "本次林下样方发生在东坡松林。记录者先测量落叶厚度，随后确认中央区域比边缘略薄。这份简短记录意味着下次采样可复用同一位置。",
+      "supportDocumentIds": ["zh-06-support-a", "zh-06-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-06-a",
+          "cursorOffset": 10,
+          "expectedSuffix": "坡松林。记录者先测量落叶厚度，随后确认中央区域比边缘略薄。这份简短记录意味着下次采样可复用同一位置。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-06-b",
+          "cursorOffset": 27,
+          "expectedSuffix": "确认中央区域比边缘略薄。这份简短记录意味着下次采样可复用同一位置。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-06-c",
+          "cursorOffset": 43,
+          "expectedSuffix": "记录意味着下次采样可复用同一位置。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-06-silence",
+          "cursorOffset": 60,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-07-target",
+      "path": "targets/zh/07.md",
+      "language": "zh",
+      "category": "home-maintenance",
+      "text": "在下层冷藏格完成冰箱整理时，值守人员决定核对食材日期。现场结果显示两盒开封酱料需要优先使用，所以本周菜单能减少临期浪费。",
+      "supportDocumentIds": ["zh-07-support-a", "zh-07-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-07-a",
+          "cursorOffset": 10,
+          "expectedSuffix": "整理时，值守人员决定核对食材日期。现场结果显示两盒开封酱料需要优先使用，所以本周菜单能减少临期浪费。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-07-b",
+          "cursorOffset": 27,
+          "expectedSuffix": "现场结果显示两盒开封酱料需要优先使用，所以本周菜单能减少临期浪费。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-07-c",
+          "cursorOffset": 43,
+          "expectedSuffix": "使用，所以本周菜单能减少临期浪费。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-07-silence",
+          "cursorOffset": 60,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-08-target",
+      "path": "targets/zh/08.md",
+      "language": "zh",
+      "category": "learning-note",
+      "text": "阅读摘录笔记来自历史资料室。工作人员按原定顺序分开事实与推断；核对后发现页边注释不再混合两种口径，由此复盘论点时更容易查证。",
+      "supportDocumentIds": ["zh-08-support-a", "zh-08-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-08-a",
+          "cursorOffset": 11,
+          "expectedSuffix": "料室。工作人员按原定顺序分开事实与推断；核对后发现页边注释不再混合两种口径，由此复盘论点时更容易查证。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-08-b",
+          "cursorOffset": 28,
+          "expectedSuffix": "推断；核对后发现页边注释不再混合两种口径，由此复盘论点时更容易查证。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-08-c",
+          "cursorOffset": 44,
+          "expectedSuffix": "两种口径，由此复盘论点时更容易查证。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-08-silence",
+          "cursorOffset": 62,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-09-target",
+      "path": "targets/zh/09.md",
+      "language": "zh",
+      "category": "project-log",
+      "text": "今天围绕缓存修复检查了离线演示环境。第一步是重放失败步骤，明确的观察结果为断网重载已返回稳定页面。因此后续回归能锁定真实路径。",
+      "supportDocumentIds": ["zh-09-support-a", "zh-09-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-09-a",
+          "cursorOffset": 11,
+          "expectedSuffix": "离线演示环境。第一步是重放失败步骤，明确的观察结果为断网重载已返回稳定页面。因此后续回归能锁定真实路径。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-09-b",
+          "cursorOffset": 28,
+          "expectedSuffix": "，明确的观察结果为断网重载已返回稳定页面。因此后续回归能锁定真实路径。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-09-c",
+          "cursorOffset": 45,
+          "expectedSuffix": "定页面。因此后续回归能锁定真实路径。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-09-silence",
+          "cursorOffset": 63,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-10-target",
+      "path": "targets/zh/10.md",
+      "language": "zh",
+      "category": "meeting-note",
+      "text": "活动服务台留下了一条志愿排班记录：先确认交接时段，再复查周围条件。最终确认午间空档已有候补人员，并且负责人可以提前发送提醒。",
+      "supportDocumentIds": ["zh-10-support-a", "zh-10-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-10-a",
+          "cursorOffset": 11,
+          "expectedSuffix": "愿排班记录：先确认交接时段，再复查周围条件。最终确认午间空档已有候补人员，并且负责人可以提前发送提醒。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-10-b",
+          "cursorOffset": 28,
+          "expectedSuffix": "周围条件。最终确认午间空档已有候补人员，并且负责人可以提前发送提醒。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-10-c",
+          "cursorOffset": 44,
+          "expectedSuffix": "补人员，并且负责人可以提前发送提醒。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-10-silence",
+          "cursorOffset": 62,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-11-target",
+      "path": "targets/zh/11.md",
+      "language": "zh",
+      "category": "field-observation",
+      "text": "本次温室记录发生在第三排苗床。记录者先读取叶面温度，随后确认靠窗两株数值稍高。这份简短记录意味着遮光调整有可比较依据。",
+      "supportDocumentIds": ["zh-11-support-a", "zh-11-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-11-a",
+          "cursorOffset": 10,
+          "expectedSuffix": "三排苗床。记录者先读取叶面温度，随后确认靠窗两株数值稍高。这份简短记录意味着遮光调整有可比较依据。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-11-b",
+          "cursorOffset": 27,
+          "expectedSuffix": "后确认靠窗两株数值稍高。这份简短记录意味着遮光调整有可比较依据。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-11-c",
+          "cursorOffset": 42,
+          "expectedSuffix": "短记录意味着遮光调整有可比较依据。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-11-silence",
+          "cursorOffset": 59,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-12-target",
+      "path": "targets/zh/12.md",
+      "language": "zh",
+      "category": "home-maintenance",
+      "text": "在阳台储物柜完成工具盘点时，值守人员决定补齐尺寸标签。现场结果显示常用扳手已经按规格归位，所以下次维修无需反复翻找。",
+      "supportDocumentIds": ["zh-12-support-a", "zh-12-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-12-a",
+          "cursorOffset": 10,
+          "expectedSuffix": "盘点时，值守人员决定补齐尺寸标签。现场结果显示常用扳手已经按规格归位，所以下次维修无需反复翻找。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-12-b",
+          "cursorOffset": 26,
+          "expectedSuffix": "。现场结果显示常用扳手已经按规格归位，所以下次维修无需反复翻找。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-12-c",
+          "cursorOffset": 41,
+          "expectedSuffix": "格归位，所以下次维修无需反复翻找。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-12-silence",
+          "cursorOffset": 58,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-13-target",
+      "path": "targets/zh/13.md",
+      "language": "zh",
+      "category": "learning-note",
+      "text": "实验复习笔记来自物理自习桌。工作人员按原定顺序重画受力示意；核对后发现摩擦方向的判断已改正，由此同类题可以沿用检查顺序。",
+      "supportDocumentIds": ["zh-13-support-a", "zh-13-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-13-a",
+          "cursorOffset": 10,
+          "expectedSuffix": "自习桌。工作人员按原定顺序重画受力示意；核对后发现摩擦方向的判断已改正，由此同类题可以沿用检查顺序。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-13-b",
+          "cursorOffset": 27,
+          "expectedSuffix": "示意；核对后发现摩擦方向的判断已改正，由此同类题可以沿用检查顺序。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-13-c",
+          "cursorOffset": 43,
+          "expectedSuffix": "改正，由此同类题可以沿用检查顺序。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-13-silence",
+          "cursorOffset": 60,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-14-target",
+      "path": "targets/zh/14.md",
+      "language": "zh",
+      "category": "project-log",
+      "text": "今天围绕索引升级检查了干净测试目录。第一步是验证重命名事件，明确的观察结果为旧路径已经从结果中消失。因此发布记录具备完整证据。",
+      "supportDocumentIds": ["zh-14-support-a", "zh-14-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-14-a",
+          "cursorOffset": 11,
+          "expectedSuffix": "干净测试目录。第一步是验证重命名事件，明确的观察结果为旧路径已经从结果中消失。因此发布记录具备完整证据。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-14-b",
+          "cursorOffset": 28,
+          "expectedSuffix": "件，明确的观察结果为旧路径已经从结果中消失。因此发布记录具备完整证据。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-14-c",
+          "cursorOffset": 45,
+          "expectedSuffix": "果中消失。因此发布记录具备完整证据。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-14-silence",
+          "cursorOffset": 63,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-15-target",
+      "path": "targets/zh/15.md",
+      "language": "zh",
+      "category": "meeting-note",
+      "text": "编辑讨论区留下了一条采访准备记录：先整理追问顺序，再复查周围条件。最终确认敏感问题被移到背景确认之后，并且现场交流会更加自然。",
+      "supportDocumentIds": ["zh-15-support-a", "zh-15-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-15-a",
+          "cursorOffset": 11,
+          "expectedSuffix": "访准备记录：先整理追问顺序，再复查周围条件。最终确认敏感问题被移到背景确认之后，并且现场交流会更加自然。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-15-b",
+          "cursorOffset": 28,
+          "expectedSuffix": "周围条件。最终确认敏感问题被移到背景确认之后，并且现场交流会更加自然。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-15-c",
+          "cursorOffset": 45,
+          "expectedSuffix": "景确认之后，并且现场交流会更加自然。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-15-silence",
+          "cursorOffset": 63,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-16-target",
+      "path": "targets/zh/16.md",
+      "language": "zh",
+      "category": "field-observation",
+      "text": "本次屋顶监测发生在雨水收集槽。记录者先查看沉积物分布，随后确认出水口附近只有少量细沙。这份简短记录意味着清理周期不必提前调整。",
+      "supportDocumentIds": ["zh-16-support-a", "zh-16-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-16-a",
+          "cursorOffset": 11,
+          "expectedSuffix": "收集槽。记录者先查看沉积物分布，随后确认出水口附近只有少量细沙。这份简短记录意味着清理周期不必提前调整。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-16-b",
+          "cursorOffset": 28,
+          "expectedSuffix": "后确认出水口附近只有少量细沙。这份简短记录意味着清理周期不必提前调整。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-16-c",
+          "cursorOffset": 45,
+          "expectedSuffix": "简短记录意味着清理周期不必提前调整。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-16-silence",
+          "cursorOffset": 63,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-17-target",
+      "path": "targets/zh/17.md",
+      "language": "zh",
+      "category": "home-maintenance",
+      "text": "在走廊壁柜完成衣物收纳时，值守人员决定重新划分层板。现场结果显示季节用品已移到上层，所以日常取用能够保持顺手。",
+      "supportDocumentIds": ["zh-17-support-a", "zh-17-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-17-a",
+          "cursorOffset": 9,
+          "expectedSuffix": "收纳时，值守人员决定重新划分层板。现场结果显示季节用品已移到上层，所以日常取用能够保持顺手。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-17-b",
+          "cursorOffset": 25,
+          "expectedSuffix": "。现场结果显示季节用品已移到上层，所以日常取用能够保持顺手。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-17-c",
+          "cursorOffset": 39,
+          "expectedSuffix": "上层，所以日常取用能够保持顺手。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-17-silence",
+          "cursorOffset": 55,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-18-target",
+      "path": "targets/zh/18.md",
+      "language": "zh",
+      "category": "learning-note",
+      "text": "写作修改笔记来自安静工作角。工作人员按原定顺序删去重复转折；核对后发现段落主旨现在更集中，由此下一稿可以继续压缩例子。",
+      "supportDocumentIds": ["zh-18-support-a", "zh-18-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-18-a",
+          "cursorOffset": 10,
+          "expectedSuffix": "工作角。工作人员按原定顺序删去重复转折；核对后发现段落主旨现在更集中，由此下一稿可以继续压缩例子。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-18-b",
+          "cursorOffset": 27,
+          "expectedSuffix": "转折；核对后发现段落主旨现在更集中，由此下一稿可以继续压缩例子。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-18-c",
+          "cursorOffset": 42,
+          "expectedSuffix": "集中，由此下一稿可以继续压缩例子。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-18-silence",
+          "cursorOffset": 59,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-19-target",
+      "path": "targets/zh/19.md",
+      "language": "zh",
+      "category": "project-log",
+      "text": "今天围绕导出验证检查了浏览器测试页。第一步是读取生成文件，明确的观察结果为表格标题与源笔记保持一致。因此验收不再只检查下载动作。",
+      "supportDocumentIds": ["zh-19-support-a", "zh-19-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-19-a",
+          "cursorOffset": 11,
+          "expectedSuffix": "浏览器测试页。第一步是读取生成文件，明确的观察结果为表格标题与源笔记保持一致。因此验收不再只检查下载动作。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-19-b",
+          "cursorOffset": 29,
+          "expectedSuffix": "明确的观察结果为表格标题与源笔记保持一致。因此验收不再只检查下载动作。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-19-c",
+          "cursorOffset": 46,
+          "expectedSuffix": "持一致。因此验收不再只检查下载动作。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-19-silence",
+          "cursorOffset": 64,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-20-target",
+      "path": "targets/zh/20.md",
+      "language": "zh",
+      "category": "meeting-note",
+      "text": "财务协作页留下了一条预算复核记录：先标记异常条目，再复查周围条件。最终确认交通费用已有原始凭证，并且批准决定能回到具体依据。",
+      "supportDocumentIds": ["zh-20-support-a", "zh-20-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-20-a",
+          "cursorOffset": 11,
+          "expectedSuffix": "算复核记录：先标记异常条目，再复查周围条件。最终确认交通费用已有原始凭证，并且批准决定能回到具体依据。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-20-b",
+          "cursorOffset": 28,
+          "expectedSuffix": "周围条件。最终确认交通费用已有原始凭证，并且批准决定能回到具体依据。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-20-c",
+          "cursorOffset": 44,
+          "expectedSuffix": "始凭证，并且批准决定能回到具体依据。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-20-silence",
+          "cursorOffset": 62,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-21-target",
+      "path": "targets/zh/21.md",
+      "language": "zh",
+      "category": "field-observation",
+      "text": "本次夜间观测发生在校园南门。记录者先统计照明故障，随后确认只有第二根灯柱偶尔闪烁。这份简短记录意味着维修单可以描述准确位置。",
+      "supportDocumentIds": ["zh-21-support-a", "zh-21-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-21-a",
+          "cursorOffset": 11,
+          "expectedSuffix": "南门。记录者先统计照明故障，随后确认只有第二根灯柱偶尔闪烁。这份简短记录意味着维修单可以描述准确位置。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-21-b",
+          "cursorOffset": 28,
+          "expectedSuffix": "认只有第二根灯柱偶尔闪烁。这份简短记录意味着维修单可以描述准确位置。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-21-c",
+          "cursorOffset": 44,
+          "expectedSuffix": "短记录意味着维修单可以描述准确位置。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-21-silence",
+          "cursorOffset": 62,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-22-target",
+      "path": "targets/zh/22.md",
+      "language": "zh",
+      "category": "home-maintenance",
+      "text": "在厨房水槽旁完成茶具清洁时，值守人员决定检查杯口细纹。现场结果显示常用白瓷杯没有扩大裂痕，所以继续使用时仍需定期复看。",
+      "supportDocumentIds": ["zh-22-support-a", "zh-22-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-22-a",
+          "cursorOffset": 10,
+          "expectedSuffix": "清洁时，值守人员决定检查杯口细纹。现场结果显示常用白瓷杯没有扩大裂痕，所以继续使用时仍需定期复看。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-22-b",
+          "cursorOffset": 27,
+          "expectedSuffix": "现场结果显示常用白瓷杯没有扩大裂痕，所以继续使用时仍需定期复看。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-22-c",
+          "cursorOffset": 42,
+          "expectedSuffix": "裂痕，所以继续使用时仍需定期复看。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-22-silence",
+          "cursorOffset": 59,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-23-target",
+      "path": "targets/zh/23.md",
+      "language": "zh",
+      "category": "learning-note",
+      "text": "词汇整理笔记来自移动学习卡。工作人员按原定顺序合并近义表达；核对后发现三个生僻词已补充语境例句，由此下轮复习可以减少死记。",
+      "supportDocumentIds": ["zh-23-support-a", "zh-23-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-23-a",
+          "cursorOffset": 10,
+          "expectedSuffix": "学习卡。工作人员按原定顺序合并近义表达；核对后发现三个生僻词已补充语境例句，由此下轮复习可以减少死记。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-23-b",
+          "cursorOffset": 28,
+          "expectedSuffix": "达；核对后发现三个生僻词已补充语境例句，由此下轮复习可以减少死记。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-23-c",
+          "cursorOffset": 43,
+          "expectedSuffix": "语境例句，由此下轮复习可以减少死记。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-23-silence",
+          "cursorOffset": 61,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-24-target",
+      "path": "targets/zh/24.md",
+      "language": "zh",
+      "category": "project-log",
+      "text": "今天围绕权限检查检查了桌面打包目录。第一步是确认资源可读，明确的观察结果为离线模型已随安装包出现。因此真实烟测能够继续执行。",
+      "supportDocumentIds": ["zh-24-support-a", "zh-24-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-24-a",
+          "cursorOffset": 11,
+          "expectedSuffix": "桌面打包目录。第一步是确认资源可读，明确的观察结果为离线模型已随安装包出现。因此真实烟测能够继续执行。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-24-b",
+          "cursorOffset": 28,
+          "expectedSuffix": "，明确的观察结果为离线模型已随安装包出现。因此真实烟测能够继续执行。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-24-c",
+          "cursorOffset": 44,
+          "expectedSuffix": "装包出现。因此真实烟测能够继续执行。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-24-silence",
+          "cursorOffset": 62,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "zh-25-target",
+      "path": "targets/zh/25.md",
+      "language": "zh",
+      "category": "meeting-note",
+      "text": "线上白板留下了一条课程回顾记录：先收集疑问主题，再复查周围条件。最终确认最多反馈集中在练习节奏，并且下次讲解可以预留讨论时间。",
+      "supportDocumentIds": ["zh-25-support-a", "zh-25-support-b"],
+      "checkpoints": [
+        {
+          "id": "zh-25-a",
+          "cursorOffset": 11,
+          "expectedSuffix": "回顾记录：先收集疑问主题，再复查周围条件。最终确认最多反馈集中在练习节奏，并且下次讲解可以预留讨论时间。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-25-b",
+          "cursorOffset": 28,
+          "expectedSuffix": "围条件。最终确认最多反馈集中在练习节奏，并且下次讲解可以预留讨论时间。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-25-c",
+          "cursorOffset": 45,
+          "expectedSuffix": "节奏，并且下次讲解可以预留讨论时间。",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "zh-25-silence",
+          "cursorOffset": 63,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-01-target",
+      "path": "targets/en/01.md",
+      "language": "en",
+      "category": "field-observation",
+      "text": "This harbor inspection took place at the eastern pier. The observer chose to compare the rope markers and then confirmed that the lower knot remained above the spray line. This means the evening crew can verify the same reference.",
+      "supportDocumentIds": ["en-01-support-a", "en-01-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-01-a",
+          "cursorOffset": 49,
+          "expectedSuffix": "pier. The observer chose to compare the rope markers and then confirmed that the lower knot remained above the spray line. This means the evening crew can verify the same reference.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-01-b",
+          "cursorOffset": 106,
+          "expectedSuffix": "then confirmed that the lower knot remained above the spray line. This means the evening crew can verify the same reference.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-01-c",
+          "cursorOffset": 166,
+          "expectedSuffix": "line. This means the evening crew can verify the same reference.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-01-silence",
+          "cursorOffset": 230,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-02-target",
+      "path": "targets/en/02.md",
+      "language": "en",
+      "category": "home-maintenance",
+      "text": "While completing the shelf repair at the study alcove, the reviewer decided to check every wall anchor. The recorded result was that the upper bracket no longer shifts under light pressure, so the next load test has a reliable baseline.",
+      "supportDocumentIds": ["en-02-support-a", "en-02-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-02-a",
+          "cursorOffset": 47,
+          "expectedSuffix": "alcove, the reviewer decided to check every wall anchor. The recorded result was that the upper bracket no longer shifts under light pressure, so the next load test has a reliable baseline.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-02-b",
+          "cursorOffset": 117,
+          "expectedSuffix": "result was that the upper bracket no longer shifts under light pressure, so the next load test has a reliable baseline.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-02-c",
+          "cursorOffset": 174,
+          "expectedSuffix": "light pressure, so the next load test has a reliable baseline.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-02-silence",
+          "cursorOffset": 236,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-03-target",
+      "path": "targets/en/03.md",
+      "language": "en",
+      "category": "learning-note",
+      "text": "The pronunciation review note comes from the quiet practice booth. Staff followed the planned order to mark each stressed syllable; the check showed that the second recording sounded less rushed, and the weekend session can target only the weak phrases.",
+      "supportDocumentIds": ["en-03-support-a", "en-03-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-03-a",
+          "cursorOffset": 51,
+          "expectedSuffix": "practice booth. Staff followed the planned order to mark each stressed syllable; the check showed that the second recording sounded less rushed, and the weekend session can target only the weak phrases.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-03-b",
+          "cursorOffset": 122,
+          "expectedSuffix": "syllable; the check showed that the second recording sounded less rushed, and the weekend session can target only the weak phrases.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-03-c",
+          "cursorOffset": 183,
+          "expectedSuffix": "less rushed, and the weekend session can target only the weak phrases.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-03-silence",
+          "cursorOffset": 253,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-04-target",
+      "path": "targets/en/04.md",
+      "language": "en",
+      "category": "project-log",
+      "text": "Today's schema migration covered the isolated test folder. The first action was to compare the renamed fields, and the clearest observation was that all three compatibility samples retained their values. Therefore, the review can trace each conversion rule.",
+      "supportDocumentIds": ["en-04-support-a", "en-04-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-04-a",
+          "cursorOffset": 51,
+          "expectedSuffix": "folder. The first action was to compare the renamed fields, and the clearest observation was that all three compatibility samples retained their values. Therefore, the review can trace each conversion rule.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-04-b",
+          "cursorOffset": 119,
+          "expectedSuffix": "clearest observation was that all three compatibility samples retained their values. Therefore, the review can trace each conversion rule.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-04-c",
+          "cursorOffset": 190,
+          "expectedSuffix": "their values. Therefore, the review can trace each conversion rule.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-04-silence",
+          "cursorOffset": 257,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-05-target",
+      "path": "targets/en/05.md",
+      "language": "en",
+      "category": "meeting-note",
+      "text": "A short venue handoff record was made at the west conference room: the team had to confirm the equipment labels before reviewing nearby conditions. They confirmed that the spare adapter now has a visible owner tag, while the setup crew will avoid duplicate requests.",
+      "supportDocumentIds": ["en-05-support-a", "en-05-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-05-a",
+          "cursorOffset": 50,
+          "expectedSuffix": "conference room: the team had to confirm the equipment labels before reviewing nearby conditions. They confirmed that the spare adapter now has a visible owner tag, while the setup crew will avoid duplicate requests.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-05-b",
+          "cursorOffset": 129,
+          "expectedSuffix": "nearby conditions. They confirmed that the spare adapter now has a visible owner tag, while the setup crew will avoid duplicate requests.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-05-c",
+          "cursorOffset": 194,
+          "expectedSuffix": "a visible owner tag, while the setup crew will avoid duplicate requests.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-05-silence",
+          "cursorOffset": 266,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-06-target",
+      "path": "targets/en/06.md",
+      "language": "en",
+      "category": "field-observation",
+      "text": "This garden survey took place at the shaded north bed. The observer chose to measure the mulch depth and then confirmed that the center strip stayed drier than both edges. This means the next visit can reuse identical sampling points.",
+      "supportDocumentIds": ["en-06-support-a", "en-06-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-06-a",
+          "cursorOffset": 44,
+          "expectedSuffix": "north bed. The observer chose to measure the mulch depth and then confirmed that the center strip stayed drier than both edges. This means the next visit can reuse identical sampling points.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-06-b",
+          "cursorOffset": 110,
+          "expectedSuffix": "confirmed that the center strip stayed drier than both edges. This means the next visit can reuse identical sampling points.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-06-c",
+          "cursorOffset": 172,
+          "expectedSuffix": "This means the next visit can reuse identical sampling points.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-06-silence",
+          "cursorOffset": 234,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-07-target",
+      "path": "targets/en/07.md",
+      "language": "en",
+      "category": "home-maintenance",
+      "text": "While completing the pantry rotation at the lower storage drawer, the reviewer decided to review every open date. The recorded result was that two grain packets should be used before Friday, so the weekly menu can reduce avoidable waste.",
+      "supportDocumentIds": ["en-07-support-a", "en-07-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-07-a",
+          "cursorOffset": 44,
+          "expectedSuffix": "lower storage drawer, the reviewer decided to review every open date. The recorded result was that two grain packets should be used before Friday, so the weekly menu can reduce avoidable waste.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-07-b",
+          "cursorOffset": 114,
+          "expectedSuffix": "The recorded result was that two grain packets should be used before Friday, so the weekly menu can reduce avoidable waste.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-07-c",
+          "cursorOffset": 171,
+          "expectedSuffix": "used before Friday, so the weekly menu can reduce avoidable waste.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-07-silence",
+          "cursorOffset": 237,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-08-target",
+      "path": "targets/en/08.md",
+      "language": "en",
+      "category": "learning-note",
+      "text": "The source reading note comes from the local archive desk. Staff followed the planned order to separate claims from evidence; the check showed that the margin notes now identify uncertain inferences, and the final summary will be easier to verify.",
+      "supportDocumentIds": ["en-08-support-a", "en-08-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-08-a",
+          "cursorOffset": 45,
+          "expectedSuffix": "archive desk. Staff followed the planned order to separate claims from evidence; the check showed that the margin notes now identify uncertain inferences, and the final summary will be easier to verify.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-08-b",
+          "cursorOffset": 116,
+          "expectedSuffix": "evidence; the check showed that the margin notes now identify uncertain inferences, and the final summary will be easier to verify.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-08-c",
+          "cursorOffset": 178,
+          "expectedSuffix": "uncertain inferences, and the final summary will be easier to verify.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-08-silence",
+          "cursorOffset": 247,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-09-target",
+      "path": "targets/en/09.md",
+      "language": "en",
+      "category": "project-log",
+      "text": "Today's offline recovery covered the browser test profile. The first action was to replay the failed reload, and the clearest observation was that the cached page returned without a network request. Therefore, future regressions can target the actual path.",
+      "supportDocumentIds": ["en-09-support-a", "en-09-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-09-a",
+          "cursorOffset": 50,
+          "expectedSuffix": "profile. The first action was to replay the failed reload, and the clearest observation was that the cached page returned without a network request. Therefore, future regressions can target the actual path.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-09-b",
+          "cursorOffset": 126,
+          "expectedSuffix": "observation was that the cached page returned without a network request. Therefore, future regressions can target the actual path.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-09-c",
+          "cursorOffset": 190,
+          "expectedSuffix": "request. Therefore, future regressions can target the actual path.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-09-silence",
+          "cursorOffset": 256,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-10-target",
+      "path": "targets/en/10.md",
+      "language": "en",
+      "category": "meeting-note",
+      "text": "A short volunteer roster record was made at the event welcome table: the team had to confirm each handoff window before reviewing nearby conditions. They confirmed that the lunch gap now has a named backup, while the coordinator can send reminders in advance.",
+      "supportDocumentIds": ["en-10-support-a", "en-10-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-10-a",
+          "cursorOffset": 48,
+          "expectedSuffix": "event welcome table: the team had to confirm each handoff window before reviewing nearby conditions. They confirmed that the lunch gap now has a named backup, while the coordinator can send reminders in advance.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-10-b",
+          "cursorOffset": 120,
+          "expectedSuffix": "reviewing nearby conditions. They confirmed that the lunch gap now has a named backup, while the coordinator can send reminders in advance.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-10-c",
+          "cursorOffset": 187,
+          "expectedSuffix": "has a named backup, while the coordinator can send reminders in advance.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-10-silence",
+          "cursorOffset": 259,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-11-target",
+      "path": "targets/en/11.md",
+      "language": "en",
+      "category": "field-observation",
+      "text": "This greenhouse reading took place at the third seedling row. The observer chose to record the leaf temperature and then confirmed that the two window plants remained slightly warmer. This means the shade adjustment has measurable evidence.",
+      "supportDocumentIds": ["en-11-support-a", "en-11-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-11-a",
+          "cursorOffset": 48,
+          "expectedSuffix": "seedling row. The observer chose to record the leaf temperature and then confirmed that the two window plants remained slightly warmer. This means the shade adjustment has measurable evidence.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-11-b",
+          "cursorOffset": 112,
+          "expectedSuffix": "and then confirmed that the two window plants remained slightly warmer. This means the shade adjustment has measurable evidence.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-11-c",
+          "cursorOffset": 176,
+          "expectedSuffix": "warmer. This means the shade adjustment has measurable evidence.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-11-silence",
+          "cursorOffset": 240,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-12-target",
+      "path": "targets/en/12.md",
+      "language": "en",
+      "category": "home-maintenance",
+      "text": "While completing the tool inventory at the balcony cabinet, the reviewer decided to replace missing size labels. The recorded result was that the common wrenches are sorted by measurement, so the next repair will require less searching.",
+      "supportDocumentIds": ["en-12-support-a", "en-12-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-12-a",
+          "cursorOffset": 43,
+          "expectedSuffix": "balcony cabinet, the reviewer decided to replace missing size labels. The recorded result was that the common wrenches are sorted by measurement, so the next repair will require less searching.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-12-b",
+          "cursorOffset": 113,
+          "expectedSuffix": "The recorded result was that the common wrenches are sorted by measurement, so the next repair will require less searching.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-12-c",
+          "cursorOffset": 173,
+          "expectedSuffix": "by measurement, so the next repair will require less searching.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-12-silence",
+          "cursorOffset": 236,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-13-target",
+      "path": "targets/en/13.md",
+      "language": "en",
+      "category": "learning-note",
+      "text": "The physics revision note comes from the library worktable. Staff followed the planned order to redraw the force diagram; the check showed that the friction arrow now follows the correct direction, and similar exercises can reuse the checking order.",
+      "supportDocumentIds": ["en-13-support-a", "en-13-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-13-a",
+          "cursorOffset": 49,
+          "expectedSuffix": "worktable. Staff followed the planned order to redraw the force diagram; the check showed that the friction arrow now follows the correct direction, and similar exercises can reuse the checking order.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-13-b",
+          "cursorOffset": 122,
+          "expectedSuffix": "the check showed that the friction arrow now follows the correct direction, and similar exercises can reuse the checking order.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-13-c",
+          "cursorOffset": 187,
+          "expectedSuffix": "direction, and similar exercises can reuse the checking order.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-13-silence",
+          "cursorOffset": 249,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-14-target",
+      "path": "targets/en/14.md",
+      "language": "en",
+      "category": "project-log",
+      "text": "Today's search upgrade covered the clean workspace fixture. The first action was to verify the rename event, and the clearest observation was that the stale path disappeared from every result. Therefore, the release note can cite complete evidence.",
+      "supportDocumentIds": ["en-14-support-a", "en-14-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-14-a",
+          "cursorOffset": 51,
+          "expectedSuffix": "fixture. The first action was to verify the rename event, and the clearest observation was that the stale path disappeared from every result. Therefore, the release note can cite complete evidence.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-14-b",
+          "cursorOffset": 117,
+          "expectedSuffix": "clearest observation was that the stale path disappeared from every result. Therefore, the release note can cite complete evidence.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-14-c",
+          "cursorOffset": 179,
+          "expectedSuffix": "every result. Therefore, the release note can cite complete evidence.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-14-silence",
+          "cursorOffset": 248,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-15-target",
+      "path": "targets/en/15.md",
+      "language": "en",
+      "category": "meeting-note",
+      "text": "A short interview outline record was made at the editorial planning board: the team had to reorder the follow-up questions before reviewing nearby conditions. They confirmed that the sensitive topic now follows the background check, while the conversation should keep a natural rhythm.",
+      "supportDocumentIds": ["en-15-support-a", "en-15-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-15-a",
+          "cursorOffset": 59,
+          "expectedSuffix": "planning board: the team had to reorder the follow-up questions before reviewing nearby conditions. They confirmed that the sensitive topic now follows the background check, while the conversation should keep a natural rhythm.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-15-b",
+          "cursorOffset": 140,
+          "expectedSuffix": "nearby conditions. They confirmed that the sensitive topic now follows the background check, while the conversation should keep a natural rhythm.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-15-c",
+          "cursorOffset": 211,
+          "expectedSuffix": "the background check, while the conversation should keep a natural rhythm.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-15-silence",
+          "cursorOffset": 285,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-16-target",
+      "path": "targets/en/16.md",
+      "language": "en",
+      "category": "field-observation",
+      "text": "This roof survey took place at the rain collection channel. The observer chose to inspect the sediment pattern and then confirmed that only fine sand remained near the outlet. This means the cleaning interval does not need an early change.",
+      "supportDocumentIds": ["en-16-support-a", "en-16-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-16-a",
+          "cursorOffset": 51,
+          "expectedSuffix": "channel. The observer chose to inspect the sediment pattern and then confirmed that only fine sand remained near the outlet. This means the cleaning interval does not need an early change.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-16-b",
+          "cursorOffset": 111,
+          "expectedSuffix": "and then confirmed that only fine sand remained near the outlet. This means the cleaning interval does not need an early change.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-16-c",
+          "cursorOffset": 176,
+          "expectedSuffix": "This means the cleaning interval does not need an early change.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-16-silence",
+          "cursorOffset": 239,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-17-target",
+      "path": "targets/en/17.md",
+      "language": "en",
+      "category": "home-maintenance",
+      "text": "While completing the closet reset at the hallway wardrobe, the reviewer decided to reassign the shelf zones. The recorded result was that seasonal equipment has moved above eye level, so daily items will remain easy to reach.",
+      "supportDocumentIds": ["en-17-support-a", "en-17-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-17-a",
+          "cursorOffset": 41,
+          "expectedSuffix": "hallway wardrobe, the reviewer decided to reassign the shelf zones. The recorded result was that seasonal equipment has moved above eye level, so daily items will remain easy to reach.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-17-b",
+          "cursorOffset": 109,
+          "expectedSuffix": "The recorded result was that seasonal equipment has moved above eye level, so daily items will remain easy to reach.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-17-c",
+          "cursorOffset": 167,
+          "expectedSuffix": "above eye level, so daily items will remain easy to reach.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-17-silence",
+          "cursorOffset": 225,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-18-target",
+      "path": "targets/en/18.md",
+      "language": "en",
+      "category": "learning-note",
+      "text": "The draft revision note comes from the corner writing desk. Staff followed the planned order to remove repeated transitions; the check showed that the central argument is now easier to follow, and the next draft can shorten its examples.",
+      "supportDocumentIds": ["en-18-support-a", "en-18-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-18-a",
+          "cursorOffset": 46,
+          "expectedSuffix": "writing desk. Staff followed the planned order to remove repeated transitions; the check showed that the central argument is now easier to follow, and the next draft can shorten its examples.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-18-b",
+          "cursorOffset": 112,
+          "expectedSuffix": "transitions; the check showed that the central argument is now easier to follow, and the next draft can shorten its examples.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-18-c",
+          "cursorOffset": 171,
+          "expectedSuffix": "now easier to follow, and the next draft can shorten its examples.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-18-silence",
+          "cursorOffset": 237,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-19-target",
+      "path": "targets/en/19.md",
+      "language": "en",
+      "category": "project-log",
+      "text": "Today's export verification covered the production preview page. The first action was to read the generated workbook, and the clearest observation was that the table heading matches the source note. Therefore, acceptance no longer stops at the download event.",
+      "supportDocumentIds": ["en-19-support-a", "en-19-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-19-a",
+          "cursorOffset": 51,
+          "expectedSuffix": "preview page. The first action was to read the generated workbook, and the clearest observation was that the table heading matches the source note. Therefore, acceptance no longer stops at the download event.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-19-b",
+          "cursorOffset": 122,
+          "expectedSuffix": "the clearest observation was that the table heading matches the source note. Therefore, acceptance no longer stops at the download event.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-19-c",
+          "cursorOffset": 193,
+          "expectedSuffix": "note. Therefore, acceptance no longer stops at the download event.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-19-silence",
+          "cursorOffset": 259,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-20-target",
+      "path": "targets/en/20.md",
+      "language": "en",
+      "category": "meeting-note",
+      "text": "A short expense review record was made at the shared finance sheet: the team had to flag each unusual entry before reviewing nearby conditions. They confirmed that the transit charge now includes its original receipt, while the approval can return to concrete evidence.",
+      "supportDocumentIds": ["en-20-support-a", "en-20-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-20-a",
+          "cursorOffset": 53,
+          "expectedSuffix": "finance sheet: the team had to flag each unusual entry before reviewing nearby conditions. They confirmed that the transit charge now includes its original receipt, while the approval can return to concrete evidence.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-20-b",
+          "cursorOffset": 125,
+          "expectedSuffix": "nearby conditions. They confirmed that the transit charge now includes its original receipt, while the approval can return to concrete evidence.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-20-c",
+          "cursorOffset": 196,
+          "expectedSuffix": "its original receipt, while the approval can return to concrete evidence.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-20-silence",
+          "cursorOffset": 269,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-21-target",
+      "path": "targets/en/21.md",
+      "language": "en",
+      "category": "field-observation",
+      "text": "This night lighting check took place at the southern campus gate. The observer chose to count unstable lamps and then confirmed that only the second pole flickered during the interval. This means the repair ticket can name the exact location.",
+      "supportDocumentIds": ["en-21-support-a", "en-21-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-21-a",
+          "cursorOffset": 44,
+          "expectedSuffix": "southern campus gate. The observer chose to count unstable lamps and then confirmed that only the second pole flickered during the interval. This means the repair ticket can name the exact location.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-21-b",
+          "cursorOffset": 113,
+          "expectedSuffix": "then confirmed that only the second pole flickered during the interval. This means the repair ticket can name the exact location.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-21-c",
+          "cursorOffset": 175,
+          "expectedSuffix": "interval. This means the repair ticket can name the exact location.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-21-silence",
+          "cursorOffset": 242,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-22-target",
+      "path": "targets/en/22.md",
+      "language": "en",
+      "category": "home-maintenance",
+      "text": "While completing the cup inspection at the kitchen drying rack, the reviewer decided to review the rim marks. The recorded result was that the everyday ceramic cup shows no wider crack, so continued use still requires a monthly check.",
+      "supportDocumentIds": ["en-22-support-a", "en-22-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-22-a",
+          "cursorOffset": 43,
+          "expectedSuffix": "kitchen drying rack, the reviewer decided to review the rim marks. The recorded result was that the everyday ceramic cup shows no wider crack, so continued use still requires a monthly check.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-22-b",
+          "cursorOffset": 110,
+          "expectedSuffix": "The recorded result was that the everyday ceramic cup shows no wider crack, so continued use still requires a monthly check.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-22-c",
+          "cursorOffset": 170,
+          "expectedSuffix": "no wider crack, so continued use still requires a monthly check.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-22-silence",
+          "cursorOffset": 234,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-23-target",
+      "path": "targets/en/23.md",
+      "language": "en",
+      "category": "learning-note",
+      "text": "The vocabulary cleanup note comes from the mobile study deck. Staff followed the planned order to merge overlapping expressions; the check showed that three rare terms now include contextual examples, and the next review can rely less on memorization.",
+      "supportDocumentIds": ["en-23-support-a", "en-23-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-23-a",
+          "cursorOffset": 50,
+          "expectedSuffix": "study deck. Staff followed the planned order to merge overlapping expressions; the check showed that three rare terms now include contextual examples, and the next review can rely less on memorization.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-23-b",
+          "cursorOffset": 116,
+          "expectedSuffix": "expressions; the check showed that three rare terms now include contextual examples, and the next review can rely less on memorization.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-23-c",
+          "cursorOffset": 191,
+          "expectedSuffix": "examples, and the next review can rely less on memorization.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-23-silence",
+          "cursorOffset": 251,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-24-target",
+      "path": "targets/en/24.md",
+      "language": "en",
+      "category": "project-log",
+      "text": "Today's bundle audit covered the desktop release folder. The first action was to confirm each packaged resource, and the clearest observation was that the offline model appears beside the application assets. Therefore, the real smoke test can proceed without substitution.",
+      "supportDocumentIds": ["en-24-support-a", "en-24-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-24-a",
+          "cursorOffset": 49,
+          "expectedSuffix": "folder. The first action was to confirm each packaged resource, and the clearest observation was that the offline model appears beside the application assets. Therefore, the real smoke test can proceed without substitution.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-24-b",
+          "cursorOffset": 130,
+          "expectedSuffix": "observation was that the offline model appears beside the application assets. Therefore, the real smoke test can proceed without substitution.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-24-c",
+          "cursorOffset": 200,
+          "expectedSuffix": "assets. Therefore, the real smoke test can proceed without substitution.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-24-silence",
+          "cursorOffset": 272,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    },
+    {
+      "id": "en-25-target",
+      "path": "targets/en/25.md",
+      "language": "en",
+      "category": "meeting-note",
+      "text": "A short course retrospective record was made at the remote whiteboard: the team had to group the unresolved questions before reviewing nearby conditions. They confirmed that most comments concern the exercise pace, while the next lesson can reserve a focused discussion block.",
+      "supportDocumentIds": ["en-25-support-a", "en-25-support-b"],
+      "checkpoints": [
+        {
+          "id": "en-25-a",
+          "cursorOffset": 52,
+          "expectedSuffix": "remote whiteboard: the team had to group the unresolved questions before reviewing nearby conditions. They confirmed that most comments concern the exercise pace, while the next lesson can reserve a focused discussion block.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-25-b",
+          "cursorOffset": 135,
+          "expectedSuffix": "nearby conditions. They confirmed that most comments concern the exercise pace, while the next lesson can reserve a focused discussion block.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-25-c",
+          "cursorOffset": 200,
+          "expectedSuffix": "exercise pace, while the next lesson can reserve a focused discussion block.",
+          "expectedBehavior": "complete"
+        },
+        {
+          "id": "en-25-silence",
+          "cursorOffset": 276,
+          "expectedSuffix": "",
+          "expectedBehavior": "silence"
+        }
+      ]
+    }
+  ]
+}

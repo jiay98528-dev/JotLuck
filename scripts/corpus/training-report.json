@@ -1,400 +1,107 @@
 {
-  "generatedAt": "2026-07-06T08:18:49.224Z",
+  "generatedAt": "2026-07-10T00:00:00.000Z",
   "profile": "release",
+  "verifiedOnly": true,
   "outputFile": "../../packages/app/public/baseline-ngram.v1.compact.txt",
-  "totalEntries": 6668,
-  "totalRawEntries": 32645,
-  "totalWeightedEntries": 58510,
-  "estimatedSize": "300KB",
-  "modelBytes": 307030,
-  "modelSizeLimit": null,
-  "modelSoftTarget": null,
-  "languageDistribution": {
-    "zh": 1208,
-    "en": 114,
-    "mixed": 108,
-    "unknown": 184
-  },
-  "skippedMixedFragments": 0,
-  "categoryEffectiveWeights": {
-    "zh-natural-notes": {
-      "weightedEntries": 4642,
-      "ratio": "7.9%"
-    },
-    "zh-tech-notes": {
-      "weightedEntries": 11598,
-      "ratio": "19.8%"
-    },
+  "manifestFile": "../../packages/app/public/baseline-ngram.v1.compact.manifest.json",
+  "sourceCount": 5,
+  "documentCount": 36,
+  "rawFragmentCount": 2189,
+  "canonicalFragmentCount": 2139,
+  "exactDuplicatesMerged": 47,
+  "nearDuplicatesRemoved": 3,
+  "rawExactDuplicateRate": 0.02147099132023755,
+  "rawNearDuplicateRate": 0.0013704888076747373,
+  "residualExactDuplicateRate": 0,
+  "residualNearDuplicateRate": 0,
+  "cleanPoolBytes": 107797,
+  "trainingHoldoutOverlap": 0,
+  "modelBytes": 116068,
+  "totalEntries": 3013,
+  "totalPredictions": 3637,
+  "categoryDistribution": {
     "en-tech-docs": {
-      "weightedEntries": 3279,
-      "ratio": "5.6%"
+      "weightedBytes": 29894000,
+      "ratio": "27.8%"
     },
     "markdown-structure": {
-      "weightedEntries": 2892,
-      "ratio": "4.9%"
+      "weightedBytes": 4889000,
+      "ratio": "4.5%"
+    },
+    "zh-natural-notes": {
+      "weightedBytes": 17374000,
+      "ratio": "16.1%"
     },
     "zh-note-patterns": {
-      "weightedEntries": 29676,
-      "ratio": "50.7%"
+      "weightedBytes": 34083000,
+      "ratio": "31.7%"
     },
-    "project-docs": {
-      "weightedEntries": 4238,
-      "ratio": "7.2%"
-    },
-    "project-specs": {
-      "weightedEntries": 1068,
-      "ratio": "1.8%"
+    "zh-tech-notes": {
+      "weightedBytes": 21439000,
+      "ratio": "19.9%"
     }
   },
-  "webBoilerplateHits": 0,
+  "webDomainDistribution": {},
   "governance": {
-    "categoryDominanceLimit": "45%",
-    "maxCategory": "zh-note-patterns",
-    "maxCategoryRatio": "50.7%",
-    "mixedFragmentsAllowed": 0,
+    "safetyGatePassed": false,
     "hardLimitPassed": true,
-    "softTargetPassed": true
+    "softTargetPassed": true,
+    "qualityGatePassed": false,
+    "releaseEligible": false,
+    "degradedAllowed": false,
+    "errors": [
+      "Legacy v3 model exceeds the raw exact-duplicate gate and has no bound holdout evidence; rebuild with the v4 pipeline."
+    ],
+    "warnings": []
   },
-  "sources": {
-    "creative-zh": {
-      "files": 3,
-      "fragments": 75,
-      "entries": 3639,
-      "weightedEntries": 4641.599999999683,
-      "rawSize": 11392,
-      "coverage": "11.1%",
-      "effectiveCoverage": "7.9%",
-      "languageDistribution": {
-        "zh": 68,
-        "en": 0,
-        "mixed": 6,
-        "unknown": 1
-      }
-    },
-    "tech-writing-zh": {
-      "files": 6,
-      "fragments": 212,
-      "entries": 4095,
-      "weightedEntries": 11597.5,
-      "rawSize": 16796,
-      "coverage": "12.5%",
-      "effectiveCoverage": "19.8%",
-      "languageDistribution": {
-        "zh": 172,
-        "en": 1,
-        "mixed": 14,
-        "unknown": 25
-      }
-    },
-    "code-doc-en": {
-      "files": 3,
-      "fragments": 126,
-      "entries": 2803,
-      "weightedEntries": 3278.5,
-      "rawSize": 7400,
-      "coverage": "8.6%",
-      "effectiveCoverage": "5.6%",
-      "languageDistribution": {
-        "zh": 0,
-        "en": 108,
-        "mixed": 0,
-        "unknown": 18
-      }
-    },
-    "markdown-structures": {
-      "files": 2,
-      "fragments": 84,
-      "entries": 1311,
-      "weightedEntries": 2892,
-      "rawSize": 6052,
-      "coverage": "4.0%",
-      "effectiveCoverage": "4.9%",
-      "languageDistribution": {
-        "zh": 70,
-        "en": 0,
-        "mixed": 2,
-        "unknown": 12
-      }
-    },
-    "note-patterns-zh": {
-      "files": 8,
-      "fragments": 356,
-      "entries": 6243,
-      "weightedEntries": 29676,
-      "rawSize": 24323,
-      "coverage": "19.1%",
-      "effectiveCoverage": "50.7%",
-      "languageDistribution": {
-        "zh": 335,
-        "en": 0,
-        "mixed": 6,
-        "unknown": 15
-      }
-    },
-    "../../doc": {
-      "files": 11,
-      "fragments": 610,
-      "entries": 13111,
-      "weightedEntries": 4238.399999998943,
-      "rawSize": 107269,
-      "coverage": "40.2%",
-      "effectiveCoverage": "7.2%",
-      "languageDistribution": {
-        "zh": 464,
-        "en": 3,
-        "mixed": 67,
-        "unknown": 76
-      }
-    },
-    "../../spec": {
-      "files": 9,
-      "fragments": 151,
-      "entries": 4003,
-      "weightedEntries": 1067.6000000000863,
-      "rawSize": 31313,
-      "coverage": "12.3%",
-      "effectiveCoverage": "1.8%",
-      "languageDistribution": {
-        "zh": 99,
-        "en": 2,
-        "mixed": 13,
-        "unknown": 37
-      }
-    },
-    "hardcoded-p0": {
-      "files": 0,
-      "fragments": 0,
-      "entries": 38,
-      "weightedEntries": 38,
-      "rawSize": 0,
-      "coverage": "0.1%",
-      "effectiveCoverage": "0.1%",
-      "languageDistribution": {
-        "zh": 0,
-        "en": 0,
-        "mixed": 0,
-        "unknown": 0
-      }
-    }
-  },
-  "topContexts": [
+  "inputManifestHash": "118110517758d39f6d643f8d1b2347a151107e12f38f65e7fe73c12387e23317",
+  "modelSha256": "6495ab353f95594abf021ec0a6e19c9c60605e2f7ecd4d2cabd3f2cebc8bf7b1",
+  "sourceInputs": [
     {
-      "ctx": "4d61726b",
-      "ctxText": "Mark",
-      "preds": "d/L",
-      "predsText": "d/L",
-      "from": "various"
+      "id": "curated-code-doc-en",
+      "path": "code-doc-en/",
+      "kind": "curated",
+      "category": "en-tech-docs",
+      "licenseId": "MIT",
+      "contentSha256": "e757cdc61de1837b78e00577434a196ec52e1af470c79e5ab4dd9766a15eff7a",
+      "files": 7
     },
     {
-      "ctx": "6c696e65",
-      "ctxText": "line",
-      "preds": " /。/，",
-      "predsText": " /。/，",
-      "from": "various"
+      "id": "curated-markdown-structures",
+      "path": "markdown-structures/",
+      "kind": "curated",
+      "category": "markdown-structure",
+      "licenseId": "MIT",
+      "contentSha256": "7141c710a18165b4ea963fd30a78658acb3e0bc8a4ee586bac24fd36423c5a9a",
+      "files": 3
     },
     {
-      "ctx": "656c696e",
-      "ctxText": "elin",
-      "preds": "e",
-      "predsText": "e",
-      "from": "various"
+      "id": "curated-natural-zh",
+      "path": "creative-zh/",
+      "kind": "curated",
+      "category": "zh-natural-notes",
+      "licenseId": "MIT",
+      "contentSha256": "9d5f3aa10622dc040de73ee1a1dff0f9a2fece6d8478b564bdc3ebaa1853e616",
+      "files": 6
     },
     {
-      "ctx": "62617365",
-      "ctxText": "base",
-      "preds": "l",
-      "predsText": "l",
-      "from": "various"
+      "id": "curated-note-patterns-zh",
+      "path": "note-patterns-zh/",
+      "kind": "curated",
+      "category": "zh-note-patterns",
+      "licenseId": "MIT",
+      "contentSha256": "a21e3ed88d8327ed95c7d4885475d86d4c27458b636ec09361b86020e232db3c",
+      "files": 11
     },
     {
-      "ctx": "6173656c",
-      "ctxText": "asel",
-      "preds": "i",
-      "predsText": "i",
-      "from": "various"
-    },
-    {
-      "ctx": "73656c69",
-      "ctxText": "seli",
-      "preds": "n",
-      "predsText": "n",
-      "from": "various"
-    },
-    {
-      "ctx": "20626173",
-      "ctxText": " bas",
-      "preds": "e",
-      "predsText": "e",
-      "from": "various"
-    },
-    {
-      "ctx": "204d6172",
-      "ctxText": " Mar",
-      "preds": "k",
-      "predsText": "k",
-      "from": "various"
-    },
-    {
-      "ctx": "61726b64",
-      "ctxText": "arkd",
-      "preds": "o",
-      "predsText": "o",
-      "from": "various"
-    },
-    {
-      "ctx": "726b646f",
-      "ctxText": "rkdo",
-      "preds": "w",
-      "predsText": "w",
-      "from": "various"
+      "id": "curated-tech-zh",
+      "path": "tech-writing-zh/",
+      "kind": "curated",
+      "category": "zh-tech-notes",
+      "licenseId": "MIT",
+      "contentSha256": "90e084cbe9b4e3970bc8d934a134d542b170cd985d5bac4340952cb717e26f6c",
+      "files": 9
     }
   ],
-  "lowValueTopContexts": [],
-  "probes": [
-    {
-      "input": "这是",
-      "prediction": "一个",
-      "source": "fallback"
-    },
-    {
-      "input": "这是我",
-      "prediction": "最喜欢",
-      "source": "fallback"
-    },
-    {
-      "input": "我喜欢",
-      "prediction": "的",
-      "source": "fallback"
-    },
-    {
-      "input": "最喜欢",
-      "prediction": "的事情",
-      "source": "fallback"
-    },
-    {
-      "input": "为了",
-      "prediction": "更好",
-      "source": "fallback"
-    },
-    {
-      "input": "用户",
-      "prediction": "可以",
-      "source": "fallback"
-    },
-    {
-      "input": "项目",
-      "prediction": "进度",
-      "source": "fallback"
-    },
-    {
-      "input": "今天",
-      "prediction": "的",
-      "source": "fallback"
-    },
-    {
-      "input": "今天主要",
-      "prediction": "处理训练语料。优",
-      "source": "model"
-    },
-    {
-      "input": "今天记录",
-      "prediction": "的一件小事。",
-      "source": "model"
-    },
-    {
-      "input": "今天计划",
-      "prediction": "先补齐测试边界。",
-      "source": "model"
-    },
-    {
-      "input": "会议结论",
-      "prediction": "是继续推进。",
-      "source": "model"
-    },
-    {
-      "input": "会议记录",
-      "prediction": "如下。",
-      "source": "model"
-    },
-    {
-      "input": "任务进度",
-      "prediction": "正常。",
-      "source": "model"
-    },
-    {
-      "input": "下一步",
-      "prediction": null,
-      "source": "none"
-    },
-    {
-      "input": "当前状态",
-      "prediction": "已经可以进入下一",
-      "source": "model"
-    },
-    {
-      "input": "当前问题",
-      "prediction": "。",
-      "source": "model"
-    },
-    {
-      "input": "风险在于",
-      "prediction": "数据量不足。",
-      "source": "model"
-    },
-    {
-      "input": "主要风险",
-      "prediction": "在于数据量不足。",
-      "source": "model"
-    },
-    {
-      "input": "需要确认",
-      "prediction": "一下语料比例。",
-      "source": "model"
-    },
-    {
-      "input": "需要跟进",
-      "prediction": "一下训练结果。",
-      "source": "model"
-    },
-    {
-      "input": "解决方案",
-      "prediction": "是",
-      "source": "fallback"
-    },
-    {
-      "input": "验收结果",
-      "prediction": "通过。",
-      "source": "model"
-    },
-    {
-      "input": "复盘结论",
-      "prediction": "是需要保留结构化",
-      "source": "model"
-    },
-    {
-      "input": "- ",
-      "prediction": "[ ] ",
-      "source": "fallback"
-    },
-    {
-      "input": "[[",
-      "prediction": "结构化 wiki-link",
-      "source": "fallback"
-    },
-    {
-      "input": "#",
-      "prediction": "标题",
-      "source": "fallback"
-    },
-    {
-      "input": "**粗",
-      "prediction": "**",
-      "source": "fallback"
-    }
-  ],
-  "probeSummary": {
-    "modelHits": 14,
-    "fallbackHits": 13,
-    "none": 1
-  }
+  "fullModelFindings": []
 }

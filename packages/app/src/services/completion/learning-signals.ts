@@ -1,5 +1,15 @@
 import type { CompletionCandidate, CompletionContext } from './types';
+import {
+  normalizeCompletionScope,
+  parseJsonSafely,
+  readStorage,
+  removeStorage,
+  runCompletionStorageMutation,
+  scopedCompletionStorageKey,
+  writeStorage,
+} from './learning-repository';
 
+/** @deprecated v1 global key, read once for migration only. */
 export const LEARNING_SIGNALS_STORAGE_KEY = 'jotluck:autocomplete:learningSignals:v1';
 
 const MAX_SIGNAL_ENTRIES = 800;
@@ -15,48 +25,73 @@ export interface LearningSignalEntry {
 }
 
 export interface LearningSignalStore {
-  version: 1;
+  version: 2;
   entries: Record<string, LearningSignalEntry>;
   updatedAt: number;
 }
 
-export function loadLearningSignals(): LearningSignalStore {
-  try {
-    const raw = localStorage.getItem(LEARNING_SIGNALS_STORAGE_KEY);
-    if (!raw) return createLearningSignalStore();
-    const parsed = JSON.parse(raw) as Partial<LearningSignalStore>;
-    if (parsed.version !== 1 || !parsed.entries || typeof parsed.entries !== 'object') {
-      return createLearningSignalStore();
-    }
-    return {
-      version: 1,
-      entries: normalizeEntries(parsed.entries),
-      updatedAt: Number.isFinite(parsed.updatedAt) ? Number(parsed.updatedAt) : 0,
-    };
-  } catch {
-    return createLearningSignalStore();
-  }
+export function learningSignalsStorageKey(scope = 'unscoped'): string {
+  return scopedCompletionStorageKey(scope, 'learning-signals:v2');
 }
 
-export function saveLearningSignals(store: LearningSignalStore): void {
-  try {
-    localStorage.setItem(LEARNING_SIGNALS_STORAGE_KEY, JSON.stringify(pruneLearningSignals(store)));
-  } catch {
-    // Learning signals are best-effort personalization data.
+export function loadLearningSignals(scope = 'unscoped'): LearningSignalStore {
+  const targetKey = learningSignalsStorageKey(scope);
+  const current = normalizeStore(parseJsonSafely(readStorage(targetKey)), false);
+  if (current) return pruneLearningSignals(current);
+  if (readStorage(targetKey) !== null) removeStorage(targetKey);
+
+  const normalizedScope = normalizeCompletionScope(scope);
+  const legacyKeys = [
+    scopedCompletionStorageKey(normalizedScope, 'learning-signals:v1'),
+    LEARNING_SIGNALS_STORAGE_KEY,
+  ];
+  for (const legacyKey of legacyKeys) {
+    const migrated = normalizeStore(parseJsonSafely(readStorage(legacyKey)), true);
+    if (!migrated) continue;
+    saveLearningSignals(migrated, normalizedScope);
+    removeStorage(...legacyKeys);
+    return pruneLearningSignals(migrated);
   }
+  return createLearningSignalStore();
 }
 
-export function clearLearningSignals(): void {
-  try {
-    localStorage.removeItem(LEARNING_SIGNALS_STORAGE_KEY);
-  } catch {
-    // Learning signals are best-effort personalization data.
-  }
+export function saveLearningSignals(store: LearningSignalStore, scope = 'unscoped'): void {
+  writeStorage(learningSignalsStorageKey(scope), JSON.stringify(pruneLearningSignals(store)));
+}
+
+export function persistLearningSignalEvent(
+  scope: string,
+  key: string,
+  event: 'shown' | 'accepted' | 'rejected',
+  savedChars = 0,
+): void {
+  const normalizedScope = normalizeCompletionScope(scope);
+  runCompletionStorageMutation(`signals:${normalizedScope}`, () => {
+    let latest = loadLearningSignals(normalizedScope);
+    latest =
+      event === 'shown'
+        ? recordSignalShown(latest, key)
+        : event === 'accepted'
+          ? recordSignalAccepted(latest, key, savedChars)
+          : recordSignalRejected(latest, key);
+    saveLearningSignals(latest, normalizedScope);
+  });
+}
+
+export function clearLearningSignals(scope = 'unscoped'): void {
+  const normalizedScope = normalizeCompletionScope(scope);
+  runCompletionStorageMutation(`signals:${normalizedScope}`, () => {
+    removeStorage(
+      learningSignalsStorageKey(normalizedScope),
+      scopedCompletionStorageKey(normalizedScope, 'learning-signals:v1'),
+      ...(normalizedScope === 'unscoped' ? [LEARNING_SIGNALS_STORAGE_KEY] : []),
+    );
+  });
 }
 
 export function createLearningSignalStore(): LearningSignalStore {
   return {
-    version: 1,
+    version: 2,
     entries: {},
     updatedAt: 0,
   };
@@ -77,8 +112,6 @@ export function getLearningSignalKey(
   );
   const suggestionSignature = hashString(normalizeSuggestion(candidate.text));
   return [
-    candidate.providerId,
-    candidate.sourceLayer ?? 'unknown',
     candidate.syntaxType,
     context.blockType,
     context.languageHint,
@@ -149,7 +182,7 @@ function updateSignal(
 ): LearningSignalStore {
   const now = Date.now();
   const next: LearningSignalStore = {
-    version: 1,
+    version: 2,
     entries: { ...store.entries },
     updatedAt: now,
   };
@@ -192,7 +225,7 @@ function normalizeEntries(
 ): Record<string, LearningSignalEntry> {
   const normalized: Record<string, LearningSignalEntry> = {};
   for (const [key, value] of Object.entries(entries)) {
-    if (!value || typeof value !== 'object') continue;
+    if (!key || key.length > 256 || !value || typeof value !== 'object') continue;
     normalized[key] = {
       shown: normalizeCount(value.shown),
       accepted: normalizeCount(value.accepted),
@@ -208,7 +241,21 @@ function normalizeEntries(
 
 function normalizeCount(value: unknown): number {
   const number = Number(value);
-  return Number.isFinite(number) && number > 0 ? Math.floor(number) : 0;
+  return Number.isSafeInteger(number) && number > 0 ? number : 0;
+}
+
+function normalizeStore(value: unknown, allowLegacy: boolean): LearningSignalStore | null {
+  if (!value || typeof value !== 'object') return null;
+  const parsed = value as Partial<LearningSignalStore> & { version?: number };
+  if (parsed.version !== 2 && !(allowLegacy && parsed.version === 1)) return null;
+  if (!parsed.entries || typeof parsed.entries !== 'object' || Array.isArray(parsed.entries)) {
+    return null;
+  }
+  return {
+    version: 2,
+    entries: normalizeEntries(parsed.entries as Record<string, LearningSignalEntry>),
+    updatedAt: normalizeCount(parsed.updatedAt),
+  };
 }
 
 function isWeakSource(candidate: CompletionCandidate): boolean {

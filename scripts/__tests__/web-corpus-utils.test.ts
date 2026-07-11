@@ -1,39 +1,59 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import {
+  assertApprovedWebSources,
   buildCleanDocument,
   cleanFragment,
   detectFragmentLanguage,
   extractReadableText,
+  findForbiddenCorpusText,
   fragmentText,
+  isAllowedCollectionUrl,
   scrubPrivacy,
 } from '../web-corpus-utils';
 import {
+  atomicReplaceFiles,
+  auditFullModel,
   buildProfileSources,
+  buildVerifiedBaseline,
   buildWebLocalSourcesFromReport,
+  distillTrainingTable,
+  selectNestedTrainingSample,
+  runTraining,
   scanSource,
+  serialize,
+  type TrainingTable,
+  type TrainingBuild,
   WEB_LOCAL_MAX_BYTES,
   WEB_LOCAL_MIN_COUNT,
 } from '../train-baseline';
+import { runSyntheticCorpusGenerator } from '../generate-autocomplete-synthetic-corpus';
+import { AUTOCOMPLETE_MODEL_EVALUATOR_VERSION } from '../autocomplete-model-evaluator';
+
+beforeAll(() => {
+  runSyntheticCorpusGenerator([], { log: () => undefined });
+});
 
 describe('web corpus privacy scrubbing', () => {
-  it('removes phone numbers without keeping the original value', () => {
+  it('fails closed when a fragment contains a phone number', () => {
     const result = scrubPrivacy(
       '这个段落用于说明处理步骤，号码13812345678已经被移除，后续只保留通用语义。',
     );
 
-    expect(result.action).toBe('keep');
+    expect(result.action).toBe('drop');
     expect(result.text).not.toContain('13812345678');
     expect(result.hits).toContain('phone');
+    expect(result.reason).toBe('privacy-hit');
   });
 
-  it('replaces company-like entities with a generic token', () => {
+  it('fails closed instead of emitting an organization placeholder', () => {
     const result = scrubPrivacy('示例科技有限公司提供的流程说明只保留通用写法，用于训练短句补全。');
 
-    expect(result.action).toBe('keep');
-    expect(result.text).toContain('某机构');
+    expect(result.action).toBe('drop');
+    expect(result.text).not.toContain('某机构');
     expect(result.text).not.toContain('有限公司');
   });
 
@@ -41,7 +61,7 @@ describe('web corpus privacy scrubbing', () => {
     const result = scrubPrivacy('作者：张三 在示例科技有限公司表示，这段内容不应该进入训练片段。');
 
     expect(result.action).toBe('drop');
-    expect(result.reason).toBe('multiple-privacy-hits');
+    expect(result.reason).toBe('privacy-hit');
   });
 
   it('removes byline and account patterns', () => {
@@ -72,6 +92,24 @@ describe('web corpus privacy scrubbing', () => {
     expect(result.action).toBe('drop');
     expect(result.text).not.toContain('John');
     expect(result.text).not.toContain('Gruber');
+  });
+
+  it('rejects obfuscated email addresses', () => {
+    const result = scrubPrivacy(
+      'For additional details contact private.user (at) example (dot) com before continuing.',
+    );
+
+    expect(result.action).toBe('drop');
+    expect(result.hits).toContain('obfuscated-email');
+  });
+
+  it('uses high-confidence release checks without flagging ordinary prose', () => {
+    expect(
+      findForbiddenCorpusText('This value is grouped by category and written by design.'),
+    ).toEqual([]);
+    expect(findForbiddenCorpusText('邮箱：private@example.com')).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'privacy', rule: 'email' })]),
+    );
   });
 });
 
@@ -147,13 +185,23 @@ describe('web corpus fragmentation and extraction', () => {
 describe('web corpus training profiles', () => {
   const baseSources = [
     {
+      id: 'notes',
       path: 'note-patterns-zh/',
-      weight: 4,
+      weightMilli: 4000,
+      category: 'notes',
+      language: 'zh' as const,
+      kind: 'curated' as const,
+      minDocumentFrequency: 2,
       description: 'base notes',
     },
     {
+      id: 'cache',
       path: '_web-cache/_clean/should-not-release.md',
-      weight: 1,
+      weightMilli: 1000,
+      category: 'web',
+      language: 'zh' as const,
+      kind: 'web' as const,
+      minDocumentFrequency: 3,
       description: 'accidental local cache',
     },
   ];
@@ -175,11 +223,15 @@ describe('web corpus training profiles', () => {
           fragmentsKept: 10,
         },
         {
+          sourceId: 'approved-note',
           cleanPath: '_web-cache/_clean/zh-cn/zh-note/page.md',
           category: 'zh-note',
           language: 'zh-CN',
           weight: 1.2,
           fragmentsKept: 8,
+          licenseId: 'CC-BY-4.0',
+          licenseEvidence: 'https://example.test/license',
+          cleanSha256: 'a'.repeat(64),
         },
         {
           cleanPath: null,
@@ -192,13 +244,14 @@ describe('web corpus training profiles', () => {
 
     expect(webSources).toEqual([
       {
+        id: 'approved-note',
         path: '_web-cache/_clean/zh-cn/zh-note/page.md',
-        weight: 1.2,
-        description: 'Local-only scrubbed web fragments (zh-note)',
+        weightMilli: 1200,
+        description: 'Approved clean web corpus (zh-note)',
         category: 'zh-note',
         language: 'zh',
-        localOnly: true,
-        maxFragments: 900,
+        kind: 'web',
+        minDocumentFrequency: 3,
       },
     ]);
   });
@@ -207,8 +260,8 @@ describe('web corpus training profiles', () => {
     expect(WEB_LOCAL_MAX_BYTES).toBe(6 * 1024 * 1024);
   });
 
-  it('uses a weighted min-count for the larger web-local compact model', () => {
-    expect(WEB_LOCAL_MIN_COUNT).toBe(0.85);
+  it('requires a transition to appear in at least three web documents', () => {
+    expect(WEB_LOCAL_MIN_COUNT).toBe(3);
   });
 
   it('scans web-local clean files fragment by fragment without cross-fragment ngrams', () => {
@@ -240,4 +293,352 @@ describe('web corpus training profiles', () => {
     expect(result.skippedMixedFragments).toBe(1);
     expect([...result.table.keys()].join('')).not.toContain('mix');
   });
+});
+
+describe('web corpus provenance and collection boundaries', () => {
+  it('fails closed when an enabled source has no approved license evidence', () => {
+    expect(() =>
+      assertApprovedWebSources({
+        version: 1,
+        sources: [
+          {
+            id: 'unverified',
+            url: 'https://example.test/docs/',
+            category: 'docs',
+            language: 'en',
+            license: { status: 'unverified' },
+          },
+        ],
+      }),
+    ).toThrow(/missing approved license provenance/);
+  });
+
+  it('restricts collection to same-origin, allowed, non-account paths', () => {
+    const source = {
+      url: 'https://example.test/docs/',
+      category: 'docs',
+      language: 'en',
+      allowPathPrefixes: ['/docs/'],
+    };
+
+    expect(isAllowedCollectionUrl('https://example.test/docs/guide', source)).toBe(true);
+    expect(isAllowedCollectionUrl('https://example.test/login', source)).toBe(false);
+    expect(isAllowedCollectionUrl('https://other.test/docs/guide', source)).toBe(false);
+  });
+});
+
+describe('verified model serialization', () => {
+  it('selects every byte tier as a deterministic prefix of one category-balanced order', () => {
+    const items = [
+      { id: 'a-1', category: 'a', bytes: 10 },
+      { id: 'a-2', category: 'a', bytes: 10 },
+      { id: 'a-3', category: 'a', bytes: 10 },
+      { id: 'b-1', category: 'b', bytes: 10 },
+      { id: 'b-2', category: 'b', bytes: 10 },
+      { id: 'b-3', category: 'b', bytes: 10 },
+    ];
+
+    const small = selectNestedTrainingSample(items, 30);
+    const large = selectNestedTrainingSample([...items].reverse(), 50);
+    const repeated = selectNestedTrainingSample(items, 30);
+
+    expect(small.selected).toEqual(repeated.selected);
+    expect(large.selected.slice(0, small.selected.length)).toEqual(small.selected);
+    expect(new Set(small.selected.map((item) => item.category))).toEqual(new Set(['a', 'b']));
+    expect(selectNestedTrainingSample(items, 100)).toMatchObject({
+      availableBytes: 60,
+      realizedBytes: 60,
+      insufficient: true,
+    });
+  });
+
+  it('serializes Unicode code points deterministically with positive integer counts', () => {
+    const table = new Map([
+      [
+        '中文😀A',
+        new Map([
+          ['。', 2000],
+          ['！', 1000],
+        ]),
+      ],
+      ['abcd', new Map([['e', 3000]])],
+    ]);
+    const serialized = serialize(table);
+
+    expect(serialized).not.toContain('\ufffd');
+    expect(auditFullModel(serialized, table, 4)).toEqual([]);
+    expect(serialized.split('\n')).toEqual([...serialized.split('\n')].sort());
+  });
+
+  it('atomically replaces a group of model artifacts', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'JotLuck-atomic-model-'));
+    const model = path.join(root, 'model.txt');
+    const manifest = path.join(root, 'manifest.json');
+    fs.writeFileSync(model, 'old-model', 'utf8');
+    fs.writeFileSync(manifest, 'old-manifest', 'utf8');
+
+    atomicReplaceFiles([
+      { target: model, content: 'new-model' },
+      { target: manifest, content: 'new-manifest' },
+    ]);
+
+    expect(fs.readFileSync(model, 'utf8')).toBe('new-model');
+    expect(fs.readFileSync(manifest, 'utf8')).toBe('new-manifest');
+    expect(
+      fs.readdirSync(root).some((entry) => entry.includes('.tmp-') || entry.includes('.bak-')),
+    ).toBe(false);
+  });
+
+  it('applies configured document frequency and a deterministic global byte budget', () => {
+    const transition = (
+      sourceId: string,
+      documents: string[],
+      minDocumentFrequency: number,
+      count: number,
+    ) => ({
+      count,
+      documentsBySource: new Map([[sourceId, new Set(documents)]]),
+      minDocumentFrequencyBySource: new Map([[sourceId, minDocumentFrequency]]),
+    });
+    const table: TrainingTable = new Map([
+      ['aaaa', new Map([['x', transition('strict', ['a', 'b'], 3, 9000)]])],
+      ['bbbb', new Map([['y', transition('normal', ['c', 'd'], 2, 1000)]])],
+      ['cccc', new Map([['z', transition('strong', ['e', 'f', 'g'], 3, 3000)]])],
+    ]);
+    const oneEntryBudget = Buffer.byteLength(
+      serialize(new Map([['cccc', new Map([['z', 3000]])]])),
+      'utf8',
+    );
+
+    const first = distillTrainingTable(table, 3, oneEntryBudget);
+    const second = distillTrainingTable(table, 3, oneEntryBudget);
+
+    expect([...first.model.keys()]).toEqual(['cccc']);
+    expect(first.budget).toMatchObject({
+      candidateEntries: 2,
+      retainedEntries: 1,
+      evictedEntries: 1,
+      retainedBytes: oneEntryBudget,
+    });
+    expect(first.budget.candidateBytes).toBeGreaterThan(first.budget.retainedBytes);
+    expect(first.budget.retainedBytes).toBeLessThanOrEqual(oneEntryBudget);
+    expect(serialize(first.model)).toBe(serialize(second.model));
+  });
+
+  it('serializes independent document support instead of repeated in-document occurrences', () => {
+    const transition = (count: number, documents: string[]) => ({
+      count,
+      documentsBySource: new Map([['project', new Set(documents)]]),
+      minDocumentFrequencyBySource: new Map([['project', 2]]),
+      weightMilliBySource: new Map([['project', 1000]]),
+    });
+    const table: TrainingTable = new Map([
+      [
+        'same',
+        new Map([
+          ['x', transition(100_000, ['a', 'b'])],
+          ['y', transition(3_000, ['c', 'd', 'e'])],
+        ]),
+      ],
+    ]);
+
+    const result = distillTrainingTable(table, 3, 1024);
+
+    expect(result.model.get('same')).toEqual(
+      new Map([
+        ['y', 3000],
+        ['x', 2000],
+      ]),
+    );
+  });
+
+  it('prefers lower-entropy contexts when support and byte budget are comparable', () => {
+    const transition = (documents: string[], count = 2000) => ({
+      count,
+      documentsBySource: new Map([['project', new Set(documents)]]),
+      minDocumentFrequencyBySource: new Map([['project', 2]]),
+    });
+    const table: TrainingTable = new Map([
+      ['calm', new Map([['x', transition(['a', 'b'])]])],
+      [
+        'noisy',
+        new Map([
+          ['x', transition(['a', 'b'], 1000)],
+          ['y', transition(['a', 'b'], 1000)],
+        ]),
+      ],
+    ]);
+    const calmBytes = Buffer.byteLength(serialize(new Map([['calm', new Map([['x', 2000]])]])));
+    const noisyBytes = Buffer.byteLength(
+      serialize(
+        new Map([
+          [
+            'noisy',
+            new Map([
+              ['x', 1000],
+              ['y', 1000],
+            ]),
+          ],
+        ]),
+      ),
+    );
+
+    const result = distillTrainingTable(table, 3, Math.max(calmBytes, noisyBytes));
+
+    expect([...result.model.keys()]).toEqual(['calm']);
+    expect(result.budget.meanRetainedEntropyPpm).toBe(0);
+    expect(result.budget.meanEvictedEntropyPpm).toBe(1_000_000);
+  });
+});
+
+describe('verified baseline governance', () => {
+  let releaseCandidate: TrainingBuild;
+  let evidenceRoot = '';
+  let evidencePath = '';
+  let validEvidence: Record<string, unknown>;
+
+  beforeAll(() => {
+    releaseCandidate = buildVerifiedBaseline({
+      profile: 'release',
+      dryRun: true,
+      allowVerifiedDegraded: false,
+      trainingPoolBytes: 104_858,
+      testDocumentLimit: 512,
+    });
+    const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+    evidenceRoot = fs.mkdtempSync(path.join(repositoryRoot, 'scripts', '__tests__', '.quality-'));
+    evidencePath = path.join(evidenceRoot, 'quality.json');
+    validEvidence = {
+      schemaVersion: 1,
+      profile: 'release',
+      modelSha256: releaseCandidate.report.modelSha256,
+      trainingInputHash: releaseCandidate.report.inputManifestHash,
+      holdoutSha256: releaseCandidate.report.holdoutQuality.holdoutSha256,
+      evaluatorVersion: AUTOCOMPLETE_MODEL_EVALUATOR_VERSION,
+      learningCurveSha256: 'b'.repeat(64),
+      opportunities: 220,
+      triggerRate: 0.368,
+      usableRate: 0.368,
+      falseTriggerRate: 0,
+      mixedCandidateRate: 0,
+      p90Ms: 105,
+    };
+  }, 120_000);
+
+  afterAll(() => {
+    if (evidenceRoot) fs.rmSync(evidenceRoot, { recursive: true, force: true });
+  });
+
+  it('builds a deterministic candidate but fails closed without quality evidence', () => {
+    const build = releaseCandidate;
+    const notePatterns = build.report.sourceInputs.find(
+      (source) => source.id === 'curated-note-patterns-zh',
+    );
+
+    expect(notePatterns?.files).toBe(10);
+    expect(build.report.trainingHoldoutOverlap).toBe(0);
+    expect(build.report.fullModelFindings).toEqual([]);
+    expect(build.report.rawExactDuplicateRate).toBeLessThanOrEqual(0.01);
+    expect(build.report.residualExactDuplicateRate).toBeLessThanOrEqual(0.01);
+    expect(build.report.residualNearDuplicateRate).toBeLessThanOrEqual(0.03);
+    expect(
+      Math.max(
+        ...Object.values(build.report.categoryDistribution).map(
+          ({ ratio }) => Number.parseFloat(ratio) / 100,
+        ),
+      ),
+    ).toBeLessThanOrEqual(0.4);
+    expect(build.manifest).toMatchObject({
+      schemaVersion: 2,
+      serialization: 'sectioned-jsonl-hex-v4',
+      minNgramN: 2,
+      wordNgramOrders: [1, 2],
+      countScale: 1000,
+      verifiedOnly: true,
+      runtimeEligible: true,
+      hardLimitPassed: true,
+      softTargetPassed: true,
+      qualityGatePassed: false,
+      releaseEligible: false,
+      degradedReason: 'holdout-quality-gate-not-passed',
+    });
+    expect(build.report.holdoutQuality).toMatchObject({ provided: false, passed: false });
+    expect(build.report.governance.errors).toEqual(
+      expect.arrayContaining([expect.stringContaining('Holdout quality evidence is required')]),
+    );
+  }, 300_000);
+
+  it('does not let the degraded flag replace official assets without quality evidence', () => {
+    expect(() =>
+      runTraining(
+        ['--profile', 'web-local', '--allow-verified-degraded', '--training-pool-bytes', '104858'],
+        { testDocumentLimit: 512 },
+      ),
+    ).toThrow(/official assets were not replaced/);
+  }, 120_000);
+
+  it('marks a degraded candidate as ineligible without quality evidence', () => {
+    const build = buildVerifiedBaseline({
+      profile: 'web-local',
+      dryRun: true,
+      allowVerifiedDegraded: true,
+      trainingPoolBytes: 104_858,
+      testDocumentLimit: 512,
+    });
+    expect(build.manifest).toMatchObject({
+      verifiedOnly: true,
+      hardLimitPassed: true,
+      softTargetPassed: true,
+      qualityGatePassed: false,
+      releaseEligible: false,
+      degradedReason: 'holdout-quality-gate-not-passed',
+    });
+  }, 120_000);
+
+  it('accepts quality evidence bound to the exact model, input, holdout, and profile', () => {
+    fs.writeFileSync(evidencePath, JSON.stringify(validEvidence), 'utf8');
+    const verified = buildVerifiedBaseline({
+      profile: 'release',
+      dryRun: true,
+      allowVerifiedDegraded: false,
+      qualityReportPath: evidencePath,
+      trainingPoolBytes: 104_858,
+      testDocumentLimit: 512,
+    });
+
+    expect(verified.report.holdoutQuality).toMatchObject({
+      provided: true,
+      passed: true,
+      opportunities: 220,
+    });
+    expect(verified.manifest.qualityGatePassed).toBe(true);
+    expect(verified.manifest.releaseEligible).toBe(true);
+    expect(verified.manifest).toMatchObject({
+      holdoutSha256: validEvidence.holdoutSha256,
+      evaluatorVersion: validEvidence.evaluatorVersion,
+      learningCurveSha256: validEvidence.learningCurveSha256,
+      qualityEvidenceSha256: expect.stringMatching(/^[0-9a-f]{64}$/u),
+    });
+    expect(verified.report.governance.errors).toEqual([]);
+  }, 120_000);
+
+  it('rejects quality evidence bound to a different model', () => {
+    fs.writeFileSync(
+      evidencePath,
+      JSON.stringify({ ...validEvidence, modelSha256: '0'.repeat(64) }),
+      'utf8',
+    );
+    const mismatched = buildVerifiedBaseline({
+      profile: 'release',
+      dryRun: true,
+      allowVerifiedDegraded: false,
+      qualityReportPath: evidencePath,
+      trainingPoolBytes: 104_858,
+      testDocumentLimit: 512,
+    });
+    expect(mismatched.report.holdoutQuality.passed).toBe(false);
+    expect(mismatched.report.holdoutQuality.errors).toEqual(
+      expect.arrayContaining([expect.stringContaining('different model SHA-256')]),
+    );
+  }, 120_000);
 });

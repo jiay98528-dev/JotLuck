@@ -206,6 +206,7 @@
                             :wiki-link-exists="wikiLinkExists"
                             :wiki-link-revision="wikiLinkRevision"
                             :completion-settings="completionSettings"
+                            :predictor="completionPredictor"
                             :enable-autocomplete="!isExternalEditing && !isLargeDocument"
                             :on-editor-drop="isExternalEditing ? undefined : imageUpload.handleDrop"
                             :on-editor-drag-over="
@@ -248,6 +249,7 @@
                         :wiki-link-exists="wikiLinkExists"
                         :wiki-link-revision="wikiLinkRevision"
                         :completion-settings="completionSettings"
+                        :predictor="completionPredictor"
                         :enable-autocomplete="!isExternalEditing && !isLargeDocument"
                         :on-editor-drop="isExternalEditing ? undefined : imageUpload.handleDrop"
                         :on-editor-drag-over="
@@ -663,6 +665,7 @@ import {
   subscribeTrainingMeta,
   type CompletionTrainingMeta,
 } from '@/services/CompletionTrainingService';
+import { MarkdownPredictor } from '@/services/MarkdownPredictor';
 import {
   applyParagraphPreset,
   clearMarkdownFormatting,
@@ -776,6 +779,7 @@ const notebookName = ref('未打开笔记本');
 const activeNotebookRoot = ref('');
 const completionSettings = ref<CompletionSettings>(getCompletionSettings());
 const completionTrainingMeta = ref<CompletionTrainingMeta>(loadTrainingMeta());
+const completionPredictor = new MarkdownPredictor(4);
 let unsubscribeCompletionSettings: (() => void) | null = null;
 let unsubscribeTrainingMeta: (() => void) | null = null;
 let completionTrainer: CompletionTrainingService | null = null;
@@ -841,6 +845,11 @@ if (e2eBridge) {
     isDirty: isDirty.value,
     isExternalEditing: isExternalEditing.value,
   });
+  e2eBridge.listNotePaths = () =>
+    files.value
+      .filter((entry) => entry.isFile && isSupportedNoteFile(entry.name))
+      .map((entry) => entry.path);
+  e2eBridge.selectNote = (path) => onSelectNote(path);
 }
 const externalFilePath = computed(() => externalFile.value?.absolutePath ?? '');
 const externalFileName = computed(() => {
@@ -2326,12 +2335,11 @@ async function onRenameFile(oldPath: string, newName: string): Promise<void> {
   const newPath = joinPath(parentDir, newName);
   clearPendingSaveForPath(oldPath);
   await fs.renameFile(oldPath, newPath);
-  completionTrainer?.removePath(oldPath);
+  completionTrainer?.renamePath(oldPath, newPath);
   if (renamingActivePath) activePath.value = newPath;
   // 更新索引：移除旧路径，索引新路径
   indexStore.removeDocument(oldPath);
   await indexStore.refreshDocument(fs, newPath);
-  if (activePath.value === newPath) void trainCurrentFile(newPath, currentContent.value);
   await refreshFileTree();
 }
 
@@ -2968,8 +2976,7 @@ function onGlobalKeydown(e: KeyboardEvent): void {
 /** Wire predictor to IndexStore for structured completions ([[/#/path). */
 function connectPredictor(): void {
   if (isExternalSession.value) return;
-  const pred = editorRef.value?.predictor;
-  if (!pred) return;
+  const pred = completionPredictor;
   pred.setStorageScope(completionStorageScope.value);
   completionTrainingMeta.value = loadTrainingMeta(completionStorageScope.value);
   const svc = indexStore.getIndexService();
@@ -2990,10 +2997,7 @@ function connectPredictor(): void {
   void maybeTrainNotebook();
 }
 
-function ensureCompletionTrainer(
-  pred = editorRef.value?.predictor,
-): CompletionTrainingService | null {
-  if (!pred) return null;
+function ensureCompletionTrainer(pred = completionPredictor): CompletionTrainingService | null {
   if (!completionTrainer) completionTrainer = new CompletionTrainingService(fs, pred);
   return completionTrainer;
 }
@@ -3022,14 +3026,14 @@ async function trainCurrentFile(path: string, content: string): Promise<void> {
 function onUpdateCompletionSettings(settings: CompletionSettings): void {
   completionSettings.value = settings;
   saveCompletionSettings(settings);
-  editorRef.value?.predictor.configure(settings);
+  completionPredictor.configure(settings);
   if (settings.backgroundTraining) void maybeTrainNotebook();
 }
 
 function onClearCompletionData(): void {
   completionTrainer?.cancelCurrentRun();
   completionTrainer = null;
-  editorRef.value?.predictor.clearLearningData();
+  completionPredictor.clearLearningData();
   const nextMeta: CompletionTrainingMeta = {
     ...DEFAULT_TRAINING_META,
     trainedPaths: {},
@@ -3144,7 +3148,7 @@ onMounted(async () => {
   connectPredictor();
   unsubscribeCompletionSettings = subscribeCompletionSettings((settings) => {
     completionSettings.value = settings;
-    editorRef.value?.predictor.configure(settings);
+    completionPredictor.configure(settings);
     if (!isExternalSession.value && settings.backgroundTraining) void maybeTrainNotebook();
   });
   unsubscribeTrainingMeta = subscribeTrainingMeta(
@@ -3175,6 +3179,9 @@ onUnmounted(() => {
   if (splitDragCleanup) splitDragCleanup();
   unsubscribeCompletionSettings?.();
   unsubscribeTrainingMeta?.();
+  completionTrainer?.cancelCurrentRun();
+  completionTrainer = null;
+  void completionPredictor.dispose();
   unlistenOpenedFile?.();
   unlistenWindowClose?.();
 });
