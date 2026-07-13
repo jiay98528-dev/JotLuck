@@ -236,9 +236,13 @@ function refineCandidateText(
       : context.settings.maxSuggestionLength;
   const rawPoints = Array.from(rawText);
   let text = rawPoints.slice(0, maxLength).join('');
-  if (languageHint === 'en' && rawPoints.length > maxLength && /\s/u.test(rawText)) {
-    const boundary = text.lastIndexOf(' ');
-    if (boundary > 0) text = text.slice(0, boundary);
+  if (languageHint === 'en' && rawPoints.length > maxLength) {
+    const last = rawPoints[maxLength - 1] ?? '';
+    const next = rawPoints[maxLength] ?? '';
+    if (/[A-Za-z'’-]/u.test(last) && /[A-Za-z'’-]/u.test(next)) {
+      const boundary = text.lastIndexOf(' ');
+      text = boundary > 0 ? text.slice(0, boundary) : '';
+    }
   }
   if (
     languageHint !== 'en' ||

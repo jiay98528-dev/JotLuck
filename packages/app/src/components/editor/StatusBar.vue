@@ -4,11 +4,12 @@
     :class="[`status-bar--${region.density}`, `status-bar--layout-${region.layout}`]"
     :data-density="region.density"
     :data-layout="region.layout"
+    data-theme-part="status"
     role="status"
     aria-label="编辑器状态栏"
   >
     <template v-if="region.layout === 'save-only'">
-      <span class="status-reader-save">
+      <span class="status-reader-save" data-theme-part="status-save">
         <span v-if="saveError" class="status-error" :title="saveError"
           >&#9888; {{ saveError }}</span
         >
@@ -19,15 +20,15 @@
     </template>
 
     <template v-else-if="region.layout === 'dashboard'">
-      <span class="status-left status-left--dashboard">
+      <span class="status-left status-left--dashboard" data-theme-part="status-metrics">
         <strong>{{ lineCount }} 行</strong>
         <span>{{ charCount }} 字 &middot; {{ wordCount }} 词</span>
       </span>
-      <span class="status-center status-center--dashboard">
+      <span class="status-center status-center--dashboard" data-theme-part="status-position">
         <template v-if="cursorLine !== null">Ln {{ cursorLine }}, Col {{ cursorCol }}</template>
         <template v-else>Ready</template>
       </span>
-      <span class="status-dashboard-actions">
+      <span class="status-dashboard-actions" data-theme-part="status-actions">
         <ShellActionButton
           v-for="action in actions"
           :key="action.id"
@@ -35,7 +36,7 @@
           label-mode="short"
           size="sm"
         />
-        <span class="status-right">
+        <span class="status-right" data-theme-part="status-save">
           <span v-if="saveError" class="status-error" :title="saveError"
             >&#9888; {{ saveError }}</span
           >
@@ -47,17 +48,17 @@
     </template>
 
     <template v-else>
-      <span class="status-left">
+      <span class="status-left" data-theme-part="status-position">
         <template v-if="cursorLine !== null">Ln {{ cursorLine }}, Col {{ cursorCol }}</template>
         <template v-else>&mdash;</template>
       </span>
-      <span class="status-center">
+      <span class="status-center" data-theme-part="status-metrics">
         {{ charCount }} 字 &middot; {{ wordCount }} 词
         <span v-if="region.layout !== 'compact'" class="status-hint">
           &middot; 选中文字以格式化 &middot; Ctrl+点击固定区块
         </span>
       </span>
-      <span class="status-right">
+      <span class="status-right" data-theme-part="status-save">
         <span v-if="saveError" class="status-error" :title="saveError"
           >&#9888; {{ saveError }}</span
         >

@@ -10,6 +10,7 @@ import type {
   ThemeSlotId,
   ThemeTokenSet,
 } from '@/types/theme-pack';
+import { findUnscopedCssSelector } from './theme-css-scope';
 
 export const ACTIVE_THEME_STYLE_ID = 'jotluck-active-theme';
 export const DEFAULT_THEME_ID = 'paper';
@@ -133,6 +134,10 @@ function buildThemeCss(id: string, tokens: ThemeTokenSet, extraCss?: string): st
   }
 
   if (extraCss) {
+    const unscoped = findUnscopedCssSelector(extraCss, id);
+    if (unscoped) {
+      throw new Error(`官方主题 CSS 未限定在当前主题根节点：${unscoped}`);
+    }
     parts.push(extraCss.trim());
   }
 

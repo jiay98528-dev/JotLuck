@@ -5,6 +5,18 @@ import {
   type CompletionRanker,
 } from '../engine-router';
 import type { CompletionCandidate } from '../types';
+import {
+  PUBLIC_ENGINE_MAX_OUTPUT_CODE_POINTS,
+  PUBLIC_ENGINE_PROTOCOL_VERSION,
+  PUBLIC_ENGINE_PROVIDER_PRIORITY,
+  createEmptyPublicEngineAssetDiagnostics,
+  type CompletionPublicEngine,
+  type PublicEngineGenerateRequest,
+  type PublicEngineRawCandidate,
+  type PublicEngineDiagnostics,
+} from '../public-engine-types';
+
+const TEST_PUBLIC_ENGINE_ID = 'test-public-engine';
 
 function candidate(text: string, source: CompletionCandidate['source'] = 'ngram') {
   return {
@@ -37,6 +49,59 @@ function batchFor(
     deadlineAt,
     candidates,
   });
+}
+
+function publicEngineDiagnostics(epoch = 1): PublicEngineDiagnostics {
+  return {
+    engineId: TEST_PUBLIC_ENGINE_ID,
+    backendKind: 'worker',
+    status: 'ready',
+    epoch,
+    profile: 'web-local',
+    lastError: null,
+    warmupDurationMs: 1,
+    lastInferenceDurationMs: 0,
+    visibleInferenceP90Ms: 0,
+    generateRequests: 0,
+    generatedCandidates: 0,
+    cancellations: 0,
+    deadlineExpirations: 0,
+    lateResponses: 0,
+    invalidResponses: 0,
+    workerErrors: 0,
+    assets: createEmptyPublicEngineAssetDiagnostics(),
+  };
+}
+
+function publicEngine(
+  generate: CompletionPublicEngine['generate'],
+  overrides: Partial<CompletionPublicEngine> = {},
+): CompletionPublicEngine {
+  const engine: CompletionPublicEngine = {
+    id: TEST_PUBLIC_ENGINE_ID,
+    protocolVersion: PUBLIC_ENGINE_PROTOCOL_VERSION,
+    sourceKind: 'ngram',
+    maxOutputCodePoints: PUBLIC_ENGINE_MAX_OUTPUT_CODE_POINTS,
+    warmup: async () => true,
+    generate,
+    diagnostics: () => publicEngineDiagnostics(),
+    dispose: () => undefined,
+  };
+  return Object.assign(engine, overrides);
+}
+
+function publicResponse(
+  request: PublicEngineGenerateRequest,
+  candidates: readonly PublicEngineRawCandidate[],
+) {
+  return {
+    protocolVersion: PUBLIC_ENGINE_PROTOCOL_VERSION,
+    engineEpoch: request.engineEpoch,
+    workspaceScope: request.workspaceScope,
+    documentVersion: request.documentVersion,
+    cursorPos: request.cursorPos,
+    candidates,
+  };
 }
 
 describe('completion engine router', () => {
@@ -198,5 +263,384 @@ describe('completion engine router', () => {
     await expect(installing).resolves.toBe(false);
     expect(router.getActiveRankerId()).toBeNull();
     expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  it('warms and invokes the public generator without allowing it to escape the router epoch', async () => {
+    const router = new CompletionEngineRouter();
+    const generate = vi.fn<CompletionPublicEngine['generate']>(async (request) =>
+      publicResponse(request, [
+        {
+          candidateId: 'candidate-en-1',
+          text: ' after the review',
+          confidence: 0.94,
+          modelScore: 0.92,
+          gateScore: 0.96,
+          language: 'en',
+        },
+      ]),
+    );
+    await expect(router.installPublicEngine(publicEngine(generate))).resolves.toBe(true);
+    const routerEpoch = router.getEpoch();
+    const result = await router.generatePublic(
+      {
+        workspaceScope: 'workspace-a',
+        documentVersion: 'doc-v1',
+        cursorPos: 12,
+        contextTail: 'Project plan',
+        languageHint: 'en',
+        blockType: 'paragraph',
+        cursorBoundary: 'word',
+        maxCandidates: 32,
+        deadlineAt: Date.now() + 100,
+      },
+      routerEpoch,
+      performance.now() + 100,
+    );
+
+    expect(result.usedEngineId).toBe(TEST_PUBLIC_ENGINE_ID);
+    expect(result.candidates[0]).toMatchObject({
+      text: ' after the review',
+      from: 12,
+      providerId: TEST_PUBLIC_ENGINE_ID,
+      source: 'ngram',
+      sourceLayer: 'l3',
+      priority: PUBLIC_ENGINE_PROVIDER_PRIORITY,
+      modelScore: 0.92,
+      gateScore: 0.96,
+    });
+
+    router.bumpEpoch();
+    const obsolete = await router.generatePublic(
+      {
+        workspaceScope: 'workspace-a',
+        documentVersion: 'doc-v1',
+        cursorPos: 12,
+        contextTail: 'Project plan',
+        languageHint: 'en',
+        blockType: 'paragraph',
+        cursorBoundary: 'word',
+        maxCandidates: 32,
+        deadlineAt: Date.now() + 100,
+      },
+      routerEpoch,
+      performance.now() + 100,
+    );
+    expect(obsolete).toMatchObject({ candidates: [], fellBack: true, timedOut: false });
+    expect(generate).toHaveBeenCalledOnce();
+  });
+
+  it('trims the public context to 256 UTF-8 bytes without splitting an emoji code point', async () => {
+    const router = new CompletionEngineRouter();
+    let observedRequest: PublicEngineGenerateRequest | null = null;
+    await router.installPublicEngine(
+      publicEngine(async (request) => {
+        observedRequest = request;
+        return publicResponse(request, []);
+      }),
+    );
+
+    await router.generatePublic(
+      {
+        workspaceScope: 'workspace-a',
+        documentVersion: 'doc-v1',
+        cursorPos: 500,
+        contextTail: `${'a'.repeat(300)}😀中文尾`,
+        languageHint: 'zh',
+        blockType: 'paragraph',
+        cursorBoundary: 'word',
+        maxCandidates: 32,
+        deadlineAt: Date.now() + 100,
+      },
+      router.getEpoch(),
+      performance.now() + 100,
+    );
+
+    const captured = observedRequest as PublicEngineGenerateRequest | null;
+    expect(captured).not.toBeNull();
+    expect(new TextEncoder().encode(captured?.contextTail ?? '').byteLength).toBeLessThanOrEqual(
+      256,
+    );
+    expect(captured?.contextTailUtf8Bytes).toBe(
+      new TextEncoder().encode(captured?.contextTail ?? '').byteLength,
+    );
+    expect(captured?.contextTail).toMatch(/😀中文尾$/u);
+    expect(captured?.contextTail).not.toContain('\ufffd');
+  });
+
+  it.each([
+    {
+      name: 'duplicate candidate IDs',
+      candidates: [
+        {
+          candidateId: 'same',
+          text: ' reviewed',
+          confidence: 0.9,
+          modelScore: 0.88,
+          gateScore: 0.92,
+          language: 'en' as const,
+        },
+        {
+          candidateId: 'same',
+          text: ' approved',
+          confidence: 0.8,
+          modelScore: 0.78,
+          gateScore: 0.82,
+          language: 'en' as const,
+        },
+      ],
+    },
+    {
+      name: 'mixed-language candidate text',
+      candidates: [
+        {
+          candidateId: 'mixed',
+          text: ' reviewed中文',
+          confidence: 0.9,
+          modelScore: 0.88,
+          gateScore: 0.92,
+          language: 'en' as const,
+        },
+      ],
+    },
+    {
+      name: 'non-finite confidence',
+      candidates: [
+        {
+          candidateId: 'nan',
+          text: ' reviewed',
+          confidence: Number.NaN,
+          modelScore: 0.88,
+          gateScore: 0.92,
+          language: 'en' as const,
+        },
+      ],
+    },
+    {
+      name: 'multi-line candidate text',
+      candidates: [
+        {
+          candidateId: 'line',
+          text: ' reviewed\nnext',
+          confidence: 0.9,
+          modelScore: 0.88,
+          gateScore: 0.92,
+          language: 'en' as const,
+        },
+      ],
+    },
+    {
+      name: 'non-finite model score',
+      candidates: [
+        {
+          candidateId: 'nan-model',
+          text: ' reviewed',
+          confidence: 0.9,
+          modelScore: Number.NaN,
+          gateScore: 0.92,
+          language: 'en' as const,
+        },
+      ],
+    },
+    {
+      name: 'out-of-range gate score',
+      candidates: [
+        {
+          candidateId: 'bad-gate',
+          text: ' reviewed',
+          confidence: 0.9,
+          modelScore: 0.88,
+          gateScore: 1.01,
+          language: 'en' as const,
+        },
+      ],
+    },
+    {
+      name: 'partial word injected at a word cursor boundary',
+      candidates: [
+        {
+          candidateId: 'partial-word',
+          text: 'reviewed',
+          confidence: 0.9,
+          modelScore: 0.88,
+          gateScore: 0.92,
+          language: 'en' as const,
+        },
+      ],
+    },
+  ])('fails closed on $name', async ({ candidates }) => {
+    const router = new CompletionEngineRouter();
+    await router.installPublicEngine(
+      publicEngine(async (request) => publicResponse(request, candidates)),
+    );
+    const result = await router.generatePublic(
+      {
+        workspaceScope: 'workspace-a',
+        documentVersion: 'doc-v1',
+        cursorPos: 12,
+        contextTail: 'Project plan',
+        languageHint: 'en',
+        blockType: 'paragraph',
+        cursorBoundary: 'word',
+        maxCandidates: 32,
+        deadlineAt: Date.now() + 100,
+      },
+      router.getEpoch(),
+      performance.now() + 100,
+    );
+
+    expect(result).toMatchObject({ candidates: [], usedEngineId: null, fellBack: true });
+  });
+
+  it('fails closed when a Worker response echoes an obsolete engine epoch', async () => {
+    const router = new CompletionEngineRouter();
+    await router.installPublicEngine(
+      publicEngine(async (request) => ({
+        ...publicResponse(request, [
+          {
+            candidateId: 'candidate',
+            text: ' reviewed',
+            confidence: 0.9,
+            modelScore: 0.88,
+            gateScore: 0.92,
+            language: 'en',
+          },
+        ]),
+        engineEpoch: request.engineEpoch + 1,
+      })),
+    );
+    const result = await router.generatePublic(
+      {
+        workspaceScope: 'workspace-a',
+        documentVersion: 'doc-v1',
+        cursorPos: 12,
+        contextTail: 'Project plan',
+        languageHint: 'en',
+        blockType: 'paragraph',
+        cursorBoundary: 'word',
+        maxCandidates: 32,
+        deadlineAt: Date.now() + 100,
+      },
+      router.getEpoch(),
+      performance.now() + 100,
+    );
+
+    expect(result).toMatchObject({ candidates: [], usedEngineId: null, fellBack: true });
+  });
+
+  it('ignores privileged fields spoofed by an untrusted raw candidate', async () => {
+    const router = new CompletionEngineRouter();
+    await router.installPublicEngine(
+      publicEngine(async (request) =>
+        publicResponse(request, [
+          {
+            candidateId: 'spoofed',
+            text: ' reviewed',
+            confidence: 0.9,
+            modelScore: 0.88,
+            gateScore: 0.92,
+            language: 'en',
+            from: 0,
+            providerId: 'attacker',
+            source: 'neural',
+            sourceLayer: 'provider',
+            priority: 999,
+          } as PublicEngineRawCandidate & Record<string, unknown>,
+        ]),
+      ),
+    );
+    const result = await router.generatePublic(
+      {
+        workspaceScope: 'workspace-a',
+        documentVersion: 'doc-v1',
+        cursorPos: 12,
+        contextTail: 'Project plan',
+        languageHint: 'en',
+        blockType: 'paragraph',
+        cursorBoundary: 'word',
+        maxCandidates: 32,
+        deadlineAt: Date.now() + 100,
+      },
+      router.getEpoch(),
+      performance.now() + 100,
+    );
+
+    expect(result.candidates[0]).toMatchObject({
+      from: 12,
+      providerId: TEST_PUBLIC_ENGINE_ID,
+      source: 'ngram',
+      sourceLayer: 'l3',
+      priority: PUBLIC_ENGINE_PROVIDER_PRIORITY,
+    });
+  });
+
+  it('rejects an incompatible public protocol before warmup', async () => {
+    const router = new CompletionEngineRouter();
+    const warmup = vi.fn(async () => true);
+    const dispose = vi.fn();
+    const engine = publicEngine(async (request) => publicResponse(request, []), {
+      protocolVersion: PUBLIC_ENGINE_PROTOCOL_VERSION + 1,
+      warmup,
+      dispose,
+    });
+
+    await expect(router.installPublicEngine(engine)).resolves.toBe(false);
+    expect(warmup).not.toHaveBeenCalled();
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(router.getActivePublicEngineId()).toBeNull();
+  });
+
+  it('disposes a public engine that arrives after the router lifecycle ended', async () => {
+    const router = new CompletionEngineRouter();
+    const warmup = vi.fn(async () => true);
+    const dispose = vi.fn();
+    const lateEngine = publicEngine(async (request) => publicResponse(request, []), {
+      warmup,
+      dispose,
+    });
+
+    await router.dispose();
+    await expect(router.installPublicEngine(lateEngine)).resolves.toBe(false);
+    expect(warmup).not.toHaveBeenCalled();
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(router.getActivePublicEngineId()).toBeNull();
+  });
+
+  it('aborts a public generator at the shared prediction deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      const router = new CompletionEngineRouter();
+      let observedSignal: AbortSignal | null | undefined = null;
+      await router.installPublicEngine(
+        publicEngine((_request, signal) => {
+          observedSignal = signal;
+          return new Promise(() => undefined);
+        }),
+      );
+      const pending = router.generatePublic(
+        {
+          workspaceScope: 'workspace-a',
+          documentVersion: 'doc-v1',
+          cursorPos: 4,
+          contextTail: '计划完成',
+          languageHint: 'zh',
+          blockType: 'paragraph',
+          cursorBoundary: 'word',
+          maxCandidates: 32,
+          deadlineAt: Date.now() + 20,
+        },
+        router.getEpoch(),
+        performance.now() + 20,
+      );
+      await vi.advanceTimersByTimeAsync(25);
+
+      await expect(pending).resolves.toMatchObject({
+        candidates: [],
+        fellBack: true,
+        timedOut: true,
+      });
+      expect((observedSignal as AbortSignal | null | undefined)?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

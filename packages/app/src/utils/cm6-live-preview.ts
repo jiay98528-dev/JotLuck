@@ -21,7 +21,11 @@ import {
 } from '@codemirror/view';
 import { StateField, StateEffect, type Range } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
-import { normalizeFullwidthMarkdownSyntax, renderMarkdown } from '@jotluck/renderer';
+import {
+  findBareJsonBlockLineRanges,
+  normalizeFullwidthMarkdownSyntax,
+  renderMarkdown,
+} from '@jotluck/renderer';
 import DOMPurify from 'dompurify';
 import { normalizeUrl } from '@/utils/urlUtils';
 
@@ -73,6 +77,7 @@ type BlockType =
   | 'heading'
   | 'setextHeadingText'
   | 'setextHeadingRule'
+  | 'jsonBlockLine'
   | 'paragraph'
   | 'codeFenceLine'
   | 'blockquoteLine'
@@ -104,6 +109,7 @@ interface LiveBlock {
   tableAlignments?: Array<'left' | 'center' | 'right'>;
   tableHeader?: boolean;
   tableColumnCount?: number;
+  headingLevel?: 1 | 2;
 }
 
 interface LivePreviewOptions {
@@ -113,7 +119,13 @@ interface LivePreviewOptions {
   wikiLinkExists?: (note: string) => boolean;
 }
 
-const SOURCE_PRESERVING_BLOCK_TYPES = new Set<BlockType>(['heading', 'paragraph', 'tableRow']);
+const SOURCE_PRESERVING_BLOCK_TYPES = new Set<BlockType>([
+  'heading',
+  'setextHeadingText',
+  'paragraph',
+  'tableRow',
+  'jsonBlockLine',
+]);
 const SOURCE_MARK_NODE_NAMES = new Set([
   'HeaderMark',
   'EmphasisMark',
@@ -142,6 +154,16 @@ function splitTableCells(raw: string): string[] {
     ? withoutLeading.slice(0, -1)
     : withoutLeading;
   return withoutTrailing.split('|').map((cell) => cell.trim());
+}
+
+function isTableSeparatorLine(raw: string): boolean {
+  if (!raw.includes('|')) return false;
+  const cells = splitTableCells(raw);
+  return cells.length > 0 && cells.every((cell) => /^:?-{1,}:?$/.test(cell));
+}
+
+function isTableRowCandidate(raw: string): boolean {
+  return raw.includes('|') && raw.trim() !== '';
 }
 
 function tableAlignments(
@@ -175,7 +197,11 @@ function tableGridTemplate(rows: string[], columnCount: number): string {
 // ---- Block Parser ----
 
 function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBlock[] {
-  const lines = normalizeFullwidthMarkdownSyntax(text).split('\n');
+  const normalizedText = normalizeFullwidthMarkdownSyntax(text);
+  const lines = normalizedText.split('\n');
+  const bareJsonRangesByStart = new Map(
+    findBareJsonBlockLineRanges(normalizedText).map((range) => [range.startLine, range]),
+  );
   const blocks: LiveBlock[] = [];
   let pos = 0;
   let i = 0;
@@ -296,6 +322,42 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
       continue;
     }
 
+    // Bare JSON-like blocks use the same complete-block detection as the shared renderer.
+    const bareJsonRange = bareJsonRangesByStart.get(i);
+    if (bareJsonRange) {
+      const group = groupKey(i);
+      const count = bareJsonRange.endLine - bareJsonRange.startLine + 1;
+      for (
+        let lineIndex = bareJsonRange.startLine;
+        lineIndex <= bareJsonRange.endLine;
+        lineIndex++
+      ) {
+        const jsonLine = lines[lineIndex] ?? '';
+        const jsonPos = lineIndex === i ? startPos : pos;
+        const position =
+          count === 1
+            ? 'single'
+            : lineIndex === bareJsonRange.startLine
+              ? 'first'
+              : lineIndex === bareJsonRange.endLine
+                ? 'last'
+                : 'middle';
+        blocks.push({
+          key: blockKey(lineIndex, jsonLine),
+          from: jsonPos,
+          to: jsonPos + jsonLine.length,
+          type: 'jsonBlockLine',
+          raw: jsonLine,
+          html: '',
+          groupKey: group,
+          position,
+        });
+        pos = jsonPos + jsonLine.length + 1;
+      }
+      i = bareJsonRange.endLine + 1;
+      continue;
+    }
+
     // Horizontal rule
     if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line.trim())) {
       blocks.push({
@@ -339,6 +401,7 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
           type: 'setextHeadingText',
           raw: line,
           html: '',
+          headingLevel: nextLine.trim().startsWith('=') ? 1 : 2,
         });
         // Rule line
         const ruleLen = nextLine.length;
@@ -350,6 +413,7 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
           type: 'setextHeadingRule',
           raw: nextLine,
           html: '',
+          headingLevel: nextLine.trim().startsWith('=') ? 1 : 2,
         });
         pos = rulePos + ruleLen + 1;
         i += 2;
@@ -454,9 +518,12 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
     }
 
     // Table row
-    if (line.includes('|') && line.trim().startsWith('|')) {
+    if (
+      isTableRowCandidate(line) &&
+      (line.trim().startsWith('|') || isTableSeparatorLine(lines[i + 1] ?? ''))
+    ) {
       const group = groupKey(i);
-      while (i < lines.length && (lines[i] ?? '').includes('|')) {
+      while (i < lines.length && isTableRowCandidate(lines[i] ?? '')) {
         const tl = lines[i] ?? '';
         const tlLen = tl.length;
         const tp = pos;
@@ -473,9 +540,9 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
         i++;
       }
       const tblBlocks = blocks.filter((b) => b.groupKey === group);
-      const hasSeparator = tblBlocks.length > 1 && /^\|[\s\-:|]+\|$/.test(tblBlocks[1]?.raw ?? '');
+      const hasSeparator = tblBlocks.length > 1 && isTableSeparatorLine(tblBlocks[1]?.raw ?? '');
       const visibleRows = tblBlocks
-        .filter((block) => !/^\|[\s\-:|]+\|$/.test(block.raw))
+        .filter((block) => !isTableSeparatorLine(block.raw))
         .map((block) => block.raw);
       const columnCount = Math.max(1, ...visibleRows.map((row) => splitTableCells(row).length));
       const gridTemplate = tableGridTemplate(visibleRows, columnCount);
@@ -539,6 +606,7 @@ export function __parseLiveBlocksForTest(text: string): Array<{
   tableColumnCount?: number;
   tableHeader?: boolean;
   unclosed?: boolean;
+  headingLevel?: 1 | 2;
 }> {
   return parseLiveBlocks(text).map((block) => ({
     type: block.type,
@@ -549,6 +617,7 @@ export function __parseLiveBlocksForTest(text: string): Array<{
     tableColumnCount: block.tableColumnCount,
     tableHeader: block.tableHeader,
     unclosed: block.unclosed,
+    headingLevel: block.headingLevel,
   }));
 }
 
@@ -642,8 +711,8 @@ function renderBlockHtml(
       }
 
       case 'setextHeadingText': {
-        // Render as heading; level depends on the rule line (not available here, default h2)
-        const html = renderBlock(block.raw, 'heading', refDefs, options);
+        const level = block.headingLevel ?? 2;
+        const html = renderBlock(`${'#'.repeat(level)} ${block.raw}`, 'heading', refDefs, options);
         return wrapBlockHtml(html, block);
       }
 
@@ -655,7 +724,7 @@ function renderBlockHtml(
         // Render each table row as a grid with a table-group-level column
         // template. CM6 cannot replace a multi-line table as one widget, so
         // this keeps per-line widgets while preserving stable columns.
-        const isSeparator = /^\|[\s\-:|]+\|$/.test(block.raw);
+        const isSeparator = isTableSeparatorLine(block.raw);
         if (isSeparator) {
           return wrapBlockHtml('', block);
         }
@@ -668,12 +737,22 @@ function renderBlockHtml(
             const rendered = renderBlock(trimmed, 'paragraph', refDefs, options)
               .replace(/^<p>/, '')
               .replace(/<\/p>\n?$/, '');
-            const align = block.tableHeader ? 'left' : (alignments[index] ?? 'left');
+            const align = alignments[index] ?? 'left';
             const role = block.tableHeader ? 'columnheader' : 'cell';
             return `<span class="ml-table-cell ml-table-cell--align-${align}${block.tableHeader ? ' ml-table-cell--header' : ''}" role="${role}">${rendered || '&nbsp;'}</span>`;
           })
           .join('');
         return wrapBlockHtml(cellHtml, block);
+      }
+
+      case 'jsonBlockLine': {
+        const escaped = block.raw
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/ /g, '&nbsp;')
+          .replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;');
+        return wrapBlockHtml(`<code class="cm-json-line">${escaped}</code>`, block);
       }
 
       case 'frontmatterLine':

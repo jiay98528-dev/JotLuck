@@ -5,6 +5,18 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_rc_gate:
+        description: 'Diagnostic only: generic RC remains fail-closed until evidence protocol v2'
+        required: true
+        default: false
+        type: boolean
+      l4_report:
+        description: 'Repository-relative installed-app L4 report path'
+        required: false
+        default: ''
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -40,6 +52,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Token contract check
+        run: pnpm lint:tokens
+
       - name: Format check
         run: pnpm format
 
@@ -69,14 +84,22 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify fail-closed autocomplete evidence
-        run: node scripts/verify-autocomplete-evidence.mjs --mode=ci
+      - name: Verify V2S evidence or its fail-closed absence
+        run: node scripts/verify-autocomplete-v2s-evidence.mjs --mode=ci
 
       - name: Run unit tests
         run: pnpm test
 
       - name: Run coverage
         run: pnpm test:coverage
+
+      - name: Upload unit coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-coverage
+          path: coverage/app
+          if-no-files-found: ignore
 
       - name: Build app
         run: pnpm --filter @jotluck/app build
@@ -117,7 +140,59 @@ jobs:
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
       - name: Run E2E tests
-        run: pnpm --filter @jotluck/app exec playwright test --project=${{ matrix.browser }} --workers=1
+        run: pnpm --filter @jotluck/app exec playwright test --project=${{ matrix.browser }} --workers=1 --grep-invert @windows-visual
+
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ matrix.browser }}
+          path: |
+            e2e/report
+            packages/app/test-results
+            e2e/artifacts
+          if-no-files-found: ignore
+
+  e2e-visual-windows:
+    name: Windows Visual Regression
+    runs-on: windows-latest
+    timeout-minutes: 15
+    needs: [lint-and-typecheck, test]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm exec playwright install chromium
+
+      - name: Run Win32-owned visual baselines
+        run: pnpm --filter @jotluck/app exec playwright test 23-halo-canvas-theme.spec.ts --project=chromium --workers=1 --grep @windows-visual
+
+      - name: Upload Windows visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-visual-windows
+          path: |
+            e2e/report
+            packages/app/test-results
+            e2e/artifacts
+          if-no-files-found: ignore
 
   rust:
     name: Rust Check, Test & Audit
@@ -172,3 +247,47 @@ jobs:
 
       - name: Build Tauri installer
         run: pnpm --filter @jotluck/app tauri:build
+
+      - name: Upload Tauri installer
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jotluck-windows-installer
+          path: packages/app/src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+
+  release-rc-gate:
+    name: Installed-app RC Gate
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_rc_gate == true }}
+    runs-on: windows-latest
+    timeout-minutes: 10
+    needs: [tauri-build-windows]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download Windows installer
+        uses: actions/download-artifact@v4
+        with:
+          name: jotluck-windows-installer
+          path: packages/app/src-tauri/target/release/bundle/nsis
+
+      - name: Run installed-app RC gate
+        env:
+          JotLuck_L4_REPORT: ${{ inputs.l4_report }}
+        run: pnpm release:rc-gate

@@ -206,8 +206,8 @@ describe('web corpus training profiles', () => {
     },
   ];
 
-  it('keeps release profile away from web cache paths', () => {
-    const sources = buildProfileSources(baseSources, 'release');
+  it('keeps the canonical profile away from unapproved web cache paths', () => {
+    const sources = buildProfileSources(baseSources, 'web-local');
 
     expect(sources).toHaveLength(1);
     expect(sources[0]?.path).toBe('note-patterns-zh/');
@@ -492,14 +492,14 @@ describe('verified model serialization', () => {
 });
 
 describe('verified baseline governance', () => {
-  let releaseCandidate: TrainingBuild;
+  let canonicalCandidate: TrainingBuild;
   let evidenceRoot = '';
   let evidencePath = '';
   let validEvidence: Record<string, unknown>;
 
   beforeAll(() => {
-    releaseCandidate = buildVerifiedBaseline({
-      profile: 'release',
+    canonicalCandidate = buildVerifiedBaseline({
+      profile: 'web-local',
       dryRun: true,
       allowVerifiedDegraded: false,
       trainingPoolBytes: 104_858,
@@ -510,10 +510,10 @@ describe('verified baseline governance', () => {
     evidencePath = path.join(evidenceRoot, 'quality.json');
     validEvidence = {
       schemaVersion: 1,
-      profile: 'release',
-      modelSha256: releaseCandidate.report.modelSha256,
-      trainingInputHash: releaseCandidate.report.inputManifestHash,
-      holdoutSha256: releaseCandidate.report.holdoutQuality.holdoutSha256,
+      profile: 'web-local',
+      modelSha256: canonicalCandidate.report.modelSha256,
+      trainingInputHash: canonicalCandidate.report.inputManifestHash,
+      holdoutSha256: canonicalCandidate.report.holdoutQuality.holdoutSha256,
       evaluatorVersion: AUTOCOMPLETE_MODEL_EVALUATOR_VERSION,
       learningCurveSha256: 'b'.repeat(64),
       opportunities: 220,
@@ -530,7 +530,7 @@ describe('verified baseline governance', () => {
   });
 
   it('builds a deterministic candidate but fails closed without quality evidence', () => {
-    const build = releaseCandidate;
+    const build = canonicalCandidate;
     const notePatterns = build.report.sourceInputs.find(
       (source) => source.id === 'curated-note-patterns-zh',
     );
@@ -598,7 +598,7 @@ describe('verified baseline governance', () => {
   it('accepts quality evidence bound to the exact model, input, holdout, and profile', () => {
     fs.writeFileSync(evidencePath, JSON.stringify(validEvidence), 'utf8');
     const verified = buildVerifiedBaseline({
-      profile: 'release',
+      profile: 'web-local',
       dryRun: true,
       allowVerifiedDegraded: false,
       qualityReportPath: evidencePath,
@@ -629,7 +629,7 @@ describe('verified baseline governance', () => {
       'utf8',
     );
     const mismatched = buildVerifiedBaseline({
-      profile: 'release',
+      profile: 'web-local',
       dryRun: true,
       allowVerifiedDegraded: false,
       qualityReportPath: evidencePath,

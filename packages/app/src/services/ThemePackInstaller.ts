@@ -1,12 +1,15 @@
 import JSZip from 'jszip';
 import type {
   InstalledThemePack,
+  ThemeActionId,
   ThemeManifestV2,
   ThemePackageInput,
+  ThemePrimitiveNode,
   ThemeUxRecipeMap,
   ThemeValidationIssue,
 } from '@/types/theme-pack';
 import { APP_THEME_VERSION } from './ThemeRegistry';
+import { findUnscopedCssSelector } from './theme-css-scope';
 
 const STORAGE_KEY = 'jotluck:themes:installed:v2';
 const MAX_THEME_PACKAGE_BYTES = 8 * 1024 * 1024;
@@ -22,6 +25,58 @@ const ALLOWED_DEFAULT_PERMISSIONS = [
   'filesystem-read',
   'filesystem-write',
 ];
+const THEME_SLOT_IDS = new Set<string>([
+  'app-shell',
+  'topbar',
+  'left-wing',
+  'right-wing',
+  'editor-control',
+  'status-bar',
+  'home',
+  'workflow-canvas',
+  'editor-surface',
+  'reader-workbench',
+  'file-drawer',
+  'command-palette',
+  'export-dialog',
+  'template-dialog',
+  'settings-dialog',
+  'share-dialog',
+  'new-file-dialog',
+  'delete-confirm-dialog',
+  'external-edit-dialog',
+  'scratch-exit-dialog',
+  'external-reader',
+  'markdown-cheat-sheet',
+  'toast-container',
+  'update-notification',
+  'dialogs.theme',
+]);
+const THEME_PRIMITIVE_TYPES = new Set([
+  'Stack',
+  'Grid',
+  'Panel',
+  'Text',
+  'ActionList',
+  'ActionButton',
+  'NoteList',
+  'HeadingTree',
+  'TagCloud',
+  'EditorStatus',
+  'ThemePreview',
+  'Slot',
+]);
+const THEME_ACTION_IDS = new Set<ThemeActionId>([
+  'new-note',
+  'file-drawer',
+  'search',
+  'template',
+  'export',
+  'share',
+  'theme',
+  'settings',
+  'view-toggle',
+]);
 
 interface StoredThemePackage {
   manifest: ThemeManifestV2;
@@ -54,11 +109,12 @@ export async function parseThemePack(input: ThemeZipInput): Promise<ThemePackage
   const cssBytes = cssFile ? await cssFile.async('uint8array') : new Uint8Array();
   if (cssBytes.byteLength > MAX_CSS_BYTES) throw new Error('theme.css 超过大小限制');
 
-  if (cssFile && manifest.checksums['theme.css']) {
+  if (cssFile && manifest.checksums?.['theme.css']) {
     await verifyChecksum('theme.css', cssBytes, manifest.checksums['theme.css']);
   }
 
-  for (const entrypoint of manifest.entrypoints ?? []) {
+  const entrypoints = Array.isArray(manifest.entrypoints) ? manifest.entrypoints : [];
+  for (const entrypoint of entrypoints) {
     const moduleFile = zip.file(entrypoint.module);
     if (!moduleFile) throw new Error(`主题代码入口不存在: ${entrypoint.module}`);
     await verifyChecksum(
@@ -69,7 +125,7 @@ export async function parseThemePack(input: ThemeZipInput): Promise<ThemePackage
   }
 
   const codeBundles: Record<string, string> = {};
-  for (const entrypoint of manifest.entrypoints ?? []) {
+  for (const entrypoint of entrypoints) {
     const moduleFile = zip.file(entrypoint.module);
     if (moduleFile) codeBundles[entrypoint.module] = await moduleFile.async('string');
   }
@@ -118,7 +174,14 @@ export function validateThemePackage(input: ThemePackageInput): ThemeValidationI
       path: 'manifest.entrypoints',
     });
   }
-  for (const permission of manifest.permissions ?? []) {
+  if (!manifest.checksums || typeof manifest.checksums !== 'object') {
+    issues.push({
+      code: 'invalid-checksums',
+      message: '主题 manifest 必须提供 checksums 对象。',
+      path: 'manifest.checksums',
+    });
+  }
+  for (const permission of Array.isArray(manifest.permissions) ? manifest.permissions : []) {
     if (
       !ALLOWED_DEFAULT_PERMISSIONS.includes(permission) &&
       (permission === 'network' ||
@@ -139,6 +202,55 @@ export function validateThemePackage(input: ThemePackageInput): ThemeValidationI
       path: 'manifest.minAppVersion',
     });
   }
+  if (manifest.slots !== undefined && !Array.isArray(manifest.slots)) {
+    issues.push({
+      code: 'invalid-slots',
+      message: 'manifest.slots 必须是主题 slot id 数组。',
+      path: 'manifest.slots',
+    });
+  }
+  for (const slot of Array.isArray(manifest.slots) ? manifest.slots : []) {
+    if (!THEME_SLOT_IDS.has(slot)) {
+      issues.push({
+        code: 'unknown-slot',
+        message: `manifest 声明了未知 UX slot：${String(slot)}。`,
+        path: 'manifest.slots',
+      });
+    }
+  }
+  const entrypoints = Array.isArray(manifest.entrypoints) ? manifest.entrypoints : [];
+  for (const [index, entrypoint] of entrypoints.entries()) {
+    if (!entrypoint || typeof entrypoint !== 'object') {
+      issues.push({
+        code: 'invalid-entrypoint',
+        message: '主题代码入口必须是对象。',
+        path: `manifest.entrypoints[${index}]`,
+      });
+      continue;
+    }
+    if (!THEME_SLOT_IDS.has(entrypoint.slot)) {
+      issues.push({
+        code: 'unknown-slot',
+        message: `代码入口声明了未知 UX slot：${String(entrypoint.slot)}。`,
+        path: `manifest.entrypoints[${index}].slot`,
+      });
+    }
+    if (typeof entrypoint.module !== 'string' || !entrypoint.module.trim()) {
+      issues.push({
+        code: 'invalid-entrypoint',
+        message: '主题代码入口必须提供 module 路径。',
+        path: `manifest.entrypoints[${index}].module`,
+      });
+    }
+    if (Array.isArray(manifest.slots) && !manifest.slots.includes(entrypoint.slot)) {
+      issues.push({
+        code: 'slot-not-declared',
+        message: `代码入口 slot 未出现在 manifest.slots：${String(entrypoint.slot)}。`,
+        path: `manifest.entrypoints[${index}].slot`,
+      });
+    }
+  }
+  validateUxRecipeMap(input.ux, manifest, issues);
   const unscopedSelector = findUnscopedCssSelector(input.css ?? '', manifest.id);
   if (unscopedSelector) {
     issues.push({
@@ -150,95 +262,100 @@ export function validateThemePackage(input: ThemePackageInput): ThemeValidationI
   return issues;
 }
 
-function stripCssComments(css: string): string {
-  return css.replace(/\/\*[\s\S]*?\*\//g, '');
-}
-
-function selectorHasThemeScope(selector: string, themeId: string): boolean {
-  const trimmed = selector.trim();
-  const scopes = [
-    `[data-theme-id="${themeId}"]`,
-    `[data-theme-id='${themeId}']`,
-    `[data-theme-id=${themeId}]`,
-  ];
-  return scopes.some(
-    (scope) => trimmed.startsWith(scope) || trimmed.startsWith(`:where(${scope})`),
-  );
-}
-
-function splitSelectorList(prelude: string): string[] {
-  const selectors: string[] = [];
-  let start = 0;
-  let squareDepth = 0;
-  let parenDepth = 0;
-  let quote: '"' | "'" | null = null;
-
-  for (let i = 0; i < prelude.length; i++) {
-    const char = prelude[i];
-    const previous = prelude[i - 1];
-    if (quote) {
-      if (char === quote && previous !== '\\') quote = null;
+function validateUxRecipeMap(
+  ux: ThemeUxRecipeMap | undefined,
+  manifest: ThemeManifestV2,
+  issues: ThemeValidationIssue[],
+): void {
+  if (ux === undefined) return;
+  if (!ux || typeof ux !== 'object' || Array.isArray(ux)) {
+    issues.push({ code: 'invalid-ux', message: 'ux.json 必须是对象。', path: 'ux.json' });
+    return;
+  }
+  for (const [slotKey, recipe] of Object.entries(ux)) {
+    if (!THEME_SLOT_IDS.has(slotKey)) {
+      issues.push({
+        code: 'unknown-slot',
+        message: `ux.json 声明了未知 UX slot：${slotKey}。`,
+        path: `ux.${slotKey}`,
+      });
       continue;
     }
-    if (char === '"' || char === "'") {
-      quote = char;
+    if (!recipe || typeof recipe !== 'object' || Array.isArray(recipe)) {
+      issues.push({
+        code: 'invalid-ux-recipe',
+        message: `ux.${slotKey} 必须是 recipe 对象。`,
+        path: `ux.${slotKey}`,
+      });
       continue;
     }
-    if (char === '[') squareDepth++;
-    else if (char === ']') squareDepth = Math.max(0, squareDepth - 1);
-    else if (char === '(') parenDepth++;
-    else if (char === ')') parenDepth = Math.max(0, parenDepth - 1);
-    else if (char === ',' && squareDepth === 0 && parenDepth === 0) {
-      selectors.push(prelude.slice(start, i).trim());
-      start = i + 1;
+    if (recipe.slot !== slotKey) {
+      issues.push({
+        code: 'slot-mismatch',
+        message: `ux.${slotKey}.slot 必须与 map key 一致。`,
+        path: `ux.${slotKey}.slot`,
+      });
+    }
+    if (Array.isArray(manifest.slots) && !manifest.slots.includes(recipe.slot)) {
+      issues.push({
+        code: 'slot-not-declared',
+        message: `ux recipe slot 未出现在 manifest.slots：${slotKey}。`,
+        path: `ux.${slotKey}`,
+      });
+    }
+    validatePrimitiveNode(recipe.root, `ux.${slotKey}.root`, issues);
+  }
+}
+
+function validatePrimitiveNode(
+  node: unknown,
+  nodePath: string,
+  issues: ThemeValidationIssue[],
+): node is ThemePrimitiveNode {
+  if (!node || typeof node !== 'object' || Array.isArray(node)) {
+    issues.push({
+      code: 'invalid-primitive',
+      message: `${nodePath} 必须是 primitive 对象。`,
+      path: nodePath,
+    });
+    return false;
+  }
+  const candidate = node as Partial<ThemePrimitiveNode>;
+  if (typeof candidate.type !== 'string' || !THEME_PRIMITIVE_TYPES.has(candidate.type)) {
+    issues.push({
+      code: 'unknown-primitive',
+      message: `${nodePath}.type 不是当前 DSL 支持的 primitive。`,
+      path: `${nodePath}.type`,
+    });
+  }
+  if (candidate.action !== undefined) {
+    const action = candidate.action as { actionId?: unknown };
+    if (
+      !action ||
+      typeof action.actionId !== 'string' ||
+      !THEME_ACTION_IDS.has(action.actionId as ThemeActionId)
+    ) {
+      issues.push({
+        code: 'unknown-action',
+        message: `${nodePath}.action.actionId 不是当前宿主 action。`,
+        path: `${nodePath}.action.actionId`,
+      });
     }
   }
-
-  selectors.push(prelude.slice(start).trim());
-  return selectors.filter(Boolean);
-}
-
-function findUnscopedCssSelector(css: string, themeId: string): string | null {
-  if (!css.trim()) return null;
-
-  const source = stripCssComments(css);
-  let segmentStart = 0;
-  let depth = 0;
-  let keyframesDepth: number | null = null;
-
-  for (let i = 0; i < source.length; i++) {
-    const char = source[i];
-    if (char === '{') {
-      const prelude = source.slice(segmentStart, i).trim();
-      const lowerPrelude = prelude.toLowerCase();
-
-      if (keyframesDepth !== null && depth >= keyframesDepth) {
-        // Keyframe selectors (`from`, `to`, `50%`) are not DOM selectors.
-      } else if (
-        lowerPrelude.startsWith('@keyframes') ||
-        lowerPrelude.startsWith('@-webkit-keyframes')
-      ) {
-        keyframesDepth = depth + 1;
-      } else if (prelude && !prelude.startsWith('@')) {
-        const unscoped = splitSelectorList(prelude).find(
-          (selector) => !selectorHasThemeScope(selector, themeId),
-        );
-        if (unscoped) return unscoped;
-      }
-
-      depth += 1;
-      segmentStart = i + 1;
-      continue;
-    }
-
-    if (char === '}') {
-      depth = Math.max(0, depth - 1);
-      if (keyframesDepth !== null && depth < keyframesDepth) keyframesDepth = null;
-      segmentStart = i + 1;
+  if (candidate.children !== undefined) {
+    if (!Array.isArray(candidate.children)) {
+      issues.push({
+        code: 'invalid-primitive-children',
+        message: `${nodePath}.children 必须是数组。`,
+        path: `${nodePath}.children`,
+      });
+    } else {
+      candidate.children.forEach((child, index) =>
+        validatePrimitiveNode(child, `${nodePath}.children[${index}]`, issues),
+      );
     }
   }
-
-  return null;
+  return true;
 }
 
 async function validateZipEntries(zip: JSZip): Promise<void> {

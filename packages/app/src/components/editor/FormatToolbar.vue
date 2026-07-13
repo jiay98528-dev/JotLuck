@@ -3,10 +3,11 @@
     class="format-toolbar"
     :class="`format-toolbar--${density}`"
     :data-density="density"
+    data-theme-part="format-toolbar"
     role="toolbar"
     aria-label="固定格式工具栏"
   >
-    <label class="format-toolbar__preset">
+    <label class="format-toolbar__preset" data-theme-part="format-toolbar-preset">
       <span class="sr-only">段落样式</span>
       <select :value="displayPreset" aria-label="段落样式" @change="onPresetChange">
         <option value="paragraph">正文</option>
@@ -32,6 +33,7 @@
       :title="item.title"
       :aria-label="item.label"
       :aria-pressed="activeAction === item.action"
+      data-theme-part="format-toolbar-action"
       @mousedown.prevent
       @click="$emit('format', item.action)"
     >
@@ -46,6 +48,7 @@
       class="format-toolbar__clear"
       title="清除格式"
       aria-label="清除格式"
+      data-theme-part="format-toolbar-clear"
       @mousedown.prevent
       @click="$emit('format', 'clear')"
     >

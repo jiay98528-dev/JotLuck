@@ -30,11 +30,6 @@
     "note-patterns-zh/short-anchors.md"
   ],
   "profiles": {
-    "release": {
-      "outputFile": "../../packages/app/public/baseline-ngram.v1.compact.txt",
-      "manifestFile": "../../packages/app/public/baseline-ngram.v1.compact.manifest.json",
-      "reportFile": "training-report.json"
-    },
     "web-local": {
       "outputFile": "../../packages/app/public/baseline-ngram.web-local.compact.txt",
       "manifestFile": "../../packages/app/public/baseline-ngram.web-local.compact.manifest.json",

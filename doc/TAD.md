@@ -1,6 +1,6 @@
 # JotLuck TAD
 
-版本：2026-07-11
+版本：2026-07-13
 
 ## UX Theme Runtime v2
 
@@ -28,10 +28,15 @@ Vue 3 + Pinia + Vite
 - `MarkdownPredictor` 是工作区级稳定 facade，组合 Markdown 上下文扫描、结构化 Provider、Resolver、N-gram 引擎和按工作区隔离的学习仓库；编辑器 keyed 重建不重建 Predictor。
 - 数据层固定为当前文档 L1、notebook 按文件可撤销贡献 N2、仅接收明确用户反馈的 Personal L2，以及应用级只读单例 L3。各层分别输出 top-k 候选；N2 先汇总跨文档支持再剪枝，不与 Personal L2 原始计数合并。
 - 学习仓库统一持久化 Personal L2、accepted lexicon、signals、metrics 和元数据；写入按 scope 串行合并，可用时使用 Web Locks，并通过 BroadcastChannel/storage event 同步多标签页。
-- L3 采用 sectioned v4：中文字符表支持高文档频次 4→3→2 回退，英文优先词级 bigram/trigram，字符 4-gram 只做词内回退。manifest 约束表 profile、阶数范围、定点计数尺度、条目数、字节数、SHA-256、训练输入哈希、`runtimeEligible` 和发布资格；大表按批异步解析并让出主线程，加载失败时只允许回退到另一份通过同等验证且可运行的内置模型。
-- 训练管线使用批准来源、全局定额蒸馏和原子发布，硬隔离 `novel-zh`，运行时模型保持 ≤6MiB；原始重复率、独立 holdout 质量或哈希绑定失败时只能生成隔离候选，不能替换正式资产。24MiB 学习曲线具有独立 source set，只允许五个同版本、同 seed 的项目生成器来源；curated 或生成目录外路径进入该 source set 时立即失败。
-- 扩池评测使用固定 `0.1/0.5/1/3/8/16/24MiB-cap` 嵌套样本和冻结 checkpoint；成员关系以文档 ID 与内容 SHA 集合验证，小档必须是大档严格前缀，末档允许使用不超过 24MiB 的完整批准池。cold validation 选择满足绝对门槛且不低于同集 V1 的最小档；只有选出候选后才能一次性消耗 workspace final。发布资格绑定模型、输入、validation、final、评测器源码树、V1 快照、质量/运行时/V1-V2/学习曲线证据的实际路径与 SHA，不能由单一布尔值放行。
-- 运行时解析采用可测量的分块让出策略；最大同步 chunk 必须小于 50ms，否则发布前升级为 Worker 或紧凑 Trie。英文词边界只查询词级 bigram/trigram，字符模型仅在未完成单词内部承担拼写续写。
+- `CompletionEngineRouter` 管理唯一、模型无关的 `CompletionPublicEngine` 生成插槽与未来只做重排的 V2.1 `CompletionRanker`。公共插槽默认未绑定；只有通过独立证据的模型才能显式安装。epoch、workspace scope、document version、UTF-16 cursor、deadline 与 AbortSignal 继续作为迟到结果边界。
+- Public V2S 的目标 canonical 入口为 `packages/app/public/autocomplete/autocomplete-public.manifest.json`，只引用一份内容寻址 v6 二进制；候选阶段仍保留当前 v4 pair 的 fail-closed 状态，正式切换时必须删除旧 pair。任何时刻都不得同时发布两代公共资产，冻结 V1 只存在于隔离评测闭包。
+- 已停止的 `public-phrase-transformer-v1` 训练、语料治理、量化和证据代码保留在 `scripts/` 供复核；其 Worker、ONNX adapter、默认 factory 与 `onnxruntime-web` 已从生产依赖图移除。`autocomplete-v2r-architecture-stop.json` 继续阻断长训练、publisher 与 v5 verifier。
+- Public V2S 在专用 Worker 内执行中英文独立的边界感知 Subword Modified Kneser-Ney 查询和小型选择性门控。宿主只传光标前最后 256 个 UTF-8 字节；Worker 只返回原始文本/分数，Router 校验并盖章插入位置、来源、层级和优先级。Worker/CSP/资产校验失败时返回空 L3，禁止主线程推理。
+- canonical manifest 与内容寻址二进制只有在 schema、大小和 SHA 全部通过后才可写入 `jotluck-public-v2s-v1` CacheStorage；离线时只读该验证后缓存，身份不符立即关闭 Public L3。中英文 tokenizer/Trie 可在训练期分别选择，但发布时仍封装为同一 v6 二进制和一个公共插槽。
+- `public-v2s-mkn-v1` 的固定矩阵与唯一逐语言组合修正已完成；最大 5,735,917B 候选的 development Oracle@8/32 为 37%/40%，固定矩阵逐语言最好前沿为 37.5%/40.5%，仍未达到 40%/45% 总体架构门槛。`autocomplete-v2s-architecture-stop.json` 因此在任何输入读取前阻断训练、Gate repack、组合和 publisher；CI 只能确认公共 L3 继续 fail closed，不能把停止状态计为质量 PASS。
+- 停止态下 `MarkdownPredictor` 只接受显式注入的 `CompletionPublicEngine`，不自动导入 V2S factory；因此普通生产 bundle 不含已停止 Worker。V2S engine/factory 源码仅供单元测试和隔离评测复核，不能由无 manifest 的生产路径隐式激活。
+- 公共模型仍须满足 manifest+单资产 ≤6MiB、主线程无模型长任务、双 p90 ≤140ms、独立 cold/workspace final 和完整证据绑定；发布器只能原子替换唯一 canonical profile，不能并行安装多版本或用旧模型 fallback 掩盖失败。
+- 结构化 Provider、L1、Personal L2、Notebook N2 与 Hybrid 是互补来源而非公共模型版本；公共 L3 缺失或失败时它们继续提供免费确定性路径。
 
 ## 离线补全可插拔扩展（3.12，V2.1 规划）
 
@@ -66,6 +71,13 @@ Vue 3 + Pinia + Vite
 
 ## 变更记录
 
+- 2026-07-13：Public V2S 在有界 development 预检中未达到 Oracle 架构门槛，记录 architecture stop；不训练 Gate、不读取 final、不安装 v6 public 资产。
+- 2026-07-13：新增 Public V2S 目标架构：双语 Subword MKN + 小门控、256-byte Worker 边界、v6 单 manifest/单资产与 35% 绝对可用率双 final 合同。
+- 2026-07-13：`public-phrase-transformer-v1` 固定短语分类架构停止；训练、publisher 和 v5 verifier 由 architecture-stop 记录硬阻断，未来开放词表/组合生成需新 ADR 与 manifest schema。
+
+- 2026-07-12：V2R 输入固定为 192-byte/48×4-byte patch；训练数据升级为 silence-safe v3，禁止把短语库表示缺口标为 abstain，并将生成器治理升级为 v3.1 的文档级多样性约束。
+- 2026-07-12：V2R 训练样本升级为多合法前缀目标，并补齐 generator/training-data/bundle 与 manifest 的可重算证据闭环；新增不可进入普通生产构建的 evaluation-only 候选包，发布闸门保持关闭。
+- 2026-07-12：公共 L3 升级为 V2R 边界感知短语 Transformer，新增生成引擎 Worker/v5 manifest、30MiB 训练拆分、多参考 cold/workspace 盲测与 60% 绝对可用率发布合同；主题架构未变更。
 - 2026-07-11：补齐 synthetic-only source set、validation/final 一次性语义、V1 子进程快照、实际证据复算、Hybrid 原子批/逐 scope 恢复与真实 WebView2 smoke 合同。
 - 2026-07-11：补充 P1/P2 可信评测、原子快照查询、Worker 不可用禁用策略和单次回放重建合同；主题架构未变更。
 - 2026-07-11：新增 §3.12，定义 V2 异步候选批次与 V2.1 数据型语义重排扩展边界。

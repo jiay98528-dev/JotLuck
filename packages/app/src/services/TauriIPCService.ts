@@ -35,6 +35,7 @@ interface RustFileChangeEvent {
   kind: 'create' | 'modify' | 'remove' | 'rename';
   path: string;
   old_path?: string | null;
+  generation: number;
 }
 
 // ── Recent notebooks cache key ──
@@ -70,6 +71,9 @@ export function sanitizeRecentNotebookPaths(paths: string[]): string[] {
 export class TauriIPCService implements IFileSystemService {
   private unwatchFns: TauriUnlistenFn[] = [];
   private activeWatchRoot: string | null = null;
+  private activeWatchId = 0;
+  private activeWatchGeneration: number | null = null;
+  private watchTransition: Promise<void> = Promise.resolve();
   // ====================================================================
   // Notebook Management
   // ====================================================================
@@ -86,6 +90,12 @@ export class TauriIPCService implements IFileSystemService {
 
   async openNotebookAt(path: string): Promise<NotebookHandle> {
     const root = await invoke<string>('open_notebook', { path });
+    this.saveRecent(root);
+    return { rootPath: root, name: this.displayNameFromPath(root) };
+  }
+
+  async openNotebookFromExternalGrant(accessToken: string): Promise<NotebookHandle> {
+    const root = await invoke<string>('open_external_notebook', { accessToken });
     this.saveRecent(root);
     return { rootPath: root, name: this.displayNameFromPath(root) };
   }
@@ -217,11 +227,42 @@ export class TauriIPCService implements IFileSystemService {
   // ====================================================================
 
   async watch(rootPath: string, callback: (event: FileChangeEvent) => void): Promise<UnwatchFn> {
-    await this.unwatchAll();
-    await invoke('start_file_watcher', { rootPath });
-    this.activeWatchRoot = rootPath;
+    let unwatch: UnwatchFn | undefined;
+    const transition = this.watchTransition.then(async () => {
+      unwatch = await this.watchInternal(rootPath, callback);
+    });
+    this.watchTransition = transition.then(
+      () => undefined,
+      () => undefined,
+    );
+    await transition;
+    return unwatch ?? (() => undefined);
+  }
+
+  async unwatchAll(): Promise<void> {
+    const transition = this.watchTransition.then(() => this.unwatchAllInternal());
+    this.watchTransition = transition.then(
+      () => undefined,
+      () => undefined,
+    );
+    await transition;
+  }
+
+  private async watchInternal(
+    rootPath: string,
+    callback: (event: FileChangeEvent) => void,
+  ): Promise<UnwatchFn> {
+    await this.unwatchAllInternal();
+    const watchId = ++this.activeWatchId;
     const unlisten = await listen<RustFileChangeEvent>('file-change', (event) => {
+      if (this.activeWatchId !== watchId) return;
       const payload = event.payload;
+      if (
+        this.activeWatchGeneration !== null &&
+        payload.generation !== this.activeWatchGeneration
+      ) {
+        return;
+      }
       callback({
         type: this.mapChangeKind(payload.kind),
         path: payload.path.startsWith('/') ? payload.path : `/${payload.path}`,
@@ -233,20 +274,29 @@ export class TauriIPCService implements IFileSystemService {
       });
     });
     this.unwatchFns.push(unlisten);
-    return () => {
+    try {
+      this.activeWatchGeneration = await invoke<number>('start_file_watcher', {
+        rootPath,
+        accessToken: null,
+        relativePath: null,
+      });
+      this.activeWatchRoot = rootPath;
+    } catch (error) {
       unlisten();
       this.unwatchFns = this.unwatchFns.filter((fn) => fn !== unlisten);
-      if (this.activeWatchRoot === rootPath) {
-        this.activeWatchRoot = null;
-        void invoke('stop_file_watcher').catch((error) => {
-          // eslint-disable-next-line no-console
-          console.warn('[TauriIPCService] stop_file_watcher failed:', error);
-        });
-      }
+      this.activeWatchId++;
+      this.activeWatchGeneration = null;
+      throw error;
+    }
+    return () => {
+      if (this.activeWatchId !== watchId) return;
+      void this.unwatchAll();
     };
   }
 
-  async unwatchAll(): Promise<void> {
+  private async unwatchAllInternal(): Promise<void> {
+    this.activeWatchId++;
+    this.activeWatchGeneration = null;
     for (const unwatch of this.unwatchFns.splice(0)) {
       unwatch();
     }

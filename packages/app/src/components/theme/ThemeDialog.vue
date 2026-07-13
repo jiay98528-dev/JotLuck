@@ -634,7 +634,7 @@ async function onImportFile(event: Event): Promise<void> {
 
 .theme-card__meta span,
 .theme-token-list span {
-  padding: var(--space-3) var(--space-8);
+  padding: var(--space-4) var(--space-8);
   border-radius: var(--radius-pill);
   background: var(--surface-hover);
 }
@@ -647,7 +647,7 @@ async function onImportFile(event: Event): Promise<void> {
 
 .theme-pill {
   flex: 0 0 auto;
-  padding: var(--space-3) var(--space-9);
+  padding: var(--space-4) var(--space-8);
   border: var(--border-thin) solid color-mix(in oklch, var(--accent) 34%, var(--rule));
   border-radius: var(--radius-pill);
   color: var(--accent);
@@ -842,16 +842,29 @@ async function onImportFile(event: Event): Promise<void> {
 
 @media (width <= 900px) {
   .theme-center__body {
-    grid-template-columns: 1fr;
+    display: block;
     overflow: hidden auto;
     scrollbar-gutter: stable;
   }
 
-  .theme-center__main,
-  .theme-center__side {
+  .theme-center__main {
+    min-height: auto;
     overflow: visible;
     padding-inline: 0;
-    padding-block-end: 0;
+    padding-block-end: var(--space-20);
+  }
+
+  .theme-center__side {
+    display: none;
+  }
+
+  .theme-grid,
+  .theme-grid--compact {
+    grid-template-columns: 1fr;
+  }
+
+  .theme-card__preview {
+    max-height: 240px;
   }
 
   .theme-center__status,
@@ -875,6 +888,20 @@ async function onImportFile(event: Event): Promise<void> {
 
   .theme-grid {
     grid-template-columns: 1fr;
+  }
+
+  .theme-center__body {
+    display: block;
+    overflow: hidden auto;
+  }
+
+  .theme-center__main {
+    min-height: auto;
+    padding-block-end: var(--space-20);
+  }
+
+  .theme-center__side {
+    display: none;
   }
 }
 </style>

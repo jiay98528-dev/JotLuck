@@ -21,7 +21,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Mutex,
 };
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, WindowEvent};
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,6 +29,7 @@ struct OpenedFile {
     absolute_path: String,
     notebook_root: String,
     relative_path: String,
+    access_token: Option<String>,
 }
 
 /// Stores the file path from command-line args (file association / double-click open).
@@ -72,6 +73,7 @@ fn opened_file_from_arg(arg: &str) -> Option<OpenedFile> {
         absolute_path: path_to_slash(&absolute),
         notebook_root: path_to_slash(&notebook_root),
         relative_path: format!("/{file_name}"),
+        access_token: None,
     })
 }
 
@@ -79,6 +81,15 @@ fn capture_opened_file_from_args(args: &[String]) -> Option<OpenedFile> {
     args.iter()
         .skip(1)
         .find_map(|arg| opened_file_from_arg(arg))
+}
+
+fn attach_external_grant(
+    opened_file: &mut OpenedFile,
+    access: &fs_ops::ExternalAccessGrants,
+) -> Result<(), String> {
+    let handle = access.grant_for_existing_file(&opened_file.absolute_path)?;
+    opened_file.access_token = Some(handle.access_token);
+    Ok(())
 }
 
 fn startup_log_path() -> Option<PathBuf> {
@@ -121,7 +132,7 @@ pub fn run() {
 
     if let Err(error) = tauri::Builder::default()
         .manage(fs_ops::NotebookRoot::new())
-        .manage(fs_ops::ExternalAccessRoots::new())
+        .manage(fs_ops::ExternalAccessGrants::new())
         .manage(file_watcher::FileWatcherState::new())
         .manage(completion_retrieval::CompletionRetrievalState::default())
         .manage(Mutex::new(indexer::SearchIndex::new()))
@@ -133,11 +144,23 @@ pub fn run() {
             )?;
 
             // Emit opened-file event to frontend after setup
-            if let Some(ref opened_file) = *OPENED_FILE.lock().unwrap() {
-                let _ = app
-                    .state::<fs_ops::ExternalAccessRoots>()
-                    .allow_root_path(&opened_file.notebook_root);
-                let _ = app.emit("opened-file", opened_file.clone());
+            if let Some(mut opened_file) = OPENED_FILE.lock().unwrap().take() {
+                let access = app.state::<fs_ops::ExternalAccessGrants>();
+                if attach_external_grant(&mut opened_file, &access).is_ok() {
+                    let _ = app.emit("opened-file", opened_file.clone());
+                    *OPENED_FILE.lock().unwrap() = Some(opened_file);
+                }
+            }
+
+            if let Some(window) = app.get_webview_window("main") {
+                let app_handle = app.handle().clone();
+                window.on_window_event(move |event| {
+                    if matches!(event, WindowEvent::Destroyed) {
+                        app_handle
+                            .state::<fs_ops::ExternalAccessGrants>()
+                            .revoke_all();
+                    }
+                });
             }
 
             log::info!("JotLuck Tauri backend initialized");
@@ -148,11 +171,12 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if let Some(opened_file) = capture_opened_file_from_args(&argv) {
-                *OPENED_FILE.lock().unwrap() = Some(opened_file.clone());
-                let _ = app
-                    .state::<fs_ops::ExternalAccessRoots>()
-                    .allow_root_path(&opened_file.notebook_root);
-                let _ = app.emit("opened-file", opened_file);
+                let mut opened_file = opened_file;
+                let access = app.state::<fs_ops::ExternalAccessGrants>();
+                if attach_external_grant(&mut opened_file, &access).is_ok() {
+                    *OPENED_FILE.lock().unwrap() = Some(opened_file.clone());
+                    let _ = app.emit("opened-file", opened_file);
+                }
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
                     let _ = window.set_focus();
@@ -162,6 +186,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             // M6-03: File system operations
             fs_ops::open_notebook,
+            fs_ops::open_external_notebook,
             fs_ops::open_sample_notebook,
             fs_ops::get_notebook_root,
             fs_ops::list_directory,
@@ -170,9 +195,10 @@ pub fn run() {
             fs_ops::read_external_note_file,
             fs_ops::write_file,
             fs_ops::read_external_markdown_file,
-            fs_ops::register_external_access_root,
             fs_ops::write_external_markdown_file,
             fs_ops::write_external_note_file,
+            fs_ops::save_external_note_as,
+            fs_ops::revoke_external_access,
             fs_ops::read_binary_file,
             fs_ops::write_binary_file,
             fs_ops::delete_file,

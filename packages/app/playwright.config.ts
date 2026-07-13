@@ -6,11 +6,12 @@ const previewHost = parsedBaseURL.hostname === 'localhost' ? '127.0.0.1' : parse
 const previewPort = parsedBaseURL.port || (parsedBaseURL.protocol === 'https:' ? '443' : '80');
 const autocompleteRcEnabled =
   process.env.JOTLUCK_AUTOCOMPLETE_RC === '1' ||
-  process.argv.some((argument) => /2[4-6]-autocomplete/u.test(argument));
-const webServerCommand = [
-  'pnpm --filter @jotluck/app build:e2e',
-  `pnpm --filter @jotluck/app preview --host ${previewHost} --port ${previewPort}`,
-].join(' && ');
+  process.argv.some((argument) => /2[4-8]-autocomplete/u.test(argument));
+const useFrozenV2REvaluationBundle = process.env.JOTLUCK_AUTOCOMPLETE_V2R_EVALUATION_BUNDLE === '1';
+const previewCommand = `pnpm --filter @jotluck/app preview --host ${previewHost} --port ${previewPort}`;
+const webServerCommand = useFrozenV2REvaluationBundle
+  ? previewCommand
+  : ['pnpm --filter @jotluck/app build:e2e', previewCommand].join(' && ');
 
 export default defineConfig({
   testDir: '../../e2e/tests',

@@ -50,7 +50,7 @@ describe('markdown formatting', () => {
 
   it('识别全角标题与行内格式定界符', () => {
     expect(normalizeFullwidthMarkdownSyntax('＃　标题\n＊＊粗体＊＊')).toBe('# 标题\n**粗体**');
-    expect(renderMarkdown('＃　标题\n\n＊＊粗体＊＊')).toContain('<h1>标题</h1>');
+    expect(renderMarkdown('＃　标题\n\n＊＊粗体＊＊')).toContain('<h1 id="heading-标题">标题</h1>');
     expect(renderMarkdown('＊＊粗体＊＊')).toContain('<strong>粗体</strong>');
     expect(detectParagraphPreset('＃　标题', 2)).toBe('heading1');
   });

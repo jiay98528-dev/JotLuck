@@ -1,25 +1,27 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   AUTOCOMPLETE_EVIDENCE_SOURCE_FILES,
+  AUTOCOMPLETE_V2R_EVIDENCE_SOURCE_FILES,
   canonicalJson,
   resolveWorkspaceFile,
   sha256,
   verifyEvaluatorSourceTree,
   verifyFrozenV1Snapshot,
 } from './autocomplete-evidence-integrity.mjs';
+import {
+  V2R_PUBLIC_MANIFESTS,
+  hasAnyV2RPublicManifest,
+  verifyAutocompleteV2REvidence,
+} from './verify-autocomplete-v2r-evidence.mjs';
 
 const MODULE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC_MODELS = [
   {
     asset: 'packages/app/public/baseline-ngram.web-local.compact.txt',
     manifest: 'packages/app/public/baseline-ngram.web-local.compact.manifest.json',
-  },
-  {
-    asset: 'packages/app/public/baseline-ngram.v1.compact.txt',
-    manifest: 'packages/app/public/baseline-ngram.v1.compact.manifest.json',
   },
 ];
 const COMPLETE_BINDING_KEYS = [
@@ -63,6 +65,21 @@ export function verifyAutocompleteEvidence(options = {}) {
   if (mode !== 'ci' && mode !== 'rc') throw new Error(`Unsupported evidence mode: ${mode}.`);
   const models = options.models ?? PUBLIC_MODELS;
   const expectedEvaluatorFiles = options.evaluatorFiles ?? AUTOCOMPLETE_EVIDENCE_SOURCE_FILES;
+  if (hasAnyV2RPublicManifest(rootDir)) {
+    const present = V2R_PUBLIC_MANIFESTS.filter(({ manifest }) =>
+      existsSync(path.resolve(rootDir, manifest)),
+    );
+    if (present.length !== V2R_PUBLIC_MANIFESTS.length) {
+      throw new Error('V2R public manifests are only partially installed.');
+    }
+    return {
+      mode,
+      models: verifyAutocompleteV2REvidence({
+        rootDir,
+        expectedEvaluatorFiles: options.v2rEvaluatorFiles ?? AUTOCOMPLETE_V2R_EVIDENCE_SOURCE_FILES,
+      }),
+    };
+  }
   const results = models.map((model) => verifyModel(rootDir, model, mode, expectedEvaluatorFiles));
   return { mode, models: results };
 }

@@ -56,6 +56,7 @@ const purifyConfig = {
     'disabled',
     'target',
     'rel',
+    'align',
   ],
   ALLOW_DATA_ATTR: true,
   FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form'],

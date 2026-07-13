@@ -6,11 +6,15 @@
 use crate::path::resolve_safe_path;
 use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
-use tauri::State;
+use std::time::{Duration, Instant};
+use tauri::{AppHandle, State};
+use tauri_plugin_dialog::DialogExt;
+use uuid::Uuid;
 
 static WRITE_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -33,34 +37,262 @@ impl NotebookRoot {
     }
 }
 
-/// In-memory state: external roots explicitly opened through file association or UI flow.
-pub struct ExternalAccessRoots(pub Mutex<Vec<PathBuf>>);
+const EXTERNAL_GRANT_IDLE_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
-impl ExternalAccessRoots {
-    pub fn new() -> Self {
-        Self(Mutex::new(Vec::new()))
-    }
+fn external_path_to_slash(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
 
-    pub fn allow_root_path(&self, root_path: &str) -> Result<(), String> {
-        let root = resolve_external_root(root_path)?;
-        self.allow_root(root);
-        Ok(())
-    }
+/// Opaque capability returned by the backend after a native file association or dialog.
+/// The renderer must never use an absolute path as an authorization credential.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalFileHandle {
+    pub access_token: String,
+    pub absolute_path: String,
+    pub notebook_root: String,
+    pub relative_path: String,
+    pub capabilities: ExternalAccessCapabilities,
+}
 
-    pub fn allow_root(&self, root: PathBuf) {
-        let Ok(mut roots) = self.0.lock() else {
-            return;
-        };
-        if !roots.iter().any(|existing| existing == &root) {
-            roots.push(root);
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalAccessCapabilities {
+    pub read: bool,
+    pub write: bool,
+    pub list: bool,
+    pub watch: bool,
+}
+
+impl ExternalAccessCapabilities {
+    const fn opened_file() -> Self {
+        Self {
+            read: true,
+            write: true,
+            list: true,
+            watch: true,
         }
     }
 
-    fn is_allowed_path(&self, path: &Path) -> bool {
-        let Ok(roots) = self.0.lock() else {
-            return false;
+    const fn saved_file() -> Self {
+        Self {
+            read: true,
+            write: true,
+            list: true,
+            watch: false,
+        }
+    }
+}
+
+fn can_read(capabilities: ExternalAccessCapabilities) -> bool {
+    capabilities.read
+}
+
+fn can_write(capabilities: ExternalAccessCapabilities) -> bool {
+    capabilities.write
+}
+
+fn can_list(capabilities: ExternalAccessCapabilities) -> bool {
+    capabilities.list
+}
+
+fn can_watch(capabilities: ExternalAccessCapabilities) -> bool {
+    capabilities.watch
+}
+
+#[derive(Debug, Clone)]
+struct ExternalAccessGrant {
+    root: PathBuf,
+    capabilities: ExternalAccessCapabilities,
+    expires_at: Instant,
+}
+
+/// In-memory, session-scoped external file capabilities.
+/// Grants are never persisted and expire after inactivity.
+pub struct ExternalAccessGrants(Mutex<HashMap<String, ExternalAccessGrant>>);
+
+impl ExternalAccessGrants {
+    pub fn new() -> Self {
+        Self(Mutex::new(HashMap::new()))
+    }
+
+    pub fn grant_for_existing_file(
+        &self,
+        absolute_path: &str,
+    ) -> Result<ExternalFileHandle, String> {
+        let target = resolve_external_note_file(absolute_path)?;
+        self.issue_grant(target, ExternalAccessCapabilities::opened_file())
+    }
+
+    pub fn grant_for_saved_file(&self, absolute_path: &str) -> Result<ExternalFileHandle, String> {
+        let target = resolve_external_note_file_for_write(absolute_path)?;
+        self.issue_grant(target, ExternalAccessCapabilities::saved_file())
+    }
+
+    fn issue_grant(
+        &self,
+        target: PathBuf,
+        capabilities: ExternalAccessCapabilities,
+    ) -> Result<ExternalFileHandle, String> {
+        let root = target
+            .parent()
+            .ok_or_else(|| "external file has no parent directory".to_string())?
+            .canonicalize()
+            .map_err(|e| format!("unable to resolve external file parent: {e}"))?;
+        let target = target
+            .canonicalize()
+            .map_err(|e| format!("unable to resolve external file: {e}"))?;
+        let relative_path = format!(
+            "/{}",
+            crate::path::display_path(&root, &target).trim_start_matches('/')
+        );
+        let access_token = Uuid::new_v4().simple().to_string();
+        let grant = ExternalAccessGrant {
+            root: root.clone(),
+            capabilities,
+            expires_at: Instant::now() + EXTERNAL_GRANT_IDLE_TIMEOUT,
         };
-        roots.iter().any(|root| path.starts_with(root))
+        self.0
+            .lock()
+            .map_err(|_| "external access state lock poisoned".to_string())?
+            .insert(access_token.clone(), grant);
+
+        Ok(ExternalFileHandle {
+            access_token,
+            absolute_path: external_path_to_slash(&target),
+            notebook_root: external_path_to_slash(&root),
+            relative_path,
+            capabilities,
+        })
+    }
+
+    pub fn revoke(&self, access_token: &str) {
+        if let Ok(mut grants) = self.0.lock() {
+            grants.remove(access_token);
+        }
+    }
+
+    pub fn revoke_all(&self) {
+        if let Ok(mut grants) = self.0.lock() {
+            grants.clear();
+        }
+    }
+
+    fn grant_root(
+        &self,
+        access_token: &str,
+        capability: fn(ExternalAccessCapabilities) -> bool,
+    ) -> Result<PathBuf, String> {
+        let mut grants = self
+            .0
+            .lock()
+            .map_err(|_| "external access state lock poisoned".to_string())?;
+        let grant = grants
+            .get_mut(access_token)
+            .ok_or_else(|| "external access grant is invalid or expired".to_string())?;
+        if grant.expires_at <= Instant::now() {
+            grants.remove(access_token);
+            return Err("external access grant is invalid or expired".to_string());
+        }
+        if !capability(grant.capabilities) {
+            return Err("external access grant does not allow this operation".to_string());
+        }
+        grant.expires_at = Instant::now() + EXTERNAL_GRANT_IDLE_TIMEOUT;
+        Ok(grant.root.clone())
+    }
+
+    pub fn resolve_file(
+        &self,
+        access_token: &str,
+        relative_path: &str,
+        markdown_only: bool,
+        for_write: bool,
+    ) -> Result<PathBuf, String> {
+        let root = self.grant_root(access_token, if for_write { can_write } else { can_read })?;
+        let target = resolve_safe_path(&root, relative_path).map_err(|e| e.to_string())?;
+        let name = target
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| "external relative path must name a file".to_string())?;
+        if markdown_only {
+            if !is_markdown_like_file(name) {
+                return Err("only .md/.markdown/.mdx files are supported".to_string());
+            }
+        } else if !is_supported_note_file(name) {
+            return Err("only .md/.markdown/.mdx/.txt files are supported".to_string());
+        }
+        if !for_write && (!target.exists() || !target.is_file()) {
+            return Err(format!("external note does not exist: {relative_path}"));
+        }
+        if for_write {
+            let parent = target
+                .parent()
+                .ok_or_else(|| "external file has no parent directory".to_string())?;
+            let canonical_parent = parent
+                .canonicalize()
+                .map_err(|e| format!("unable to resolve external file parent: {e}"))?;
+            if !canonical_parent.starts_with(&root) {
+                return Err("external path escapes the granted directory".to_string());
+            }
+            if target.exists() {
+                let canonical_target = target
+                    .canonicalize()
+                    .map_err(|e| format!("unable to resolve external target: {e}"))?;
+                if !canonical_target.starts_with(&root) || !canonical_target.is_file() {
+                    return Err("external path is outside the granted directory".to_string());
+                }
+                return Ok(canonical_target);
+            }
+            return Ok(canonical_parent.join(
+                target
+                    .file_name()
+                    .ok_or_else(|| "external file has no name".to_string())?,
+            ));
+        }
+
+        let canonical_target = target
+            .canonicalize()
+            .map_err(|e| format!("unable to resolve external target: {e}"))?;
+        if !canonical_target.starts_with(&root) || !canonical_target.is_file() {
+            return Err("external path is outside the granted directory".to_string());
+        }
+        Ok(canonical_target)
+    }
+
+    pub fn resolve_directory(
+        &self,
+        access_token: &str,
+        relative_path: &str,
+    ) -> Result<PathBuf, String> {
+        let root = self.grant_root(access_token, can_list)?;
+        let target = resolve_safe_path(&root, relative_path).map_err(|e| e.to_string())?;
+        let canonical = target
+            .canonicalize()
+            .map_err(|e| format!("unable to resolve external directory: {e}"))?;
+        if !canonical.starts_with(&root) || !canonical.is_dir() {
+            return Err("external directory is outside the granted directory".to_string());
+        }
+        Ok(canonical)
+    }
+
+    pub fn resolve_watch_directory(
+        &self,
+        access_token: &str,
+        relative_path: &str,
+    ) -> Result<PathBuf, String> {
+        let root = self.grant_root(access_token, can_watch)?;
+        let target = resolve_safe_path(&root, relative_path).map_err(|e| e.to_string())?;
+        let canonical = target
+            .canonicalize()
+            .map_err(|e| format!("unable to resolve external watcher directory: {e}"))?;
+        if !canonical.starts_with(&root) || !canonical.is_dir() {
+            return Err("external watcher directory is outside the granted directory".to_string());
+        }
+        Ok(canonical)
+    }
+
+    pub fn resolve_notebook_root(&self, access_token: &str) -> Result<PathBuf, String> {
+        self.resolve_directory(access_token, "/")
     }
 }
 
@@ -90,39 +322,6 @@ fn is_markdown_like_file(name: &str) -> bool {
     matches!(ext.as_deref(), Some("md" | "markdown" | "mdx"))
 }
 
-fn resolve_external_root(root_path: &str) -> Result<PathBuf, String> {
-    let root = PathBuf::from(root_path);
-    if !root.is_absolute() {
-        return Err("外部目录路径必须是绝对路径".to_string());
-    }
-    if !root.exists() {
-        return Err(format!("目录不存在: {}", root_path));
-    }
-    if !root.is_dir() {
-        return Err(format!("路径不是目录: {}", root_path));
-    }
-    root.canonicalize()
-        .map_err(|e| format!("无法解析外部目录路径: {}", e))
-}
-
-fn resolve_external_markdown_file(absolute_path: &str) -> Result<PathBuf, String> {
-    let path = PathBuf::from(absolute_path);
-    if !path.is_absolute() {
-        return Err("外部文件路径必须是绝对路径".to_string());
-    }
-    if !is_markdown_like_file(absolute_path) {
-        return Err("仅支持打开 .md/.markdown/.mdx 文件".to_string());
-    }
-    if !path.exists() {
-        return Err(format!("文件不存在: {}", absolute_path));
-    }
-    if !path.is_file() {
-        return Err(format!("路径不是文件: {}", absolute_path));
-    }
-    path.canonicalize()
-        .map_err(|e| format!("无法解析外部文件路径: {}", e))
-}
-
 fn resolve_external_note_file(absolute_path: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(absolute_path);
     if !path.is_absolute() {
@@ -139,10 +338,6 @@ fn resolve_external_note_file(absolute_path: &str) -> Result<PathBuf, String> {
     }
     path.canonicalize()
         .map_err(|e| format!("无法解析外部文件路径: {}", e))
-}
-
-fn resolve_external_markdown_file_for_write(absolute_path: &str) -> Result<PathBuf, String> {
-    resolve_external_file_for_write(absolute_path, true)
 }
 
 fn resolve_external_note_file_for_write(absolute_path: &str) -> Result<PathBuf, String> {
@@ -184,23 +379,6 @@ fn resolve_external_file_for_write(
         .file_name()
         .ok_or_else(|| "外部文件缺少文件名".to_string())?;
     Ok(parent.join(file_name))
-}
-
-fn ensure_external_path_allowed(access: &ExternalAccessRoots, path: &Path) -> Result<(), String> {
-    if access.is_allowed_path(path) {
-        Ok(())
-    } else {
-        Err("外部文件未通过本次会话授权".to_string())
-    }
-}
-
-/// Register an external root selected by a first-party UI flow such as file association or save dialog.
-#[tauri::command]
-pub fn register_external_access_root(
-    root_path: String,
-    access: State<ExternalAccessRoots>,
-) -> Result<(), String> {
-    access.allow_root_path(&root_path)
 }
 
 fn unique_write_temp_path(target: &Path) -> Result<PathBuf, String> {
@@ -290,6 +468,20 @@ pub fn open_notebook(path: String, root: State<NotebookRoot>) -> Result<String, 
     let canonical = p
         .canonicalize()
         .map_err(|e| format!("无法解析路径: {}", e))?;
+    root.set(canonical.clone());
+    Ok(canonical.to_string_lossy().to_string())
+}
+
+/// Promote an already-authorized external file grant to its parent notebook.
+/// The renderer submits only the opaque grant token; the backend resolves the
+/// canonical directory and becomes the sole owner of the active notebook root.
+#[tauri::command]
+pub fn open_external_notebook(
+    access_token: String,
+    access: State<ExternalAccessGrants>,
+    root: State<NotebookRoot>,
+) -> Result<String, String> {
+    let canonical = access.resolve_notebook_root(&access_token)?;
     root.set(canonical.clone());
     Ok(canonical.to_string_lossy().to_string())
 }
@@ -436,18 +628,21 @@ pub fn list_directory(
 /// List supported note files and directories under an external root without opening it as notebook.
 #[tauri::command]
 pub fn list_external_note_directory(
-    root_path: String,
+    access_token: String,
     relative_path: String,
-    access: State<ExternalAccessRoots>,
+    access: State<ExternalAccessGrants>,
 ) -> Result<Vec<DirEntry>, String> {
-    let root_path = resolve_external_root(&root_path)?;
-    ensure_external_path_allowed(&access, &root_path)?;
-    list_directory_at(&root_path, &relative_path)
+    let root_path = access.resolve_directory(&access_token, "/")?;
+    let target = access.resolve_directory(&access_token, &relative_path)?;
+    list_directory_entries(&root_path, &target)
 }
 
 fn list_directory_at(root_path: &PathBuf, relative_path: &str) -> Result<Vec<DirEntry>, String> {
     let target = resolve_safe_path(&root_path, &relative_path).map_err(|e| e.to_string())?;
+    list_directory_entries(root_path, &target)
+}
 
+fn list_directory_entries(root_path: &Path, target: &Path) -> Result<Vec<DirEntry>, String> {
     let mut entries = Vec::new();
     let dir_iter = fs::read_dir(&target).map_err(|e| format!("读取目录失败: {}", e))?;
 
@@ -512,29 +707,32 @@ fn read_file_at(root_path: &PathBuf, relative_path: &str) -> Result<String, Stri
 /// Read one markdown-family file by absolute path without opening its parent as notebook.
 #[tauri::command]
 pub fn read_external_markdown_file(
-    absolute_path: String,
-    access: State<ExternalAccessRoots>,
+    access_token: String,
+    relative_path: String,
+    access: State<ExternalAccessGrants>,
 ) -> Result<String, String> {
-    read_external_markdown_file_with_access(&absolute_path, &access)
+    let target = access.resolve_file(&access_token, &relative_path, true, false)?;
+    fs::read_to_string(&target).map_err(|e| format!("读取外部文件失败: {}", e))
 }
 
+#[cfg(test)]
 fn read_external_markdown_file_with_access(
     absolute_path: &str,
-    access: &ExternalAccessRoots,
+    access: &ExternalAccessGrants,
 ) -> Result<String, String> {
-    let target = resolve_external_markdown_file(absolute_path)?;
-    ensure_external_path_allowed(access, &target)?;
+    let handle = access.grant_for_saved_file(absolute_path)?;
+    let target = access.resolve_file(&handle.access_token, &handle.relative_path, true, false)?;
     fs::read_to_string(&target).map_err(|e| format!("读取外部文件失败: {}", e))
 }
 
 /// Read one supported text note by absolute path without opening its parent as notebook.
 #[tauri::command]
 pub fn read_external_note_file(
-    absolute_path: String,
-    access: State<ExternalAccessRoots>,
+    access_token: String,
+    relative_path: String,
+    access: State<ExternalAccessGrants>,
 ) -> Result<String, String> {
-    let target = resolve_external_note_file(&absolute_path)?;
-    ensure_external_path_allowed(&access, &target)?;
+    let target = access.resolve_file(&access_token, &relative_path, false, false)?;
     fs::read_to_string(&target).map_err(|e| format!("读取外部文件失败: {}", e))
 }
 
@@ -566,33 +764,71 @@ fn write_file_at(root_path: &PathBuf, relative_path: &str, content: &str) -> Res
 /// Write one markdown-family file by absolute path without opening its parent as notebook.
 #[tauri::command]
 pub fn write_external_markdown_file(
-    absolute_path: String,
+    access_token: String,
+    relative_path: String,
     content: String,
-    access: State<ExternalAccessRoots>,
+    access: State<ExternalAccessGrants>,
 ) -> Result<(), String> {
-    write_external_markdown_file_with_access(&absolute_path, &content, &access)
+    let target = access.resolve_file(&access_token, &relative_path, true, true)?;
+    write_text_file_atomically(&target, &content)
 }
 
+#[cfg(test)]
 fn write_external_markdown_file_with_access(
     absolute_path: &str,
     content: &str,
-    access: &ExternalAccessRoots,
+    access: &ExternalAccessGrants,
 ) -> Result<(), String> {
-    let target = resolve_external_markdown_file_for_write(absolute_path)?;
-    ensure_external_path_allowed(access, &target)?;
+    let handle = access.grant_for_saved_file(absolute_path)?;
+    let target = access.resolve_file(&handle.access_token, &handle.relative_path, true, true)?;
     write_text_file_atomically(&target, content).map_err(|e| format!("保存外部文件失败: {}", e))
 }
 
 /// Write one supported text note by absolute path without opening its parent as notebook.
 #[tauri::command]
 pub fn write_external_note_file(
-    absolute_path: String,
+    access_token: String,
+    relative_path: String,
     content: String,
-    access: State<ExternalAccessRoots>,
+    access: State<ExternalAccessGrants>,
 ) -> Result<(), String> {
-    let target = resolve_external_note_file_for_write(&absolute_path)?;
-    ensure_external_path_allowed(&access, &target)?;
+    let target = access.resolve_file(&access_token, &relative_path, false, true)?;
     write_text_file_atomically(&target, &content).map_err(|e| format!("保存外部文件失败: {}", e))
+}
+
+/// Open the native save dialog, write the selected note, then issue its grant.
+/// The renderer receives only the opaque handle and never authorizes the path.
+#[tauri::command]
+pub fn save_external_note_as(
+    app: AppHandle,
+    default_file_name: String,
+    content: String,
+    access: State<ExternalAccessGrants>,
+) -> Result<ExternalFileHandle, String> {
+    let selected = app
+        .dialog()
+        .file()
+        .set_title("Save Markdown note")
+        .set_file_name(default_file_name)
+        .add_filter("Markdown", &["md", "markdown", "mdx", "txt"])
+        .blocking_save_file()
+        .ok_or_else(|| "save dialog was cancelled".to_string())?;
+    let path = selected
+        .into_path()
+        .map_err(|e| format!("unable to resolve selected save path: {e}"))?;
+    let path_text = path.to_string_lossy().to_string();
+    let target = resolve_external_note_file_for_write(&path_text)?;
+    write_text_file_atomically(&target, &content)?;
+    access.grant_for_saved_file(&path_text)
+}
+
+#[tauri::command]
+pub fn revoke_external_access(
+    access_token: String,
+    access: State<ExternalAccessGrants>,
+) -> Result<(), String> {
+    access.revoke(&access_token);
+    Ok(())
 }
 
 /// Write binary content to a file (base64 payload, relative to notebook root).
@@ -850,11 +1086,16 @@ mod tests {
         let target = root.join("external.mdx");
         std::fs::write(&target, "# External").unwrap();
         let path = target.to_string_lossy().to_string();
-        let access = ExternalAccessRoots::new();
-        access.allow_root(root.canonicalize().unwrap());
+        let access = ExternalAccessGrants::new();
+        let handle = access.grant_for_existing_file(&path).unwrap();
 
         assert_eq!(
-            read_external_markdown_file_with_access(&path, &access).unwrap(),
+            std::fs::read_to_string(
+                access
+                    .resolve_file(&handle.access_token, &handle.relative_path, true, false)
+                    .unwrap(),
+            )
+            .unwrap(),
             "# External"
         );
         write_external_markdown_file_with_access(&path, "# Changed\n\n内容", &access).unwrap();
@@ -870,15 +1111,16 @@ mod tests {
     fn external_note_file_write_allows_new_file_under_registered_root() {
         let root = temp_notebook("external-new-file");
         let target = root.join("saved.md");
-        let access = ExternalAccessRoots::new();
-        access.allow_root(root.canonicalize().unwrap());
-
-        write_external_markdown_file_with_access(
-            target.to_string_lossy().as_ref(),
-            "# Saved",
-            &access,
-        )
-        .unwrap();
+        let seed = root.join("seed.md");
+        std::fs::write(&seed, "# Seed").unwrap();
+        let access = ExternalAccessGrants::new();
+        let handle = access
+            .grant_for_existing_file(&seed.to_string_lossy())
+            .unwrap();
+        let target_path = access
+            .resolve_file(&handle.access_token, "/saved.md", true, true)
+            .unwrap();
+        write_text_file_atomically(&target_path, "# Saved").unwrap();
 
         assert_eq!(std::fs::read_to_string(&target).unwrap(), "# Saved");
         std::fs::remove_dir_all(root).unwrap();
@@ -889,9 +1131,7 @@ mod tests {
         let root = temp_notebook("external-reject");
         let txt = root.join("plain.txt");
         std::fs::write(&txt, "plain").unwrap();
-        let access = ExternalAccessRoots::new();
-        access.allow_root(root.canonicalize().unwrap());
-
+        let access = ExternalAccessGrants::new();
         assert!(
             read_external_markdown_file_with_access(txt.to_string_lossy().as_ref(), &access)
                 .is_err()
@@ -909,13 +1149,33 @@ mod tests {
         let root = temp_notebook("external-unregistered");
         let target = root.join("external.md");
         std::fs::write(&target, "# External").unwrap();
-        let access = ExternalAccessRoots::new();
+        let access = ExternalAccessGrants::new();
 
-        assert!(read_external_markdown_file_with_access(
-            target.to_string_lossy().as_ref(),
-            &access
-        )
-        .is_err());
+        assert!(access
+            .resolve_file("missing-token", "/external.md", true, false)
+            .is_err());
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn saved_file_grant_records_capabilities_and_rejects_watcher_access() {
+        let root = temp_notebook("external-capabilities");
+        let target = root.join("external.md");
+        std::fs::write(&target, "# External").unwrap();
+        let access = ExternalAccessGrants::new();
+        let handle = access
+            .grant_for_saved_file(&target.to_string_lossy())
+            .unwrap();
+
+        assert!(handle.capabilities.read);
+        assert!(handle.capabilities.write);
+        assert!(handle.capabilities.list);
+        assert!(!handle.capabilities.watch);
+        assert!(access
+            .resolve_watch_directory(&handle.access_token, "/")
+            .is_err());
+        assert!(access.resolve_notebook_root(&handle.access_token).is_ok());
 
         std::fs::remove_dir_all(root).unwrap();
     }

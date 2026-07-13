@@ -14,6 +14,7 @@ import type {
   ThemeHostToastApi,
   ThemeSlotId,
 } from '@/types/theme-pack';
+import { findUnscopedCssSelector } from './theme-css-scope';
 
 export interface ThemeHostApi extends ThemeHostContext {
   getStorage: (key: string) => string | null;
@@ -43,6 +44,21 @@ function normalizeComponents(
   return (components ?? {}) as Partial<Record<ThemeSlotId, Component>>;
 }
 
+function installScopedThemeCss(themeId: string, css?: string): HTMLStyleElement | undefined {
+  if (!css?.trim()) return undefined;
+  const unscoped = findUnscopedCssSelector(css, themeId);
+  if (unscoped) {
+    throw new Error(`主题 CSS 未限定在当前主题根节点：${unscoped}`);
+  }
+  if (typeof document === 'undefined') return undefined;
+  const style = document.createElement('style');
+  style.dataset.themeId = themeId;
+  style.dataset.themeRuntime = 'trusted-code';
+  style.textContent = css;
+  document.head.appendChild(style);
+  return style;
+}
+
 function nextActivationGeneration(themeId: string): number {
   const next = (activationGenerations.get(themeId) ?? 0) + 1;
   activationGenerations.set(themeId, next);
@@ -56,9 +72,16 @@ function isCurrentActivation(themeId: string, generation: number): boolean {
 function disposeTrustedTheme(themeId: string): void {
   const existing = registrations.get(themeId);
   if (existing) {
-    existing.dispose();
-    registrations.delete(themeId);
-    bumpRuntimeVersion();
+    try {
+      existing.dispose();
+    } catch (error) {
+      // Cleanup must not prevent registration/style/object URL removal.
+      // eslint-disable-next-line no-console
+      console.warn(`[ThemeRuntimeHost] cleanup failed for ${themeId}`, error);
+    } finally {
+      registrations.delete(themeId);
+      bumpRuntimeVersion();
+    }
   }
   const objectUrl = objectUrls.get(themeId);
   if (objectUrl) {
@@ -81,12 +104,23 @@ export function registerTrustedTheme(
     };
   }
   disposeTrustedTheme(themeId);
-  const cleanup = module.activate?.(api);
+  const styleElement = installScopedThemeCss(themeId, module.css);
+  let cleanup: void | (() => void);
+  try {
+    cleanup = module.activate?.(api);
+  } catch (error) {
+    styleElement?.remove();
+    throw error;
+  }
   const registration: TrustedThemeRegistration = {
     themeId,
     components: normalizeComponents(module.components),
     dispose: () => {
-      if (typeof cleanup === 'function') cleanup();
+      try {
+        if (typeof cleanup === 'function') cleanup();
+      } finally {
+        styleElement?.remove();
+      }
     },
   };
   registrations.set(themeId, registration);
@@ -208,12 +242,14 @@ export async function activateTrustedThemeRuntime(
     return;
   }
 
+  // A failed replacement must not leave the previous trusted runtime active.
+  // Invalidate and dispose it before validating/loading the new bundle.
+  disposeTrustedTheme(pack.manifest.id);
   const entrypoint = pack.manifest.entrypoints?.[0];
   if (!entrypoint) throw new Error(`Theme is missing code entrypoint: ${pack.manifest.id}`);
   const source = pack.codeBundles?.[entrypoint.module];
   if (!source) throw new Error(`Theme code bundle is not installed: ${entrypoint.module}`);
 
-  disposeTrustedTheme(pack.manifest.id);
   const objectUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
   objectUrls.set(pack.manifest.id, objectUrl);
 
@@ -221,6 +257,10 @@ export async function activateTrustedThemeRuntime(
   try {
     imported = (await import(/* @vite-ignore */ objectUrl)) as Record<string, unknown>;
   } catch (error) {
+    if (objectUrls.get(pack.manifest.id) === objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+      objectUrls.delete(pack.manifest.id);
+    }
     if (isCurrentActivation(pack.manifest.id, generation)) throw error;
     return;
   }
@@ -233,17 +273,36 @@ export async function activateTrustedThemeRuntime(
   }
   const exported = imported[entrypoint.exportName ?? 'default'] ?? imported.default;
   if (!isTrustedThemeModule(exported)) {
+    if (objectUrls.get(pack.manifest.id) === objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+      objectUrls.delete(pack.manifest.id);
+    }
     throw new Error(`Theme code entrypoint did not export ThemePluginModule: ${pack.manifest.id}`);
   }
 
-  registerTrustedTheme(
-    pack.manifest.id,
-    exported,
-    createThemeHostApi(pack, pack.manifest.permissions ?? [], actions, chrome, ui, commerce),
-    generation,
-  );
+  try {
+    registerTrustedTheme(
+      pack.manifest.id,
+      exported,
+      createThemeHostApi(pack, pack.manifest.permissions ?? [], actions, chrome, ui, commerce),
+      generation,
+    );
+  } catch (error) {
+    if (objectUrls.get(pack.manifest.id) === objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+      objectUrls.delete(pack.manifest.id);
+    }
+    throw error;
+  }
 }
 
 function isTrustedThemeModule(value: unknown): value is TrustedThemeModule {
-  return typeof value === 'object' && value !== null;
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Partial<ThemePluginModule>;
+  return (
+    (candidate.activate === undefined || typeof candidate.activate === 'function') &&
+    (candidate.components === undefined ||
+      (typeof candidate.components === 'object' && candidate.components !== null)) &&
+    (candidate.css === undefined || typeof candidate.css === 'string')
+  );
 }

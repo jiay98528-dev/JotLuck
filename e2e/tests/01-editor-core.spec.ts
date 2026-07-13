@@ -14,10 +14,10 @@ import {
   waitForAppReady,
   ensureEditorReady,
   getEditorContent,
+  getEditorContentFromBridge,
   typeInEditor,
   appendInEditor,
   waitForAutoSave,
-  expectEditorContains,
 } from '../helpers/test-utils';
 
 // ============================================================
@@ -115,8 +115,9 @@ test.describe('编辑器核心', () => {
     await typeInEditor(page, markdownText);
 
     // Step 2: 验证编辑器内容包含输入的文本
-    await expectEditorContains(page, '# Hello World');
-    await expectEditorContains(page, 'This is **bold** text');
+    const source = await getEditorContentFromBridge(page);
+    expect(source).toContain('# Hello World');
+    expect(source).toContain('This is **bold** text');
 
     // Step 3: 等待自动保存完成
     await waitForAutoSave(page);
@@ -137,26 +138,21 @@ test.describe('编辑器核心', () => {
     // 检查视图切换按钮可见
     await expect(viewToggle).toBeVisible({ timeout: 5000 });
 
-    // 记录初始模式文本
-    const initialLabel = await viewToggle.textContent();
-
-    // Step 1: 点击切换模式
+    // Step 1: 即时编辑 → 分栏
     await viewToggle.click();
-    await page.waitForTimeout(400);
+    await expect(page.locator('.split-pane')).toBeVisible();
+    await expect(viewToggle).toHaveAttribute('aria-label', '切换到只读渲染');
 
-    // Step 2: 验证模式已变更（按钮文本或布局变化）
-    const newLabel = await viewToggle.textContent();
-    expect(newLabel).not.toBe(initialLabel);
-
-    // Step 3: 再次点击切换回初始模式
+    // Step 2: 分栏 → 只读渲染，格式工具栏退出交互层
     await viewToggle.click();
-    await page.waitForTimeout(400);
+    await expect(page.locator('.reader-workbench[data-view-mode="read"]')).toBeVisible();
+    await expect(page.locator('[data-theme-part="format-toolbar"]')).toHaveCount(0);
+    await expect(viewToggle).toHaveAttribute('aria-label', '返回即时编辑');
 
-    const restoredLabel = await viewToggle.textContent();
-    expect(restoredLabel).toBe(initialLabel);
-
-    // 切换后验证编辑器仍然正常工作
+    // Step 3: 只读渲染 → 即时编辑
+    await viewToggle.click();
     await expect(page.locator('.cm-editor')).toBeVisible();
+    await expect(viewToggle).toHaveAttribute('aria-label', '切换到分栏视图');
   });
 
   test('分栏模式显示完整标准预览且左侧保持纯源码', async ({ page }) => {
@@ -247,14 +243,16 @@ test.describe('编辑器核心', () => {
     await page.keyboard.press('Enter');
     await expect(bold).toHaveAttribute('aria-pressed', 'false');
     await page.keyboard.type('普通正文');
-    expect(await getEditorContent(page)).toBe('**中文**\n普通正文');
+    expect(await getEditorContentFromBridge(page)).toBe('**中文**\n普通正文');
 
     await page.keyboard.press('Enter');
     await preset.selectOption('heading2');
     await page.keyboard.type('预选标题');
     await page.keyboard.press('Enter');
     await page.keyboard.type('恢复正文');
-    expect(await getEditorContent(page)).toBe('**中文**\n普通正文\n## 预选标题\n恢复正文');
+    expect(await getEditorContentFromBridge(page)).toBe(
+      '**中文**\n普通正文\n## 预选标题\n恢复正文',
+    );
   });
 
   // ==========================================================

@@ -384,8 +384,8 @@
                     class="tree-rename-input"
                     type="text"
                     spellcheck="false"
-                    @keydown.enter.prevent="commitRename"
-                    @keydown.escape.prevent="cancelRename"
+                    @keydown.enter.stop.prevent="commitRename"
+                    @keydown.escape.stop.prevent="cancelRename"
                     @blur="commitRename"
                     @click.stop
                   />

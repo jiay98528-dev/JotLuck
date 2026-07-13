@@ -65,11 +65,6 @@ const PROFILE_OUTPUTS = {
     manifest: 'packages/app/public/baseline-ngram.web-local.compact.manifest.json',
     report: 'scripts/corpus/training-report.web-local.json',
   },
-  release: {
-    model: 'packages/app/public/baseline-ngram.v1.compact.txt',
-    manifest: 'packages/app/public/baseline-ngram.v1.compact.manifest.json',
-    report: 'scripts/corpus/training-report.json',
-  },
 } as const;
 
 const CANDIDATE_BINDING_KEYS = [
@@ -380,13 +375,14 @@ interface LoadedBinding {
 }
 
 /**
- * Validate all release evidence and atomically publish both public profiles.
+ * Validate all release evidence and atomically publish the canonical public model.
  * Validation performs no writes; selectedTier=null therefore always leaves
  * the workspace byte-for-byte unchanged.
  */
 export function publishAutocompleteFinal(
   options: PublishAutocompleteFinalOptions = {},
 ): PublishAutocompleteFinalResult {
+  assertLegacyPublisherTestOnly('v4');
   const rootDir = fs.realpathSync(path.resolve(options.rootDir ?? MODULE_ROOT));
   const curveRelative = options.curvePath ?? DEFAULT_CURVE;
   const curveFile = readWorkspaceJson<LearningCurveReport>(rootDir, curveRelative);
@@ -482,6 +478,13 @@ export function publishAutocompleteFinal(
   );
   atomicReplaceFiles(releasePayload.writes);
   return releasePayload.result;
+}
+
+function assertLegacyPublisherTestOnly(line: 'v4'): void {
+  if (process.env.VITEST === 'true') return;
+  throw new Error(
+    `Public autocomplete ${line} publication is archived; only publish-autocomplete-v2s-final may write the canonical public model.`,
+  );
 }
 
 function assertLearningCurve(curve: LearningCurveReport): void {
@@ -1102,7 +1105,7 @@ function buildReleasePayload(input: {
   }));
   const profiles: PublishedAutocompleteProfile[] = [];
 
-  for (const profile of ['web-local', 'release'] as const) {
+  for (const profile of ['web-local'] as const) {
     const output = PROFILE_OUTPUTS[profile];
     const modelBinding = staticBinding(output.model, candidateModel);
     const {

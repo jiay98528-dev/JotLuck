@@ -167,6 +167,24 @@ describe('completion resolver', () => {
     expect(retained.candidate?.text).toBe('the issue');
   });
 
+  it('preserves neural leading spaces and never truncates its first English word', () => {
+    const rejected = resolveCompletionCandidates(context('The current issue'), [
+      rawCandidate('public-phrase-transformer-v1', ' configuration', 66, 0.9, {
+        source: 'neural',
+        sourceLayer: 'l3',
+      }),
+    ]);
+    const retained = resolveCompletionCandidates(context('The next step needs'), [
+      rawCandidate('public-phrase-transformer-v1', ' review checkpoint', 66, 0.9, {
+        source: 'neural',
+        sourceLayer: 'l3',
+      }),
+    ]);
+
+    expect(rejected.candidate).toBeNull();
+    expect(retained.candidate?.text).toBe(' review');
+  });
+
   it('keeps structured candidates above higher-confidence prose candidates', () => {
     const result = resolveCompletionCandidates(context(), [
       rawCandidate('prose', 'owner review', 82, 0.99),

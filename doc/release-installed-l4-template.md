@@ -2,6 +2,8 @@
 
 > 复制本模板为单次发行记录，例如 `验收报告/2026-06-30-JotLuck-0.15.0-installed-L4.md`。
 > 所有 `状态` 必须填写 `PASS`，否则 `pnpm release:rc-gate` 必须阻断 RC 放行。任何失败项标记为 P0/P1/P2，不允许用 Web 自动化通过覆盖人工失败。
+>
+> **协议状态：本模板仅用于人工记录，不构成机器 PASS。** 文末 v1 JSON 示例是历史迁移参考，不能再被 `release:rc-gate` 接受。正式放行等待“候选 commit → 只读原始报告 → 结构化二次转录 → 证据 commit”的 v2 协议实现。
 
 ## 发行对象
 
@@ -113,6 +115,10 @@
 - 失败级别:
 
 ## L4-EVIDENCE
+
+- L4-EVIDENCE-MANIFEST: `BLOCKED — independent evidence protocol v2 is not implemented`
+
+协议 v2 落地后，机器清单必须绑定独立的候选 commit、受版本管理的原始执行产物、逐 case 结果、安装包 SHA、只读审计原始报告及其结构化二次转录。禁止复制旧 v1 JSON 或只填写命令退出码。
 
 - 截图目录:
 - 验证用本地文件夹:

@@ -1,0 +1,143 @@
+{
+  "schema": "jotluck.autocomplete.v2s-architecture-stop.v1",
+  "schemaVersion": 1,
+  "engine": "public-v2s-mkn-v1",
+  "status": "architecture-blocked",
+  "architectureId": "public-v2s-mkn-v1",
+  "formalResult": false,
+  "releaseEvidence": false,
+  "stopLongTraining": true,
+  "reasonCode": "development-oracle-ceiling",
+  "recordedAt": "2026-07-13T07:20:28.226Z",
+  "sourceCommit": "307784a719d8ec3678c504e1b7117b659b75a8da",
+  "workingTreeClean": false,
+  "gates": {
+    "oracleAt8AbsoluteMinimum": 0.4,
+    "oracleAt32AbsoluteMinimum": 0.45,
+    "perLanguageOracleAt8AbsoluteMinimum": 0.32
+  },
+  "oracle": {
+    "denominator": "all-development-opportunities",
+    "opportunities": 200,
+    "completeOpportunities": 150,
+    "silenceOpportunities": 50,
+    "at8": {
+      "hits": 74,
+      "absoluteRate": 0.37,
+      "byLanguage": {
+        "zh": {
+          "opportunities": 100,
+          "hits": 43,
+          "absoluteRate": 0.43
+        },
+        "en": {
+          "opportunities": 100,
+          "hits": 31,
+          "absoluteRate": 0.31
+        }
+      }
+    },
+    "at32": {
+      "hits": 80,
+      "absoluteRate": 0.4,
+      "byLanguage": {
+        "zh": {
+          "opportunities": 100,
+          "hits": 45,
+          "absoluteRate": 0.45
+        },
+        "en": {
+          "opportunities": 100,
+          "hits": 35,
+          "absoluteRate": 0.35
+        }
+      }
+    }
+  },
+  "frontierDerivation": "per-language-max-over-fixed-matrix",
+  "bestFixedMatrixFrontier": {
+    "denominator": "all-development-opportunities",
+    "opportunities": 200,
+    "completeOpportunities": 150,
+    "silenceOpportunities": 50,
+    "at8": {
+      "hits": 75,
+      "absoluteRate": 0.375,
+      "byLanguage": {
+        "zh": {
+          "opportunities": 100,
+          "hits": 43,
+          "absoluteRate": 0.43
+        },
+        "en": {
+          "opportunities": 100,
+          "hits": 32,
+          "absoluteRate": 0.32
+        }
+      }
+    },
+    "at32": {
+      "hits": 81,
+      "absoluteRate": 0.405,
+      "byLanguage": {
+        "zh": {
+          "opportunities": 100,
+          "hits": 45,
+          "absoluteRate": 0.45
+        },
+        "en": {
+          "opportunities": 100,
+          "hits": 36,
+          "absoluteRate": 0.36
+        }
+      }
+    }
+  },
+  "candidateId": "24mib-mixed-g0-5m5-method-v1",
+  "methodCorrection": "bpe-en+unigram-zh",
+  "evidenceBindings": {
+    "selection": {
+      "path": "scripts/corpus/_web-cache/autocomplete-v2s/candidates/v2s-selection-v1/selection.json",
+      "sha256": "b4ccd0689d07847f12f9e31acf898df5b499b48a1c07301acdf16e376e45dd1e"
+    },
+    "candidateManifest": {
+      "path": "scripts/corpus/_web-cache/autocomplete-v2s/candidates/24mib-mixed-g0-5m5-method-v1/manifest.json",
+      "sha256": "5144ce34e1516cbf2037677acf83f29f9e23cd31a5b12f2ae3db0e6df91d9fa4"
+    },
+    "model": {
+      "path": "scripts/corpus/_web-cache/autocomplete-v2s/candidates/24mib-mixed-g0-5m5-method-v1/public-v2s.bin",
+      "sha256": "c498c88a49e304117656b4759ab7554f7b165f4e67e4be5336da31cb0ce4f8b5"
+    },
+    "diagnostic": {
+      "path": "scripts/corpus/_web-cache/autocomplete-v2s/candidates/24mib-mixed-g0-5m5-method-v1/development-diagnostic.json",
+      "sha256": "a95ad3095e9b40f90e9f27d082be85b3d45bb1a9d0de246943cae40f2b1d4458"
+    },
+    "combinationReport": {
+      "path": "scripts/corpus/_web-cache/autocomplete-v2s/candidates/24mib-mixed-g0-5m5-method-v1/training-report.json",
+      "sha256": "87494cc322420b04c8110f28d6696a62362227e16898d962a1ee53b92f1fea12"
+    },
+    "bpeSourceManifest": {
+      "path": "scripts/corpus/_web-cache/autocomplete-v2s/candidates/24mib-bpe-g0-5m5-method-v1/manifest.json",
+      "sha256": "9a515923920fb24008c785252f04ef61297196276a0a64482e01813a072028d0"
+    },
+    "unigramSourceManifest": {
+      "path": "scripts/corpus/_web-cache/autocomplete-v2s/candidates/24mib-unigram-g0-5m5-v1/manifest.json",
+      "sha256": "849fad8f7ef9fb32cce0b2daa311ca2db0e712d4c0e0f0a20ab6e24817e14a32"
+    },
+    "bpeFrontierDiagnostic": {
+      "path": "scripts/corpus/_web-cache/autocomplete-v2s/candidates/3mib-bpe-g0-trie-v2/development-diagnostic-frontier.json",
+      "sha256": "f27f465b9413df9539140e96c85410f169f2a39c2a779997f56dbfe12d45dc02"
+    },
+    "unigramMaxDiagnostic": {
+      "path": "scripts/corpus/_web-cache/autocomplete-v2s/candidates/24mib-unigram-g0-5m5-v1/development-diagnostic.json",
+      "sha256": "2db8053c1888214a24032d142536bee0f46248b37009971cd4e71d294826e522"
+    }
+  },
+  "lifecycle": {
+    "gateTrainingStarted": false,
+    "finalHoldoutsRead": false,
+    "publicWritten": false,
+    "v21Unlocked": false
+  },
+  "recordSha256": "332445ecbd34ec83ef5b045c09dbad95eaf7166f61dbfc0a05422821379a4ffc"
+}

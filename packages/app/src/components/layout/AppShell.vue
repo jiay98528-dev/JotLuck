@@ -424,15 +424,17 @@ watchEffect((onCleanup) => {
   scroll-padding-top: var(--space-48);
 }
 
+@media (width <= 900px) {
+  .editor-area + .wing-divider,
+  :deep(.right-wing) {
+    display: none;
+  }
+}
+
 @media (width <= 720px) {
   .app-shell {
     width: 100%;
     min-width: 0;
-  }
-
-  .editor-area + .wing-divider,
-  :deep(.right-wing) {
-    display: none;
   }
 }
 </style>

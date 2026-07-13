@@ -7,6 +7,11 @@ export default mergeConfig(
     test: {
       environment: 'jsdom',
       include: ['src/**/*.test.ts', 'src/**/*.spec.ts', '../../scripts/**/*.test.ts'],
+      // Official themes inject CSS strings through ThemeRegistry. Keep the Halo
+      // asset real in Vitest so fallback and accessibility contracts are tested.
+      css: {
+        include: [/halo-canvas\.css(?:\?.*)?$/],
+      },
       coverage: {
         provider: 'v8',
         reportsDirectory: '../../coverage/app',

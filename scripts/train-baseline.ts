@@ -29,7 +29,7 @@ import { NGRAM_OTHER_MASS } from '../packages/app/src/utils/ngram-engine';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export type TrainProfile = 'release' | 'web-local';
+export type TrainProfile = 'web-local';
 export type SourceKind = 'curated' | 'web';
 export type NGramTable = Map<string, Map<string, number>>;
 
@@ -379,6 +379,11 @@ export function runTraining(
   testOverrides: Pick<CliOptions, 'testDocumentLimit'> = {},
 ): TrainReport {
   const options = { ...parseCli(argv), ...testOverrides };
+  if (!options.candidateDir && !options.dryRun && process.env.VITEST !== 'true') {
+    throw new Error(
+      'The v4 public trainer is archived; use --candidate-dir for diagnostics or the Public V2S pipeline for publication.',
+    );
+  }
   const build = buildVerifiedBaseline(options);
 
   if (
@@ -1754,14 +1759,13 @@ export function scanSource(
 /** Compatibility helper retained for script consumers. Web cache is never implicit. */
 export function buildProfileSources(
   configSources: SourceConfig[],
-  profile: TrainProfile,
+  _profile: TrainProfile,
   approvedWebSources: SourceConfig[] = [],
 ): SourceConfig[] {
-  return [...configSources, ...approvedWebSources].filter(
-    (source) =>
-      !isForbiddenSourcePath(normalizeRelativePath(source.path)) &&
-      (profile === 'web-local' || source.kind !== 'web'),
-  );
+  return [
+    ...configSources.filter((source) => source.kind !== 'web'),
+    ...approvedWebSources.filter((source) => source.kind === 'web'),
+  ].filter((source) => !isForbiddenSourcePath(normalizeRelativePath(source.path)));
 }
 
 /** Compatibility helper: only explicitly approved, hashed clean files may be returned. */
@@ -2261,7 +2265,7 @@ function evaluateHoldoutQualityEvidence(
   ] as const;
   const shapeIsValid =
     raw.schemaVersion === 1 &&
-    (raw.profile === 'release' || raw.profile === 'web-local') &&
+    raw.profile === 'web-local' &&
     typeof raw.modelSha256 === 'string' &&
     typeof raw.trainingInputHash === 'string' &&
     typeof raw.holdoutSha256 === 'string' &&
@@ -2411,6 +2415,12 @@ function validateConfig(config: CorpusConfig): void {
     throw new Error(
       'countScale is not supported; weightMilli is the sole integer fixed-point scale.',
     );
+  }
+  if (
+    Object.keys(config.profiles).length !== 1 ||
+    !Object.prototype.hasOwnProperty.call(config.profiles, 'web-local')
+  ) {
+    throw new Error('corpus config must expose only the canonical web-local profile.');
   }
   if (config.ngramN < 2 || config.ngramN > 8) throw new Error('ngramN must be between 2 and 8.');
   if (
@@ -2611,7 +2621,7 @@ function isForbiddenSourcePath(normalizedPath: string): boolean {
 
 function parseCli(argv: string[]): CliOptions {
   const profileValue = readArg(argv, '--profile') ?? 'web-local';
-  if (profileValue !== 'release' && profileValue !== 'web-local') {
+  if (profileValue !== 'web-local') {
     throw new Error(`Unsupported profile: ${profileValue}`);
   }
   const qualityReportPath = readArg(argv, '--quality-report');

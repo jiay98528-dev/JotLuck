@@ -24,25 +24,25 @@ import {
   type HybridRetrievalBackend,
 } from '../completion/hybrid-retrieval-backend';
 import type { HybridRetrievalResponse } from '../completion/hybrid-retrieval-types';
+import {
+  PUBLIC_ENGINE_MAX_OUTPUT_CODE_POINTS,
+  PUBLIC_ENGINE_PROTOCOL_VERSION,
+  createEmptyPublicEngineAssetDiagnostics,
+  type CompletionPublicEngine,
+} from '../completion/public-engine-types';
 
 // ---- helpers ----
 const SCOPED_NGRAM_KEY = 'jotluck:scope:unscoped:autocomplete:ngram:v4';
 const SCOPED_NGRAM_META_KEY = 'jotluck:scope:unscoped:autocomplete:meta:v4';
 const SCOPED_ACCEPTED_LEXICON_KEY = 'jotluck:scope:unscoped:autocomplete:acceptedLexicon:v1';
 const TEST_BASELINE_HASH = 'a'.repeat(64);
+const TEST_PUBLIC_ENGINE_ID = 'test-public-engine';
 
-function baselineManifest(
-  model: string,
-  entryCount: number,
-  profile: 'web-local' | 'release' = 'web-local',
-) {
+function baselineManifest(model: string, entryCount: number) {
   return JSON.stringify({
     schemaVersion: 1,
-    profile,
-    modelFile:
-      profile === 'web-local'
-        ? 'baseline-ngram.web-local.compact.txt'
-        : 'baseline-ngram.v1.compact.txt',
+    profile: 'web-local',
+    modelFile: 'baseline-ngram.web-local.compact.txt',
     serialization: 'jsonl-hex-v3-fixed-int',
     order: 'lexicographic-context-hex',
     ngramN: 4,
@@ -559,7 +559,7 @@ describe('MarkdownPredictor', () => {
       expect(result!.text).toBe('需要确认负责人和截止时间');
     });
 
-    it('echoes the repeated English line suffix without producing CJK text', () => {
+    it('rejects a repeated English suffix when the first complete word exceeds the ghost limit', () => {
       const p = createPredictor(4);
       const doc =
         '# Release triage\n\n' +
@@ -568,10 +568,7 @@ describe('MarkdownPredictor', () => {
         'Release risk is';
       const result = p.getGhostText(doc.length, doc);
 
-      expect(result).not.toBeNull();
-      expect(result!.providerId).toBe('line-echo');
-      expect(result!.text).toBe(' configurati');
-      expect(result!.text).not.toMatch(/[\u3400-\u9fff]/u);
+      expect(result).toBeNull();
     });
 
     it.each([
@@ -579,7 +576,6 @@ describe('MarkdownPredictor', () => {
       ['本节课需要加强阅读理解和课堂表达。', '本节课需要'],
       ['主要风险在于付款节点和违约责任约定。', '主要风险在于'],
       ['复盘重点是报名转化率和渠道投放成本。', '复盘重点是'],
-      ['Release risk is configuration drift before the final check.', 'Release risk is'],
       ['The observation suggests a stronger baseline is required.', 'The observation suggests'],
       ['Next step is to confirm the migration window and owner.', 'Next step is'],
       ['Morning plan includes temple visits and a quiet lunch nearby.', 'Morning plan includes'],
@@ -1384,19 +1380,9 @@ describe('MarkdownPredictor', () => {
       expect(predictor.getLoadedBaselineIdentity()).toBeNull();
     });
 
-    it('loadBaseline 默认模型失败时回退 v1 baseline', async () => {
+    it('does not fall through to a second public model when the canonical model fails', async () => {
       const p = createPredictor(4);
-      const { serialize, scanText } = await import('@/utils/ngram-engine');
-      const table = scanText('fallback baseline works', 4);
-      const compact = serialize(table);
-      const manifest = baselineManifest(compact, table.size, 'release');
-      const fetchSpy = vi.fn((url: string) => {
-        if (url.includes('web-local')) return Promise.resolve({ ok: false } as Response);
-        return Promise.resolve({
-          ok: true,
-          text: () => Promise.resolve(url.endsWith('.manifest.json') ? manifest : compact),
-        } as Response);
-      });
+      const fetchSpy = vi.fn(() => Promise.resolve({ ok: false } as Response));
       configureBaselineLoaderForTests({
         fetcher: fetchSpy as unknown as typeof fetch,
         cache: null,
@@ -1405,9 +1391,9 @@ describe('MarkdownPredictor', () => {
       });
       await p.loadBaseline();
 
-      expect(fetchSpy).toHaveBeenCalledWith('/baseline-ngram.v1.compact.manifest.json');
-      expect(fetchSpy).toHaveBeenCalledWith('/baseline-ngram.v1.compact.txt');
-      expect(priv(p).l3.size).toBeGreaterThan(0);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledWith('/baseline-ngram.web-local.compact.manifest.json');
+      expect(priv(p).l3.size).toBe(0);
     });
 
     it('rejects an oversized manifest before downloading its model body', async () => {
@@ -1526,17 +1512,9 @@ describe('MarkdownPredictor', () => {
       expect(cache.read).toHaveBeenCalledTimes(1);
     });
 
-    it('rejects bad cached main model and falls back to a valid cached release model', async () => {
-      const { serialize, scanText } = await import('@/utils/ngram-engine');
-      const table = scanText('cached release fallback works', 4);
-      const compact = serialize(table);
-      const releaseManifest = baselineManifest(compact, table.size, 'release');
+    it('rejects a bad cached canonical model without consulting another model path', async () => {
       const cache = {
-        read: vi.fn(async (_manifestUrl: string, modelUrl: string) =>
-          modelUrl.includes('web-local')
-            ? { manifest: baselineManifest('broken', 1), model: 'broken' }
-            : { manifest: releaseManifest, model: compact },
-        ),
+        read: vi.fn(async () => ({ manifest: baselineManifest('broken', 1), model: 'broken' })),
         write: vi.fn(async () => undefined),
       };
       configureBaselineLoaderForTests({
@@ -1548,8 +1526,8 @@ describe('MarkdownPredictor', () => {
       const predictor = createPredictor(4);
 
       await predictor.loadBaseline();
-      expect(priv(predictor).l3.size).toBe(table.size);
-      expect(cache.read).toHaveBeenCalledTimes(2);
+      expect(priv(predictor).l3.size).toBe(0);
+      expect(cache.read).toHaveBeenCalledTimes(1);
     });
 
     it('shares one verified L3 load across predictor instances', async () => {
@@ -1574,7 +1552,7 @@ describe('MarkdownPredictor', () => {
       expect(fetcher).toHaveBeenCalledTimes(2);
     });
 
-    it('initialize 恢复 Personal L2 并独立尝试 L3', async () => {
+    it('initialize 恢复 Personal L2 且架构停止态不探测公共模型', async () => {
       setupLocalStorageMock();
       const p1 = createPredictor(4);
       p1.acceptCompletion('hell', 'o world');
@@ -1589,7 +1567,7 @@ describe('MarkdownPredictor', () => {
 
       const p2 = createPredictor(4);
       await p2.initialize();
-      expect(fetchSpy).toHaveBeenCalled();
+      expect(fetchSpy).not.toHaveBeenCalled();
       expect(priv(p2).l2.size).toBeGreaterThan(0);
 
       vi.unstubAllGlobals();
@@ -1907,6 +1885,85 @@ describe('MarkdownPredictor', () => {
       } finally {
         nowSpy.mockRestore();
       }
+    });
+
+    it('keeps the single public engine slot unbound by default', async () => {
+      const predictor = new MarkdownPredictor();
+
+      await expect(predictor.warmupPublicEngine()).resolves.toBe(false);
+      expect(predictor.getPublicEngineDiagnostics()).toBeNull();
+
+      await predictor.dispose();
+    });
+
+    it('merges an explicitly injected public candidate through the existing resolver', async () => {
+      const generate = vi.fn<CompletionPublicEngine['generate']>(async (request) => ({
+        protocolVersion: PUBLIC_ENGINE_PROTOCOL_VERSION,
+        engineEpoch: request.engineEpoch,
+        workspaceScope: request.workspaceScope,
+        documentVersion: request.documentVersion,
+        cursorPos: request.cursorPos,
+        candidates: [
+          {
+            candidateId: 'candidate-en-review',
+            text: ' reviewed',
+            confidence: 0.96,
+            modelScore: 0.94,
+            gateScore: 0.98,
+            language: 'en',
+          },
+        ],
+      }));
+      const publicEngine: CompletionPublicEngine = {
+        id: TEST_PUBLIC_ENGINE_ID,
+        protocolVersion: PUBLIC_ENGINE_PROTOCOL_VERSION,
+        sourceKind: 'ngram',
+        maxOutputCodePoints: PUBLIC_ENGINE_MAX_OUTPUT_CODE_POINTS,
+        warmup: async () => true,
+        generate,
+        diagnostics: () => ({
+          engineId: TEST_PUBLIC_ENGINE_ID,
+          backendKind: 'worker',
+          status: 'ready',
+          epoch: 1,
+          profile: 'web-local',
+          lastError: null,
+          warmupDurationMs: 1,
+          lastInferenceDurationMs: 1,
+          visibleInferenceP90Ms: 1,
+          generateRequests: 1,
+          generatedCandidates: 1,
+          cancellations: 0,
+          deadlineExpirations: 0,
+          lateResponses: 0,
+          invalidResponses: 0,
+          workerErrors: 0,
+          assets: createEmptyPublicEngineAssetDiagnostics(),
+        }),
+        dispose: () => undefined,
+      };
+      const p = new MarkdownPredictor(4, undefined, publicEngine);
+      p.setAblationMode('l3-only');
+      await expect(p.warmupPublicEngine()).resolves.toBe(true);
+
+      const diagnostics = await p.requestGhostTextWithDiagnostics(
+        'Project plan'.length,
+        'Project plan',
+      );
+
+      expect(diagnostics.result).toMatchObject({
+        text: ' reviewed',
+        providerId: TEST_PUBLIC_ENGINE_ID,
+        source: 'ngram',
+        sourceLayer: 'l3',
+      });
+      expect(diagnostics.publicEngine).toMatchObject({
+        attempted: true,
+        fellBack: false,
+        usedEngineId: TEST_PUBLIC_ENGINE_ID,
+      });
+      expect(generate).toHaveBeenCalledOnce();
+      await p.dispose();
     });
 
     it('binds feedback to the shown prediction token instead of mutable last-prediction state', () => {

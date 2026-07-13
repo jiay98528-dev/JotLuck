@@ -10,7 +10,7 @@
  * @see TAD.md §4
  */
 
-import { marked } from 'marked';
+import { marked, type Tokens } from 'marked';
 import { jotluckExtensions, setWikiLinkExistsResolver } from './marked-extensions';
 import { sanitize } from './sanitize';
 import { highlightCodeBlocks } from './highlight';
@@ -32,6 +32,39 @@ export function normalizeFullwidthMarkdownSyntax(source: string): string {
     .replace(/｀([^｀\n]+)｀/g, '`$1`')
     .replace(/［([^］\n]+)］（([^）\n]+)）/g, '[$1]($2)')
     .replace(/｜/g, '|');
+}
+
+/** Convert a heading's inline source into the stable anchor used by previews. */
+export function headingIdFromText(text: string, occurrence = 1): string {
+  const base = text
+    .normalize('NFKC')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/[`*_~]/g, '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .toLowerCase();
+  const normalized = base || 'heading';
+  const anchor = `heading-${normalized}`;
+  return occurrence > 1 ? `${anchor}-${occurrence}` : anchor;
+}
+
+function addHeadingIds(html: string, source: string): string {
+  const headings: string[] = [];
+  marked.walkTokens(marked.lexer(source), (token: Tokens.Generic) => {
+    if (token.type === 'heading') headings.push(token.text);
+  });
+  const occurrences = new Map<string, number>();
+  let index = 0;
+  return html.replace(/<h([1-6])>/g, (_match, depth: string) => {
+    const text = headings[index++] ?? `heading-${index}`;
+    const base = headingIdFromText(text);
+    const occurrence = (occurrences.get(base) ?? 0) + 1;
+    occurrences.set(base, occurrence);
+    return `<h${depth} id="${headingIdFromText(text, occurrence)}">`;
+  });
 }
 
 // 配置 marked 使用 JotLuck 自定义扩展
@@ -76,20 +109,24 @@ function isJsonText(value: string): boolean {
   }
 }
 
-function protectBareJsonBlocks(source: string): string {
+export interface BareJsonBlockRange {
+  startLine: number;
+  endLine: number;
+}
+
+/** Locate complete bare JSON blocks without treating fenced code as JSON. */
+export function findBareJsonBlockLineRanges(source: string): BareJsonBlockRange[] {
   const lines = source.split('\n');
-  const output: string[] = [];
+  const ranges: BareJsonBlockRange[] = [];
   let inFence = false;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? '';
     if (/^\s*```/.test(line)) {
       inFence = !inFence;
-      output.push(line);
       continue;
     }
     if (inFence || !startsBareJsonBlock(line)) {
-      output.push(line);
       continue;
     }
 
@@ -111,10 +148,27 @@ function protectBareJsonBlocks(source: string): string {
     }
 
     if (end >= i) {
-      output.push('```json', ...candidate, '```');
+      ranges.push({ startLine: i, endLine: end });
       i = end;
+    }
+  }
+
+  return ranges;
+}
+
+function protectBareJsonBlocks(source: string): string {
+  const lines = source.split('\n');
+  const ranges = findBareJsonBlockLineRanges(source);
+  const starts = new Map(ranges.map((range) => [range.startLine, range]));
+  const output: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const range = starts.get(i);
+    if (range) {
+      output.push('```json', ...lines.slice(range.startLine, range.endLine + 1), '```');
+      i = range.endLine;
     } else {
-      output.push(line);
+      output.push(lines[i] ?? '');
     }
   }
 
@@ -148,7 +202,7 @@ export function renderMarkdown(source: string, options?: RendererOptions): strin
   }
 
   // Step 2: Sanitize against XSS
-  const cleanHtml = sanitize(rawHtml);
+  const cleanHtml = sanitize(addHeadingIds(rawHtml, normalizedSource));
 
   return cleanHtml;
 }

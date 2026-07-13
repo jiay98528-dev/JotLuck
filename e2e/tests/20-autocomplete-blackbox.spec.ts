@@ -73,8 +73,8 @@ const CASES: BlackboxCase[] = [
       '# Release triage\n\n' +
       'Release risk is configuration drift before the final check.\n' +
       'Release risk is configuration drift before the final check.\n' +
-      'Release risk is',
-    expected: 'configuration drift before the final check.',
+      'Release risk is configuration',
+    expected: 'drift before the final check.',
     language: 'en',
   },
   {

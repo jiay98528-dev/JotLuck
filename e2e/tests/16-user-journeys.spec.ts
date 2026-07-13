@@ -540,8 +540,8 @@ test.describe('外部文件父目录笔记本会话', () => {
     await expect(page.locator('.status-bar')).toBeVisible();
     await expect(page.locator('.left-wing')).toBeVisible();
     await expect.poll(visibleEditorText, { timeout: 5000 }).toContain('外部文档');
-    await page.getByRole('button', { name: /当前即时|即时/ }).click();
-    await expect(page.getByRole('button', { name: /当前分栏|分栏/ })).toBeVisible({
+    await page.getByRole('button', { name: '切换到分栏视图', exact: true }).click();
+    await expect(page.getByRole('button', { name: '切换到只读渲染', exact: true })).toBeVisible({
       timeout: 5000,
     });
 

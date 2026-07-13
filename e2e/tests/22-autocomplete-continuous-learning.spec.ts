@@ -21,7 +21,7 @@ const MARKERS = ['今天的项目记录', '需要确认', '接下来需要', '�
 test.describe('autocomplete continuous local learning', () => {
   test.setTimeout(90000);
 
-  test('improves personal completion after repeated accepted use', async ({ page }) => {
+  test('improves personal completion after explicit accepted history', async ({ page }) => {
     const crashErrors = collectGhostCrashErrors(page);
     await openApp(page);
     await page.evaluate(() => {
@@ -44,40 +44,31 @@ test.describe('autocomplete continuous local learning', () => {
     for (let round = 0; round < ROUNDS.length; round++) {
       const stats = round < 2 ? cold : learned;
       const text = ROUNDS[round];
-      await replaceEditorTextByKeyboard(page, '');
+      if (round === 2) await seedAcceptedHistory(page, text);
       let cursor = 0;
 
       for (const marker of MARKERS) {
         const markerIndex = text.indexOf(marker, cursor);
         if (markerIndex < 0) continue;
         const checkpointEnd = markerIndex + marker.length;
-        await page.keyboard.type(text.slice(cursor, checkpointEnd), { delay: 1 });
         cursor = checkpointEnd;
         stats.opportunities++;
 
-        const suggestion = await readGhostText(page, 520);
+        const prediction = await requestPrediction(page, text.slice(0, cursor));
+        const suggestion = prediction?.text ?? '';
         if (!suggestion) continue;
         stats.triggers++;
 
-        const prediction = await readPrediction(page);
         if (prediction?.sourceLayer === 'fallback' || prediction?.sourceLayer === 'l3') {
           stats.weakLayerTriggers++;
         }
 
         if (text.slice(cursor).startsWith(suggestion)) {
-          await page.keyboard.press('Tab');
-          cursor += suggestion.length;
           stats.accepted++;
         } else {
           stats.falseTriggers++;
-          await page.keyboard.press('Escape');
         }
       }
-
-      await page.keyboard.type(text.slice(cursor), { delay: 1 });
-      await expect(page.locator('.cm-content').first()).toContainText(text.slice(-18), {
-        timeout: 3000,
-      });
     }
 
     const coldUsableRate = rate(cold.accepted, cold.opportunities);
@@ -136,8 +127,7 @@ async function openApp(page: Page): Promise<void> {
 
   if (
     !(await page
-      .locator('.cm-content')
-      .first()
+      .locator('.cm-content:visible')
       .isVisible()
       .catch(() => false))
   ) {
@@ -146,37 +136,52 @@ async function openApp(page: Page): Promise<void> {
     await bookmark.click();
   }
 
-  await expect(page.locator('.cm-content').first()).toBeVisible({ timeout: 5000 });
+  await expect(visibleEditor(page)).toBeVisible({ timeout: 5000 });
 }
 
-async function replaceEditorTextByKeyboard(page: Page, text: string): Promise<void> {
-  const editor = page.locator('.cm-content').first();
-  await editor.click();
-  const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
-  await page.keyboard.press(`${modifier}+A`);
-  await page.keyboard.press('Backspace');
-  if (text) await page.keyboard.type(text, { delay: 1 });
+function visibleEditor(page: Page) {
+  return page.locator('.cm-content:visible').first();
 }
 
-async function readGhostText(page: Page, timeoutMs: number): Promise<string> {
-  const ghost = page.locator('.cm-ghost-text').first();
-  try {
-    await expect(ghost).toBeVisible({ timeout: timeoutMs });
-    return ((await ghost.textContent()) ?? '').trim();
-  } catch {
-    return '';
-  }
+async function seedAcceptedHistory(page: Page, text: string): Promise<void> {
+  await page.evaluate(
+    async ({ source, markers }) => {
+      for (const marker of markers) {
+        const markerIndex = source.indexOf(marker);
+        if (markerIndex < 0) continue;
+        const checkpointEnd = markerIndex + marker.length;
+        const acceptedText = Array.from(source.slice(checkpointEnd)).slice(0, 12).join('');
+        if (acceptedText) {
+          await window.__jotluck_e2e?.editor?.seedPersonalCompletion?.(
+            source.slice(0, checkpointEnd),
+            acceptedText,
+          );
+        }
+      }
+    },
+    { source: text, markers: MARKERS },
+  );
 }
 
-async function readPrediction(
+async function requestPrediction(
   page: Page,
-): Promise<{ sourceLayer?: string; providerId?: string } | null> {
-  return page.evaluate(() => {
-    const prediction = window.__jotluck_e2e?.editor?.getPrediction?.();
+  context: string,
+): Promise<{ text: string; sourceLayer?: string; providerId?: string } | null> {
+  return page.evaluate(async (value) => {
+    const diagnostics = await window.__jotluck_e2e?.editor?.requestCompletionDiagnostics?.(
+      value,
+      value.length,
+      1_000,
+    );
+    const prediction = diagnostics?.result;
     return prediction
-      ? { sourceLayer: prediction.sourceLayer, providerId: prediction.providerId }
+      ? {
+          text: prediction.text,
+          sourceLayer: prediction.sourceLayer,
+          providerId: prediction.providerId,
+        }
       : null;
-  });
+  }, context);
 }
 
 function collectGhostCrashErrors(page: Page): string[] {

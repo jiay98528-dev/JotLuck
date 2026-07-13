@@ -1,0 +1,1140 @@
+/*
+ * Halo Canvas
+ *
+ * A daylight writing cockpit. The environment is quiet silver mist; refraction
+ * belongs to glass edges, while prose remains a calm, opaque surface.
+ */
+
+[data-theme-id='jotluck.halo-canvas'] .app-shell {
+  gap: var(--space-8);
+  padding: var(--space-8);
+  background: var(--paper-bg);
+  box-shadow: inset 0 1px 0 color-mix(in oklch, var(--halo-glass-highlight) 42%, transparent);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .app-shell::before {
+  animation: none;
+  filter: none;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .app-shell .wing-divider {
+  display: none;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .app-shell .editor-area {
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  overflow: hidden;
+  border: var(--border-thin) solid color-mix(in oklch, var(--rule) 62%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklch, var(--paper-bg) 76%, transparent);
+  box-shadow: var(--halo-chassis-shadow);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .app-shell .editor-area::before {
+  display: none;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .app-shell .editor-area > * {
+  position: relative;
+  z-index: 1;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .app-shell .editor-scroll {
+  overscroll-behavior: contain;
+}
+
+/* Glass is reserved for navigation, controls, and floating surfaces. */
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar,
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck,
+[data-theme-id='jotluck.halo-canvas'] .modal-card,
+[data-theme-id='jotluck.halo-canvas'] .palette,
+[data-theme-id='jotluck.halo-canvas'] .file-drawer,
+[data-theme-id='jotluck.halo-canvas'] .theme-center {
+  --halo-current-glass: var(--halo-glass-live);
+  --halo-current-shadow: var(--halo-glass-shadow);
+
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: var(--border-thin) solid color-mix(in oklch, var(--halo-glass-edge) 58%, var(--rule));
+  background: var(--halo-glass-solid);
+  box-shadow: var(--halo-current-shadow), var(--halo-elevation-inset);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar {
+  --halo-current-glass: var(--halo-glass-rail);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar {
+  --halo-current-glass: var(--halo-glass-status);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing {
+  --halo-current-glass: var(--halo-glass-side);
+  --halo-current-shadow: var(--halo-side-shadow);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck {
+  --halo-current-glass: var(--halo-glass-dock);
+  --halo-current-shadow: var(--halo-dock-shadow);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar > *,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing > *,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing > *,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar > *,
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck > *,
+[data-theme-id='jotluck.halo-canvas'] .modal-card > *,
+[data-theme-id='jotluck.halo-canvas'] .palette > *,
+[data-theme-id='jotluck.halo-canvas'] .file-drawer > *,
+[data-theme-id='jotluck.halo-canvas'] .theme-center > * {
+  position: relative;
+  z-index: 1;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar::before,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing::before,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing::before,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar::before,
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck::before,
+[data-theme-id='jotluck.halo-canvas'] .modal-card::before,
+[data-theme-id='jotluck.halo-canvas'] .palette::before,
+[data-theme-id='jotluck.halo-canvas'] .file-drawer::before,
+[data-theme-id='jotluck.halo-canvas'] .theme-center::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  content: '';
+  pointer-events: none;
+  background:
+    linear-gradient(124deg, var(--halo-glass-highlight), transparent 26%),
+    radial-gradient(circle at 96% 2%, var(--halo-refraction-iris), transparent 22%);
+  opacity: 0.28;
+  transform: translate3d(0, 0, 0);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing::before {
+  background: linear-gradient(132deg, var(--halo-glass-highlight), transparent 22%);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing::before {
+  background: linear-gradient(116deg, var(--halo-glass-highlight), transparent 20%);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck::before {
+  background:
+    linear-gradient(126deg, var(--halo-glass-highlight), transparent 24%),
+    radial-gradient(circle at 94% 4%, var(--halo-refraction-iris), transparent 24%),
+    radial-gradient(circle at 5% 100%, var(--halo-refraction-coral), transparent 24%);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar::after,
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck::after,
+[data-theme-id='jotluck.halo-canvas'] .modal-card::after,
+[data-theme-id='jotluck.halo-canvas'] .palette::after {
+  position: absolute;
+  z-index: 0;
+  inset: auto -10% -56% 54%;
+  height: 68%;
+  content: '';
+  pointer-events: none;
+  border-radius: var(--radius-full);
+  background: radial-gradient(ellipse, var(--halo-refraction-iris), transparent 68%);
+  filter: blur(10px) saturate(1.12);
+  opacity: 0.18;
+  transform: rotate(-10deg);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar,
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck,
+  [data-theme-id='jotluck.halo-canvas'] .modal-card,
+  [data-theme-id='jotluck.halo-canvas'] .palette,
+  [data-theme-id='jotluck.halo-canvas'] .file-drawer,
+  [data-theme-id='jotluck.halo-canvas'] .theme-center {
+    background: var(--halo-current-glass, var(--halo-glass-live));
+    -webkit-backdrop-filter: blur(16px) saturate(1.08) brightness(1.025);
+    backdrop-filter: blur(16px) saturate(1.08) brightness(1.025);
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar {
+    background: var(--halo-current-glass, var(--halo-glass-side));
+    -webkit-backdrop-filter: blur(10px) saturate(1.03);
+    backdrop-filter: blur(10px) saturate(1.03);
+  }
+}
+
+/* Keep the opaque material explicit for engines that cannot blur live content. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar,
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck,
+  [data-theme-id='jotluck.halo-canvas'] .modal-card,
+  [data-theme-id='jotluck.halo-canvas'] .palette,
+  [data-theme-id='jotluck.halo-canvas'] .file-drawer,
+  [data-theme-id='jotluck.halo-canvas'] .theme-center {
+    background: var(--halo-glass-solid);
+  }
+}
+
+/* Top command rail preserves the native TopBar controls and their action routing. */
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar {
+  flex: 0 0 auto;
+  margin: var(--space-8) var(--space-8) 0;
+  border-radius: var(--radius-md);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar .topbar {
+  height: var(--topbar-height);
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar .topbar-inner--workbench {
+  grid-template-columns: minmax(194px, 0.9fr) minmax(236px, 1.05fr) auto;
+  gap: var(--space-10);
+  padding-inline: var(--space-12);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar .topbar-identity {
+  gap: var(--space-10);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar .topbar-notebook {
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-semibold);
+  line-height: var(--halo-meta-line-height);
+  letter-spacing: var(--ls-wide);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar .topbar-title--workbench {
+  color: var(--ink-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  line-height: var(--halo-topbar-line-height);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar .topbar-command-zone--workbench {
+  justify-content: center;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar .shell-action--search {
+  min-height: 36px;
+  padding-inline: var(--space-12);
+  border-color: var(--halo-control-edge);
+  border-radius: var(--radius);
+  background: color-mix(in oklch, var(--halo-inset-surface) 82%, transparent);
+  box-shadow: var(--halo-inset-shadow);
+  color: var(--ink-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--halo-topbar-line-height);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar .shell-action--search:hover,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar .shell-action--search.is-active {
+  border-color: color-mix(in oklch, var(--accent) 58%, var(--halo-control-edge));
+  background: var(--halo-control-hover);
+  box-shadow: var(--halo-elevation-inset), var(--halo-hover-shadow);
+  color: var(--accent-hover);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar .shell-action:not(.shell-action--search),
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck .shell-action,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar .shell-action {
+  border-color: transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  box-shadow: none;
+  font-size: 13px;
+  line-height: var(--halo-topbar-line-height);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar .shell-action:not(.shell-action--search) {
+  width: var(--halo-control-size);
+  min-width: var(--halo-control-size);
+  height: var(--halo-control-size);
+  padding: var(--space-8);
+  color: var(--ink-secondary);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar .shell-action--theme .mk-btn__icon,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar .shell-action__theme-icon {
+  width: var(--halo-control-icon-size) !important;
+  height: var(--halo-control-icon-size) !important;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar .shell-action.is-active,
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck .shell-action.is-active,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar .shell-action.is-active {
+  border-color: color-mix(in oklch, var(--accent) 62%, var(--halo-control-edge));
+  background: color-mix(in oklch, var(--accent-soft) 78%, transparent);
+  box-shadow:
+    inset 0 0 0 var(--border-thin) var(--accent-ring),
+    inset 0 1px 0 color-mix(in oklch, var(--halo-glass-highlight) 64%, transparent);
+  color: var(--accent-hover);
+}
+
+/* Navigator remains a single glass pod; only current and focused rows gain material. */
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing {
+  flex: 0 0 var(--wing-left-width);
+  width: var(--wing-left-width);
+  min-width: 0;
+  margin: var(--space-8) 0 var(--space-8) var(--space-8);
+  border-radius: var(--radius-lg);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing .left-wing {
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-14) var(--space-10) var(--space-12);
+  border: 0;
+  background: transparent;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing .wing-logo {
+  min-height: 32px;
+  margin-bottom: var(--space-12);
+  border-radius: var(--radius);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing .wing-rule {
+  width: calc(100% - var(--space-24));
+  margin: var(--space-8) auto var(--space-12);
+  background: color-mix(in oklch, var(--halo-glass-edge) 72%, var(--rule));
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing .wing-panel-kicker {
+  margin: 0 var(--space-6) var(--space-10);
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+  line-height: var(--halo-meta-line-height);
+  letter-spacing: var(--ls-wide);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing .wing-bookmarks {
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+}
+
+[data-theme-id='jotluck.halo-canvas']
+  .halo-frame--left-wing
+  .left-wing--layout-navigator
+  .wing-bookmark-dot {
+  min-height: 36px;
+  padding: var(--space-6) var(--space-8);
+  border-color: transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  box-shadow: none;
+  color: var(--dot-color);
+}
+
+[data-theme-id='jotluck.halo-canvas']
+  .halo-frame--left-wing
+  .left-wing--layout-navigator
+  .wing-bookmark-dot:hover {
+  background: color-mix(in oklch, var(--halo-control-hover) 54%, transparent);
+}
+
+[data-theme-id='jotluck.halo-canvas']
+  .halo-frame--left-wing
+  .left-wing--layout-navigator
+  .wing-bookmark-dot.active {
+  border-color: color-mix(in oklch, var(--accent) 36%, var(--halo-glass-edge));
+  background: color-mix(in oklch, var(--accent-soft) 62%, var(--halo-control-surface));
+  box-shadow: var(--halo-control-shadow), var(--halo-elevation-inset);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing .dot-core {
+  box-shadow: 0 0 0 2px color-mix(in oklch, currentcolor 14%, transparent);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing .dot-ring {
+  display: none;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing .wing-bookmark-name {
+  color: var(--ink-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--halo-nav-line-height);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing .wing-bookmark-path {
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+  line-height: var(--halo-meta-line-height);
+}
+
+/* The host owns desktop inspector sizing. Halo only frames it and provides a tablet rail. */
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
+  margin: var(--space-8) var(--space-8) var(--space-8) 0;
+  border-radius: var(--radius-lg);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .right-wing {
+  display: flex;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .grab-handle {
+  left: 0;
+  top: calc(var(--topbar-height) + var(--space-8));
+  width: var(--space-16);
+  z-index: 2;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .wing-content {
+  padding: var(--space-10) 0 var(--space-16);
+  background: transparent;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .section-header {
+  min-height: 38px;
+  padding: var(--space-8) var(--space-14);
+  border-radius: 0;
+  background: transparent;
+}
+
+[data-theme-id='jotluck.halo-canvas']
+  .halo-frame--right-wing
+  .wing-content[data-mode='atlas']
+  .wing-section:first-child
+  .section-header {
+  border-block: 0;
+  background: transparent;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .section-header:hover {
+  background: color-mix(in oklch, var(--halo-control-hover) 52%, transparent);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .section-label {
+  color: var(--ink-secondary);
+  font-size: var(--halo-inspector-label-size);
+  font-weight: var(--fw-semibold);
+  line-height: var(--halo-topbar-line-height);
+  letter-spacing: 0;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .section-icon {
+  width: var(--halo-inspector-icon-size);
+  height: var(--halo-inspector-icon-size);
+  color: color-mix(in oklch, var(--accent) 34%, var(--ink-muted));
+  opacity: 0.76;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .count-badge {
+  min-width: 20px;
+  border: var(--border-thin) solid color-mix(in oklch, var(--rule) 72%, transparent);
+  border-radius: var(--radius-full);
+  background: color-mix(in oklch, var(--halo-control-surface) 82%, transparent);
+  color: var(--ink-muted);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .section-rule {
+  margin: var(--space-8) var(--space-14);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklch, var(--rule) 76%, transparent) 14% 86%,
+    transparent
+  );
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .empty-hint {
+  margin: 0;
+  padding: var(--space-8) var(--space-14) var(--space-12) 42px;
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+  font-style: normal;
+  line-height: var(--halo-meta-line-height);
+  text-align: left;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .heading-link,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .backlink-item {
+  border-radius: var(--radius);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .heading-link:hover,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .backlink-item:hover {
+  background: color-mix(in oklch, var(--halo-control-hover) 50%, transparent);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .heading-node.active .heading-link {
+  background: color-mix(in oklch, var(--accent-soft) 52%, transparent);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .tag-chip {
+  border-color: transparent;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklch, var(--halo-control-surface) 76%, transparent);
+}
+
+/* A compact macOS-like glass toolbar keeps all native host actions in one layer. */
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck {
+  display: block;
+  margin: var(--space-8) var(--space-12) 0;
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-md);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck__content {
+  min-width: 0;
+}
+
+[data-theme-id='jotluck.halo-canvas']
+  .halo-command-deck:has(.editor-control-strip[data-view-mode='read']) {
+  display: none;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck .editor-control-strip {
+  gap: var(--space-4);
+  min-height: 38px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck .editor-control-strip__stack {
+  gap: var(--space-8);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck .editor-control-strip__actions {
+  order: -1;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  padding-right: var(--space-8);
+  border-right: var(--border-thin) solid color-mix(in oklch, var(--rule) 68%, transparent);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck .shell-action--template {
+  min-width: 62px;
+}
+
+[data-theme-id='jotluck.halo-canvas']
+  .halo-command-deck
+  .editor-control-strip[data-view-mode='read']
+  .editor-control-strip__actions {
+  padding-right: var(--space-2);
+  border-right: 0;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck .format-toolbar {
+  flex: 1 1 auto;
+  gap: var(--space-2);
+  max-height: none;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck .format-toolbar__preset select {
+  height: 28px;
+  border-color: color-mix(in oklch, var(--halo-control-edge) 72%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in oklch, var(--halo-control-surface) 76%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in oklch, var(--halo-glass-highlight) 48%, transparent);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck .format-toolbar__preset select:hover,
+[data-theme-id='jotluck.halo-canvas']
+  .halo-command-deck
+  .format-toolbar__preset
+  select:focus-visible {
+  background: color-mix(in oklch, var(--accent-soft) 44%, transparent);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck .format-toolbar__button,
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck .format-toolbar__clear {
+  border-color: transparent;
+  border-radius: var(--radius);
+  background: transparent;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck .format-toolbar__button:hover,
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck .format-toolbar__clear:hover,
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck .shell-action:hover,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar .shell-action:hover {
+  background: color-mix(in oklch, var(--halo-control-hover) 64%, transparent);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-command-deck .format-toolbar__button.is-active {
+  background: color-mix(in oklch, var(--accent-soft) 68%, transparent);
+  box-shadow: inset 0 0 0 var(--border-thin) var(--accent-ring);
+  color: var(--accent-hover);
+}
+
+/* Atelier remains quiet around an opaque, lifted writing canvas. */
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--workflow-canvas {
+  display: flex;
+  height: 100%;
+  min-height: 100%;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--workflow-canvas > .workflow-canvas {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 100%;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .workflow-canvas[data-workspace-intent='atelier'] {
+  padding: var(--space-12);
+  background: transparent;
+}
+
+[data-theme-id='jotluck.halo-canvas']
+  .workflow-canvas[data-workspace-intent='atelier']
+  .workflow-canvas__main {
+  overflow: hidden;
+  border: var(--border-thin) solid color-mix(in oklch, var(--rule) 70%, transparent);
+  border-radius: var(--radius-lg);
+  background: var(--halo-canvas-surface);
+  box-shadow: var(--halo-canvas-shadow), var(--halo-elevation-inset);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--editor-surface,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--external-reader {
+  min-width: 0;
+  min-height: 0;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--editor-surface {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--editor-surface > .markdown-editor,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--editor-surface > .reader-workbench,
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--editor-surface > .split-pane {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .workflow-canvas__main,
+[data-theme-id='jotluck.halo-canvas'] .reader-workbench,
+[data-theme-id='jotluck.halo-canvas'] .split-pane,
+[data-theme-id='jotluck.halo-canvas'] .split-right {
+  background: var(--halo-canvas-surface);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .reader-workbench__bar {
+  min-height: 42px;
+  padding: var(--space-6) var(--space-12);
+  border-bottom-color: color-mix(in oklch, var(--rule) 62%, transparent);
+  background: color-mix(in oklch, var(--halo-glass-rail) 78%, var(--halo-canvas-surface));
+}
+
+[data-theme-id='jotluck.halo-canvas'] .reader-workbench__label {
+  color: var(--ink-secondary);
+  font-size: 13px;
+  font-weight: var(--fw-medium);
+  line-height: var(--halo-topbar-line-height);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .reader-workbench__bar .shell-action--view-toggle {
+  border-color: color-mix(in oklch, var(--accent) 34%, var(--halo-control-edge));
+  background: color-mix(in oklch, var(--accent-soft) 64%, var(--halo-control-surface));
+  box-shadow: var(--halo-control-shadow), var(--halo-elevation-inset);
+  color: var(--accent-hover);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .cm-editor,
+[data-theme-id='jotluck.halo-canvas'] .cm-scroller,
+[data-theme-id='jotluck.halo-canvas'] .cm-content,
+[data-theme-id='jotluck.halo-canvas'] .markdown-body,
+[data-theme-id='jotluck.halo-canvas'] .reader-workbench__content {
+  background: var(--editor-bg);
+  color: var(--ink-primary);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .cm-gutters {
+  border-right-color: color-mix(in oklch, var(--rule) 72%, transparent);
+  background: color-mix(in oklch, var(--paper-surface) 94%, transparent);
+  color: var(--editor-gutter);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .cm-activeLine,
+[data-theme-id='jotluck.halo-canvas'] .cm-activeLineGutter {
+  background: var(--editor-line-highlight);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .cm-live-block,
+[data-theme-id='jotluck.halo-canvas'] .markdown-body pre {
+  border-color: color-mix(in oklch, var(--rule) 70%, transparent);
+}
+
+/* A low-profile status pod keeps saving feedback visible without competing with prose. */
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar {
+  flex: 0 0 auto;
+  margin: 0 var(--space-8) var(--space-8);
+  border-radius: var(--radius-md);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar .status-bar {
+  min-height: 34px;
+  height: auto;
+  padding: 0 var(--space-12);
+  border: 0;
+  background: transparent;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar .status-bar--layout-dashboard {
+  background: transparent;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar .status-center--dashboard {
+  color: var(--ink-muted);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar .status-saved {
+  color: var(--signal-success);
+}
+
+/* Teleported surfaces share the glass material while retaining native layouts. */
+[data-theme-id='jotluck.halo-canvas'] .modal-card,
+[data-theme-id='jotluck.halo-canvas'] .palette,
+[data-theme-id='jotluck.halo-canvas'] .file-drawer,
+[data-theme-id='jotluck.halo-canvas'] .theme-center {
+  border-radius: var(--halo-radius-float);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .context-menu,
+[data-theme-id='jotluck.halo-canvas'] .format-bubble,
+[data-theme-id='jotluck.halo-canvas'] .view-mode-toggle {
+  border-color: var(--halo-control-edge);
+  border-radius: var(--radius);
+  background: var(--halo-control-surface);
+  box-shadow: var(--halo-control-shadow), var(--halo-elevation-inset);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .theme-card.is-active,
+[data-theme-id='jotluck.halo-canvas'] .theme-card.is-preview {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 var(--border-thin) var(--accent-ring),
+    var(--shadow-stack);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar,
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck {
+    transition:
+      box-shadow var(--dur-hover-settle) var(--ease-enter),
+      border-color var(--dur-hover-lift) var(--ease-press);
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar:hover,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing:hover,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing:hover,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar:hover,
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck:hover {
+    border-color: color-mix(in oklch, var(--halo-glass-edge) 72%, var(--accent-soft));
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .mk-btn:not(:disabled, .mk-btn--loading),
+  [data-theme-id='jotluck.halo-canvas'] .wing-bookmark-dot,
+  [data-theme-id='jotluck.halo-canvas'] .section-header,
+  [data-theme-id='jotluck.halo-canvas'] .heading-link,
+  [data-theme-id='jotluck.halo-canvas'] .backlink-item,
+  [data-theme-id='jotluck.halo-canvas'] .tag-chip,
+  [data-theme-id='jotluck.halo-canvas'] .inspector-rail-toggle {
+    transition:
+      background-color var(--dur-hover-lift) var(--ease-press),
+      border-color var(--dur-hover-lift) var(--ease-press),
+      box-shadow var(--dur-hover-settle) var(--ease-enter),
+      color var(--dur-hover-lift) var(--ease-press);
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .mk-btn:hover:not(:disabled, .mk-btn--loading),
+  [data-theme-id='jotluck.halo-canvas'] .wing-bookmark-dot:hover,
+  [data-theme-id='jotluck.halo-canvas'] .section-header:hover,
+  [data-theme-id='jotluck.halo-canvas'] .heading-link:hover,
+  [data-theme-id='jotluck.halo-canvas'] .backlink-item:hover,
+  [data-theme-id='jotluck.halo-canvas'] .tag-chip:hover,
+  [data-theme-id='jotluck.halo-canvas'] .inspector-rail-toggle:hover {
+    box-shadow: none;
+  }
+}
+
+/* Halo never moves the hit target. Only press states briefly compress native controls. */
+[data-theme-id='jotluck.halo-canvas'] .mk-btn:hover:not(:disabled, .mk-btn--loading) {
+  transform: none;
+}
+
+[data-theme-id='jotluck.halo-canvas'] .mk-btn:active:not(:disabled, .mk-btn--loading),
+[data-theme-id='jotluck.halo-canvas'] .wing-bookmark-dot:active,
+[data-theme-id='jotluck.halo-canvas'] .section-header:active,
+[data-theme-id='jotluck.halo-canvas'] .heading-link:active,
+[data-theme-id='jotluck.halo-canvas'] .backlink-item:active,
+[data-theme-id='jotluck.halo-canvas'] .tag-chip:active,
+[data-theme-id='jotluck.halo-canvas'] .inspector-rail-toggle:active {
+  transform: scale(0.98);
+}
+
+[data-theme-id='jotluck.halo-canvas'] .mk-btn:focus-visible,
+[data-theme-id='jotluck.halo-canvas'] .wing-bookmark-dot:focus-visible,
+[data-theme-id='jotluck.halo-canvas'] .section-header:focus-visible,
+[data-theme-id='jotluck.halo-canvas'] .heading-link:focus-visible,
+[data-theme-id='jotluck.halo-canvas'] .backlink-item:focus-visible,
+[data-theme-id='jotluck.halo-canvas'] .tag-chip:focus-visible,
+[data-theme-id='jotluck.halo-canvas'] .inspector-rail-toggle:focus-visible {
+  outline: var(--focus-ring-width) solid var(--halo-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+@media (width <= 1280px) {
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar .topbar-inner--workbench {
+    grid-template-columns: minmax(166px, 0.9fr) minmax(194px, 1fr) auto;
+  }
+}
+
+@media (721px <= width <= 900px) {
+  [data-theme-id='jotluck.halo-canvas'] {
+    --wing-left-width: 56px;
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .app-shell {
+    gap: var(--space-8);
+    padding: var(--space-8);
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing {
+    flex-basis: var(--wing-left-width);
+    width: var(--wing-left-width);
+    margin: var(--space-8) 0 var(--space-8) var(--space-8);
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing .left-wing {
+    align-items: center;
+    padding-inline: var(--space-8);
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing .wing-panel-kicker,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing .wing-bookmark-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  [data-theme-id='jotluck.halo-canvas']
+    .halo-frame--left-wing
+    .left-wing--layout-navigator
+    .wing-bookmark-dot {
+    display: grid;
+    width: 42px;
+    min-height: 42px;
+    place-items: center;
+    padding: 0;
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing {
+    display: block;
+    margin: var(--space-8) var(--space-8) var(--space-8) 0;
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .right-wing {
+    --inspector-inline-width: var(--halo-inspector-rail-width);
+
+    display: flex !important;
+    overflow: hidden;
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .right-wing.is-rail-expanded {
+    --inspector-inline-width: var(--halo-inspector-expanded-width);
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .grab-handle {
+    display: none;
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .inspector-rail-toggle {
+    display: grid;
+    flex: 0 0 var(--halo-inspector-rail-width);
+    width: 100%;
+    min-height: var(--halo-inspector-rail-width);
+    place-items: center;
+    padding: var(--space-8);
+    border: 0;
+    border-bottom: var(--border-thin) solid color-mix(in oklch, var(--rule) 68%, transparent);
+    background: transparent;
+    color: var(--ink-secondary);
+    cursor: pointer;
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .inspector-rail-toggle:hover,
+  [data-theme-id='jotluck.halo-canvas']
+    .halo-frame--right-wing
+    .inspector-rail-toggle[aria-expanded='true'] {
+    background: color-mix(in oklch, var(--accent-soft) 54%, transparent);
+    color: var(--accent-hover);
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing .wing-content {
+    display: none;
+  }
+
+  [data-theme-id='jotluck.halo-canvas']
+    .halo-frame--right-wing
+    .right-wing.is-rail-expanded
+    .wing-content {
+    display: flex;
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar .status-center--dashboard {
+    display: none;
+  }
+}
+
+@media (width <= 720px) {
+  [data-theme-id='jotluck.halo-canvas'] .app-shell {
+    gap: var(--space-4);
+    padding: var(--space-4);
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing {
+    --wing-left-width: 56px;
+
+    flex-basis: var(--wing-left-width);
+    width: var(--wing-left-width);
+    margin: var(--space-4) 0 var(--space-4) var(--space-4);
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing {
+    display: none;
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar {
+    margin: var(--space-4) var(--space-4) 0;
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar .topbar-inner--workbench {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-8);
+    padding-inline: var(--space-10);
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar .topbar-command-zone--workbench {
+    display: none;
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .workflow-canvas[data-workspace-intent='atelier'] {
+    padding: var(--space-8);
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck {
+    margin: var(--space-8) var(--space-8) 0;
+    padding: var(--space-4) var(--space-6);
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar {
+    margin: 0 var(--space-4) var(--space-4);
+  }
+}
+
+@media (width <= 480px) {
+  [data-theme-id='jotluck.halo-canvas'] {
+    --editor-top-pad: 32px;
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing {
+    display: none;
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .workflow-canvas[data-workspace-intent='atelier'] {
+    padding: var(--space-4);
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck {
+    max-height: 96px;
+    margin: var(--space-4) var(--space-4) 0;
+    padding: var(--space-4);
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck__content {
+    position: relative;
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck__content::after {
+    position: absolute;
+    z-index: 2;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: var(--space-16);
+    content: '';
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent, var(--halo-control-surface));
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck .editor-control-strip__stack {
+    gap: var(--space-4);
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck .editor-control-strip {
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck .editor-control-strip__actions {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-right: var(--space-4);
+    padding-bottom: var(--space-2);
+    border-right: 0;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck .format-toolbar {
+    flex-wrap: nowrap;
+    align-content: normal;
+    min-height: var(--touch-target-min);
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: var(--space-4);
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck .format-toolbar::-webkit-scrollbar,
+  [data-theme-id='jotluck.halo-canvas']
+    .halo-command-deck
+    .editor-control-strip__actions::-webkit-scrollbar {
+    height: var(--space-4);
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck .format-toolbar > *,
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck .editor-control-strip__actions > * {
+    flex: 0 0 auto;
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar .status-center--dashboard {
+    display: none;
+  }
+}
+
+@media (pointer: coarse) {
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar .shell-action,
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck .mk-btn,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar .shell-action,
+  [data-theme-id='jotluck.halo-canvas'] .wing-bookmark-dot,
+  [data-theme-id='jotluck.halo-canvas'] .section-header,
+  [data-theme-id='jotluck.halo-canvas'] .heading-link,
+  [data-theme-id='jotluck.halo-canvas'] .backlink-item,
+  [data-theme-id='jotluck.halo-canvas'] .tag-chip,
+  [data-theme-id='jotluck.halo-canvas'] .inspector-rail-toggle {
+    min-height: var(--touch-target-min);
+  }
+
+  [data-theme-id='jotluck.halo-canvas']
+    .halo-frame--topbar
+    .shell-action:not(.shell-action--search) {
+    min-width: var(--touch-target-min);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme-id='jotluck.halo-canvas'] .app-shell::before,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame::before,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame::after,
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck::before,
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck::after,
+  [data-theme-id='jotluck.halo-canvas'] .mk-btn,
+  [data-theme-id='jotluck.halo-canvas'] .wing-bookmark-dot,
+  [data-theme-id='jotluck.halo-canvas'] .section-header,
+  [data-theme-id='jotluck.halo-canvas'] .heading-link,
+  [data-theme-id='jotluck.halo-canvas'] .backlink-item,
+  [data-theme-id='jotluck.halo-canvas'] .tag-chip,
+  [data-theme-id='jotluck.halo-canvas'] .inspector-rail-toggle {
+    animation: none;
+    transition: none;
+    transform: none;
+  }
+}
+
+@media (forced-colors: active) {
+  [data-theme-id='jotluck.halo-canvas'] .app-shell .editor-area,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar,
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck,
+  [data-theme-id='jotluck.halo-canvas'] .modal-card,
+  [data-theme-id='jotluck.halo-canvas'] .palette,
+  [data-theme-id='jotluck.halo-canvas'] .file-drawer,
+  [data-theme-id='jotluck.halo-canvas'] .theme-center {
+    border-color: CanvasText;
+    background: Canvas;
+    box-shadow: none;
+    color: CanvasText;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .app-shell::before,
+  [data-theme-id='jotluck.halo-canvas'] .app-shell .editor-area::before,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar::before,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing::before,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing::before,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar::before,
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck::before,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar::after,
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck::after,
+  [data-theme-id='jotluck.halo-canvas'] .modal-card::before,
+  [data-theme-id='jotluck.halo-canvas'] .modal-card::after,
+  [data-theme-id='jotluck.halo-canvas'] .palette::before,
+  [data-theme-id='jotluck.halo-canvas'] .palette::after {
+    display: none;
+  }
+
+  [data-theme-id='jotluck.halo-canvas']
+    .workflow-canvas[data-workspace-intent='atelier']
+    .workflow-canvas__main,
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck .format-toolbar,
+  [data-theme-id='jotluck.halo-canvas'] .halo-frame--topbar .shell-action--search {
+    border-color: CanvasText;
+    background: Canvas;
+    box-shadow: none;
+    color: CanvasText;
+  }
+
+  [data-theme-id='jotluck.halo-canvas'] .wing-bookmark-dot.active,
+  [data-theme-id='jotluck.halo-canvas'] .heading-node.active .heading-link,
+  [data-theme-id='jotluck.halo-canvas'] .halo-command-deck .shell-action.is-active,
+  [data-theme-id='jotluck.halo-canvas'] .inspector-rail-toggle[aria-expanded='true'] {
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+}

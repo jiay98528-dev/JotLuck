@@ -23,7 +23,7 @@ import {
 
 beforeEach(() => {
   invokeMock.mockReset();
-  invokeMock.mockResolvedValue(undefined);
+  invokeMock.mockResolvedValue(1);
   listenMock.mockReset();
   listenMock.mockResolvedValue(vi.fn());
 });
@@ -47,6 +47,19 @@ describe('TauriIPCService recent notebook sanitizer', () => {
 
     expect(result).toEqual(['D:/Notes/Project', 'D:/Notes/Research']);
   });
+
+  it('promotes an external file grant without submitting a directory path', async () => {
+    invokeMock.mockResolvedValueOnce('D:/Notes/Project');
+    const service = new TauriIPCService();
+
+    await expect(service.openNotebookFromExternalGrant('opaque-grant')).resolves.toMatchObject({
+      rootPath: 'D:/Notes/Project',
+      name: 'Project',
+    });
+    expect(invokeMock).toHaveBeenCalledWith('open_external_notebook', {
+      accessToken: 'opaque-grant',
+    });
+  });
 });
 
 describe('TauriIPCService watcher lifecycle', () => {
@@ -59,7 +72,11 @@ describe('TauriIPCService watcher lifecycle', () => {
     await service.unwatchAll();
 
     expect(unlisten).toHaveBeenCalledTimes(1);
-    expect(invokeMock).toHaveBeenCalledWith('start_file_watcher', { rootPath: 'D:/Notes' });
+    expect(invokeMock).toHaveBeenCalledWith('start_file_watcher', {
+      rootPath: 'D:/Notes',
+      accessToken: null,
+      relativePath: null,
+    });
     expect(invokeMock).toHaveBeenCalledWith('stop_file_watcher');
   });
 
@@ -70,9 +87,9 @@ describe('TauriIPCService watcher lifecycle', () => {
     await service.watch('D:/Notes/B', vi.fn());
 
     expect(invokeMock.mock.calls).toEqual([
-      ['start_file_watcher', { rootPath: 'D:/Notes/A' }],
+      ['start_file_watcher', { rootPath: 'D:/Notes/A', accessToken: null, relativePath: null }],
       ['stop_file_watcher'],
-      ['start_file_watcher', { rootPath: 'D:/Notes/B' }],
+      ['start_file_watcher', { rootPath: 'D:/Notes/B', accessToken: null, relativePath: null }],
     ]);
   });
 });

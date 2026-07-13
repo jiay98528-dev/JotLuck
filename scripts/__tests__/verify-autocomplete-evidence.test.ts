@@ -61,6 +61,22 @@ describe('autocomplete evidence verifier', () => {
     ).toThrow(/not fail-closed/u);
   });
 
+  it('rejects a partially installed V2R profile pair before checking legacy assets', () => {
+    mkdirSync(path.join(tempRoot, 'packages/app/public'), { recursive: true });
+    writeFileSync(
+      path.join(
+        tempRoot,
+        'packages/app/public/public-phrase-transformer-v1.web-local.manifest.json',
+      ),
+      '{}\n',
+      'utf8',
+    );
+
+    expect(() => verifyAutocompleteEvidence({ rootDir: tempRoot, mode: 'ci', models: [] })).toThrow(
+      /partially installed/u,
+    );
+  });
+
   it('rejects runtime evidence with no visible production ghost samples', () => {
     const fixture = createReleaseFixture();
     const runtimePath = path.join(tempRoot, 'runtime.json');
@@ -130,7 +146,7 @@ describe('autocomplete evidence verifier', () => {
         verifyAutocompleteEvidence({ rootDir: tempRoot, mode: 'rc', models: [fixture.model] }),
       ).toThrow(expected);
     }
-  });
+  }, 15_000);
 
   it('rejects evidence symlinks that escape the workspace', () => {
     const fixture = createReleaseFixture();

@@ -1,10 +1,11 @@
 import { defineComponent } from 'vue';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   activateTrustedThemeRuntime,
   getThemeSlotComponent,
   unregisterTrustedTheme,
 } from '@/services/ThemeRuntimeHost';
+import { getAllRegistryThemePacks } from '@/services/ThemeRegistry';
 import type {
   InstalledThemePack,
   OfficialThemeModule,
@@ -71,6 +72,7 @@ describe('ThemeRuntimeHost', () => {
   beforeEach(() => {
     localStorage.clear();
     unregisterTrustedTheme('jotluck.test-plugin');
+    unregisterTrustedTheme('jotluck.halo-canvas');
   });
 
   it('activates an official full UX plugin and unregisters slot components', async () => {
@@ -140,5 +142,106 @@ describe('ThemeRuntimeHost', () => {
 
     expect(disposed).toBe(true);
     expect(getThemeSlotComponent(module.id, 'topbar')).toBeUndefined();
+  });
+
+  it('activates Halo Canvas on its documented slots and unregisters the runtime cleanly', async () => {
+    const pack = getAllRegistryThemePacks().find(
+      (candidate) => candidate.manifest.id === 'jotluck.halo-canvas',
+    );
+    const expectedSlots = [
+      'topbar',
+      'left-wing',
+      'right-wing',
+      'editor-control',
+      'status-bar',
+      'workflow-canvas',
+      'editor-surface',
+      'external-reader',
+    ] as const;
+
+    expect(pack).toBeDefined();
+    await activateTrustedThemeRuntime(pack!, [], chrome);
+
+    for (const slot of expectedSlots) {
+      expect(getThemeSlotComponent(pack!.manifest.id, slot)).toBeDefined();
+    }
+    expect(getThemeSlotComponent(pack!.manifest.id, 'dialogs.theme')).toBeUndefined();
+    expect(getThemeSlotComponent(pack!.manifest.id, 'file-drawer')).toBeUndefined();
+    expect(getThemeSlotComponent(pack!.manifest.id, 'command-palette')).toBeUndefined();
+
+    unregisterTrustedTheme(pack!.manifest.id);
+
+    for (const slot of expectedSlots) {
+      expect(getThemeSlotComponent(pack!.manifest.id, slot)).toBeUndefined();
+    }
+  });
+
+  it('revokes the dynamic runtime URL when activation fails after import', async () => {
+    const themeId = 'jotluck.runtime-failure';
+    const objectUrl = `data:text/javascript,${encodeURIComponent(
+      'export default { activate() { throw new Error("activation failed") } }',
+    )}`;
+    const originalCreateObjectUrl = URL.createObjectURL;
+    const originalRevokeObjectUrl = URL.revokeObjectURL;
+    const createObjectUrl = vi.fn().mockReturnValue(objectUrl);
+    const revokeObjectUrl = vi.fn().mockImplementation(() => undefined);
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: createObjectUrl,
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: revokeObjectUrl,
+    });
+    const pack: InstalledThemePack = {
+      manifest: {
+        id: themeId,
+        version: '1.0.0',
+        themeApi: 2,
+        runtime: 'trusted-code',
+        minAppVersion: '0.15.0',
+        name: 'Runtime Failure',
+        author: 'JotLuck',
+        capabilities: ['trusted-code'],
+        permissions: ['component-replace'],
+        layoutPreset: 'atelier',
+        checksums: {},
+        entrypoints: [{ slot: 'topbar', module: 'runtime.js', checksum: 'test' }],
+      },
+      css: '',
+      source: 'imported',
+      installedAt: 0,
+      codeBundles: { 'runtime.js': 'export default {}' },
+    };
+
+    await expect(activateTrustedThemeRuntime(pack, [], chrome)).rejects.toThrow(
+      'activation failed',
+    );
+    expect(createObjectUrl).toHaveBeenCalledTimes(1);
+    expect(revokeObjectUrl).toHaveBeenCalledWith(objectUrl);
+
+    if (originalCreateObjectUrl) {
+      Object.defineProperty(URL, 'createObjectURL', {
+        configurable: true,
+        value: originalCreateObjectUrl,
+      });
+    } else {
+      Object.defineProperty(URL, 'createObjectURL', {
+        configurable: true,
+        value: undefined,
+      });
+    }
+    if (originalRevokeObjectUrl) {
+      Object.defineProperty(URL, 'revokeObjectURL', {
+        configurable: true,
+        value: originalRevokeObjectUrl,
+      });
+    } else {
+      Object.defineProperty(URL, 'revokeObjectURL', {
+        configurable: true,
+        value: undefined,
+      });
+    }
+    unregisterTrustedTheme(themeId);
   });
 });

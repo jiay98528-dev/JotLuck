@@ -13,6 +13,7 @@
     :aria-label="action.label"
     :aria-pressed="action.active"
     :disabled="action.disabled"
+    data-theme-part="shell-action"
     @click="action.run"
   >
     <template #icon-left>
@@ -23,6 +24,7 @@
         stroke="currentColor"
         stroke-width="2"
         stroke-linecap="round"
+        data-theme-part="shell-action-icon"
         aria-hidden="true"
       >
         <line x1="12" y1="5" x2="12" y2="19" />
@@ -35,6 +37,7 @@
         stroke="currentColor"
         stroke-width="2"
         stroke-linecap="round"
+        data-theme-part="shell-action-icon"
         aria-hidden="true"
       >
         <path d="M3 6h6l2 2h10v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
@@ -47,6 +50,7 @@
         stroke="currentColor"
         stroke-width="2"
         stroke-linecap="round"
+        data-theme-part="shell-action-icon"
         aria-hidden="true"
       >
         <circle cx="11" cy="11" r="8" />
@@ -60,6 +64,7 @@
         stroke-width="2"
         stroke-linecap="round"
         stroke-linejoin="round"
+        data-theme-part="shell-action-icon"
         aria-hidden="true"
       >
         <rect x="4" y="4" width="16" height="16" rx="2" />
@@ -75,6 +80,7 @@
         stroke-width="2"
         stroke-linecap="round"
         stroke-linejoin="round"
+        data-theme-part="shell-action-icon"
         aria-hidden="true"
       >
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -88,6 +94,7 @@
         stroke="currentColor"
         stroke-width="2"
         stroke-linecap="round"
+        data-theme-part="shell-action-icon"
         aria-hidden="true"
       >
         <circle cx="18" cy="5" r="3" />
@@ -105,6 +112,7 @@
         stroke-width="1.7"
         stroke-linecap="round"
         stroke-linejoin="round"
+        data-theme-part="shell-action-icon"
         aria-hidden="true"
       >
         <path d="M4 5.5h16" />
@@ -123,6 +131,7 @@
         stroke-width="1.6"
         stroke-linecap="round"
         stroke-linejoin="round"
+        data-theme-part="shell-action-icon"
         aria-hidden="true"
       >
         <circle cx="12" cy="12" r="3" />
@@ -131,19 +140,27 @@
         />
       </svg>
       <svg
-        v-else
+        v-else-if="action.icon === 'view-toggle'"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        stroke-width="2"
+        stroke-width="1.8"
         stroke-linecap="round"
         stroke-linejoin="round"
+        data-theme-part="shell-action-icon"
         aria-hidden="true"
       >
-        <path d="M8 5v14l11-7z" />
+        <rect x="3.5" y="5" width="17" height="14" rx="2.5" />
+        <path d="M11 5v14" />
+        <path d="m14.5 10 2-2 2 2" />
+        <path d="M16.5 8v5" />
       </svg>
     </template>
-    <span v-if="labelMode !== 'icon'" class="shell-action__label">
+    <span
+      v-if="labelMode !== 'icon'"
+      class="shell-action__label"
+      data-theme-part="shell-action-label"
+    >
       {{ labelMode === 'short' ? action.shortLabel : action.label }}
     </span>
   </Button>

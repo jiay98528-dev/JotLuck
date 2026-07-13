@@ -4,11 +4,16 @@
     :class="[`topbar--${region.variant}`, `topbar--layout-${region.layout}`]"
     :data-variant="region.variant"
     :data-layout="region.layout"
+    data-theme-part="topbar"
     role="banner"
     aria-label="编辑器工具栏"
   >
-    <div v-if="region.layout === 'search-first'" class="topbar-inner topbar-inner--search-first">
-      <div class="topbar-left">
+    <div
+      v-if="region.layout === 'search-first'"
+      class="topbar-inner topbar-inner--search-first"
+      data-theme-part="topbar-content"
+    >
+      <div class="topbar-left" data-theme-part="topbar-actions">
         <ShellActionButton
           v-for="action in leftActions"
           :key="action.id"
@@ -17,7 +22,7 @@
         />
         <span class="topbar-notebook" :title="notebookName">{{ notebookName }}</span>
       </div>
-      <div class="topbar-command-zone">
+      <div class="topbar-command-zone" data-theme-part="topbar-command">
         <ShellActionButton
           v-for="action in centerActions"
           :key="action.id"
@@ -26,7 +31,7 @@
           size="sm"
         />
       </div>
-      <div class="topbar-right">
+      <div class="topbar-right" data-theme-part="topbar-actions">
         <span class="topbar-title topbar-title--archive" :title="titleText">{{ titleText }}</span>
         <ShellActionButton
           v-for="action in rightActions"
@@ -37,8 +42,12 @@
       </div>
     </div>
 
-    <div v-else-if="region.layout === 'reader'" class="topbar-inner topbar-inner--reader">
-      <div class="topbar-left">
+    <div
+      v-else-if="region.layout === 'reader'"
+      class="topbar-inner topbar-inner--reader"
+      data-theme-part="topbar-content"
+    >
+      <div class="topbar-left" data-theme-part="topbar-actions">
         <ShellActionButton
           v-for="action in leftActions"
           :key="action.id"
@@ -49,7 +58,7 @@
       <div class="topbar-center topbar-center--reader">
         <span class="topbar-title" :title="titleText">{{ titleText }}</span>
       </div>
-      <div class="topbar-right">
+      <div class="topbar-right" data-theme-part="topbar-actions">
         <ShellActionButton
           v-for="action in rightActions"
           :key="action.id"
@@ -59,11 +68,15 @@
       </div>
     </div>
 
-    <div v-else-if="region.layout === 'compact'" class="topbar-inner topbar-inner--compact">
-      <div class="topbar-left topbar-left--compact">
+    <div
+      v-else-if="region.layout === 'compact'"
+      class="topbar-inner topbar-inner--compact"
+      data-theme-part="topbar-content"
+    >
+      <div class="topbar-left topbar-left--compact" data-theme-part="topbar-title">
         <span class="topbar-title" :title="titleText">{{ titleText }}</span>
       </div>
-      <div class="topbar-right">
+      <div class="topbar-right" data-theme-part="topbar-actions">
         <ShellActionButton
           v-for="action in [...centerActions, ...rightActions]"
           :key="action.id"
@@ -73,9 +86,13 @@
       </div>
     </div>
 
-    <div v-else-if="region.layout === 'workbench'" class="topbar-inner topbar-inner--workbench">
-      <div class="topbar-identity">
-        <div class="topbar-identity-actions">
+    <div
+      v-else-if="region.layout === 'workbench'"
+      class="topbar-inner topbar-inner--workbench"
+      data-theme-part="topbar-content"
+    >
+      <div class="topbar-identity" data-theme-part="topbar-identity">
+        <div class="topbar-identity-actions" data-theme-part="topbar-actions">
           <ShellActionButton
             v-for="action in leftActions"
             :key="action.id"
@@ -83,7 +100,7 @@
             label-mode="icon"
           />
         </div>
-        <div class="topbar-identity-copy">
+        <div class="topbar-identity-copy" data-theme-part="topbar-identity-copy">
           <span class="topbar-notebook topbar-notebook--caps" :title="notebookName">
             {{ notebookName }}
           </span>
@@ -92,7 +109,10 @@
           </span>
         </div>
       </div>
-      <div class="topbar-command-zone topbar-command-zone--workbench">
+      <div
+        class="topbar-command-zone topbar-command-zone--workbench"
+        data-theme-part="topbar-command"
+      >
         <ShellActionButton
           v-for="action in centerActions"
           :key="action.id"
@@ -101,7 +121,7 @@
           size="sm"
         />
       </div>
-      <div class="topbar-right topbar-right--workbench">
+      <div class="topbar-right topbar-right--workbench" data-theme-part="topbar-actions">
         <ShellActionButton
           v-for="action in rightActions"
           :key="action.id"
@@ -115,8 +135,9 @@
       v-else
       class="topbar-inner"
       :class="{ 'topbar-inner--title-first': region.layout === 'title-first' }"
+      data-theme-part="topbar-content"
     >
-      <div class="topbar-left">
+      <div class="topbar-left" data-theme-part="topbar-actions">
         <ShellActionButton
           v-for="action in leftActions"
           :key="action.id"
@@ -125,10 +146,10 @@
         />
         <span class="topbar-notebook" :title="notebookName">{{ notebookName }}</span>
       </div>
-      <div class="topbar-center">
+      <div class="topbar-center" data-theme-part="topbar-title">
         <span class="topbar-title" :title="titleText">{{ titleText }}</span>
       </div>
-      <div class="topbar-right">
+      <div class="topbar-right" data-theme-part="topbar-actions">
         <ShellActionButton
           v-for="action in [...centerActions, ...rightActions]"
           :key="action.id"

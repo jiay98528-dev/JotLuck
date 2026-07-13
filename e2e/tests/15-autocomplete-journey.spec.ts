@@ -250,7 +250,7 @@ test.describe('offline autocomplete user journeys', () => {
     const editorProbe =
       'Release risk is configuration drift.\n' +
       'Release risk is configuration drift.\n' +
-      'Release risk is';
+      'Release risk is configuration';
     await replaceEditorTextByTyping(page, editorProbe);
     await page.locator('.cm-content').click();
     await expect(page.locator('.cm-ghost-text')).toBeVisible({ timeout: 3000 });
@@ -284,7 +284,7 @@ test.describe('offline autocomplete user journeys', () => {
     await expect.poll(() => getEditorContentFromBridge(page)).toBe(probe);
   });
 
-  test('keyed note switches reuse the same baseline load', async ({ page }) => {
+  test('keyed note switches never revive the ineligible legacy baseline', async ({ page }) => {
     await page.addInitScript(() => {
       const originalFetch = window.fetch.bind(window);
       (window as any).__baselineFetchCount = 0;
@@ -304,7 +304,7 @@ test.describe('offline autocomplete user journeys', () => {
 
     await expect
       .poll(() => page.evaluate(() => (window as any).__baselineFetchCount as number))
-      .toBeGreaterThan(0);
+      .toBe(0);
     const initialCount = await page.evaluate(() => (window as any).__baselineFetchCount as number);
     const notePaths = await page.evaluate(() => window.__jotluck_e2e?.listNotePaths?.() ?? []);
     expect(notePaths.length).toBeGreaterThanOrEqual(2);
@@ -319,6 +319,7 @@ test.describe('offline autocomplete user journeys', () => {
 
     await expect
       .poll(() => page.evaluate(() => (window as any).__baselineFetchCount as number))
-      .toBe(initialCount);
+      .toBe(0);
+    expect(initialCount).toBe(0);
   });
 });

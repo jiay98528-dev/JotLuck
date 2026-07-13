@@ -1,0 +1,6 @@
+cmake==3.31.6
+ninja==1.13.0
+numpy==2.4.3
+onnx==1.22.0
+onnxruntime==1.27.0
+torch==2.13.0

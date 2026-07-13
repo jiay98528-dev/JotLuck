@@ -3,7 +3,8 @@ import { readFileSync } from 'fs';
 const data = JSON.parse(readFileSync('D:/eslint-output.json', 'utf-8'));
 
 // 1. Total errors and warnings
-let totalErrors = 0, totalWarnings = 0;
+let totalErrors = 0,
+  totalWarnings = 0;
 const fileDetails = [];
 
 for (const f of data) {
@@ -111,13 +112,28 @@ console.log();
 // 5. Score
 const totalIssues = totalErrors + totalWarnings;
 let score, msg;
-if (totalErrors === 0 && totalWarnings === 0) { score = 'A+'; msg = '零错误零警告，完美规范'; }
-else if (totalErrors === 0 && totalWarnings <= 5) { score = 'A'; msg = '零错误，少量警告，近乎完美'; }
-else if (totalErrors === 0 && totalWarnings <= 20) { score = 'B'; msg = '零错误，警告较多'; }
-else if (totalErrors === 0) { score = 'C'; msg = '零错误，大量警告'; }
-else if (totalErrors <= 5) { score = 'C-'; msg = '少量错误'; }
-else if (totalErrors <= 20) { score = 'D'; msg = '较多错误'; }
-else { score = 'F'; msg = '大量错误'; }
+if (totalErrors === 0 && totalWarnings === 0) {
+  score = 'A+';
+  msg = '零错误零警告，完美规范';
+} else if (totalErrors === 0 && totalWarnings <= 5) {
+  score = 'A';
+  msg = '零错误，少量警告，近乎完美';
+} else if (totalErrors === 0 && totalWarnings <= 20) {
+  score = 'B';
+  msg = '零错误，警告较多';
+} else if (totalErrors === 0) {
+  score = 'C';
+  msg = '零错误，大量警告';
+} else if (totalErrors <= 5) {
+  score = 'C-';
+  msg = '少量错误';
+} else if (totalErrors <= 20) {
+  score = 'D';
+  msg = '较多错误';
+} else {
+  score = 'F';
+  msg = '大量错误';
+}
 
 console.log('=== 5. 代码规范符合度评分 ===');
 console.log('评分等级:', score);

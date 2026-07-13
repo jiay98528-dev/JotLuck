@@ -1,0 +1,12 @@
+{
+  "schema": "jotluck.autocomplete.v2r-tatoeba-cleaning.v1",
+  "schemaVersion": 1,
+  "cleanerVersion": "jotluck-tatoeba-cc0-cleaner-v1",
+  "rawSha256": "14f975533e2f15257f674d6099b95cf6b2c3458a8baf7496935081ad862f4b91",
+  "rawBytes": 1288366,
+  "accepted": 24147,
+  "rejected": 17355,
+  "outputSha256": "fbf253c75015a27f8a32f73dd430a6c73347bfc7c9ca188f0025a8c59f0c7a25",
+  "outputBytes": 2900641,
+  "reportSha256": "9341f60e36e236d4355136d5c06ec0202398c00cfd7b906ef983283d19039851"
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import {
   buildSyntheticCorpusReport,
   familySupportAnchor,
@@ -12,6 +13,7 @@ import {
   serializeSyntheticJsonlRecord,
   SYNTHETIC_GENERATOR_SEED,
   SYNTHETIC_GENERATOR_VERSION,
+  SYNTHETIC_REPOSITORY_ROOT,
   SYNTHETIC_LICENSE_ID,
   SYNTHETIC_OWNER,
   SYNTHETIC_SOURCE_PLANS,
@@ -60,6 +62,11 @@ function defaultReport(): SyntheticCorpusReport {
 }
 
 describe('project-owned synthetic autocomplete corpus', () => {
+  it('resolves the default workspace from the generator module location', () => {
+    const testFileRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+    expect(SYNTHETIC_REPOSITORY_ROOT).toBe(testFileRoot);
+  });
+
   it('uses fixed generator identity and produces deterministic documents and source hashes', () => {
     const firstDocument = generateSyntheticDocument(SYNTHETIC_SOURCE_PLANS[0]!, 17);
     const secondDocument = generateSyntheticDocument(SYNTHETIC_SOURCE_PLANS[0]!, 17);

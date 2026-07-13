@@ -21,6 +21,7 @@ import {
   ensureEditorReady,
   waitForAppReady,
   getEditorContent,
+  getEditorContentFromBridge,
   typeInEditor,
   appendInEditor,
   clearEditor,
@@ -33,28 +34,32 @@ import {
 // 辅助函数
 // ============================================================
 
-/** 切换视图模式，直到按钮文本为期望值 */
-async function ensureViewMode(page: any, targetLabel: string): Promise<void> {
+/** 切换视图模式，直到实际工作区结构与目标模式一致。 */
+async function ensureViewMode(page: any, targetMode: 'live' | 'split'): Promise<void> {
   const toggle = page.locator('.view-mode-toggle');
   await expect(toggle).toBeVisible({ timeout: 5000 });
-  for (let i = 0; i < 4; i++) {
-    const label = await toggle.textContent();
-    if (label?.trim() === targetLabel) return;
+  const currentMode = async (): Promise<'live' | 'split' | 'read'> => {
+    if (await page.locator('.reader-workbench[data-view-mode="read"]').isVisible()) return 'read';
+    if (await page.locator('.split-pane').isVisible()) return 'split';
+    return 'live';
+  };
+
+  for (let i = 0; i < 3; i++) {
+    if ((await currentMode()) === targetMode) return;
     await toggle.click();
     await page.waitForTimeout(300);
   }
-  const finalLabel = await toggle.textContent();
-  expect(finalLabel?.trim()).toBe(targetLabel);
+  expect(await currentMode()).toBe(targetMode);
 }
 
 /** 切换到即时模式 (live preview) */
 async function switchToLiveMode(page: any): Promise<void> {
-  await ensureViewMode(page, '即时');
+  await ensureViewMode(page, 'live');
 }
 
 /** 切换到分栏模式 */
 async function switchToSplitMode(page: any): Promise<void> {
-  await ensureViewMode(page, '分栏');
+  await ensureViewMode(page, 'split');
 }
 
 /** 获取元素的 computed style 属性值 */
@@ -167,7 +172,7 @@ test.describe('即时模式 (Live Preview)', () => {
     await switchToLiveMode(page);
 
     // Step 2: 验证编辑器内容包含 Wiki-link [[项目规划]]
-    const content = await getEditorContent(page);
+    const content = await getEditorContentFromBridge(page);
     expect(content).toContain('[[项目规划]]');
 
     // Step 3: 将光标移动到文档末尾，让 wiki-link 行失焦渲染
@@ -191,7 +196,7 @@ test.describe('即时模式 (Live Preview)', () => {
     await page.waitForTimeout(1500);
 
     // Step 7: 验证已跳转到"项目规划"笔记
-    const newContent = await getEditorContent(page);
+    const newContent = await getEditorContentFromBridge(page);
     expect(newContent).toContain('# 项目规划');
     expect(newContent).toContain('## 里程碑');
 
@@ -202,7 +207,7 @@ test.describe('即时模式 (Live Preview)', () => {
   // ==========================================================
   // Test 3: 外部链接可点击（渲染验证 + window.open mock）
   // ==========================================================
-  test('03-外部链接渲染且可点击（window.open mock）', async ({ page }) => {
+  test('03-外部链接渲染且可点击（真实用户路径）', async ({ page }) => {
     // Step 1: 切换到"快速入门"笔记
     await switchToNote(page, '快速入门');
     await page.waitForTimeout(500);
@@ -223,28 +228,12 @@ test.describe('即时模式 (Live Preview)', () => {
     const linkText = await extLink.first().textContent();
     expect(linkText).toContain('JotLuck GitHub');
 
-    // Step 4: 通过 JS 验证 window.open 在外部链接点击时被调用
-    const called = await page.evaluate(() => {
-      const origOpen = window.open.bind(window);
-      let wasCalled = false;
-      window.open = (...args: Parameters<typeof window.open>) => {
-        if (args[0]?.toString().includes('github.com')) wasCalled = true;
-        return origOpen(...args);
-      };
-      // 模拟 CM6 live preview 的 anchor click 处理逻辑
-      const link = document.querySelector('.cm-live-block a[href*="github.com"]');
-      if (link) {
-        const href = link.getAttribute('href');
-        if (href) {
-          origOpen(href, '_blank', 'noopener', 'noreferrer');
-          window.open = origOpen;
-          return true;
-        }
-      }
-      window.open = origOpen;
-      return false;
-    });
-    expect(called).toBe(true);
+    // Step 4: 通过真实用户点击验证外部链接打开新窗口
+    const popupPromise = page.waitForEvent('popup');
+    await extLink.first().click();
+    const popup = await popupPromise;
+    await expect.poll(() => popup.url(), { timeout: 5000 }).toContain('github.com');
+    await popup.close();
   });
 
   // ==========================================================
@@ -263,7 +252,7 @@ test.describe('即时模式 (Live Preview)', () => {
     await page.waitForTimeout(300);
 
     // Step 3: 验证内容写入正确
-    const typedContent = await getEditorContent(page);
+    const typedContent = await getEditorContentFromBridge(page);
     expect(typedContent).toContain('- [ ] Task 1');
     expect(typedContent).toContain('- [x] Task 2');
     expect(typedContent).toContain('- [ ] Task 3');
@@ -292,12 +281,12 @@ test.describe('即时模式 (Live Preview)', () => {
     // Step 7: 点击真实复选框反转状态，并验证 Markdown 写回
     await checkboxes.nth(0).click();
 
-    await expect.poll(() => getEditorContent(page)).toContain('- [x] Task 1');
+    await expect.poll(() => getEditorContentFromBridge(page)).toContain('- [x] Task 1');
 
     // Toggle Task 2: - [x] → - [ ]
     await checkboxes.nth(1).click();
 
-    const finalContent = await getEditorContent(page);
+    const finalContent = await getEditorContentFromBridge(page);
     expect(finalContent).toContain('- [x] Task 1');
     expect(finalContent).toContain('- [ ] Task 2');
     expect(finalContent).toContain('- [ ] Task 3');
@@ -471,21 +460,25 @@ test.describe('即时模式 (Live Preview)', () => {
     const toggle = page.locator('.view-mode-toggle');
     await expect(toggle).toBeVisible({ timeout: 5000 });
 
-    // 初始模式为即时
-    const initialLabel = (await toggle.textContent())?.trim();
-    expect(initialLabel).toBe('即时');
+    // 初始模式为即时，按钮表达下一动作而非当前状态
+    await expect(toggle).toHaveAttribute('aria-label', '切换到分栏视图');
+    await expect(page.locator('.cm-editor')).toBeVisible();
 
     // 点击切换到分栏
     await toggle.click();
-    await page.waitForTimeout(300);
-    const afterClick = (await toggle.textContent())?.trim();
-    expect(afterClick).toBe('分栏');
+    await expect(page.locator('.split-pane')).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-label', '切换到只读渲染');
 
-    // 再次点击切回即时
+    // 分栏进入只读渲染，三态循环按钮不冒充二态 pressed 控件
     await toggle.click();
-    await page.waitForTimeout(300);
-    const restoredLabel = (await toggle.textContent())?.trim();
-    expect(restoredLabel).toBe('即时');
+    await expect(page.locator('.reader-workbench[data-view-mode="read"]')).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-label', '返回即时编辑');
+    await expect(toggle).not.toHaveAttribute('aria-pressed');
+
+    // 返回即时编辑
+    await toggle.click();
+    await expect(page.locator('.cm-editor')).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-label', '切换到分栏视图');
   });
 
   // ==========================================================
@@ -525,7 +518,7 @@ test.describe('即时模式 (Live Preview)', () => {
     await switchToNote(page, '设计笔记');
     await page.waitForTimeout(500);
 
-    const persistedContent = await getEditorContent(page);
+    const persistedContent = await getEditorContentFromBridge(page);
     expect(persistedContent).toContain('即时测试');
     expect(persistedContent).toContain('- [ ] 检查点 A');
     expect(persistedContent).toContain('- [x] 检查点 B');
@@ -563,7 +556,7 @@ test.describe('即时模式 (Live Preview)', () => {
     await page.keyboard.insertText('。');
     await page.waitForTimeout(250);
 
-    const content = await getEditorContent(page);
+    const content = await getEditorContentFromBridge(page);
     expect(content).toBe('# 中文标题\n中。');
     expect(content).not.toContain('# 中文标题中');
 

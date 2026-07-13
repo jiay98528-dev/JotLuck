@@ -1,6 +1,6 @@
 # JotLuck 主题开发标准
 
-版本：2026-06-27
+版本：2026-07-11
 适用范围：Theme API v2、本地主题市场、`.mltheme` 导入包、官方主题模块、UX Theme Plugin
 
 ## 1. 规范地位
@@ -330,6 +330,28 @@ const plugin: ThemePluginModule = {
 export default plugin;
 ```
 
+### 7.1 默认 slot 的稳定样式部件
+
+`data-theme-part` 是默认宿主组件的加性样式部件契约，不是新的 `ThemeSlotId`、Manifest 字段或 Host API。它让官方主题能够保留宿主动作、图标、无障碍语义与状态机，只在稳定的内部区域施加材质、密度和层级样式。
+
+| 默认组件             | 稳定 `data-theme-part` 值                                                                                                                                |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TopBar`             | `topbar`、`topbar-content`、`topbar-identity`、`topbar-command`、`topbar-actions`、`topbar-title`                                                        |
+| `LeftWing`           | `navigator`、`navigator-list`、`navigator-item`                                                                                                          |
+| `RightWing`          | `inspector`、`inspector-content`、`inspector-section`、`inspector-section-header`、`inspector-section-body`、`inspector-resize`、`inspector-rail-toggle` |
+| `EditorControlStrip` | `editor-control`、`editor-control-stack`、`editor-control-actions`                                                                                       |
+| `FormatToolbar`      | `format-toolbar`、`format-toolbar-preset`、`format-toolbar-action`、`format-toolbar-clear`                                                               |
+| `StatusBar`          | `status`、`status-metrics`、`status-position`、`status-actions`、`status-save`                                                                           |
+| `ShellActionButton`  | `shell-action`、`shell-action-icon`、`shell-action-label`                                                                                                |
+
+规则：
+
+- 这些属性只能补充现有 DOM，不能替代组件的 role、ARIA、事件、slot 或 action 路由。
+- 主题需要“玻璃外壳”时，应优先用 slot wrapper 包裹默认内容，再对 `data-theme-part` 施加 scoped CSS；不得为了视觉而重建裸 `<button>`、伪图标、文件列表或编辑器状态。
+- `inspector-rail-toggle` 是宿主 `RightWing` 的加性、本地状态控件：它必须是可聚焦的原生 button，通过 `aria-expanded` 表达窄轨展开状态；它不是 Theme API、slot 或宿主 action。
+- 变更现有部件的名称、语义或层级前，必须同时更新本文档、宿主组件测试和至少一个主题保留性测试。
+- CSS 只能依赖该表中已承诺的部件及公开 slot 根；其他宿主私有 class 仅可作为渐进增强，不能成为功能正确性的唯一前提。
+
 ## 8. ThemeHostContext
 
 `ThemeHostContext` 是代码主题接入宿主的唯一稳定 API。
@@ -559,11 +581,15 @@ interface ThemeCommerceProvider {
 - 外部现有 Markdown 文件默认进入 `external-reader` 只读模式，启用编辑后回到完整编辑工作区。
 - 主题中心可展示 runtime、slot 覆盖范围、版本、来源、商业状态、安装/预览/启用/卸载状态。
 - 当前主题刷新后持久化；主题不存在、校验失败或运行异常时回退 `paper`。
+- 如使用默认 slot wrapper，必须验证宿主 action、格式工具栏、无障碍语义和编辑器状态仍由默认组件提供。
+- 主题涉及 spacing、玻璃或悬浮层级时，必须验证关键控件的 computed padding/gap/inset、正文画布阴影和无 `backdrop-filter` 降级，而不是仅保存一张截图。
+- 官方主题的预览图必须来自通过视觉基线与 GUI 验收的真实运行时截图，不得使用方向探针或静态 mock。
 
 涉及 Theme API、slot、Host API 或包协议变更时，最低自动化检查：
 
 ```bash
 pnpm.cmd --filter @jotluck/app typecheck
+pnpm.cmd lint:tokens
 npx.cmd eslint packages/app/src/ packages/renderer/src/
 pnpm.cmd --filter @jotluck/app lint:style
 pnpm.cmd --filter @jotluck/app exec vitest run
@@ -571,3 +597,8 @@ pnpm.cmd --filter @jotluck/app build
 ```
 
 仅修改本文档或元指令时，可只执行文档一致性与格式检查。
+
+## 变更记录
+
+- 2026-07-11：为 `RightWing` 增加 `inspector-rail-toggle` 稳定样式部件契约；明确窄轨状态为组件本地 ARIA 交互，不扩展 Theme API 或 action 路由。
+- 2026-07-10：新增默认 slot `data-theme-part` 稳定样式部件契约；明确 wrapper 保留宿主控件、官方主题 CSS 资产化、spacing/玻璃 computed-style 与真实运行时预览验收要求。

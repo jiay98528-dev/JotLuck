@@ -74,12 +74,24 @@ import {
   resolveCompletionCandidates,
   type CompletionResolverTrace,
 } from './completion/resolver';
-import { CompletionEngineRouter, createCompletionCandidateBatch } from './completion/engine-router';
+import {
+  CompletionEngineRouter,
+  createCompletionCandidateBatch,
+  takeLastUtf8Bytes,
+} from './completion/engine-router';
 import { HybridRetrievalService } from './completion/hybrid-retrieval-backend';
 import type {
   HybridRetrievalCandidate,
   HybridRetrievalHealthDiagnostics,
 } from './completion/hybrid-retrieval-types';
+import {
+  PUBLIC_ENGINE_CONTEXT_MAX_UTF8_BYTES,
+  PUBLIC_ENGINE_MAX_CANDIDATES,
+  type CompletionPublicEngine,
+  type PublicCompletionCandidate,
+  type PublicEngineDiagnostics,
+  type PublicEngineCursorBoundary,
+} from './completion/public-engine-types';
 import type {
   CompletionAblationMode,
   CompletionCandidate,
@@ -245,6 +257,14 @@ export interface CompletionRequestDiagnostics {
     usedRankerId: string | null;
     fellBack: boolean;
   };
+  publicEngine: {
+    attempted: boolean;
+    timedOut: boolean;
+    fellBack: boolean;
+    usedEngineId: string | null;
+    candidates: PublicCompletionCandidate[];
+    health: PublicEngineDiagnostics | null;
+  };
   resolverTrace: CompletionResolverTrace;
   baselineParse: ParseDiagnostics;
   baselineModel: LoadedBaselineIdentity | null;
@@ -342,14 +362,20 @@ export class MarkdownPredictor {
   private engineRequestSequence = 0;
   private readonly engineRouter = new CompletionEngineRouter();
   private readonly retrievalService: HybridRetrievalService;
+  private readonly initialPublicEngine: CompletionPublicEngine | null;
+  private publicEngineWarmup: Promise<boolean> | null = null;
   private storageScope = 'unscoped';
   private observedStorageRevisions = new Map<string, number>();
 
   constructor(
     private readonly n: number = 4,
     retrievalService?: HybridRetrievalService,
+    publicEngine?: CompletionPublicEngine,
   ) {
     this.retrievalService = retrievalService ?? new HybridRetrievalService();
+    // Architecture-stop builds leave the public L3 slot unbound. Tests and
+    // isolated evaluators may explicitly inject an evidence-gated engine.
+    this.initialPublicEngine = publicEngine ?? null;
   }
 
   setIndexData(data: PredictorIndexData): void {
@@ -433,6 +459,20 @@ export class MarkdownPredictor {
 
   getLoadedBaselineIdentity(): LoadedBaselineIdentity | null {
     return loadedBaselineIdentity ? { ...loadedBaselineIdentity } : null;
+  }
+
+  getPublicEngineDiagnostics(): PublicEngineDiagnostics | null {
+    return this.engineRouter.getPublicEngineDiagnostics();
+  }
+
+  warmupPublicEngine(): Promise<boolean> {
+    this.publicEngineWarmup ??= this.installInitialPublicEngine();
+    return this.publicEngineWarmup;
+  }
+
+  private async installInitialPublicEngine(): Promise<boolean> {
+    const engine = this.initialPublicEngine;
+    return engine ? this.engineRouter.installPublicEngine(engine) : false;
   }
 
   async initialize(): Promise<void> {
@@ -519,6 +559,11 @@ export class MarkdownPredictor {
     let hybridAttempted = false;
     let hybridTimedOut = false;
     let hybridFellBack = false;
+    let publicEngineAttempted = false;
+    let publicEngineTimedOut = false;
+    let publicEngineFellBack = false;
+    let usedPublicEngineId: string | null = null;
+    let publicEngineCandidates: PublicCompletionCandidate[] = [];
     let rankerFellBack = false;
     let usedRankerId: string | null = null;
     const finish = (result: PredictionResult | null): CompletionRequestDiagnostics => ({
@@ -532,6 +577,14 @@ export class MarkdownPredictor {
         health: this.retrievalService.getHealthDiagnostics(),
       },
       ranker: { usedRankerId, fellBack: rankerFellBack },
+      publicEngine: {
+        attempted: publicEngineAttempted,
+        timedOut: publicEngineTimedOut,
+        fellBack: publicEngineFellBack,
+        usedEngineId: usedPublicEngineId,
+        candidates: publicEngineCandidates.map((candidate) => ({ ...candidate })),
+        health: this.getPublicEngineDiagnostics(),
+      },
       resolverTrace,
       baselineParse: this.getBaselineParseDiagnostics(),
       baselineModel: this.getLoadedBaselineIdentity(),
@@ -562,25 +615,73 @@ export class MarkdownPredictor {
     const metrics = loadCompletionMetrics(this.storageScope);
     const providers = this.createProviders();
     const rawCandidates = collectProviderCandidates(context, providers);
-    hybridAttempted =
-      this.isHybridRetrievalEnabled(context) &&
-      !rawCandidates.some((candidate) => candidate.source === 'structured');
+    const hasStructuredCandidate = rawCandidates.some(
+      (candidate) => candidate.source === 'structured',
+    );
+    hybridAttempted = this.isHybridRetrievalEnabled(context) && !hasStructuredCandidate;
+    publicEngineAttempted =
+      this.isPublicEngineEnabled(context) &&
+      !hasStructuredCandidate &&
+      this.engineRouter.getActivePublicEngineId() !== null;
+
+    const documentVersion = options.documentVersion ?? fingerprintText(doc);
+    const publicDeadlineAt = Date.now() + Math.max(0, deadlineAt - performance.now());
+    const [retrieval, publicGeneration] = await Promise.all([
+      hybridAttempted
+        ? this.retrieveCandidates(context, deadlineAt, options.signal)
+        : Promise.resolve({
+            candidates: [] as HybridRetrievalCandidate[],
+            timedOut: false,
+            fellBack: false,
+          }),
+      publicEngineAttempted
+        ? this.engineRouter.generatePublic(
+            {
+              workspaceScope: requestScope,
+              documentVersion,
+              cursorPos,
+              contextTail: takeLastUtf8Bytes(
+                doc.slice(0, cursorPos),
+                PUBLIC_ENGINE_CONTEXT_MAX_UTF8_BYTES,
+              ),
+              languageHint: context.languageHint,
+              blockType: context.blockType,
+              cursorBoundary: detectPublicCursorBoundary(doc, cursorPos),
+              maxCandidates: PUBLIC_ENGINE_MAX_CANDIDATES,
+              deadlineAt: publicDeadlineAt,
+            },
+            engineEpoch,
+            deadlineAt,
+            options.signal,
+          )
+        : Promise.resolve({
+            candidates: [],
+            usedEngineId: null,
+            fellBack: false,
+            timedOut: false,
+          }),
+    ]);
+
+    hybridTimedOut = retrieval.timedOut;
+    hybridFellBack = retrieval.fellBack;
+    publicEngineTimedOut = publicGeneration.timedOut;
+    publicEngineFellBack = publicGeneration.fellBack;
+    usedPublicEngineId = publicGeneration.usedEngineId;
+    publicEngineCandidates = [...publicGeneration.candidates];
+    if (
+      options.signal?.aborted ||
+      requestScope !== this.storageScope ||
+      engineEpoch !== this.engineRouter.getEpoch() ||
+      retrievalEpoch !== this.retrievalService.getEpoch()
+    ) {
+      return finish(null);
+    }
     if (hybridAttempted) {
-      const retrieval = await this.retrieveCandidates(context, deadlineAt, options.signal);
-      hybridTimedOut = retrieval.timedOut;
-      hybridFellBack = retrieval.fellBack;
-      if (
-        options.signal?.aborted ||
-        requestScope !== this.storageScope ||
-        engineEpoch !== this.engineRouter.getEpoch() ||
-        retrievalEpoch !== this.retrievalService.getEpoch()
-      ) {
-        return finish(null);
-      }
       rawCandidates.push(
         ...retrieval.candidates.map((candidate) => this.toRetrievalCandidate(candidate, cursorPos)),
       );
     }
+    if (publicEngineAttempted) rawCandidates.push(...publicGeneration.candidates);
     if (options.signal?.aborted) return finish(null);
     const resolved = resolveCompletionCandidates(
       context,
@@ -611,7 +712,7 @@ export class MarkdownPredictor {
       requestId: `${this.storageScope}:${++this.engineRequestSequence}`,
       engineEpoch,
       workspaceScope: requestScope,
-      documentVersion: options.documentVersion ?? fingerprintText(doc),
+      documentVersion,
       cursorPos,
       contextBeforeCursor: doc.slice(0, cursorPos),
       languageHint: context.languageHint,
@@ -632,7 +733,7 @@ export class MarkdownPredictor {
       requestScope !== this.storageScope ||
       engineEpoch !== this.engineRouter.getEpoch() ||
       retrievalEpoch !== this.retrievalService.getEpoch() ||
-      batch.request.documentVersion !== (options.documentVersion ?? fingerprintText(doc))
+      batch.request.documentVersion !== documentVersion
     ) {
       return finish(null);
     }
@@ -879,6 +980,9 @@ export class MarkdownPredictor {
 
   private async initializeOnce(): Promise<void> {
     this.loadFromLocalStorage();
+    // Warmup is independent of Personal L2 restoration. The canonical factory
+    // keeps the slot empty until a model is release-eligible.
+    void this.warmupPublicEngine();
     await this.loadBaseline();
   }
 
@@ -1028,6 +1132,18 @@ export class MarkdownPredictor {
   private isHybridRetrievalEnabled(context: CompletionContext): boolean {
     return (
       !context.emptyLine && (this.ablationMode === 'full-stack' || this.ablationMode === 'l2-only')
+    );
+  }
+
+  private isPublicEngineEnabled(context: CompletionContext): boolean {
+    return (
+      !context.emptyLine &&
+      context.atEndOfLine &&
+      context.syntax.type === 'general' &&
+      (context.blockType === 'paragraph' ||
+        context.blockType === 'list' ||
+        context.blockType === 'quote') &&
+      (this.ablationMode === 'full-stack' || this.ablationMode === 'l3-only')
     );
   }
 
@@ -1528,10 +1644,13 @@ function getBaselineUrls(): string[] {
     import.meta.env.DEV || import.meta.env.MODE === 'e2e'
       ? import.meta.env.VITE_AUTOCOMPLETE_BASELINE_URL
       : '';
+  // Public v4 is no longer a production fallback. Tests retain an explicit
+  // loader hook for frozen-v4 diagnostics, and E2E may install one exact
+  // candidate URL; neither path is reachable in an ordinary build.
+  if (!baselineLoaderOverrides && !configured) return [];
   const urls = [
     configured,
-    '/baseline-ngram.web-local.compact.txt',
-    '/baseline-ngram.v1.compact.txt',
+    ...(baselineLoaderOverrides ? ['/baseline-ngram.web-local.compact.txt'] : []),
   ].filter(Boolean);
   return [...new Set(urls)];
 }
@@ -2082,6 +2201,17 @@ function takeFirstCodePoints(text: string, count: number): string {
 
 function normalizeContributionPath(path: string): string {
   return path.trim().replace(/\\/gu, '/');
+}
+
+function detectPublicCursorBoundary(
+  document: string,
+  cursorPos: number,
+): PublicEngineCursorBoundary {
+  const previous = Array.from(document.slice(0, cursorPos)).at(-1) ?? '';
+  if (/^[\p{L}\p{N}_]$/u.test(previous)) return 'word';
+  if (/^\s$/u.test(previous)) return 'space';
+  if (/^[\p{P}\p{S}]$/u.test(previous)) return 'punctuation';
+  return 'other';
 }
 
 function fingerprintText(text: string): string {

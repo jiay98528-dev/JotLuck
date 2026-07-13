@@ -33,9 +33,6 @@ const OUTPUTS = [
   'packages/app/public/baseline-ngram.web-local.compact.txt',
   'packages/app/public/baseline-ngram.web-local.compact.manifest.json',
   'scripts/corpus/training-report.web-local.json',
-  'packages/app/public/baseline-ngram.v1.compact.txt',
-  'packages/app/public/baseline-ngram.v1.compact.manifest.json',
-  'scripts/corpus/training-report.json',
 ] as const;
 
 const temporaryRoots: string[] = [];
@@ -64,13 +61,13 @@ describe('post-final autocomplete publisher', () => {
     );
   });
 
-  it('publishes both profiles and a fully verifiable evidence bundle in one transaction', () => {
+  it('publishes one canonical profile and a fully verifiable evidence bundle', () => {
     const fixture = createPassingFixture();
     const result = publishAutocompleteFinal(fixture.options);
 
     expect(result.selectedTier).toBe('0.1mib');
     expect(result.modelSha256).toBe(fixture.modelSha256);
-    expect(result.profiles.map((item) => item.profile)).toEqual(['web-local', 'release']);
+    expect(result.profiles.map((item) => item.profile)).toEqual(['web-local']);
     for (const profile of result.profiles) {
       expect(read(fixture.root, profile.modelPath)).toBe(fixture.model);
       const manifest = readJson<Record<string, unknown>>(fixture.root, profile.manifestPath);
@@ -95,7 +92,6 @@ describe('post-final autocomplete publisher', () => {
     ).toBe(true);
     expect(verifyAutocompleteEvidence({ rootDir: fixture.root, mode: 'rc' }).models).toEqual([
       expect.objectContaining({ profile: 'web-local', status: 'release-evidence-verified' }),
-      expect.objectContaining({ profile: 'release', status: 'release-evidence-verified' }),
     ]);
   }, 15_000);
 

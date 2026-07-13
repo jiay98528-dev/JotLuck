@@ -1,0 +1,52 @@
+{
+  "schema": "jotluck.autocomplete.v2r-architecture-stop.v1",
+  "schemaVersion": 1,
+  "engine": "public-phrase-transformer-v1",
+  "status": "architecture-blocked",
+  "recordedAt": "2026-07-13T01:30:00.000Z",
+  "releaseEvidence": false,
+  "stopLongTraining": true,
+  "reason": "The fixed phrase-bank classifier cannot represent enough independent real-writing continuations under the 16384-class and 6MiB bounds.",
+  "formalV3HoldoutsAvailable": false,
+  "diagnostic": {
+    "datasetId": "formal-independent-writing-v2",
+    "holdoutSha256": "dc4988b051ceaa8b6b7600ff32e96e24e5f9e87baebd47c8cb0468e6469e081c",
+    "observedDiagnostic": true,
+    "singleReferenceConservativeCeiling": true,
+    "phraseBanks": [
+      {
+        "size": 8192,
+        "sha256": "37ef675fa67e734034375c0752186d1ba6cf1e0c35f7e18c3195104b7f1df116",
+        "internalCorpusCoverage": 0.7453636695853847,
+        "observedAbsoluteRate": 0.105,
+        "observedZhAbsoluteRate": 0.01,
+        "observedEnAbsoluteRate": 0.2
+      },
+      {
+        "size": 12288,
+        "sha256": "bfa23065ebe5aa22caa524d1b51a1f4761d6e44a2817f6eed69fc22d0a968ec8",
+        "internalCorpusCoverage": 0.7856310444943846,
+        "observedAbsoluteRate": 0.105,
+        "observedZhAbsoluteRate": 0.01,
+        "observedEnAbsoluteRate": 0.2
+      },
+      {
+        "size": 16384,
+        "sha256": "67518e3521fe61027b77cc98949c1cf01d7c5124d86f3f22cbd8c43492d338d9",
+        "internalCorpusCoverage": 0.8097179847609007,
+        "observedAbsoluteRate": 0.13,
+        "observedZhAbsoluteRate": 0.06,
+        "observedEnAbsoluteRate": 0.2
+      }
+    ]
+  },
+  "trainedDiagnostic": {
+    "phraseBankSize": 8192,
+    "internalSelectionTriggerRate": 0.6522592776948177,
+    "internalSelectionUsableRate": 0.38161606105856977,
+    "internalSelectionOracleAt32Rate": 0.6327913279132791,
+    "candidateEligible": false,
+    "int8Bytes": 1225507
+  },
+  "requiredNextStep": "A future public neural generator must use an open-vocabulary or compositional output space and a new ADR; reweighting or enlarging this fixed bank is not sufficient."
+}

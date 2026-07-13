@@ -116,6 +116,7 @@
                 :actions="actionsForRegion('editor-control')"
                 :preset="activeParagraphPreset"
                 :active-action="pendingFormatAction"
+                :view-mode="viewMode"
                 @format="onToolbarFormat"
               />
             </ThemeSlotBoundary>
@@ -155,6 +156,7 @@
                       :actions="actionsForRegion('editor-control')"
                       :preset="activeParagraphPreset"
                       :active-action="pendingFormatAction"
+                      :view-mode="viewMode"
                       @format="onToolbarFormat"
                     />
                   </ThemeSlotBoundary>
@@ -168,7 +170,7 @@
                   >
                     <div v-if="viewMode === 'read'" class="reader-workbench" data-view-mode="read">
                       <div class="reader-workbench__bar">
-                        <span class="reader-workbench__label">阅读</span>
+                        <span class="reader-workbench__label">只读渲染</span>
                         <div class="reader-workbench__actions">
                           <ShellActionButton
                             v-for="action in actionsForRegion('reader-bar')"
@@ -618,7 +620,6 @@ import {
 } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import AppShell from '@/components/layout/AppShell.vue';
 import ShellActionButton from '@/components/layout/ShellActionButton.vue';
@@ -721,6 +722,7 @@ interface OpenedFilePayload {
   absolutePath: string;
   notebookRoot: string;
   relativePath: string;
+  accessToken?: string;
 }
 
 type ExternalSessionMode = 'none' | 'readonly' | 'edit-shell' | 'folder-indexed';
@@ -964,12 +966,11 @@ const shellActions = computed<ShellAction[]>(() => [
   {
     id: 'view-toggle',
     region: actionRegion('view-toggle'),
-    label: viewMode.value === 'read' ? '进入编辑' : `当前${resolvedViewModeLabel.value}`,
-    shortLabel: viewMode.value === 'read' ? '编辑' : resolvedViewModeLabel.value,
-    title: `切换视图，当前为${resolvedViewModeLabel.value}`,
+    label: viewModeActionCopy.value.label,
+    shortLabel: viewModeActionCopy.value.shortLabel,
+    title: `${viewModeActionCopy.value.label}，当前为${resolvedViewModeLabel.value}`,
     icon: 'view-toggle',
     run: cycleViewMode,
-    active: viewMode.value === chrome.value.defaultViewMode,
   },
 ]);
 
@@ -1195,17 +1196,30 @@ const editorRef = ref<InstanceType<typeof MarkdownEditor> | null>(null);
 const viewModeLabels: Record<string, string> = {
   split: '分栏',
   live: '即时',
-  read: '阅读',
+  read: '只读渲染',
 };
 const viewModeLabel = computed(() => viewModeLabels[viewMode.value]);
 const resolvedViewModeLabel = computed(() => viewModeLabel.value ?? '阅读');
+const viewModeCycle = computed<readonly ViewMode[]>(() =>
+  chrome.value.defaultViewMode === 'read' ? ['read', 'live', 'split'] : ['live', 'split', 'read'],
+);
+const nextViewMode = computed<ViewMode>(() => {
+  const idx = viewModeCycle.value.indexOf(viewMode.value);
+  return viewModeCycle.value[(idx + 1 + viewModeCycle.value.length) % viewModeCycle.value.length]!;
+});
+const viewModeActionCopy = computed(() => {
+  if (nextViewMode.value === 'split') {
+    return { label: '切换到分栏视图', shortLabel: '分栏' };
+  }
+  if (nextViewMode.value === 'read') {
+    return { label: '切换到只读渲染', shortLabel: '只读' };
+  }
+  return { label: '返回即时编辑', shortLabel: '返回编辑' };
+});
 
 function cycleViewMode(): void {
   pendingFormatAction.value = null;
-  const modes: ViewMode[] =
-    chrome.value.defaultViewMode === 'read' ? ['read', 'live', 'split'] : ['split', 'live'];
-  const idx = modes.indexOf(viewMode.value);
-  viewMode.value = modes[(idx + 1 + modes.length) % modes.length]!;
+  viewMode.value = nextViewMode.value;
   scheduleSplitEditorMountForCurrentMode();
   if (viewMode.value === 'split' || viewMode.value === 'read') {
     updateSplitPreview();
@@ -1243,6 +1257,7 @@ function scheduleSplitEditorMountForCurrentMode(): void {
 
 // --- Split Pane ---
 function onSplitContentUpdate(content: string): void {
+  const revision = ++contentRevision;
   currentContent.value = content;
   updateHeadings(content);
   updateEditorStats(content);
@@ -1255,7 +1270,7 @@ function onSplitContentUpdate(content: string): void {
     rememberPendingMockFileWrite(activePath.value, content);
     if (saveTimer) clearTimeout(saveTimer);
     const savingPath = activePath.value;
-    saveTimer = setTimeout(() => debouncedSave(savingPath, content), 600);
+    saveTimer = setTimeout(() => void debouncedSave(savingPath, content, revision), 600);
   }
   // Debounce preview update for split mode
   if (splitDebounceTimer) clearTimeout(splitDebounceTimer);
@@ -1299,7 +1314,8 @@ const saveError = ref<string | null>(null);
 const lastSavedAt = ref<number | null>(null);
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let saveGeneration = 0;
-let currentSavePromise: Promise<void> | null = null;
+let contentRevision = 0;
+let currentSavePromise: Promise<boolean> | null = null;
 let noteSelectionQueue: Promise<void> = Promise.resolve();
 let noteSelectionVersion = 0;
 let externalSelectionVersion = 0;
@@ -1437,12 +1453,18 @@ function normalizeOpenedFilePayload(payload: unknown): OpenedFilePayload | null 
   const relativePath = String(
     record.relativePath ?? record.relative_path ?? fallback?.relativePath,
   );
+  const accessTokenValue = record.accessToken ?? record.access_token;
+  const accessToken =
+    typeof accessTokenValue === 'string' && accessTokenValue.length > 0
+      ? accessTokenValue
+      : undefined;
   if (!notebookRoot || !relativePath) return null;
 
   return {
     absolutePath: normalizeOsPath(absolutePath),
     notebookRoot: normalizeOsPath(notebookRoot),
     relativePath: normalizePath(relativePath),
+    accessToken,
   };
 }
 
@@ -1470,6 +1492,20 @@ async function getPendingOpenedFile(): Promise<OpenedFilePayload | null> {
 async function openNotebookRoot(rootPath: string): Promise<void> {
   isScratchSession.value = false;
   const handle = await fs.openNotebookAt(rootPath);
+  const nextRoot = normalizeOsPath(handle.rootPath);
+  if (nextRoot !== activeNotebookRoot.value) {
+    completionTrainer?.cancelCurrentRun();
+    completionTrainer = null;
+  }
+  activeNotebookRoot.value = nextRoot;
+  notebookName.value = handle.name || displayNameFromPath(handle.rootPath);
+}
+
+async function openNotebookFromExternalGrant(accessToken: string): Promise<void> {
+  const openFromGrant = fs.openNotebookFromExternalGrant;
+  if (!openFromGrant) throw new Error('当前桌面文件会话不支持外部目录授权');
+  isScratchSession.value = false;
+  const handle = await openFromGrant.call(fs, accessToken);
   const nextRoot = normalizeOsPath(handle.rootPath);
   if (nextRoot !== activeNotebookRoot.value) {
     completionTrainer?.cancelCurrentRun();
@@ -1514,9 +1550,11 @@ async function openInitialNotebook(): Promise<boolean> {
 function enterNotebookFileState(path: string, content: string): void {
   isScratchSession.value = false;
   externalSessionMode.value = 'none';
+  void revokeExternalGrant(externalFile.value);
   externalFile.value = null;
   externalError.value = '';
   activePath.value = path;
+  contentRevision++;
   currentContent.value = content;
   isDirty.value = false;
   isSaving.value = false;
@@ -1531,11 +1569,13 @@ function enterNotebookFileState(path: string, content: string): void {
 function enterScratchSession(): void {
   isScratchSession.value = true;
   externalSessionMode.value = 'none';
+  void revokeExternalGrant(externalFile.value);
   externalFile.value = null;
   externalError.value = '';
   activeNotebookRoot.value = '';
   customTemplates.value = [];
   activePath.value = '';
+  contentRevision++;
   currentContent.value = '';
   files.value = [];
   currentDir.value = '/';
@@ -1552,44 +1592,70 @@ function enterScratchSession(): void {
   refreshSplitPreviewIfVisible();
 }
 
-async function readExternalMarkdownFile(absolutePath: string): Promise<string> {
+async function readExternalMarkdownFile(openedFile: OpenedFilePayload): Promise<string> {
   if (isDesktopRuntime()) {
-    return invoke<string>('read_external_markdown_file', { absolutePath });
+    if (!openedFile.accessToken) throw new Error('External file grant is missing or expired');
+    return invoke<string>('read_external_markdown_file', {
+      accessToken: openedFile.accessToken,
+      relativePath: normalizePath(openedFile.relativePath),
+    });
   }
   const filesByPath = peekJotLuckE2EBridge()?.externalFiles ?? {};
-  if (Object.prototype.hasOwnProperty.call(filesByPath, absolutePath)) {
-    return filesByPath[absolutePath] ?? '';
+  if (Object.prototype.hasOwnProperty.call(filesByPath, openedFile.absolutePath)) {
+    return filesByPath[openedFile.absolutePath] ?? '';
   }
+  const absolutePath = openedFile.absolutePath;
   throw new Error(`测试外部文件不存在: ${absolutePath}`);
 }
 
-async function readExternalNoteFile(absolutePath: string): Promise<string> {
+async function readExternalNoteFile(openedFile: OpenedFilePayload): Promise<string> {
   if (isDesktopRuntime()) {
-    return invoke<string>('read_external_note_file', { absolutePath });
+    if (!openedFile.accessToken) throw new Error('External file grant is missing or expired');
+    return invoke<string>('read_external_note_file', {
+      accessToken: openedFile.accessToken,
+      relativePath: normalizePath(openedFile.relativePath),
+    });
   }
   const filesByPath = peekJotLuckE2EBridge()?.externalFiles ?? {};
-  if (Object.prototype.hasOwnProperty.call(filesByPath, absolutePath)) {
-    return filesByPath[absolutePath] ?? '';
+  if (Object.prototype.hasOwnProperty.call(filesByPath, openedFile.absolutePath)) {
+    return filesByPath[openedFile.absolutePath] ?? '';
   }
+  const absolutePath = openedFile.absolutePath;
   throw new Error(`测试外部文件不存在: ${absolutePath}`);
 }
 
-async function writeExternalNoteFile(absolutePath: string, content: string): Promise<void> {
+async function writeExternalNoteFile(
+  openedFile: OpenedFilePayload,
+  content: string,
+): Promise<void> {
   if (isDesktopRuntime()) {
-    await invoke('write_external_note_file', { absolutePath, content });
+    if (!openedFile.accessToken) throw new Error('External file grant is missing or expired');
+    await invoke('write_external_note_file', {
+      accessToken: openedFile.accessToken,
+      relativePath: normalizePath(openedFile.relativePath),
+      content,
+    });
     return;
   }
   const e2eBridge = getJotLuckE2EBridge();
   if (!e2eBridge) throw new Error('Web external file writes are available only in E2E mode');
   e2eBridge.externalFiles = e2eBridge.externalFiles ?? {};
-  e2eBridge.externalFiles[absolutePath] = content;
+  e2eBridge.externalFiles[openedFile.absolutePath] = content;
   e2eBridge.externalWrites = e2eBridge.externalWrites ?? [];
-  e2eBridge.externalWrites.push({ absolutePath, content, time: Date.now() });
+  e2eBridge.externalWrites.push({
+    absolutePath: openedFile.absolutePath,
+    content,
+    time: Date.now(),
+  });
 }
 
-async function registerExternalAccessRoot(rootPath: string): Promise<void> {
-  if (!isDesktopRuntime()) return;
-  await invoke('register_external_access_root', { rootPath });
+async function revokeExternalGrant(openedFile: OpenedFilePayload | null): Promise<void> {
+  if (!isDesktopRuntime() || !openedFile?.accessToken) return;
+  try {
+    await invoke('revoke_external_access', { accessToken: openedFile.accessToken });
+  } catch {
+    // Window teardown must not be blocked by an already-expired grant.
+  }
 }
 
 function ensureMarkdownExtension(path: string): string {
@@ -1617,11 +1683,16 @@ function downloadScratchAsMarkdown(fileName: string): void {
   toast.show('Web 预览已下载草稿；当前仍停留在临时草稿。', 'info', 3500);
 }
 
-async function enterNotebookFromSavedScratch(absolutePath: string): Promise<void> {
-  const { root, relativePath } = splitAbsoluteFilePath(absolutePath);
-  isScratchSession.value = false;
+async function enterNotebookFromSavedScratch(savedFile: OpenedFilePayload): Promise<void> {
+  const relativePath = normalizePath(savedFile.relativePath);
+  if (isDesktopRuntime()) {
+    if (!savedFile.accessToken) throw new Error('保存后的外部文件授权已失效');
+    await openNotebookFromExternalGrant(savedFile.accessToken);
+  } else {
+    const { root } = splitAbsoluteFilePath(savedFile.absolutePath);
+    await openNotebookRoot(root);
+  }
   activePath.value = '';
-  await openNotebookRoot(root);
   await loadDirectory('/');
   await indexStore.initialize(fs, true);
   wikiLinkRevision.value++;
@@ -1630,7 +1701,7 @@ async function enterNotebookFromSavedScratch(absolutePath: string): Promise<void
 
 async function saveScratchAs(): Promise<boolean> {
   if (!isScratchSession.value) return false;
-  const defaultFileName = getDraftMarkdownFileName(currentContent.value);
+  const defaultFileName = ensureMarkdownExtension(getDraftMarkdownFileName(currentContent.value));
 
   if (!isDesktopRuntime()) {
     downloadScratchAsMarkdown(defaultFileName);
@@ -1638,7 +1709,11 @@ async function saveScratchAs(): Promise<boolean> {
     return true;
   }
 
-  const selected = await saveDialog({
+  const savedFile = await invoke<OpenedFilePayload>('save_external_note_as', {
+    defaultFileName,
+    content: currentContent.value,
+  });
+  /*
     title: '保存临时草稿',
     defaultPath: defaultFileName,
     filters: [
@@ -1648,13 +1723,9 @@ async function saveScratchAs(): Promise<boolean> {
       },
     ],
   });
-  if (!selected) return false;
+  */
+  await enterNotebookFromSavedScratch(savedFile);
 
-  const absolutePath = ensureMarkdownExtension(String(selected));
-  const { root } = splitAbsoluteFilePath(absolutePath);
-  await registerExternalAccessRoot(root);
-  await writeExternalNoteFile(absolutePath, currentContent.value);
-  await enterNotebookFromSavedScratch(absolutePath);
   toast.show('草稿已保存为笔记。', 'success', 2500);
   return true;
 }
@@ -1666,6 +1737,11 @@ function externalAbsoluteFromRelative(relativePath: string): string {
   return `${normalizeOsPath(root).replace(/\/+$/, '')}/${rel}`;
 }
 
+function externalFileKey(file: OpenedFilePayload | null): string {
+  if (!file) return '';
+  return `${file.accessToken ?? file.notebookRoot}:${normalizePath(file.relativePath)}`;
+}
+
 function openedFileFromRelative(relativePath: string): OpenedFilePayload {
   const root = externalFile.value?.notebookRoot;
   if (!root) throw new Error('外部文件根目录不可用');
@@ -1674,6 +1750,7 @@ function openedFileFromRelative(relativePath: string): OpenedFilePayload {
     absolutePath: externalAbsoluteFromRelative(normalizedRelativePath),
     notebookRoot: normalizeOsPath(root),
     relativePath: normalizedRelativePath,
+    accessToken: externalFile.value?.accessToken,
   };
 }
 
@@ -1697,10 +1774,12 @@ async function listExternalNoteDirectory(relativePath = '/'): Promise<DirEntry[]
   const rootPath = externalFile.value?.notebookRoot;
   if (!rootPath) return [];
   if (isDesktopRuntime()) {
+    const accessToken = externalFile.value?.accessToken;
+    if (!accessToken) throw new Error('External file grant is missing or expired');
     const entries = await invoke<
       Array<{ name: string; path: string; is_dir: boolean; size: number; modified_at: number }>
     >('list_external_note_directory', {
-      rootPath,
+      accessToken,
       relativePath,
     });
     return entries.map((entry) => ({
@@ -1752,6 +1831,7 @@ function syncCurrentContentFromEditor(): void {
   const content = view.state.doc.toString();
   if (content === currentContent.value) return;
 
+  contentRevision++;
   currentContent.value = content;
   updateHeadings(content);
   updateEditorStats(content);
@@ -1830,7 +1910,7 @@ function flushPendingMockFileWritesSync(): void {
   }
 }
 
-async function flushPendingCurrentSave(): Promise<void> {
+async function flushPendingCurrentSave(): Promise<boolean> {
   syncCurrentContentFromEditor();
   if (saveTimer) {
     clearTimeout(saveTimer);
@@ -1838,15 +1918,32 @@ async function flushPendingCurrentSave(): Promise<void> {
   }
   if (!isDirty.value) {
     if (currentSavePromise) await currentSavePromise;
-    return;
+    return !saveError.value;
   }
-  if (isExternalEditing.value && externalFile.value) {
-    await debouncedExternalSave(currentContent.value);
-  } else if (activePath.value) {
-    await debouncedSave(activePath.value, currentContent.value);
-  } else if (currentSavePromise) {
-    await currentSavePromise;
+
+  for (let attempt = 0; attempt < 3 && isDirty.value; attempt++) {
+    const revision = contentRevision;
+    const content = currentContent.value;
+    const path = activePath.value;
+    const externalSnapshot = externalFile.value ? { ...externalFile.value } : null;
+    const saved =
+      isExternalEditing.value && externalSnapshot
+        ? await debouncedExternalSave(content, externalSnapshot, revision)
+        : path
+          ? await debouncedSave(path, content, revision)
+          : currentSavePromise
+            ? (await currentSavePromise, !saveError.value)
+            : false;
+    if (!saved) return false;
+    if (
+      revision === contentRevision &&
+      path === activePath.value &&
+      externalFileKey(externalSnapshot) === externalFileKey(externalFile.value)
+    ) {
+      break;
+    }
   }
+  return !isDirty.value && !saveError.value;
 }
 
 async function flushCurrentSaveOrBlock(reason: string): Promise<boolean> {
@@ -1868,7 +1965,6 @@ function clearPendingSaveForPath(path: string): void {
       saveTimer = null;
     }
     saveGeneration++;
-    currentSavePromise = null;
   }
 }
 
@@ -1876,7 +1972,14 @@ async function enterExternalFileSession(
   openedFile: OpenedFilePayload,
   options: { setLoading?: boolean } = {},
 ): Promise<void> {
-  await flushPendingCurrentSave();
+  if (!(await flushPendingCurrentSave())) return;
+  const previousExternalFile = externalFile.value;
+  if (
+    previousExternalFile &&
+    externalFileKey(previousExternalFile) !== externalFileKey(openedFile)
+  ) {
+    await revokeExternalGrant(previousExternalFile);
+  }
 
   isScratchSession.value = false;
   const shouldSetLoading = options.setLoading ?? true;
@@ -1901,9 +2004,10 @@ async function enterExternalFileSession(
   notebookName.value = '外部文件';
 
   try {
-    const content = await readExternalMarkdownFile(openedFile.absolutePath);
+    const content = await readExternalMarkdownFile(openedFile);
     externalFile.value = openedFile;
     externalSessionMode.value = 'readonly';
+    contentRevision++;
     currentContent.value = content;
     rememberExternalOpenedFile(openedFile);
     isDirty.value = false;
@@ -1917,6 +2021,7 @@ async function enterExternalFileSession(
   } catch (e) {
     externalFile.value = openedFile;
     externalSessionMode.value = 'readonly';
+    contentRevision++;
     currentContent.value = '';
     externalError.value = `${openedFile.absolutePath}\n${e instanceof Error ? e.message : String(e)}`;
     updateHeadings('');
@@ -2010,6 +2115,7 @@ function joinPath(dir: string, name: string): string {
 
 function clearActiveNoteState(): void {
   activePath.value = '';
+  contentRevision++;
   currentContent.value = '';
   isDirty.value = false;
   isSaving.value = false;
@@ -2079,11 +2185,7 @@ async function selectNoteNow(path: string, selectionVersion: number): Promise<vo
   syncCurrentContentFromEditor();
   // 防御性刷新：即使 saveTimer 已触发但 debouncedSave 尚未完成，
   // 只要 isDirty 为 true 就执行保存，确保内容不丢失
-  if (isDirty.value && activePath.value) {
-    await debouncedSave(activePath.value, currentContent.value);
-  } else if (currentSavePromise) {
-    await currentSavePromise;
-  }
+  if (!(await flushPendingCurrentSave())) return;
 
   if (selectionVersion !== noteSelectionVersion) return;
 
@@ -2138,6 +2240,7 @@ async function selectNoteNow(path: string, selectionVersion: number): Promise<vo
   // Now set reactive state — editor mounts with content already available
   isScratchSession.value = false;
   activePath.value = path;
+  contentRevision++;
   currentContent.value = content;
 
   const dir = path.substring(0, path.lastIndexOf('/') + 1) || '/';
@@ -2173,7 +2276,7 @@ async function onSelectExternalNote(path: string): Promise<void> {
     return;
   }
 
-  await flushPendingCurrentSave();
+  if (!(await flushPendingCurrentSave())) return;
   if (selectionVersion !== externalSelectionVersion) return;
   loading.value = true;
   errorMessage.value = '';
@@ -2183,9 +2286,10 @@ async function onSelectExternalNote(path: string): Promise<void> {
   try {
     const openedFile =
       externalOpenedFileMap.value[normalizedPath] ?? openedFileFromRelative(normalizedPath);
-    const content = await readExternalNoteFile(openedFile.absolutePath);
+    const content = await readExternalNoteFile(openedFile);
     if (selectionVersion !== externalSelectionVersion) return;
     externalFile.value = openedFile;
+    contentRevision++;
     currentContent.value = content;
     rememberExternalOpenedFile(openedFile);
     isDirty.value = false;
@@ -2291,7 +2395,7 @@ async function onShellRenameFile(oldPath: string, newName: string): Promise<void
 async function onDeleteFile(path: string): Promise<void> {
   const normalizedPath = normalizePath(path);
   if (normalizePath(activePath.value) === normalizedPath) {
-    await flushPendingCurrentSave();
+    if (!(await flushPendingCurrentSave())) return;
   }
   clearPendingSaveForPath(path);
   await fs.deleteFile(path);
@@ -2464,10 +2568,10 @@ async function ensureExternalDirectoryListed(relativePath = '/'): Promise<void> 
 function createExternalFolderFileSystem(): IFileSystemService {
   return {
     async readFile(path: string) {
-      return readExternalNoteFile(externalAbsoluteFromRelative(path));
+      return readExternalNoteFile(openedFileFromRelative(path));
     },
     async writeFile(path: string, content: string) {
-      await writeExternalNoteFile(externalAbsoluteFromRelative(path), content);
+      await writeExternalNoteFile(openedFileFromRelative(path), content);
     },
     async writeBinary() {
       throw new Error('外部单文件会话不支持写入二进制资产');
@@ -2561,7 +2665,7 @@ async function confirmExternalEditAndScan(): Promise<void> {
 async function openExternalParentAsNotebook(): Promise<void> {
   if (!externalFile.value) return;
   const target = externalFile.value;
-  await flushPendingCurrentSave();
+  if (!(await flushPendingCurrentSave())) return;
   loading.value = true;
   externalError.value = '';
   try {
@@ -2569,12 +2673,14 @@ async function openExternalParentAsNotebook(): Promise<void> {
       await openNotebookRoot('/');
       await hydrateMockNotebookFromExternalFiles(target.notebookRoot);
     } else {
-      await openNotebookRoot(target.notebookRoot);
+      if (!target.accessToken) throw new Error('外部文件授权已失效，请重新打开文件');
+      await openNotebookFromExternalGrant(target.accessToken);
     }
     await loadDirectory('/');
     await indexStore.initialize(fs, true);
     wikiLinkRevision.value++;
     await onSelectNote(target.relativePath);
+    await revokeExternalGrant(target);
     externalSessionMode.value = 'none';
     externalFile.value = null;
     externalFiles.value = [];
@@ -2624,6 +2730,7 @@ async function hydrateMockNotebookFromExternalFiles(rootPath: string): Promise<v
 
 // --- Content Updates ---
 function onContentUpdate(content: string): void {
+  const revision = ++contentRevision;
   currentContent.value = content;
   updateHeadings(content);
   updateEditorStats(content);
@@ -2639,11 +2746,12 @@ function onContentUpdate(content: string): void {
     rememberPendingMockFileWrite(activePath.value, content);
     if (saveTimer) clearTimeout(saveTimer);
     const savingPath = activePath.value;
-    saveTimer = setTimeout(() => debouncedSave(savingPath, content), 600);
+    saveTimer = setTimeout(() => void debouncedSave(savingPath, content, revision), 600);
   }
 }
 
 function onExternalContentUpdate(content: string): void {
+  const revision = ++contentRevision;
   currentContent.value = content;
   updateHeadings(content);
   updateEditorStats(content);
@@ -2651,7 +2759,8 @@ function onExternalContentUpdate(content: string): void {
     isDirty.value = true;
     saveError.value = null;
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => debouncedExternalSave(content), 600);
+    const savingFile = { ...externalFile.value };
+    saveTimer = setTimeout(() => void debouncedExternalSave(content, savingFile, revision), 600);
   }
 }
 
@@ -2679,62 +2788,81 @@ function updateEditorStats(content: string): void {
   editorStats.lineCount = content ? content.split('\n').length : 0;
 }
 
-async function debouncedSave(path: string, content: string): Promise<void> {
+async function debouncedSave(
+  path: string,
+  content: string,
+  revision = contentRevision,
+): Promise<boolean> {
+  const previousSave = currentSavePromise;
   const saveTask = (async () => {
+    if (previousSave) await previousSave.catch(() => undefined);
     const gen = ++saveGeneration;
     isSaving.value = true;
     const start = Date.now();
     try {
       await fs.writeFile(path, content);
-      if (gen !== saveGeneration) return; // 新保存已启动，放弃本次后续操作
+      if (gen !== saveGeneration) return true;
       await indexStore.refreshDocument(fs, path);
       void trainCurrentFile(path, content);
-      if (gen !== saveGeneration) return;
+      if (gen !== saveGeneration) return true;
       wikiLinkRevision.value++;
       lastSavedAt.value = Date.now();
       pendingMockFileWrites.delete(normalizePath(path));
       const elapsed = Date.now() - start;
       if (elapsed < 500) await new Promise((r) => setTimeout(r, 500 - elapsed));
-      if (gen !== saveGeneration) return;
-      isDirty.value = false;
+      if (gen !== saveGeneration) return true;
+      if (activePath.value === path && contentRevision === revision) isDirty.value = false;
+      return true;
     } catch (e) {
       saveError.value = String(e);
+      return false;
     } finally {
       if (gen === saveGeneration) isSaving.value = false;
     }
   })();
   currentSavePromise = saveTask;
   try {
-    await saveTask;
+    return await saveTask;
   } finally {
     if (currentSavePromise === saveTask) currentSavePromise = null;
   }
 }
 
-async function debouncedExternalSave(content: string): Promise<void> {
-  const absolutePath = externalFile.value?.absolutePath;
-  if (!absolutePath) return;
+async function debouncedExternalSave(
+  content: string,
+  openedFile: OpenedFilePayload,
+  revision = contentRevision,
+): Promise<boolean> {
+  const previousSave = currentSavePromise;
   const saveTask = (async () => {
+    if (previousSave) await previousSave.catch(() => undefined);
     const gen = ++saveGeneration;
     isSaving.value = true;
     const start = Date.now();
     try {
-      await writeExternalNoteFile(absolutePath, content);
-      if (gen !== saveGeneration) return;
+      await writeExternalNoteFile(openedFile, content);
+      if (gen !== saveGeneration) return true;
       lastSavedAt.value = Date.now();
       const elapsed = Date.now() - start;
       if (elapsed < 300) await new Promise((r) => setTimeout(r, 300 - elapsed));
-      if (gen !== saveGeneration) return;
-      isDirty.value = false;
+      if (gen !== saveGeneration) return true;
+      if (
+        externalFileKey(externalFile.value) === externalFileKey(openedFile) &&
+        contentRevision === revision
+      ) {
+        isDirty.value = false;
+      }
+      return true;
     } catch (e) {
       saveError.value = e instanceof Error ? e.message : String(e);
+      return false;
     } finally {
       if (gen === saveGeneration) isSaving.value = false;
     }
   })();
   currentSavePromise = saveTask;
   try {
-    await saveTask;
+    return await saveTask;
   } finally {
     if (currentSavePromise === saveTask) currentSavePromise = null;
   }
@@ -3182,6 +3310,7 @@ onUnmounted(() => {
   completionTrainer?.cancelCurrentRun();
   completionTrainer = null;
   void completionPredictor.dispose();
+  void revokeExternalGrant(externalFile.value);
   unlistenOpenedFile?.();
   unlistenWindowClose?.();
 });

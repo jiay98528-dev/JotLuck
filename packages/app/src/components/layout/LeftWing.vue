@@ -4,6 +4,7 @@
     :class="[`left-wing--${region.mode}`, `left-wing--layout-${region.layout}`]"
     :data-mode="region.mode"
     :data-layout="region.layout"
+    data-theme-part="navigator"
     aria-label="笔记本导航"
   >
     <button class="wing-logo" title="JotLuck, 回到首页" @click="$emit('select-note', '')">
@@ -47,7 +48,12 @@
     </div>
     <div v-else-if="region.layout === 'studio-rail'" class="wing-rail-groove" aria-hidden="true" />
 
-    <nav ref="bookmarkList" class="wing-bookmarks" aria-label="最近笔记">
+    <nav
+      ref="bookmarkList"
+      class="wing-bookmarks"
+      data-theme-part="navigator-list"
+      aria-label="最近笔记"
+    >
       <button
         v-for="note in notes"
         :key="note.path"
@@ -56,6 +62,7 @@
         :style="{ '--dot-color': dotPalette[note.colorIndex % 8] }"
         :title="note.title"
         :data-tooltip="note.title"
+        data-theme-part="navigator-item"
         :aria-label="note.title"
         @click="$emit('select-note', note.path)"
       >

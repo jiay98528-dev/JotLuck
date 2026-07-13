@@ -1,14 +1,16 @@
 <template>
   <aside
     class="right-wing"
-    :class="{ collapsed }"
+    :class="{ collapsed, 'is-rail-expanded': railExpanded }"
     :data-policy="region.policy"
-    :style="{ width: collapsed ? '0px' : `${panelWidth}px` }"
+    data-theme-part="inspector"
+    :style="{ width: collapsed ? '0px' : `var(--inspector-inline-width, ${panelWidth}px)` }"
     aria-label="参考面板"
   >
     <!-- Left-edge grab handle for resize / collapse -->
     <div
       class="grab-handle"
+      data-theme-part="inspector-resize"
       title="双击折叠 / 展开 | 拖拽调整宽度"
       role="separator"
       tabindex="0"
@@ -23,11 +25,48 @@
       <div class="grab-line" />
     </div>
 
+    <button
+      type="button"
+      class="inspector-rail-toggle"
+      data-theme-part="inspector-rail-toggle"
+      :aria-expanded="railExpanded"
+      aria-controls="inspector-content"
+      :aria-label="railExpanded ? '收起检查器' : '展开检查器'"
+      @click="railExpanded = !railExpanded"
+    >
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        aria-hidden="true"
+      >
+        <rect x="4" y="4" width="16" height="16" rx="2" />
+        <path d="M14 4v16" />
+        <path d="M7.5 9h3" />
+        <path d="M7.5 13h3" />
+        <path d="M7.5 17h3" />
+      </svg>
+      <span class="sr-only">{{ railExpanded ? '收起检查器' : '展开检查器' }}</span>
+    </button>
+
     <!-- Panel Content -->
-    <div v-if="!collapsed" class="wing-content" :data-mode="region.mode">
+    <div
+      v-if="!collapsed"
+      id="inspector-content"
+      class="wing-content"
+      :data-mode="region.mode"
+      data-theme-part="inspector-content"
+    >
       <template v-for="(section, index) in orderedSections" :key="section">
-        <section class="wing-section" :data-section="section">
-          <button class="section-header" @click="toggleSection(section)">
+        <section class="wing-section" :data-section="section" data-theme-part="inspector-section">
+          <button
+            class="section-header"
+            data-theme-part="inspector-section-header"
+            @click="toggleSection(section)"
+          >
             <svg
               v-if="section === 'outline'"
               class="section-icon"
@@ -101,6 +140,7 @@
           <div
             v-if="section === 'outline' && openSections.has(section)"
             class="section-body section-body--outline"
+            data-theme-part="inspector-section-body"
           >
             <component
               :is="HeadingTreeNode"
@@ -114,6 +154,7 @@
           <div
             v-else-if="section === 'backlinks' && openSections.has(section)"
             class="section-body section-body--backlinks"
+            data-theme-part="inspector-section-body"
           >
             <template v-if="backlinks.length > 0">
               <button
@@ -132,6 +173,7 @@
           <div
             v-else-if="section === 'tags' && openSections.has(section)"
             class="section-body section-body--tags"
+            data-theme-part="inspector-section-body"
           >
             <template v-if="tags.length > 0">
               <div class="tag-cloud">
@@ -335,6 +377,7 @@ function handleDoubleClick() {
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 400;
 const panelWidth = ref(widthForPolicy(props.region.policy));
+const railExpanded = ref(false);
 
 let resizeActive = false;
 
@@ -489,7 +532,9 @@ function onNavigateHeading(headingId: string, lineNumber: number) {
 .grab-handle {
   position: absolute;
   left: calc(var(--touch-target-min) / -2);
-  top: 0;
+
+  /* The side pane spans the viewport while the top bar belongs to the center pane. */
+  top: var(--topbar-height);
   bottom: 0;
   width: var(--touch-target-min);
   cursor: col-resize;
@@ -498,6 +543,11 @@ function onNavigateHeading(headingId: string, lineNumber: number) {
   justify-content: center;
   z-index: 1;
   touch-action: none;
+}
+
+/* Halo Canvas exposes this only for its 721–900px inspector rail. */
+.inspector-rail-toggle {
+  display: none;
 }
 
 .grab-handle:focus-visible {

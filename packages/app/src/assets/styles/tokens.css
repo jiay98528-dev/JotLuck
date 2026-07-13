@@ -45,17 +45,27 @@
   --ls-wide: 0.04em;
 
   /* === Spacing — 4pt grid === */
+  /* 4px establishes layout rhythm; even micro-steps tune compact controls. */
   --space-0: 0;
+  --space-2: 2px;
   --space-4: 4px;
+  --space-6: 6px;
   --space-8: 8px;
+  --space-10: 10px;
   --space-12: 12px;
+  --space-14: 14px;
   --space-16: 16px;
+  --space-18: 18px;
   --space-20: 20px;
+  --space-22: 22px;
   --space-24: 24px;
+  --space-28: 28px;
   --space-32: 32px;
+  --space-36: 36px;
   --space-40: 40px;
   --space-48: 48px;
   --space-64: 64px;
+  --space-80: 80px;
   --space-96: 96px;
   --space-120: 120px;
 

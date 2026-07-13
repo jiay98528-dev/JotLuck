@@ -1,21 +1,34 @@
-name: Autocomplete RC Evidence
+name: Public V2S Autocomplete RC
 
 on:
   workflow_dispatch:
+    inputs:
+      candidate_descriptor:
+        description: 'Repository-relative, fully evidenced Public V2S release candidate descriptor'
+        required: true
+        type: string
+      candidate_artifact_run_id:
+        description: 'Run id containing the immutable V2S candidate/evidence artifact'
+        required: true
+        type: string
+      candidate_artifact_name:
+        description: 'Artifact whose entries preserve repository-relative cache paths'
+        required: true
+        default: 'autocomplete-v2s-release-candidate'
+        type: string
 
 concurrency:
-  group: autocomplete-final-v2
+  group: autocomplete-v2s-final-v1
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
+  actions: read
 
 jobs:
-  autocomplete-rc:
+  autocomplete-v2s-rc:
     runs-on: windows-latest
-    timeout-minutes: 90
-    env:
-      JOTLUCK_AUTOCOMPLETE_RC: '1'
+    timeout-minutes: 120
 
     steps:
       - name: Checkout
@@ -38,61 +51,62 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Download immutable V2S candidate and evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.candidate_artifact_name }}
+          path: .
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_artifact_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Reject candidate artifacts that modify tracked source
+        run: git diff --exit-code
+
       - name: Install Chromium
         run: pnpm exec playwright install chromium
 
-      - name: Verify checked-in fail-closed state
-        run: node scripts/verify-autocomplete-evidence.mjs --mode=ci
+      - name: Verify the checked-out fail-closed or canonical V2S state
+        run: node scripts/verify-autocomplete-v2s-evidence.mjs --mode=ci
 
-      - name: Generate exact synthetic-only pool
-        run: pnpm generate-autocomplete-synthetic-corpus
-
-      - name: Build deterministic validation candidates
-        run: pnpm train-autocomplete-learning-curve
-
-      - name: Measure exact candidate models through the production Router
-        run: pnpm exec tsx scripts/run-autocomplete-runtime-candidates.ts
-
-      - name: Finalize validation learning curve with model-bound runtime evidence
-        run: pnpm exec tsx scripts/run-autocomplete-learning-curve.ts --runtime-evidence=scripts/corpus/_web-cache/autocomplete-candidates/runtime-evidence.json
-
-      - name: Identify frozen workspace final-v2
+      - name: Atomically install the fully evidenced V2S candidate
         shell: pwsh
-        run: |
-          $sha = (pnpm --silent exec tsx scripts/print-autocomplete-final-holdout-sha.ts).Trim()
-          if ($sha -notmatch '^[a-f0-9]{64}$') { throw "Invalid final holdout SHA: $sha" }
-          "FINAL_HOLDOUT_SHA=$sha" >> $env:GITHUB_ENV
+        env:
+          V2S_CANDIDATE_DESCRIPTOR: ${{ inputs.candidate_descriptor }}
+        run: pnpm publish-autocomplete-v2s-final --candidate $env:V2S_CANDIDATE_DESCRIPTOR
 
-      - name: Claim workspace final-v2 locally without opening target samples
-        run: pnpm exec tsx scripts/run-autocomplete-workspace-final-runtime.ts --claim-only
+      - name: Type check
+        run: pnpm typecheck
 
-      - name: Persist the one-shot claim as an atomic repository ref
-        shell: pwsh
-        run: |
-          gh api --method POST "repos/$env:GITHUB_REPOSITORY/git/refs" `
-            -f ref="refs/tags/autocomplete-final-consumed-$env:FINAL_HOLDOUT_SHA" `
-            -f sha="$env:GITHUB_SHA"
+      - name: Lint and format
+        run: pnpm lint && pnpm lint:tokens && pnpm format
 
-      - name: Upload immutable final consumption receipt
-        uses: actions/upload-artifact@v4
-        with:
-          name: autocomplete-final-consumed-${{ env.FINAL_HOLDOUT_SHA }}
-          path: scripts/corpus/_web-cache/autocomplete-candidates/final-v2-consumption/${{ env.FINAL_HOLDOUT_SHA }}.json
-          if-no-files-found: error
+      - name: Unit tests
+        run: pnpm test
 
-      - name: Consume workspace final-v2 through the production Router once
-        run: pnpm exec tsx scripts/run-autocomplete-workspace-final-runtime.ts --resume-claimed
+      - name: Production build
+        run: pnpm build
 
-      - name: Build, smoke, restore, and atomically publish the selected candidate
-        run: pnpm exec tsx scripts/run-autocomplete-post-final-rc.ts
+      - name: Autocomplete production E2E
+        run: pnpm test:e2e:autocomplete-rc
 
-      - name: Verify complete RC evidence bindings
+      - name: Rust check and tests
+        run: cargo check --manifest-path packages/app/src-tauri/Cargo.toml && cargo test --manifest-path packages/app/src-tauri/Cargo.toml
+
+      - name: Build Tauri package
+        run: pnpm --filter @jotluck/app tauri:build
+
+      - name: Execute real Tauri WebView smoke
+        run: pnpm test:tauri:webview-smoke
+
+      - name: Recompute the canonical V2S release closure
         run: node scripts/release-rc-gate.mjs --autocomplete-only
 
-      - name: Upload autocomplete evidence
-        if: always()
+      - name: Upload installed Public V2S state
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: autocomplete-rc-evidence
-          path: scripts/corpus/_web-cache/autocomplete-candidates/
-          if-no-files-found: warn
+          name: autocomplete-v2s-rc-state
+          path: |
+            packages/app/public/autocomplete/
+          if-no-files-found: error

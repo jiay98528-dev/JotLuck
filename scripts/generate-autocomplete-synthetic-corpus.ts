@@ -9,7 +9,7 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import { pathToFileURL } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 export const SYNTHETIC_GENERATOR_VERSION = 'jotluck-synthetic-short-notes-v1';
 export const SYNTHETIC_GENERATOR_SEED = 'project-owned-seed-2026-07-11';
@@ -19,6 +19,10 @@ export const SYNTHETIC_OWNER = 'JotLuck project';
 export const TARGET_CANONICAL_BYTES = 24 * 1024 * 1024;
 export const MAX_PHYSICAL_BYTES = 25 * 1024 * 1024;
 export const PACKS_PER_SOURCE = 4;
+export const SYNTHETIC_REPOSITORY_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+);
 
 type SourceLanguage = 'zh' | 'en';
 export type FamilyId =
@@ -786,7 +790,9 @@ export function runSyntheticCorpusGenerator(
   dependencies: GeneratorDependencies = {},
 ): SyntheticCorpusReport {
   const options = parseCli(argv);
-  const workspaceRoot = dependencies.workspaceRoot ?? process.cwd();
+  // Resolve from this module so package-level invocations cannot create a
+  // second corpus under packages/app.
+  const workspaceRoot = dependencies.workspaceRoot ?? SYNTHETIC_REPOSITORY_ROOT;
   const outputRoot = resolveGeneratedCorpusRoot(workspaceRoot, options.outputDirectory);
   const plans = dependencies.sourcePlans ?? SYNTHETIC_SOURCE_PLANS;
   const report = buildSyntheticCorpusReport(plans);

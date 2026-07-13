@@ -1,0 +1,33 @@
+{
+  "schema": "jotluck.autocomplete.v2r-generator-config.v1",
+  "schemaVersion": 1,
+  "generatorVersion": "jotluck-project-owned-short-notes-v3.1",
+  "generatorSeed": "v2r-project-owned-2026-07-12-b",
+  "selectionSeed": "jotluck-autocomplete-v2r-selection-2026-07-12",
+  "createdAt": "2026-07-12T18:00:00.000Z",
+  "splitBytes": {
+    "train": 25165824,
+    "development": 3145728,
+    "internalSelection": 3145728
+  },
+  "languages": ["zh", "en"],
+  "categories": [
+    "field-observation",
+    "maintenance-log",
+    "meeting-note",
+    "reading-note",
+    "household-plan"
+  ],
+  "sourcePolicy": {
+    "projectOwnedMinimumRatio": 0.6,
+    "tatoebaCc0MaximumRatio": 0.2,
+    "commonVoiceCc0MaximumRatio": 0.2,
+    "externalSourcesRequired": false,
+    "fallback": "project-owned"
+  },
+  "license": {
+    "spdx": "MIT",
+    "evidencePath": "LICENSE"
+  },
+  "cleanerVersion": "jotluck-project-owned-short-notes-v3.1"
+}

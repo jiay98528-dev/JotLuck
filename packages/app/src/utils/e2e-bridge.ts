@@ -53,7 +53,7 @@ export interface JotLuckE2EBridge {
 }
 
 export function isJotLuckE2EBridgeEnabled(): boolean {
-  return import.meta.env.MODE === 'e2e';
+  return import.meta.env.MODE === 'e2e' || import.meta.env.MODE === 'autocomplete-v2r-evaluation';
 }
 
 export function getJotLuckE2EBridge(): JotLuckE2EBridge | null {

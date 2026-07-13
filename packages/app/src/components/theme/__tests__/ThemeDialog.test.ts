@@ -33,6 +33,7 @@ describe('ThemeDialog', () => {
     expect(text).toContain('开发者实验功能');
     expect(text).toContain('来自可信来源');
     expect(text).toContain('羽翼布局');
+    expect(text).toContain('光环画布（Halo Canvas）');
     expect(text).toContain('光场知识舱');
     expect(text).not.toContain('能力验证台');
     expect(text).not.toContain('超级工作台');
@@ -57,8 +58,9 @@ describe('ThemeDialog', () => {
     const images = Array.from(document.body.querySelectorAll<HTMLImageElement>('.theme-card img'));
     const sources = images.map((image) => image.getAttribute('src') ?? '');
 
-    expect(images).toHaveLength(2);
+    expect(images).toHaveLength(3);
     expect(sources.every(Boolean)).toBe(true);
+    expect(sources.some((source) => source.includes('halo-canvas-preview'))).toBe(true);
   });
 
   it('shows developer themes only behind the local dev switch', () => {

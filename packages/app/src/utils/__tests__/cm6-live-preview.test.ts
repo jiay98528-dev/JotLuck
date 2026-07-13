@@ -38,6 +38,7 @@ describe('cm6 live preview markdown block boundaries', () => {
       raw: 'Release Notes',
     });
     expect(blocks[0]?.html).toContain('Release Notes');
+    expect(blocks[0]?.html).toContain('<h2 id="heading-release-notes">');
     expect(blocks[1]).toMatchObject({
       type: 'setextHeadingRule',
       raw: '---',
@@ -54,6 +55,25 @@ describe('cm6 live preview markdown block boundaries', () => {
     expect(blocks.every((block) => block.type === 'codeFenceLine')).toBe(true);
     expect(blocks[0]?.html).toContain('cm-code-lang');
     expect(blocks[2]?.html).toContain('"ok": true');
+  });
+
+  it('renders a bare JSON block with preserved indentation', () => {
+    const blocks = __parseLiveBlocksForTest(['{', '  "ok": true', '}'].join('\n'));
+
+    expect(blocks).toHaveLength(3);
+    expect(blocks.every((block) => block.type === 'jsonBlockLine')).toBe(true);
+    expect(blocks[0]?.html).toContain('cm-json-line');
+    expect(blocks[1]?.html).toContain('&nbsp;&nbsp;');
+  });
+
+  it('recognizes GFM tables without outer pipes', () => {
+    const rows = __parseLiveBlocksForTest(
+      ['Name | Score', '--- | ---:', 'JotLuck | 95'].join('\n'),
+    ).filter((block) => block.type === 'tableRow');
+
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toMatchObject({ tableHeader: true, tableColumnCount: 2 });
+    expect(rows[2]?.html).toContain('ml-table-cell--align-right');
   });
 });
 

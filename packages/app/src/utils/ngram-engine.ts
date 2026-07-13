@@ -14,7 +14,7 @@ export interface PredictionResult {
   /** Total count observed for the first resolved context. */
   totalSupport?: number;
   from: number;
-  source?: 'ngram' | 'structured' | 'recent';
+  source?: 'ngram' | 'structured' | 'recent' | 'neural';
   sourceLayer?: string;
   syntaxType?: string;
   providerId?: string;

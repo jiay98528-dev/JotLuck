@@ -1,0 +1,24 @@
+{
+  "schema": "jotluck.autocomplete.v2r-external-sources.v1",
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "id": "tatoeba-cc0-en-2026-07-12",
+      "kind": "tatoeba-cc0",
+      "language": "en",
+      "category": "reading-note",
+      "downloadUrl": "https://downloads.tatoeba.org/exports/per_language/eng/eng_sentences_CC0.tsv.bz2",
+      "rawCachePath": "scripts/corpus/_web-cache/autocomplete-v2r/external/tatoeba/eng_sentences_CC0.tsv.bz2",
+      "rawBytes": 1288366,
+      "rawSha256": "14f975533e2f15257f674d6099b95cf6b2c3458a8baf7496935081ad862f4b91",
+      "cleanedCachePath": "scripts/corpus/_web-cache/autocomplete-v2r/external/tatoeba/eng_sentences_CC0.cleaned.jsonl",
+      "cleanedBytes": 2900641,
+      "cleanedSha256": "fbf253c75015a27f8a32f73dd430a6c73347bfc7c9ca188f0025a8c59f0c7a25",
+      "cleaningReportPath": "scripts/corpus/tatoeba-cc0-cleaning-report.json",
+      "licenseSpdx": "CC0-1.0",
+      "licenseEvidencePath": "scripts/corpus/licenses/tatoeba-cc0.md",
+      "collectedAt": "2026-07-12T16:35:00.000Z",
+      "cleanerVersion": "jotluck-tatoeba-cc0-cleaner-v1"
+    }
+  ]
+}

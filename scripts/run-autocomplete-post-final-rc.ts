@@ -1,7 +1,7 @@
 /**
  * Final Windows RC sequence for a selected autocomplete candidate:
  * install candidate -> build Tauri -> real WebView smoke -> restore public
- * fail-closed bytes -> atomically publish both profiles.
+ * fail-closed bytes -> atomically publish the one canonical public profile.
  */
 
 import { spawnSync } from 'node:child_process';

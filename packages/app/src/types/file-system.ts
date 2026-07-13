@@ -71,5 +71,7 @@ export interface IFileSystemService {
   openNotebook(): Promise<NotebookHandle>;
   /** Open a known notebook directory without showing a picker. Used by desktop file association. */
   openNotebookAt(path: string): Promise<NotebookHandle>;
+  /** Promote a backend-issued external file grant to its parent notebook. */
+  openNotebookFromExternalGrant?(accessToken: string): Promise<NotebookHandle>;
   getRecentNotebooks(): Promise<string[]>;
 }

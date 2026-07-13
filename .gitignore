@@ -29,6 +29,11 @@ tmp/
 # TypeScript
 *.tsbuildinfo
 
+# Python training caches
+__pycache__/
+*.pyc
+.v2r/
+
 # Test
 coverage/
 test-results/

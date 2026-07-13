@@ -1,6 +1,6 @@
 import type { CompletionSettings } from '../CompletionSettings';
 
-export type CompletionSourceKind = 'structured' | 'ngram' | 'recent';
+export type CompletionSourceKind = 'structured' | 'ngram' | 'recent' | 'neural';
 export type CompletionLanguageHint = 'zh' | 'en' | 'mixed' | 'unknown';
 export type CompletionSourceLayer =
   | 'l1'

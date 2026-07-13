@@ -163,7 +163,7 @@
  *
  * @see spec/frontend/components.md
  */
-import { ref, computed, watch, nextTick } from 'vue';
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue';
 import { useSearchStore } from '@/stores/search';
 import { useSearch } from '@/composables/useSearch';
 import type { SearchResult } from '@/types';
@@ -317,6 +317,17 @@ function handleKeydown(e: KeyboardEvent): void {
   }
 }
 
+/**
+ * The palette input owns focus in normal use, but WebKit can retarget Escape
+ * while results are updating. Keep the visible overlay as the final close owner.
+ */
+function handleWindowKeydown(event: KeyboardEvent): void {
+  if (!props.visible || event.key !== 'Escape') return;
+  event.preventDefault();
+  event.stopPropagation();
+  close();
+}
+
 // ============================================================
 // Lifecycle
 // ============================================================
@@ -325,6 +336,7 @@ watch(
   () => props.visible,
   async (isVisible) => {
     if (isVisible) {
+      window.addEventListener('keydown', handleWindowKeydown, true);
       // 如果有外部预设查询（如标签点击 → tag:xxx），
       // 同步到输入框并立即执行搜索；否则正常打开空白面板。
       if (searchStore.query) {
@@ -336,9 +348,15 @@ watch(
       selectedIndex.value = 0;
       await nextTick();
       searchInputRef.value?.focus();
+    } else {
+      window.removeEventListener('keydown', handleWindowKeydown, true);
     }
   },
 );
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleWindowKeydown, true);
+});
 </script>
 
 <style scoped>

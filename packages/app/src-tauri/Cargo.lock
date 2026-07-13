@@ -2141,6 +2141,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "trash",
  "unicode-normalization",
+ "uuid",
  "walkdir",
 ]
 

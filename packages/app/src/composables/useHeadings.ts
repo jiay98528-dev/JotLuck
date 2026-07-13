@@ -7,8 +7,7 @@
  */
 import { ref } from 'vue';
 import type { HeadingItem } from '@/types';
-
-let idCounter = 0;
+import { headingIdFromText } from '@jotluck/renderer';
 
 export function useHeadings() {
   const headings = ref<HeadingItem[]>([]);
@@ -17,19 +16,27 @@ export function useHeadings() {
     const lines = content.split('\n');
     const root: HeadingItem[] = [];
     const stack: HeadingItem[] = [];
+    const occurrences = new Map<string, number>();
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i] ?? '';
-      const match = line.match(/^(#{1,6})\s+(.+)$/);
-      if (!match) continue;
+      const atxMatch = line.match(/^(#{1,6})\s+(.+)$/);
+      const setextMatch =
+        i > 0 && /^(=+|-+)\s*$/.test(line)
+          ? { text: lines[i - 1] ?? '', level: line[0] === '=' ? 1 : 2 }
+          : null;
+      if (!atxMatch && !setextMatch) continue;
 
-      const level = match[1]!.length;
-      const text = match[2]!.trim();
+      const level = atxMatch ? atxMatch[1]!.length : setextMatch!.level;
+      const text = (atxMatch ? atxMatch[2]! : setextMatch!.text).replace(/\s+#+\s*$/, '').trim();
+      const baseId = headingIdFromText(text);
+      const occurrence = (occurrences.get(baseId) ?? 0) + 1;
+      occurrences.set(baseId, occurrence);
       const item: HeadingItem = {
-        id: `h-${idCounter++}`,
+        id: headingIdFromText(text, occurrence),
         level,
         text,
-        lineNumber: i + 1,
+        lineNumber: setextMatch ? i : i + 1,
         children: [],
       };
 

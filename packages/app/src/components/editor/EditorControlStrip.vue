@@ -5,11 +5,18 @@
     :class="`editor-control-strip--${region.layout}`"
     :data-layout="region.layout"
     :data-toolbar-density="region.density"
+    :data-view-mode="viewMode"
+    data-theme-part="editor-control"
   >
-    <div v-if="region.layout === 'stacked'" class="editor-control-strip__stack">
+    <div
+      v-if="region.layout === 'stacked'"
+      class="editor-control-strip__stack"
+      data-theme-part="editor-control-stack"
+    >
       <div
         v-if="actions.length > 0"
         class="editor-control-strip__actions editor-control-strip__actions--stacked"
+        data-theme-part="editor-control-actions"
       >
         <ShellActionButton
           v-for="action in actions"
@@ -20,6 +27,7 @@
         />
       </div>
       <FormatToolbar
+        v-if="viewMode !== 'read'"
         :preset="preset"
         :active-action="activeAction"
         :density="region.density"
@@ -28,12 +36,17 @@
     </div>
     <template v-else>
       <FormatToolbar
+        v-if="viewMode !== 'read'"
         :preset="preset"
         :active-action="activeAction"
         :density="region.density"
         @format="$emit('format', $event)"
       />
-      <div v-if="actions.length > 0" class="editor-control-strip__actions">
+      <div
+        v-if="actions.length > 0"
+        class="editor-control-strip__actions"
+        data-theme-part="editor-control-actions"
+      >
         <ShellActionButton
           v-for="action in actions"
           :key="action.id"
@@ -49,7 +62,7 @@
 import FormatToolbar from './FormatToolbar.vue';
 import ShellActionButton from '@/components/layout/ShellActionButton.vue';
 import type { FormatAction, ParagraphPreset } from '@/types';
-import type { ShellAction, EditorControlRegion } from '@/types/theme-pack';
+import type { ShellAction, EditorControlRegion, ThemeViewMode } from '@/types/theme-pack';
 
 withDefaults(
   defineProps<{
@@ -57,12 +70,14 @@ withDefaults(
     actions?: ShellAction[];
     preset?: ParagraphPreset;
     activeAction?: FormatAction | null;
+    viewMode?: ThemeViewMode | string;
   }>(),
   {
     region: () => ({ layout: 'toolbar' as const, density: 'calm' as const }),
     actions: () => [],
     preset: 'paragraph',
     activeAction: null,
+    viewMode: 'live',
   },
 );
 

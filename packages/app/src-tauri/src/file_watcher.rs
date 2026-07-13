@@ -4,9 +4,11 @@
 // events to the frontend. The watcher is a replaceable singleton so switching
 // notebooks does not leak OS watcher handles.
 
+use crate::fs_ops::{ExternalAccessGrants, NotebookRoot};
 use notify::event::{CreateKind, ModifyKind, RenameMode};
 use notify::{Event, EventKind, RecursiveMode, Watcher};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -18,17 +20,24 @@ pub struct FileChangeEvent {
     pub kind: String,             // "create" | "modify" | "remove" | "rename"
     pub path: String,             // relative path within notebook
     pub old_path: Option<String>, // for rename events
+    pub generation: u64,
 }
 
 pub struct FileWatcherState {
     guard: Mutex<Option<WatcherGuard>>,
+    generation: AtomicU64,
 }
 
 impl FileWatcherState {
     pub fn new() -> Self {
         Self {
             guard: Mutex::new(None),
+            generation: AtomicU64::new(0),
         }
+    }
+
+    fn next_generation(&self) -> u64 {
+        self.generation.fetch_add(1, Ordering::Relaxed) + 1
     }
 
     fn replace(&self, guard: WatcherGuard) -> Result<(), String> {
@@ -58,17 +67,25 @@ impl FileWatcherState {
 
 struct WatcherGuard {
     stop_tx: mpsc::Sender<()>,
+    join: Option<thread::JoinHandle<()>>,
 }
 
 impl WatcherGuard {
-    fn stop(self) {
+    fn stop(mut self) {
         let _ = self.stop_tx.send(());
+        if let Some(join) = self.join.take() {
+            let _ = join.join();
+        }
     }
 }
 
 /// Start watching a directory for file changes.
 /// Events are emitted to the frontend via the `file-change` event.
-fn start_watching(app_handle: AppHandle, root_path: PathBuf) -> Result<WatcherGuard, String> {
+fn start_watching(
+    app_handle: AppHandle,
+    root_path: PathBuf,
+    generation: u64,
+) -> Result<WatcherGuard, String> {
     let (tx, rx) = mpsc::channel::<Result<Event, notify::Error>>();
     let (stop_tx, stop_rx) = mpsc::channel::<()>();
 
@@ -81,7 +98,7 @@ fn start_watching(app_handle: AppHandle, root_path: PathBuf) -> Result<WatcherGu
         .watch(&root_path, RecursiveMode::Recursive)
         .map_err(|e| format!("failed to start file watcher: {e}"))?;
 
-    thread::spawn(move || {
+    let join = thread::spawn(move || {
         let _watcher = watcher;
 
         loop {
@@ -106,7 +123,7 @@ fn start_watching(app_handle: AppHandle, root_path: PathBuf) -> Result<WatcherGu
                 continue;
             }
 
-            let change_event = event_to_change_event(&event, &root_path);
+            let change_event = event_to_change_event(&event, &root_path, generation);
 
             if let Some(ce) = change_event {
                 let _ = app_handle.emit("file-change", ce);
@@ -114,11 +131,18 @@ fn start_watching(app_handle: AppHandle, root_path: PathBuf) -> Result<WatcherGu
         }
     });
 
-    Ok(WatcherGuard { stop_tx })
+    Ok(WatcherGuard {
+        stop_tx,
+        join: Some(join),
+    })
 }
 
 /// Convert a notify Event to our simplified FileChangeEvent.
-fn event_to_change_event(event: &Event, root: &PathBuf) -> Option<FileChangeEvent> {
+fn event_to_change_event(
+    event: &Event,
+    root: &PathBuf,
+    generation: u64,
+) -> Option<FileChangeEvent> {
     let path_for = |path: &PathBuf| -> Option<String> {
         path.strip_prefix(root)
             .ok()
@@ -143,6 +167,7 @@ fn event_to_change_event(event: &Event, root: &PathBuf) -> Option<FileChangeEven
             kind: "rename".to_string(),
             path: new_path?,
             old_path,
+            generation,
         });
     }
 
@@ -166,6 +191,7 @@ fn event_to_change_event(event: &Event, root: &PathBuf) -> Option<FileChangeEven
         kind: kind.to_string(),
         path,
         old_path: None,
+        generation,
     })
 }
 
@@ -188,13 +214,43 @@ pub fn start_file_watcher(
     app_handle: AppHandle,
     state: State<'_, FileWatcherState>,
     root_path: String,
-) -> Result<(), String> {
-    let path = PathBuf::from(&root_path);
-    if !path.exists() || !path.is_dir() {
-        return Err(format!("invalid watcher root path: {root_path}"));
+    access_token: Option<String>,
+    relative_path: Option<String>,
+    notebook_root: State<'_, NotebookRoot>,
+    external_grants: State<'_, ExternalAccessGrants>,
+) -> Result<u64, String> {
+    let (canonical, notebook_allowed, external_allowed) =
+        if let Some(token) = access_token.as_deref() {
+            let relative = relative_path.as_deref().unwrap_or("/");
+            let canonical = external_grants.resolve_watch_directory(token, relative)?;
+            (canonical, false, true)
+        } else {
+            let path = PathBuf::from(&root_path);
+            if !path.exists() || !path.is_dir() {
+                return Err(format!("invalid watcher root path: {root_path}"));
+            }
+            let canonical = path
+                .canonicalize()
+                .map_err(|e| format!("invalid watcher root path: {root_path}: {e}"))?;
+            let notebook_allowed = notebook_root
+                .get()
+                .and_then(|root| root.canonicalize().ok())
+                .map(|root| canonical == root)
+                .unwrap_or(false);
+            (canonical, notebook_allowed, false)
+        };
+    if !notebook_allowed && !external_allowed {
+        return Err(
+            "watcher root is not an active notebook or authorized external root".to_string(),
+        );
     }
-    let guard = start_watching(app_handle, path)?;
-    state.replace(guard)
+    // Stop and join the previous OS watcher before creating the replacement.
+    // This prevents overlapping roots from racing events during a notebook switch.
+    state.stop()?;
+    let generation = state.next_generation();
+    let guard = start_watching(app_handle, canonical, generation)?;
+    state.replace(guard)?;
+    Ok(generation)
 }
 
 #[tauri::command]
@@ -209,7 +265,13 @@ mod tests {
 
     fn guard_with_receiver() -> (WatcherGuard, mpsc::Receiver<()>) {
         let (stop_tx, stop_rx) = mpsc::channel();
-        (WatcherGuard { stop_tx }, stop_rx)
+        (
+            WatcherGuard {
+                stop_tx,
+                join: None,
+            },
+            stop_rx,
+        )
     }
 
     #[test]

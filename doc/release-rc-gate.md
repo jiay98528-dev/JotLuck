@@ -2,6 +2,8 @@
 
 从 `0.15.0` RC 起，Web 自动化全绿只能表述为“自动化候选通过”，不能表述为“最终发布通过”。最终发布通过必须额外满足真实安装包 L4。
 
+> **当前状态：fail-closed。** 旧 `jotluck-installed-l4-evidence` v1 只校验自报退出码，并要求证据文件绑定包含自身的新 HEAD，既可伪造又无法形成合法固定点，已永久禁用。`pnpm release:rc-gate` 在独立证据协议 v2 落地前不得输出通用 RC PASS；`--autocomplete-only` 仍保留独立质量闸门。
+
 ## 两层 GUI 验收
 
 - Web GUI 烟测: 只用于验证本轮前端交互修复。
@@ -13,9 +15,11 @@
 2. 生成并定位 `JotLuck_0.15.0_x64-setup.exe`。默认路径为 `packages/app/src-tauri/target/release/bundle/nsis/JotLuck_0.15.0_x64-setup.exe`。
 3. 复制并填写 [release-installed-l4-template.md](./release-installed-l4-template.md)。
 4. 在 L4 记录中粘贴执行前后的 `git status --short`，并填写 `L4-APP-VERSION`、`L4-INSTALLER-PATH`、`L4-INSTALLER-SHA256`。任何未提交/未跟踪文件必须清理、提交或解释。
-5. 运行 `pnpm release:rc-gate`。默认要求工作区干净、安装包存在、L4 记录完整、版本匹配、路径匹配、SHA256 重新计算一致，且 `L4-CONCLUSION: PASS`。
+5. 将候选 commit 冻结后，由只读执行者生成不可变原始报告，再由同一执行者生成结构化二次转录；证据 commit 只能增加受版本管理的普通证据文件，并绑定候选 commit、安装包 SHA256、实际 case 结果和原始报告 SHA。协议 v2 尚未实现，因此当前在此步保持阻断。
 
-如必须临时审计脏工作区，可设置 `JotLuck_RELEASE_ALLOW_DIRTY=1`，但正式放行前仍必须回到干净工作区。
+`JotLuck_RELEASE_ALLOW_DIRTY=1` 仅作为诊断标记保留，正式 RC gate 仍无条件拒绝脏工作区，不能用它输出 PASS。
+
+协议 v2 的 required cases 必须来自独立固定目录；校验器必须读取每项原始 artifact、复算 SHA 并解析实际执行数、通过数、失败数和 skip 数。命令字符串、退出码或状态文件自报字段不能单独构成 PASS。候选 commit 与证据 commit 必须分离，禁止证据 manifest 自引用当前 HEAD。
 
 ## 安装版 L4 必测路径
 
