@@ -1,7 +1,7 @@
 # JotLuck 文字补全功能规格
 
-> 版本：v1.15 | 日期：2026-07-13 | 状态：⛔ Public V2S 架构预检停止；正式资产继续 fail-closed
-> 关联文档：`doc/PRD.md` §F-17/F-17.1、`doc/TAD.md` §3.11/§3.12、`spec/decisions.md` ADR-011/ADR-014/ADR-015/ADR-016、`plans/autocomplete-engine-v2.md`
+> 版本：v1.16 | 日期：2026-07-14 | 状态：⛔ Public V2R/V2S 均已停止；正式资产继续 fail-closed
+> 关联文档：`doc/PRD.md` §F-17/F-17.1、`doc/TAD.md` §3.11/§3.12、`spec/decisions.md` ADR-011/ADR-014/ADR-015/ADR-016、`plans/autocomplete-engine-v2.md`、`doc/autocomplete-model-training.md`
 
 ## 一、概述
 
@@ -86,49 +86,11 @@ meta:           "meta:v4" → {
 
 ### 基准语料训练管道
 
-```
-scripts/corpus/
-├── corpus.config.json              ← 源目录/权重/参数
-├── README.md                       ← 语料维护说明
-├── SOURCES.md                      ← 来源与采集策略记录
-├── web-sources.json                ← 外网正文采集入口
-├── training-report.json            ← 训练报告
-├── _web-cache/                     ← 本地外网正文缓存，gitignored
-│   ├── _raw/                       ← 原始抓取快照
-│   ├── _clean/                     ← 碎片化 + 隐私清洗后的训练片段
-│   └── _reports/                   ← 采集/训练报告
-├── note-patterns-zh/               ← 主语料：短笔记、项目记录、会议、任务、复盘
-├── tech-writing-zh/                ← 技术笔记：排障、架构、配置、发布、迁移
-├── markdown-structures/            ← Markdown 常用结构周边文本
-├── creative-zh/                    ← 少量自然中文表达
-│   ├── diary-samples.md            ← 日记/随笔
-│   ├── essay-samples.md            ← 散文/杂文
-│   └── note-samples.md             ← 日常笔记
-├── code-doc-en/                    ← 少量英文编程文档，低权重
-│   ├── js-ts-snippets.md
-│   └── python-rust-snippets.md
-└── project-docs/                   ← 📁 项目自身文档 (路径引用)
-    ├── → ../../doc/
-    └── → ../../spec/
-```
+> 历史协议：本节用于复核 v4 N-gram 的输入与 manifest 合同，不是当前操作手册。V2R/V2S 均已停止，现行允许命令、停止边界和未来重启流程统一见 `doc/autocomplete-model-training.md`。
 
-**原则**：仅 P0 格式闭合规则硬编码，语言习惯全部来自语料文件。语料为纯 `.md`，无需标注。`corpus.config.json` 配置源目录和权重。
+v4 使用 `corpus.config.json`、`provenance.json` 和纯 Markdown curated 语料训练字符/词级 N-gram；外网正文只允许进入 Git ignored 缓存，经正文提取、隐私清洗和去重后再形成候选输入。compact 目标为 5.7MiB、硬限制 6MiB，运行时校验 manifest、模型 SHA、schema、阶数、条目数和输入树；任一失败返回空 L3，不回退第二份模型。
 
-**语料创作规范**：UTF-8 无 BOM / LF 行尾 / Markdown 格式 / 禁止 frontmatter / 禁止真实隐私 / 训练工具自动剥离代码块和行内代码。发布基线不使用小说或长篇连续叙事语料。
-
-**训练命令**：`pnpm generate-baseline -- --profile web-local --quality-report <json>`。正式资产只有在治理、容量和绑定模型/输入/holdout 哈希的质量证据全部通过时才允许替换；本地诊断使用 `--allow-verified-degraded --candidate-dir <dir>` 写入隔离候选，其 manifest 必须保持 `releaseEligible: false`。
-
-**外网正文采集命令**：`pnpm collect-web-corpus -- --profile web-local` → `pnpm generate-baseline -- --profile web-local`
-
-**容量目标**：`web-local` compact 使用 5.7MiB 定额蒸馏目标和 6MiB 硬上限；训练器必须先按支持来源数、文档频次、上下文熵、保留质量和验证集效用做确定性的全局定额蒸馏，选择满足质量的最小 Pareto 模型。超过硬上限仍须失败且不更新发布资产，但禁止把“填满 5.7MiB”当作发布质量目标。raw/clean 外网缓存不进入发布包。
-
-**迭代流程**：准备/修改语料 → 运行采集和训练 → 查看 `training-report.web-local.json` → 补充不足类别 → 重新训练。外网正文先进入 `_web-cache/_raw`，再切分为 20-120 字片段并清洗人名、电话、公司名、笔名、账号、地址等隐私实体，训练只读取 `_web-cache/_clean`。训练报告必须包含模型字节数、语言配比、类别有效权重、低价值 top contexts、网页腔命中数、fallback/model 命中拆分。
-
-**默认输出**：`packages/app/public/baseline-ngram.web-local.compact.txt`。模型至少包含中文 Unicode code point 4→3→2 变阶表；英文正文优先查询词级 bigram/trigram，字符 4-gram 只承担词内续写回退。运行时同时读取对应 manifest，验证 schema、阶数范围、表 profile、字节数、条目数、训练输入清单哈希和 SHA-256；L3 不写入 localStorage，只在应用级单例中只读共享。
-
-**唯一真相源**：公共目录只允许 `baseline-ngram.web-local.compact.txt` 及其同名 manifest。HTTP 200 空内容、HTML、截断、超限、hash/schema/最小条目或任一资格标志失败时直接返回空 L3；不得回退到第二份模型。开发和 E2E 可用 `VITE_AUTOCOMPLETE_BASELINE_URL` 加载隔离候选，生产构建忽略该覆盖。冻结 V1 快照只属于 `scripts/frozen-v1-fb46b1e/` 的评测闭包，不是生产模型来源。
-
-训练管线必须 fail closed：来源 manifest 的许可证覆盖率为 100%，未知许可、隐私/样板文本、原始输入重复、清洗后残余重复、训练—正式 holdout 重叠、类别/域占比、模型容量或独立 holdout 质量任一闸门失败时，不得覆盖现有模型或报告。原始输入精确重复率和去重后残余精确重复率都必须 ≤1%，近似重复率 ≤3%、单类别 ≤40%、单 Web 域名 ≤5%，正式 holdout 与训练文本重叠为 0。`releaseEligible` 必须由实际 holdout 指标、治理闸门和容量共同决定，profile 名称不得绕过质量结果。模型和报告先写临时文件，全部通过后原子替换。`novel-zh` 保留在仓库但硬隔离，配置或参数命中该目录时训练立即失败。
+该历史协议的训练、采集、迭代和输出命令均已停用。现行语料事实、只读检查命令、评测分母、候选/final 时序和唯一 publisher 规则只在 `doc/autocomplete-model-training.md` 维护。冻结 V1 仍仅属于隔离评测闭包，`novel-zh` 永久硬隔离。
 
 ## 四、预测场景
 
