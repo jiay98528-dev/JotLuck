@@ -333,6 +333,11 @@ export class MockFSService implements IFileSystemService {
     const file = this.data.files[oldNormalized];
     if (!file) throw new Error(`文件不存在: ${oldNormalized}`);
 
+    if (oldNormalized === newNormalized) return;
+    if (this.data.files[newNormalized] || this.data.dirs[newNormalized]) {
+      throw new Error(`目标路径已存在: ${newNormalized}`);
+    }
+
     delete this.data.files[oldNormalized];
     this.data.files[newNormalized] = { ...file, mtime: Date.now() };
 
@@ -425,8 +430,10 @@ export class MockFSService implements IFileSystemService {
     return normalizePath([root, ...segments].join('/'));
   }
 
-  async isPathInNotebook(_root: string, _path: string): Promise<boolean> {
-    return true;
+  async isPathInNotebook(root: string, path: string): Promise<boolean> {
+    const notebookRoot = normalizePath(root);
+    const candidate = normalizePath(path);
+    return candidate === notebookRoot || candidate.startsWith(`${notebookRoot}/`);
   }
 
   async openNotebook(): Promise<NotebookHandle> {

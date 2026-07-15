@@ -93,3 +93,13 @@ describe('TauriIPCService watcher lifecycle', () => {
     ]);
   });
 });
+
+describe('TauriIPCService path boundaries', () => {
+  it('does not confuse sibling directories that share a string prefix', async () => {
+    const service = new TauriIPCService();
+
+    await expect(service.isPathInNotebook('C:/Notes', 'C:/Notes/a.md')).resolves.toBe(true);
+    await expect(service.isPathInNotebook('C:/Notes', 'C:/Notes2/a.md')).resolves.toBe(false);
+    await expect(service.isPathInNotebook('C:/NOTES', 'c:/notes/a.md')).resolves.toBe(true);
+  });
+});

@@ -326,6 +326,12 @@ export class TauriIPCService implements IFileSystemService {
   }
 
   async isPathInNotebook(root: string, path: string): Promise<boolean> {
-    return path.startsWith(root);
+    const normalize = (value: string) => {
+      const normalized = value.replace(/\\/g, '/').replace(/\/+$/, '');
+      return /^[A-Za-z]:\//.test(normalized) ? normalized.toLowerCase() : normalized;
+    };
+    const notebookRoot = normalize(root);
+    const candidate = normalize(path);
+    return candidate === notebookRoot || candidate.startsWith(`${notebookRoot}/`);
   }
 }

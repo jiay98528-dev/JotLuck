@@ -278,7 +278,7 @@ export const HeadingTreeNode: ReturnType<typeof defineComponent> = defineCompone
  *
  * @see spec/frontend/components.md — RightWing 组件规格
  */
-import { ref, computed, watch } from 'vue';
+import { ref, computed, onUnmounted, watch } from 'vue';
 import type { BacklinkEntry, TagEntry } from '@/types';
 import type {
   RightWingRegion,
@@ -380,6 +380,7 @@ const panelWidth = ref(widthForPolicy(props.region.policy));
 const railExpanded = ref(false);
 
 let resizeActive = false;
+let resizeCleanup: (() => void) | null = null;
 
 function setPanelWidth(width: number): void {
   panelWidth.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, width));
@@ -427,6 +428,7 @@ function handleResizeStart(e: PointerEvent) {
     setPanelWidth(startWidth - delta);
   };
 
+  resizeCleanup?.();
   const onUp = () => {
     resizeActive = false;
     document.removeEventListener('pointermove', onMove);
@@ -434,7 +436,9 @@ function handleResizeStart(e: PointerEvent) {
     document.removeEventListener('pointercancel', onUp);
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
+    resizeCleanup = null;
   };
+  resizeCleanup = onUp;
 
   document.body.style.cursor = 'col-resize';
   document.body.style.userSelect = 'none';
@@ -442,6 +446,8 @@ function handleResizeStart(e: PointerEvent) {
   document.addEventListener('pointerup', onUp);
   document.addEventListener('pointercancel', onUp);
 }
+
+onUnmounted(() => resizeCleanup?.());
 
 function widthForPolicy(policy: ThemeRightWingPolicy): number {
   if (policy === 'research') return 360;

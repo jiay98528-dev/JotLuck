@@ -1,7 +1,11 @@
 <template>
   <div class="notebook-home-root">
     <Transition name="external-mode" appear>
-      <div v-if="isExternalReadonly" key="external-reader" class="external-reader-frame">
+      <div
+        v-if="startupRouteResolved && isExternalReadonly"
+        key="external-reader"
+        class="external-reader-frame"
+      >
         <ThemeSlotBoundary
           slot-id="external-reader"
           :theme-id="theme.renderedTheme.manifest.id"
@@ -73,7 +77,11 @@
     </Transition>
 
     <Transition name="external-mode" appear>
-      <div v-if="!isExternalReadonly" key="editor-shell" class="editor-shell-frame">
+      <div
+        v-if="startupRouteResolved && !isExternalReadonly"
+        key="editor-shell"
+        class="editor-shell-frame"
+      >
         <AppShell
           :recent-notes="shellRecentNotesWithColors"
           :active-path="shellActivePath"
@@ -623,13 +631,10 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import AppShell from '@/components/layout/AppShell.vue';
 import ShellActionButton from '@/components/layout/ShellActionButton.vue';
-import MarkdownEditor from '@/components/editor/MarkdownEditor.vue';
 import FormatBubble from '@/components/editor/FormatBubble.vue';
 import EditorControlStrip from '@/components/editor/EditorControlStrip.vue';
 import StudioRail from '@/components/editor/StudioRail.vue';
-import ThemeDialog from '@/components/theme/ThemeDialog.vue';
 import ThemeSlotBoundary from '@/components/theme/ThemeSlotBoundary.vue';
-import FileDrawer from '@/components/overlays/FileDrawer.vue';
 import ToastContainer, { useToast } from '@/components/common/Toast.vue';
 import { MockFSService } from '@/services/MockFSService';
 import { TauriIPCService } from '@/services/TauriIPCService';
@@ -646,9 +651,10 @@ import type {
   FormatAction,
   ParagraphPreset,
   TemplateItem,
+  FileChangeEvent,
+  UnwatchFn,
 } from '@/types';
-import UpdateNotification from '@/components/overlays/UpdateNotification.vue';
-import MarkdownCheatSheet from '@/components/overlays/MarkdownCheatSheet.vue';
+import type { EditorView } from '@codemirror/view';
 import { useVersionCheck } from '@/composables/useVersionCheck';
 import { useImageUpload } from '@/composables/useImageUpload';
 import { normalizeUrl } from '@/utils/urlUtils';
@@ -698,6 +704,15 @@ import type {
 const CommandPalette = defineAsyncComponent(
   () => import('@/components/overlays/CommandPalette.vue'),
 );
+const MarkdownEditor = defineAsyncComponent(() => import('@/components/editor/MarkdownEditor.vue'));
+const FileDrawer = defineAsyncComponent(() => import('@/components/overlays/FileDrawer.vue'));
+const ThemeDialog = defineAsyncComponent(() => import('@/components/theme/ThemeDialog.vue'));
+const UpdateNotification = defineAsyncComponent(
+  () => import('@/components/overlays/UpdateNotification.vue'),
+);
+const MarkdownCheatSheet = defineAsyncComponent(
+  () => import('@/components/overlays/MarkdownCheatSheet.vue'),
+);
 const ExportDialog = defineAsyncComponent(() => import('@/components/modals/ExportDialog.vue'));
 const TemplateDialog = defineAsyncComponent(() => import('@/components/modals/TemplateDialog.vue'));
 const SettingsDialog = defineAsyncComponent(() => import('@/components/modals/SettingsDialog.vue'));
@@ -731,6 +746,7 @@ const files = ref<DirEntry[]>([]);
 const currentContent = ref('');
 const activePath = ref('');
 const loading = ref(true);
+const startupRouteResolved = ref(false);
 const errorMessage = ref('');
 const currentDir = ref('/');
 
@@ -788,7 +804,13 @@ let completionTrainer: CompletionTrainingService | null = null;
 let unlistenOpenedFile: (() => void) | null = null;
 let unlistenWindowClose: (() => void) | null = null;
 let startupOpenedFileConsumed = false;
+let externalSessionGeneration = 0;
 let allowWindowClose = false;
+let unwatchNotebook: UnwatchFn | null = null;
+let notebookWatchGeneration = 0;
+let watcherRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+const pendingWatcherEvents: FileChangeEvent[] = [];
+let backgroundTrainingTimer: ReturnType<typeof setTimeout> | null = null;
 const MAX_FILE_TREE_ENTRIES = 5000;
 
 function hashCompletionScope(input: string): string {
@@ -1190,7 +1212,12 @@ const bubbleVisible = ref(false);
 const bubblePosition = ref({ x: 0, y: 0 });
 const activeParagraphPreset = ref<ParagraphPreset>('paragraph');
 const pendingFormatAction = ref<FormatAction | null>(null);
-const editorRef = ref<InstanceType<typeof MarkdownEditor> | null>(null);
+interface MarkdownEditorExposed {
+  getEditorView(): EditorView | null;
+  focus(): void;
+}
+
+const editorRef = ref<MarkdownEditorExposed | null>(null);
 
 // --- View Mode ---
 const viewModeLabels: Record<string, string> = {
@@ -1499,6 +1526,7 @@ async function openNotebookRoot(rootPath: string): Promise<void> {
   }
   activeNotebookRoot.value = nextRoot;
   notebookName.value = handle.name || displayNameFromPath(handle.rootPath);
+  void restartNotebookWatcher(nextRoot);
 }
 
 async function openNotebookFromExternalGrant(accessToken: string): Promise<void> {
@@ -1513,6 +1541,106 @@ async function openNotebookFromExternalGrant(accessToken: string): Promise<void>
   }
   activeNotebookRoot.value = nextRoot;
   notebookName.value = handle.name || displayNameFromPath(handle.rootPath);
+  void restartNotebookWatcher(nextRoot);
+}
+
+function markStartupReady(mode: 'workspace' | 'external' | 'scratch'): void {
+  if (performance.getEntriesByName('jotluck:shell-ready').length > 0) return;
+  performance.mark('jotluck:shell-ready', { detail: { mode } });
+  if (performance.getEntriesByName('jotluck:bootstrap-start').length === 0) return;
+  performance.measure(
+    'jotluck:cold-start-to-shell',
+    'jotluck:bootstrap-start',
+    'jotluck:shell-ready',
+  );
+}
+
+async function stopNotebookWatcher(): Promise<void> {
+  notebookWatchGeneration++;
+  unwatchNotebook?.();
+  unwatchNotebook = null;
+  await fs.unwatchAll();
+}
+
+function queueWatcherRefresh(event: FileChangeEvent | FileChangeEvent[]): void {
+  pendingWatcherEvents.push(...(Array.isArray(event) ? event : [event]));
+  if (watcherRefreshTimer) clearTimeout(watcherRefreshTimer);
+  watcherRefreshTimer = setTimeout(() => {
+    watcherRefreshTimer = null;
+    void flushWatcherEvents();
+  }, 120);
+}
+
+async function flushWatcherEvents(): Promise<void> {
+  const events = pendingWatcherEvents.splice(0);
+  if (events.length === 0 || isScratchSession.value || isExternalReadonly.value) return;
+  const active = normalizePath(activePath.value);
+  const activeEvents = events.filter(
+    (event) =>
+      normalizePath(event.path) === active || normalizePath(event.oldPath ?? '') === active,
+  );
+
+  for (const event of events) {
+    if (event.type === 'deleted' || event.type === 'renamed') {
+      indexStore.removeDocument(event.oldPath ?? event.path);
+    }
+  }
+
+  try {
+    await refreshFileTree();
+    for (const event of events) {
+      const path = normalizePath(event.path);
+      const fileName = path.split('/').pop() ?? '';
+      if (
+        (event.type === 'created' || event.type === 'modified') &&
+        isSupportedNoteFile(fileName)
+      ) {
+        await indexStore.refreshDocument(fs, path);
+      }
+    }
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn('[NotebookHome] 文件监控刷新失败', error);
+  }
+
+  if (activeEvents.some((event) => event.type === 'deleted' || event.type === 'renamed')) {
+    if (isDirty.value) {
+      saveError.value = '当前文件已在 JotLuck 外部被移动或删除，请另存内容后再继续。';
+    } else {
+      clearActiveNoteState();
+    }
+    return;
+  }
+  if (active && activeEvents.some((event) => event.type === 'modified') && !isDirty.value) {
+    try {
+      const content = await fs.readFile(active);
+      if (normalizePath(activePath.value) !== active || isDirty.value) return;
+      contentRevision++;
+      currentContent.value = content;
+      updateHeadings(content);
+      updateEditorStats(content);
+      refreshSplitPreviewIfVisible();
+    } catch (error) {
+      saveError.value = error instanceof Error ? error.message : String(error);
+    }
+  }
+}
+
+async function restartNotebookWatcher(rootPath: string): Promise<void> {
+  const generation = ++notebookWatchGeneration;
+  unwatchNotebook?.();
+  unwatchNotebook = null;
+  try {
+    const unwatch = await fs.watch(rootPath, queueWatcherRefresh);
+    if (generation !== notebookWatchGeneration) {
+      unwatch();
+      return;
+    }
+    unwatchNotebook = unwatch;
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn('[NotebookHome] 文件监控启动失败', error);
+  }
 }
 
 async function openInitialNotebook(): Promise<boolean> {
@@ -1567,6 +1695,7 @@ function enterNotebookFileState(path: string, content: string): void {
 }
 
 function enterScratchSession(): void {
+  void stopNotebookWatcher();
   isScratchSession.value = true;
   externalSessionMode.value = 'none';
   void revokeExternalGrant(externalFile.value);
@@ -1972,7 +2101,12 @@ async function enterExternalFileSession(
   openedFile: OpenedFilePayload,
   options: { setLoading?: boolean } = {},
 ): Promise<void> {
+  const sessionGeneration = ++externalSessionGeneration;
   if (!(await flushPendingCurrentSave())) return;
+  if (sessionGeneration !== externalSessionGeneration) {
+    await revokeExternalGrant(openedFile);
+    return;
+  }
   const previousExternalFile = externalFile.value;
   if (
     previousExternalFile &&
@@ -2005,6 +2139,10 @@ async function enterExternalFileSession(
 
   try {
     const content = await readExternalMarkdownFile(openedFile);
+    if (sessionGeneration !== externalSessionGeneration) {
+      await revokeExternalGrant(openedFile);
+      return;
+    }
     externalFile.value = openedFile;
     externalSessionMode.value = 'readonly';
     contentRevision++;
@@ -2019,6 +2157,7 @@ async function enterExternalFileSession(
     scheduleSplitEditorMountForCurrentMode();
     updateExternalPreview();
   } catch (e) {
+    if (sessionGeneration !== externalSessionGeneration) return;
     externalFile.value = openedFile;
     externalSessionMode.value = 'readonly';
     contentRevision++;
@@ -2028,7 +2167,10 @@ async function enterExternalFileSession(
     updateEditorStats('');
     externalPreviewHtml.value = '';
   } finally {
-    if (shouldSetLoading) loading.value = false;
+    if (shouldSetLoading && sessionGeneration === externalSessionGeneration) {
+      loading.value = false;
+      markStartupReady('external');
+    }
   }
 }
 
@@ -2049,10 +2191,13 @@ async function initNotebook(): Promise<void> {
   try {
     pendingOpenedFile = await getPendingOpenedFile();
     if (pendingOpenedFile) {
+      externalSessionMode.value = 'readonly';
+      startupRouteResolved.value = true;
       await enterExternalFileSession(pendingOpenedFile, { setLoading: false });
       notebookReady = false;
       return;
     } else {
+      startupRouteResolved.value = true;
       notebookReady = await openInitialNotebook();
       if (!notebookReady) {
         enterScratchSession();
@@ -2061,11 +2206,13 @@ async function initNotebook(): Promise<void> {
     }
     await loadDirectory('/');
   } catch (e) {
+    startupRouteResolved.value = true;
     errorMessage.value = String(e);
     notebookName.value = '未打开笔记本';
     enterScratchSession();
   } finally {
     loading.value = false;
+    markStartupReady(notebookReady ? 'workspace' : 'scratch');
   }
   if (!notebookReady) return;
   try {
@@ -2245,8 +2392,6 @@ async function selectNoteNow(path: string, selectionVersion: number): Promise<vo
 
   const dir = path.substring(0, path.lastIndexOf('/') + 1) || '/';
   currentDir.value = normalizeDir(dir);
-  void refreshFileTree();
-
   updateHeadings(content);
   updateEditorStats(content);
   refreshSplitPreviewIfVisible();
@@ -3122,7 +3267,16 @@ function connectPredictor(): void {
   const titles = svc?.getAllNoteTitles() ?? [];
   pred.ingestExcerpts(titles);
   ensureCompletionTrainer(pred);
-  void maybeTrainNotebook();
+  scheduleBackgroundTraining();
+}
+
+function scheduleBackgroundTraining(): void {
+  if (!completionSettings.value.backgroundTraining || isExternalSession.value) return;
+  if (backgroundTrainingTimer) clearTimeout(backgroundTrainingTimer);
+  backgroundTrainingTimer = setTimeout(() => {
+    backgroundTrainingTimer = null;
+    void maybeTrainNotebook();
+  }, 2000);
 }
 
 function ensureCompletionTrainer(pred = completionPredictor): CompletionTrainingService | null {
@@ -3155,7 +3309,7 @@ function onUpdateCompletionSettings(settings: CompletionSettings): void {
   completionSettings.value = settings;
   saveCompletionSettings(settings);
   completionPredictor.configure(settings);
-  if (settings.backgroundTraining) void maybeTrainNotebook();
+  if (settings.backgroundTraining) scheduleBackgroundTraining();
 }
 
 function onClearCompletionData(): void {
@@ -3277,7 +3431,7 @@ onMounted(async () => {
   unsubscribeCompletionSettings = subscribeCompletionSettings((settings) => {
     completionSettings.value = settings;
     completionPredictor.configure(settings);
-    if (!isExternalSession.value && settings.backgroundTraining) void maybeTrainNotebook();
+    if (!isExternalSession.value && settings.backgroundTraining) scheduleBackgroundTraining();
   });
   unsubscribeTrainingMeta = subscribeTrainingMeta(
     (meta) => {
@@ -3304,12 +3458,15 @@ onUnmounted(() => {
   if (splitEditorMountTimer) clearTimeout(splitEditorMountTimer);
   if (previewRenderTimer) clearTimeout(previewRenderTimer);
   if (updateTimer) clearTimeout(updateTimer);
+  if (backgroundTrainingTimer) clearTimeout(backgroundTrainingTimer);
+  if (watcherRefreshTimer) clearTimeout(watcherRefreshTimer);
   if (splitDragCleanup) splitDragCleanup();
   unsubscribeCompletionSettings?.();
   unsubscribeTrainingMeta?.();
   completionTrainer?.cancelCurrentRun();
   completionTrainer = null;
   void completionPredictor.dispose();
+  void stopNotebookWatcher();
   void revokeExternalGrant(externalFile.value);
   unlistenOpenedFile?.();
   unlistenWindowClose?.();

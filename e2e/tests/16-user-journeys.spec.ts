@@ -532,6 +532,13 @@ test.describe('外部文件父目录笔记本会话', () => {
     await expect(page.locator('.external-reader-kicker')).toContainText('只读预览');
     await expect(page.locator('.external-preview table')).toBeVisible();
     await expect(page.getByRole('button', { name: '启用编辑' })).toBeVisible();
+    const editorAssetsBeforeEdit = await page.evaluate(() =>
+      performance
+        .getEntriesByType('resource')
+        .map((entry) => entry.name)
+        .filter((name) => /MarkdownEditor|vendor-codemirror/u.test(name)),
+    );
+    expect(editorAssetsBeforeEdit).toEqual([]);
 
     await page.getByRole('button', { name: '启用编辑' }).click();
     await expect(page.locator('.cm-content')).toBeVisible({ timeout: 5000 });
@@ -539,6 +546,15 @@ test.describe('外部文件父目录笔记本会话', () => {
     await expect(page.locator('.format-toolbar')).toBeVisible();
     await expect(page.locator('.status-bar')).toBeVisible();
     await expect(page.locator('.left-wing')).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          performance
+            .getEntriesByType('resource')
+            .some((entry) => /MarkdownEditor|vendor-codemirror/u.test(entry.name)),
+        ),
+      )
+      .toBe(true);
     await expect.poll(visibleEditorText, { timeout: 5000 }).toContain('外部文档');
     await page.getByRole('button', { name: '切换到分栏视图', exact: true }).click();
     await expect(page.getByRole('button', { name: '切换到只读渲染', exact: true })).toBeVisible({

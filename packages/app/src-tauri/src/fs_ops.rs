@@ -69,8 +69,8 @@ impl ExternalAccessCapabilities {
         Self {
             read: true,
             write: true,
-            list: true,
-            watch: true,
+            list: false,
+            watch: false,
         }
     }
 
@@ -78,7 +78,7 @@ impl ExternalAccessCapabilities {
         Self {
             read: true,
             write: true,
-            list: true,
+            list: false,
             watch: false,
         }
     }
@@ -103,6 +103,8 @@ fn can_watch(capabilities: ExternalAccessCapabilities) -> bool {
 #[derive(Debug, Clone)]
 struct ExternalAccessGrant {
     root: PathBuf,
+    file: PathBuf,
+    directory_access: bool,
     capabilities: ExternalAccessCapabilities,
     expires_at: Instant,
 }
@@ -149,6 +151,8 @@ impl ExternalAccessGrants {
         let access_token = Uuid::new_v4().simple().to_string();
         let grant = ExternalAccessGrant {
             root: root.clone(),
+            file: target.clone(),
+            directory_access: false,
             capabilities,
             expires_at: Instant::now() + EXTERNAL_GRANT_IDLE_TIMEOUT,
         };
@@ -178,11 +182,11 @@ impl ExternalAccessGrants {
         }
     }
 
-    fn grant_root(
+    fn grant(
         &self,
         access_token: &str,
         capability: fn(ExternalAccessCapabilities) -> bool,
-    ) -> Result<PathBuf, String> {
+    ) -> Result<ExternalAccessGrant, String> {
         let mut grants = self
             .0
             .lock()
@@ -198,7 +202,7 @@ impl ExternalAccessGrants {
             return Err("external access grant does not allow this operation".to_string());
         }
         grant.expires_at = Instant::now() + EXTERNAL_GRANT_IDLE_TIMEOUT;
-        Ok(grant.root.clone())
+        Ok(grant.clone())
     }
 
     pub fn resolve_file(
@@ -208,7 +212,8 @@ impl ExternalAccessGrants {
         markdown_only: bool,
         for_write: bool,
     ) -> Result<PathBuf, String> {
-        let root = self.grant_root(access_token, if for_write { can_write } else { can_read })?;
+        let grant = self.grant(access_token, if for_write { can_write } else { can_read })?;
+        let root = grant.root.clone();
         let target = resolve_safe_path(&root, relative_path).map_err(|e| e.to_string())?;
         let name = target
             .file_name()
@@ -241,7 +246,13 @@ impl ExternalAccessGrants {
                 if !canonical_target.starts_with(&root) || !canonical_target.is_file() {
                     return Err("external path is outside the granted directory".to_string());
                 }
+                if !grant.directory_access && canonical_target != grant.file {
+                    return Err("external file grant does not allow sibling files".to_string());
+                }
                 return Ok(canonical_target);
+            }
+            if !grant.directory_access {
+                return Err("external file grant does not allow creating sibling files".to_string());
             }
             return Ok(canonical_parent.join(
                 target
@@ -256,6 +267,9 @@ impl ExternalAccessGrants {
         if !canonical_target.starts_with(&root) || !canonical_target.is_file() {
             return Err("external path is outside the granted directory".to_string());
         }
+        if !grant.directory_access && canonical_target != grant.file {
+            return Err("external file grant does not allow sibling files".to_string());
+        }
         Ok(canonical_target)
     }
 
@@ -264,7 +278,11 @@ impl ExternalAccessGrants {
         access_token: &str,
         relative_path: &str,
     ) -> Result<PathBuf, String> {
-        let root = self.grant_root(access_token, can_list)?;
+        let grant = self.grant(access_token, can_list)?;
+        if !grant.directory_access {
+            return Err("external file grant has not been promoted to a notebook".to_string());
+        }
+        let root = grant.root;
         let target = resolve_safe_path(&root, relative_path).map_err(|e| e.to_string())?;
         let canonical = target
             .canonicalize()
@@ -280,7 +298,11 @@ impl ExternalAccessGrants {
         access_token: &str,
         relative_path: &str,
     ) -> Result<PathBuf, String> {
-        let root = self.grant_root(access_token, can_watch)?;
+        let grant = self.grant(access_token, can_watch)?;
+        if !grant.directory_access {
+            return Err("external file grant has not been promoted to a notebook".to_string());
+        }
+        let root = grant.root;
         let target = resolve_safe_path(&root, relative_path).map_err(|e| e.to_string())?;
         let canonical = target
             .canonicalize()
@@ -291,8 +313,23 @@ impl ExternalAccessGrants {
         Ok(canonical)
     }
 
-    pub fn resolve_notebook_root(&self, access_token: &str) -> Result<PathBuf, String> {
-        self.resolve_directory(access_token, "/")
+    pub fn promote_to_notebook(&self, access_token: &str) -> Result<PathBuf, String> {
+        let mut grants = self
+            .0
+            .lock()
+            .map_err(|_| "external access state lock poisoned".to_string())?;
+        let grant = grants
+            .get_mut(access_token)
+            .ok_or_else(|| "external access grant is invalid or expired".to_string())?;
+        if grant.expires_at <= Instant::now() {
+            grants.remove(access_token);
+            return Err("external access grant is invalid or expired".to_string());
+        }
+        grant.directory_access = true;
+        grant.capabilities.list = true;
+        grant.capabilities.watch = true;
+        grant.expires_at = Instant::now() + EXTERNAL_GRANT_IDLE_TIMEOUT;
+        Ok(grant.root.clone())
     }
 }
 
@@ -481,7 +518,7 @@ pub fn open_external_notebook(
     access: State<ExternalAccessGrants>,
     root: State<NotebookRoot>,
 ) -> Result<String, String> {
-    let canonical = access.resolve_notebook_root(&access_token)?;
+    let canonical = access.promote_to_notebook(&access_token)?;
     root.set(canonical.clone());
     Ok(canonical.to_string_lossy().to_string())
 }
@@ -931,6 +968,12 @@ fn rename_file_at(
     if !old_target.exists() {
         return Err(format!("文件不存在: {}", old_relative_path));
     }
+    if old_target == new_target {
+        return Ok(());
+    }
+    if new_target.exists() {
+        return Err(format!("目标文件已存在: {}", new_relative_path));
+    }
     if let Some(parent) = new_target.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("创建目标目录失败: {}", e))?;
     }
@@ -1073,6 +1116,19 @@ mod tests {
     }
 
     #[test]
+    fn rename_rejects_existing_destination_without_data_loss() {
+        let root = temp_notebook("rename-collision");
+        std::fs::write(root.join("source.md"), "# Source").unwrap();
+        std::fs::write(root.join("target.md"), "# Target").unwrap();
+
+        assert!(rename_file_at(&root, "/source.md", "/target.md").is_err());
+        assert_eq!(std::fs::read_to_string(root.join("source.md")).unwrap(), "# Source");
+        assert_eq!(std::fs::read_to_string(root.join("target.md")).unwrap(), "# Target");
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn real_fs_rejects_path_escape() {
         let root = temp_notebook("fs-escape");
         let result = write_file_at(&root, "/../outside.md", "bad");
@@ -1108,7 +1164,7 @@ mod tests {
     }
 
     #[test]
-    fn external_note_file_write_allows_new_file_under_registered_root() {
+    fn external_file_grant_rejects_sibling_file_until_promoted() {
         let root = temp_notebook("external-new-file");
         let target = root.join("saved.md");
         let seed = root.join("seed.md");
@@ -1117,6 +1173,10 @@ mod tests {
         let handle = access
             .grant_for_existing_file(&seed.to_string_lossy())
             .unwrap();
+        assert!(access
+            .resolve_file(&handle.access_token, "/saved.md", true, true)
+            .is_err());
+        access.promote_to_notebook(&handle.access_token).unwrap();
         let target_path = access
             .resolve_file(&handle.access_token, "/saved.md", true, true)
             .unwrap();
@@ -1170,12 +1230,12 @@ mod tests {
 
         assert!(handle.capabilities.read);
         assert!(handle.capabilities.write);
-        assert!(handle.capabilities.list);
+        assert!(!handle.capabilities.list);
         assert!(!handle.capabilities.watch);
         assert!(access
             .resolve_watch_directory(&handle.access_token, "/")
             .is_err());
-        assert!(access.resolve_notebook_root(&handle.access_token).is_ok());
+        assert!(access.promote_to_notebook(&handle.access_token).is_ok());
 
         std::fs::remove_dir_all(root).unwrap();
     }

@@ -68,4 +68,21 @@ describe('MockFSService sample notebook', () => {
       '# Draft',
     );
   });
+
+  it('rejects rename collisions instead of overwriting the destination', async () => {
+    const fs = new MockFSService(0);
+    await fs.writeFile('/source.md', '# Source');
+    await fs.writeFile('/target.md', '# Target');
+
+    await expect(fs.renameFile('/source.md', '/target.md')).rejects.toThrow('目标路径已存在');
+    await expect(fs.readFile('/source.md')).resolves.toBe('# Source');
+    await expect(fs.readFile('/target.md')).resolves.toBe('# Target');
+  });
+
+  it('uses path segment boundaries when checking notebook membership', async () => {
+    const fs = new MockFSService(0);
+
+    await expect(fs.isPathInNotebook('/notes', '/notes/a.md')).resolves.toBe(true);
+    await expect(fs.isPathInNotebook('/notes', '/notes2/a.md')).resolves.toBe(false);
+  });
 });

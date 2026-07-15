@@ -419,6 +419,16 @@ onMounted(() => {
     state: createState(props.modelValue),
     parent: editorHost.value,
   });
+  if (performance.getEntriesByName('jotluck:editor-ready').length === 0) {
+    performance.mark('jotluck:editor-ready');
+    if (performance.getEntriesByName('jotluck:bootstrap-start').length > 0) {
+      performance.measure(
+        'jotluck:cold-start-to-editor',
+        'jotluck:bootstrap-start',
+        'jotluck:editor-ready',
+      );
+    }
+  }
   if (props.pendingFormat) applyPendingFormat(props.pendingFormat);
   // Register E2E helpers AFTER view creation and AFTER old component's onUnmounted cleanup.
   // Must be in onMounted, not setup: Vue 3 :key patching runs setup BEFORE old unmount.

@@ -19,6 +19,7 @@ export const useIndexStore = defineStore('index', () => {
   const documentCount = ref(0);
 
   let indexService: IndexService | null = null;
+  let initializeGeneration = 0;
 
   const tags = ref<Array<{ name: string; count: number }>>([]);
   const recentNotes = ref<Array<{ path: string; title: string; lastOpenedAt: number }>>([]);
@@ -30,17 +31,21 @@ export const useIndexStore = defineStore('index', () => {
     options: { populateRecent?: boolean } = {},
   ): Promise<void> {
     if (!force && (status.value === 'building' || status.value === 'ready')) return;
+    const generation = ++initializeGeneration;
     status.value = 'building';
     error.value = null;
 
     try {
-      indexService = new IndexService(fs, options);
-      const idx = await indexService.buildFullIndex();
+      const candidate = new IndexService(fs, options);
+      const idx = await candidate.buildFullIndex();
+      if (generation !== initializeGeneration) return;
+      indexService = candidate;
       documentCount.value = Object.keys(idx.documents).length;
-      tags.value = indexService.getAllTags();
-      recentNotes.value = indexService.getRecentNotes(20);
+      tags.value = candidate.getAllTags();
+      recentNotes.value = candidate.getRecentNotes(20);
       status.value = 'ready';
     } catch (e) {
+      if (generation !== initializeGeneration) return;
       // eslint-disable-next-line no-console
       console.error('[indexStore] initialize 索引构建失败:', e);
       error.value = e instanceof Error ? e.message : '索引构建失败';

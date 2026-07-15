@@ -216,7 +216,7 @@ import type {
   StatusBarRegion,
   RightWingRegion,
 } from '@/types/theme-pack';
-import { computed, watchEffect } from 'vue';
+import { computed, watch } from 'vue';
 
 const theme = useThemeStore();
 
@@ -353,34 +353,44 @@ const rightWingSlotProps = computed(() => ({
   onToggleCollapse: () => emit('toggle-right-wing'),
 }));
 
-watchEffect((onCleanup) => {
-  const pack = theme.renderedTheme;
-  if (pack.manifest.runtime !== 'trusted-code' && !pack.module?.plugin) {
-    unregisterTrustedTheme(pack.manifest.id);
-    return;
-  }
-  const injectedUi = props.themeHostUi ?? {};
-  const injectedAppState =
-    typeof injectedUi.appState === 'object' && injectedUi.appState !== null
-      ? (injectedUi.appState as Record<string, unknown>)
-      : {};
-  void activateTrustedThemeRuntime(pack, props.actions, props.themeChrome, {
-    ...injectedUi,
-    appShell: {
-      activePath: props.activePath,
-      noteTitle: props.noteTitle,
-      notebookName: props.notebookName,
-    },
-    appState: {
-      ...injectedAppState,
-      appShell: appShellSlotProps.value,
-    },
-    commerce: theme.commerce,
-  }).catch(() => {
-    unregisterTrustedTheme(pack.manifest.id);
-  });
-  onCleanup(() => unregisterTrustedTheme(pack.manifest.id));
-});
+watch(
+  () => {
+    const pack = theme.renderedTheme;
+    const entrypoints = pack.manifest.entrypoints
+      ?.map((entry) => `${entry.slot}:${entry.module}:${entry.exportName ?? ''}:${entry.checksum}`)
+      .join('|');
+    return `${pack.manifest.id}:${pack.manifest.version}:${pack.manifest.runtime}:${entrypoints ?? ''}`;
+  },
+  (_runtimeKey, _previousRuntimeKey, onCleanup) => {
+    const pack = theme.renderedTheme;
+    if (pack.manifest.runtime !== 'trusted-code' && !pack.module?.plugin) {
+      unregisterTrustedTheme(pack.manifest.id);
+      return;
+    }
+    const injectedUi = props.themeHostUi ?? {};
+    const injectedAppState =
+      typeof injectedUi.appState === 'object' && injectedUi.appState !== null
+        ? (injectedUi.appState as Record<string, unknown>)
+        : {};
+    void activateTrustedThemeRuntime(pack, props.actions, props.themeChrome, {
+      ...injectedUi,
+      appShell: {
+        activePath: props.activePath,
+        noteTitle: props.noteTitle,
+        notebookName: props.notebookName,
+      },
+      appState: {
+        ...injectedAppState,
+        appShell: appShellSlotProps.value,
+      },
+      commerce: theme.commerce,
+    }).catch(() => {
+      unregisterTrustedTheme(pack.manifest.id);
+    });
+    onCleanup(() => unregisterTrustedTheme(pack.manifest.id));
+  },
+  { immediate: true },
+);
 </script>
 
 <style scoped>

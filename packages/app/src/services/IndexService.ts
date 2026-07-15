@@ -198,7 +198,9 @@ export class IndexService {
       }
       this.indexedNoteCount += noteEntries.length;
 
-      await runLimited(noteEntries, INDEX_FILE_CONCURRENCY, (entry) => this.indexFile(entry.path));
+      await runLimited(noteEntries, INDEX_FILE_CONCURRENCY, async (entry) => {
+        await this.indexFile(entry.path);
+      });
 
       for (const entry of entries) {
         if (entry.isDirectory) await this.scanDirectory(entry.path);
@@ -210,7 +212,7 @@ export class IndexService {
     }
   }
 
-  private async indexFile(path: string): Promise<void> {
+  private async indexFile(path: string): Promise<string | null> {
     try {
       const content = await this.fs.readFile(path);
       this.documentContents.set(path, content);
@@ -267,26 +269,20 @@ export class IndexService {
         if (!this.tagIndex.has(tag)) this.tagIndex.set(tag, []);
         this.tagIndex.get(tag)!.push(path);
       }
+      return content;
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[IndexService] indexFile 失败:', e);
+      return null;
     }
   }
 
   async updateDocument(path: string): Promise<void> {
-    await this.indexFile(path);
+    const content = await this.indexFile(path);
     // Sync updated content into the search engine
     const entry = this.allDocuments[path];
-    if (entry) {
-      try {
-        const content = await this.fs.readFile(path);
-        this.documentContents.set(path, content);
-        this.engine.updateDocument(path, entry, content);
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error('[IndexService] updateDocument 读取文件内容失败，使用空内容更新索引:', e);
-        this.engine.updateDocument(path, entry, '');
-      }
+    if (entry && content !== null) {
+      this.engine.updateDocument(path, entry, content);
     }
     // 更新 recentNotesList（新建/编辑笔记后书签圆点需要显示）
     this.recentNotesList = this.recentNotesList.filter((n) => n.path !== path);
