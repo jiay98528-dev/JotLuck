@@ -1,6 +1,8 @@
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { assertV2SArchitectureActive } from './architecture-stop';
+import { publishV2SCandidateDirectory } from './atomic-directory';
 import { canonicalJson, normalizeRelativePath, resolveInside, sha256 } from './common';
 import {
   finalizeV2SManifest,
@@ -121,7 +123,7 @@ export async function repackV2SCandidateGate(options: {
   );
 
   const finalDirectory = resolveV2SCandidateDirectory(options.workspaceRoot, options.candidateId);
-  const temporaryDirectory = `${finalDirectory}.tmp-${process.pid}`;
+  const temporaryDirectory = `${finalDirectory}.tmp-${process.pid}-${randomUUID()}`;
   await mkdir(path.dirname(finalDirectory), { recursive: true });
   await rm(temporaryDirectory, { recursive: true, force: true });
   await mkdir(temporaryDirectory, { recursive: false });
@@ -200,7 +202,7 @@ export async function repackV2SCandidateGate(options: {
         'utf8',
       ),
     ]);
-    await rename(temporaryDirectory, finalDirectory);
+    await publishV2SCandidateDirectory(temporaryDirectory, finalDirectory);
     return { directory: finalDirectory, manifest };
   } catch (error) {
     await rm(temporaryDirectory, { recursive: true, force: true });

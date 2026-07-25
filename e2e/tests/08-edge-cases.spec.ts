@@ -8,7 +8,7 @@ import { test, expect } from '@playwright/test';
 import {
   waitForAppReady,
   typeInEditor,
-  getEditorContent,
+  getEditorContentFromBridge,
   clearEditor,
   appendInEditor,
   waitForAutoSave,
@@ -61,7 +61,7 @@ test.describe('边界与压力测试', () => {
 
     // Verify editor contains the default blank-note content (not empty,
     // the blank template seeds '# 新笔记')
-    const content = await getEditorContent(page);
+    const content = await getEditorContentFromBridge(page);
     expect(content.length).toBeGreaterThan(0);
 
     // Verify the app is still functional — status bar present
@@ -72,12 +72,12 @@ test.describe('边界与压力测试', () => {
     // Clear the editor and verify it handles truly-empty content
     await clearEditor(page);
     await page.waitForTimeout(300);
-    const cleared = await getEditorContent(page);
+    const cleared = await getEditorContentFromBridge(page);
     expect(cleared.length).toBe(0);
 
     // Auto-save should still work after clearing (at minimum no crash)
     await page.waitForTimeout(800);
-    const finalContent = await getEditorContent(page);
+    const finalContent = await getEditorContentFromBridge(page);
     // After auto-save the content may stay empty or be reverted — either is fine
     // as long as the app didn't crash
     expect(typeof finalContent).toBe('string');
@@ -103,7 +103,7 @@ test.describe('边界与压力测试', () => {
     await page.waitForTimeout(500);
 
     // Verify the content was injected
-    const content = await getEditorContent(page);
+    const content = await getEditorContentFromBridge(page);
     expect(content.length).toBeGreaterThanOrEqual(5000);
     expect(content).toContain('AAAAA'); // should be all A's
 
@@ -114,7 +114,7 @@ test.describe('边界与压力测试', () => {
     await page.keyboard.press('End');
     await page.keyboard.type('Z');
     await page.waitForTimeout(300);
-    const updated = await getEditorContent(page);
+    const updated = await getEditorContentFromBridge(page);
     expect(updated).toContain('Z');
   });
 
@@ -138,7 +138,7 @@ test.describe('边界与压力测试', () => {
     await typeInEditor(page, chineseText);
     await page.waitForTimeout(500);
 
-    const content = await getEditorContent(page);
+    const content = await getEditorContentFromBridge(page);
     expect(content).toContain('这是一段中文测试文本');
     expect(content).toContain('学而时习之,不亦说乎');
     expect(content).toContain('全角字符');
@@ -166,7 +166,7 @@ test.describe('边界与压力测试', () => {
     await typeInEditor(page, emojiText);
     await page.waitForTimeout(500);
 
-    const content = await getEditorContent(page);
+    const content = await getEditorContentFromBridge(page);
     expect(content).toContain('😀');
     expect(content).toContain('🎉');
     expect(content).toContain('🚀');
@@ -197,7 +197,7 @@ test.describe('边界与压力测试', () => {
     await typeInEditor(page, specialChars);
     await page.waitForTimeout(500);
 
-    const content = await getEditorContent(page);
+    const content = await getEditorContentFromBridge(page);
     // All special markdown characters should be preserved as-is in source
     expect(content).toContain('***triple stars***');
     expect(content).toContain('~~~struck text~~~');
@@ -250,14 +250,14 @@ test.describe('边界与压力测试', () => {
     await expect(stableNote).toBeVisible({ timeout: 5000 });
     await stableNote.click();
     await expect
-      .poll(() => getEditorContent(page), { timeout: 10000 })
+      .poll(() => getEditorContentFromBridge(page), { timeout: 10000 })
       .toContain('欢迎使用 JotLuck');
     await expect(page.locator('.status-saved')).toBeVisible({ timeout: 10000 });
 
     // Should be able to type after switching
     await appendInEditor(page, '\nRapid switch survived!');
     await expect
-      .poll(() => getEditorContent(page), { timeout: 5000 })
+      .poll(() => getEditorContentFromBridge(page), { timeout: 5000 })
       .toContain('Rapid switch survived');
   });
 
@@ -276,7 +276,7 @@ test.describe('边界与压力测试', () => {
     await typeInEditor(page, nestedList);
     await page.waitForTimeout(500);
 
-    const content = await getEditorContent(page);
+    const content = await getEditorContentFromBridge(page);
     // Verify all 10 levels are present
     for (let i = 1; i <= 10; i++) {
       expect(content).toContain(`Level ${i} item`);
@@ -363,7 +363,7 @@ test.describe('边界与压力测试', () => {
     await typeInEditor(page, tableText);
     await page.waitForTimeout(500);
 
-    const content = await getEditorContent(page);
+    const content = await getEditorContentFromBridge(page);
     expect(content).toContain('| 列A | 列B | 列C |');
     expect(content).toContain('| --- | --- | --- |');
     expect(content).toContain('| 单元格1 | 单元格2 | 单元格3 |');
@@ -405,7 +405,7 @@ test.describe('边界与压力测试', () => {
     await typeInEditor(page, codeBlockText);
     await page.waitForTimeout(500);
 
-    const content = await getEditorContent(page);
+    const content = await getEditorContentFromBridge(page);
     // Verify both code blocks are preserved
     expect(content).toContain('```javascript');
     expect(content).toContain('function hello(name)');

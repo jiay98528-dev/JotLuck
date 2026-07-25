@@ -1,6 +1,8 @@
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { assertV2SArchitectureActive } from './architecture-stop';
+import { publishV2SCandidateDirectory } from './atomic-directory';
 import { canonicalJson, resolveInside, sha256, V2S_ENGINE_ID } from './common';
 import { finalizeV2SManifest, packV2SContainer, type V2SPublicModelManifest } from './container-v6';
 import {
@@ -170,7 +172,7 @@ export async function trainV2SCandidate(
 
   const finalDirectory = resolveV2SCandidateDirectory(options.workspaceRoot, options.candidateId);
   const parentDirectory = path.dirname(finalDirectory);
-  const temporaryDirectory = `${finalDirectory}.tmp-${process.pid}`;
+  const temporaryDirectory = `${finalDirectory}.tmp-${process.pid}-${randomUUID()}`;
   await mkdir(parentDirectory, { recursive: true });
   await rm(temporaryDirectory, { recursive: true, force: true });
   await mkdir(temporaryDirectory, { recursive: false });
@@ -268,7 +270,7 @@ export async function trainV2SCandidate(
         'utf8',
       ),
     ]);
-    await rename(temporaryDirectory, finalDirectory);
+    await publishV2SCandidateDirectory(temporaryDirectory, finalDirectory);
     return { directory: finalDirectory, manifest, report };
   } catch (error) {
     await rm(temporaryDirectory, { recursive: true, force: true });

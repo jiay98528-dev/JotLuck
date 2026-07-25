@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -22,10 +23,6 @@ import {
 
 const roots: string[] = [];
 const repositoryRoot = path.resolve(import.meta.dirname, '../..');
-const testParent = path.join(
-  repositoryRoot,
-  'scripts/corpus/_web-cache/autocomplete-v2s/test-workspaces',
-);
 
 afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
@@ -141,8 +138,7 @@ describe('V2S architecture stop', () => {
 });
 
 async function createWorkspace(): Promise<string> {
-  await mkdir(testParent, { recursive: true });
-  const root = await mkdtemp(path.join(testParent, 'architecture-stop-'));
+  const root = await mkdtemp(path.join(tmpdir(), 'jotluck-v2s-architecture-stop-'));
   roots.push(root);
   await mkdir(path.join(root, 'scripts/corpus'), { recursive: true });
   return root;

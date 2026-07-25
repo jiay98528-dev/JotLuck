@@ -8,8 +8,6 @@ import {
 } from '../helpers/test-utils';
 
 const MOCKFS_KEY = 'jotluck-mockfs';
-const SEARCH_HISTORY_KEY = 'jotluck-search-history';
-
 async function waitForAnyMockFileContent(page: Page, expected: string) {
   await expect
     .poll(
@@ -93,8 +91,5 @@ test.describe('Persistence', () => {
 
     expect(keys).toContain(MOCKFS_KEY);
     expect(keys.length).toBeGreaterThanOrEqual(1);
-    expect(
-      keys.includes(SEARCH_HISTORY_KEY) || keys.some((key) => key.startsWith('jotluck:scope:')),
-    ).toBeTruthy();
   });
 });

@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -22,10 +23,6 @@ import {
 const roots: string[] = [];
 const execFileAsync = promisify(execFile);
 const repositoryRoot = path.resolve(import.meta.dirname, '../..');
-const testParent = path.join(
-  repositoryRoot,
-  'scripts/corpus/_web-cache/autocomplete-v2s/test-workspaces',
-);
 
 afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
@@ -86,6 +83,8 @@ describe('V2S selection and v6 container', () => {
         '--max-documents',
         '2',
         '--workspace-root',
+        fixture.root,
+        '--repository-root',
         fixture.root,
       ],
       { cwd: path.join(repositoryRoot, 'packages/app') },
@@ -264,8 +263,7 @@ async function createSelectionFixture(options: { external?: boolean } = {}): Pro
   selectionPath: string;
   documentPaths: string[];
 }> {
-  await mkdir(testParent, { recursive: true });
-  const root = await mkdtemp(path.join(testParent, 'selection-'));
+  const root = await mkdtemp(path.join(tmpdir(), 'jotluck-v2s-selection-'));
   roots.push(root);
   const documentSpecs = options.external
     ? ([

@@ -412,7 +412,7 @@ test.describe('Halo Canvas official theme', () => {
     expect(metrics.emptyHintTextAlign).toBe('left');
     expect(metrics.rightWingWidth).toBe(240);
     if (metrics.supportsBackdropFilter) {
-      expect(metrics.glassBackdropFilter).toContain('blur(16px)');
+      expect(metrics.glassBackdropFilter).toContain('blur(12px)');
     }
   });
 

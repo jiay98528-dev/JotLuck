@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { canonicalJson, sha256, V2S_ENGINE_ID } from '../autocomplete-v2s/common';
@@ -12,10 +13,6 @@ import { parsePublicV2sModel } from '../../packages/app/src/services/completion/
 
 const roots: string[] = [];
 const repositoryRoot = path.resolve(import.meta.dirname, '../..');
-const testParent = path.join(
-  repositoryRoot,
-  'scripts/corpus/_web-cache/autocomplete-v2s/test-workspaces',
-);
 
 afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
@@ -213,8 +210,7 @@ async function createTrainingFixture(): Promise<{
   root: string;
   sourceSelectionPath: string;
 }> {
-  await mkdir(testParent, { recursive: true });
-  const root = await mkdtemp(path.join(testParent, 'training-'));
+  const root = await mkdtemp(path.join(tmpdir(), 'jotluck-v2s-training-'));
   roots.push(root);
   const inputs = [
     ['zh', '会议记录已经整理，下一步确认负责人。'],

@@ -164,15 +164,23 @@ const isEntryPoint = process.argv[1]
   : false;
 if (isEntryPoint) {
   const entryArguments = [...process.argv.slice(2)];
+  const repositoryIndex = entryArguments.indexOf('--repository-root');
+  let repositoryRoot = V2S_REPOSITORY_ROOT;
+  if (repositoryIndex >= 0) {
+    const explicitRepositoryRoot = entryArguments[repositoryIndex + 1];
+    if (!explicitRepositoryRoot) throw new Error('--repository-root requires a path.');
+    repositoryRoot = path.resolve(explicitRepositoryRoot);
+    entryArguments.splice(repositoryIndex, 2);
+  }
   const workspaceIndex = entryArguments.indexOf('--workspace-root');
-  let workspaceRoot = V2S_REPOSITORY_ROOT;
+  let workspaceRoot = repositoryRoot;
   if (workspaceIndex >= 0) {
     const explicitRoot = entryArguments[workspaceIndex + 1];
     if (!explicitRoot) throw new Error('--workspace-root requires a path.');
     workspaceRoot = path.resolve(explicitRoot);
-    const relative = path.relative(V2S_REPOSITORY_ROOT, workspaceRoot);
+    const relative = path.relative(repositoryRoot, workspaceRoot);
     if (relative.startsWith('..') || path.isAbsolute(relative)) {
-      throw new Error('--workspace-root must remain inside the repository.');
+      throw new Error('--workspace-root must remain inside --repository-root.');
     }
     entryArguments.splice(workspaceIndex, 2);
   }

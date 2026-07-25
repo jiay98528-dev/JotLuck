@@ -122,6 +122,7 @@ export const ACCEPTED_LEXICON_STORAGE_KEY = 'jotluck:autocomplete:acceptedLexico
 const PERSONAL_MODEL_HEADER = '# jotluck-personal-ngram-v4';
 const PERSONAL_MODEL_MAX_BYTES = 4.5 * 1024 * 1024;
 const PERSONAL_MODEL_TARGET_BYTES = 3.5 * 1024 * 1024;
+const UTF8_ENCODER = new TextEncoder();
 const BASELINE_MAX_BYTES = 6 * 1024 * 1024;
 const BASELINE_CACHE_NAME = 'jotluck-autocomplete-baselines-v1';
 
@@ -1542,7 +1543,7 @@ export class MarkdownPredictor {
     fingerprint = fingerprintText(text),
   ): DocumentContribution {
     const started = performance.now();
-    const inputBytes = new TextEncoder().encode(text).byteLength;
+    const inputBytes = UTF8_ENCODER.encode(text).byteLength;
     if (inputBytes > MAX_NOTEBOOK_DOCUMENT_BYTES) {
       return emptyDocumentContribution(fingerprint, performance.now() - started, inputBytes);
     }
@@ -1968,7 +1969,7 @@ async function safeWriteBaselineCache(
 async function sha256Text(text: string): Promise<string> {
   const subtle = globalThis.crypto?.subtle;
   if (!subtle) throw new Error('Web Crypto unavailable');
-  const digest = await subtle.digest('SHA-256', new TextEncoder().encode(text));
+  const digest = await subtle.digest('SHA-256', UTF8_ENCODER.encode(text));
   return Array.from(new Uint8Array(digest))
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('');
@@ -2174,7 +2175,7 @@ function estimateSerializedEntryBytes(ctx: string, preds: Map<string, number>): 
 }
 
 function utf8ByteLength(text: string): number {
-  return new TextEncoder().encode(text).byteLength;
+  return UTF8_ENCODER.encode(text).byteLength;
 }
 
 function normalizeNonNegativeInteger(value: unknown): number {

@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
+import { remote } from 'webdriverio';
 
 const binaryPath = resolve(
   process.env.JOTLUCK_TAURI_BINARY ?? 'packages/app/src-tauri/target/release/jotluck.exe',
@@ -24,13 +27,21 @@ if (isAutocompleteRc && isV2RAutocompleteRc) {
   throw new Error('Legacy and V2R autocomplete RC smoke modes are mutually exclusive.');
 }
 
-describe('Windows Tauri WebView offline smoke', () => {
-  it('loads packaged assets in a real WebView2 and survives reload', async () => {
-    if (process.platform !== 'win32') {
-      throw new Error('Tauri WebView release smoke must run on Windows/WebView2');
-    }
+let browser;
+let tauriDriver;
+let stoppingDriver = false;
 
-    const appRoot = await $('#jotluck-app');
+async function main() {
+  if (process.platform !== 'win32') {
+    throw new Error('Tauri WebView release smoke must run on Windows/WebView2');
+  }
+
+  await stat(binaryPath);
+  tauriDriver = startTauriDriver();
+  try {
+    browser = await connectToTauriDriver(tauriDriver);
+
+    const appRoot = await browser.$('#jotluck-app');
     await appRoot.waitForExist();
     const result = isV2RAutocompleteRc ? await runV2RWebviewSmoke() : await runLegacyWebviewSmoke();
 
@@ -80,8 +91,60 @@ describe('Windows Tauri WebView offline smoke', () => {
       encoding: 'utf8',
       flag: 'wx',
     });
+  } finally {
+    await browser?.deleteSession().catch(() => undefined);
+    await stopTauriDriver();
+  }
+}
+
+function startTauriDriver() {
+  const command =
+    process.env.JOTLUCK_TAURI_DRIVER ??
+    (process.platform === 'win32' ? 'tauri-driver.exe' : 'tauri-driver');
+  const args = process.env.JOTLUCK_EDGE_DRIVER
+    ? ['--native-driver', resolve(process.env.JOTLUCK_EDGE_DRIVER)]
+    : [];
+  return spawn(command, args, {
+    stdio: 'inherit',
+    windowsHide: true,
   });
-});
+}
+
+async function connectToTauriDriver(driverProcess) {
+  const earlyExit = new Promise((_, reject) => {
+    driverProcess.once('error', reject);
+    driverProcess.once('exit', (code, signal) => {
+      if (!stoppingDriver) {
+        reject(
+          new Error(`tauri-driver exited before session creation: code=${code} signal=${signal}`),
+        );
+      }
+    });
+  });
+  const connection = remote({
+    hostname: '127.0.0.1',
+    port: 4444,
+    logLevel: 'info',
+    connectionRetryTimeout: 120_000,
+    connectionRetryCount: 20,
+    capabilities: {
+      'tauri:options': {
+        application: binaryPath,
+      },
+    },
+  });
+  return Promise.race([connection, earlyExit]);
+}
+
+async function stopTauriDriver() {
+  if (!tauriDriver || tauriDriver.exitCode !== null) return;
+  stoppingDriver = true;
+  tauriDriver.kill();
+  for (let attempt = 0; attempt < 20 && tauriDriver.exitCode === null; attempt += 1) {
+    await delay(50);
+  }
+  if (tauriDriver.exitCode === null) tauriDriver.kill('SIGKILL');
+}
 
 async function runLegacyWebviewSmoke() {
   const beforeReload = await collectLegacyPackagedRuntimeFacts();
@@ -89,7 +152,7 @@ async function runLegacyWebviewSmoke() {
   assertLegacyExpectedCandidate(beforeReload);
 
   await browser.refresh();
-  await (await $('#jotluck-app')).waitForExist();
+  await (await browser.$('#jotluck-app')).waitForExist();
   const afterReload = await collectLegacyPackagedRuntimeFacts();
   assertLegacyPackagedRuntimeFacts(afterReload);
   assertLegacyExpectedCandidate(afterReload);
@@ -136,7 +199,7 @@ async function runV2RWebviewSmoke() {
 }
 
 async function waitForV2REvaluationBridge() {
-  await (await $('#jotluck-app')).waitForExist();
+  await (await browser.$('#jotluck-app')).waitForExist();
   await browser.waitUntil(
     () =>
       browser.execute(
@@ -406,3 +469,8 @@ function assertV2RExpectedCandidate(facts) {
 function assertSha256(value, message) {
   assert.match(value ?? '', /^[a-f0-9]{64}$/u, message);
 }
+
+await main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

@@ -21,7 +21,12 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  ...(autocompleteRcEnabled ? {} : { grepInvert: /@autocomplete-rc/u }),
+  ...(autocompleteRcEnabled
+    ? {}
+    : {
+        grepInvert: /@autocomplete-rc/u,
+        testIgnore: /2[4-8]-autocomplete-.*\.spec\.ts/u,
+      }),
   reporter: [['html', { outputFolder: '../../e2e/report' }], ['list']],
 
   use: {

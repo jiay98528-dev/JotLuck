@@ -329,7 +329,7 @@ test.describe('即时模式 (Live Preview)', () => {
 
     // Step 5: 验证可以编辑（输入字符后内容变化）
     await page.keyboard.type(' EDITED', { delay: 10 });
-    const content = await getEditorContent(page);
+    const content = await getEditorContentFromBridge(page);
     expect(content).toContain('EDITED');
 
     // Step 6: 验证自动保存
@@ -392,7 +392,7 @@ test.describe('即时模式 (Live Preview)', () => {
     await appendInEditor(page, '\n\n## 章节三\n\n追加内容测试。');
 
     // Step 3: 验证所有内容完整无损坏
-    const content = await getEditorContent(page);
+    const content = await getEditorContentFromBridge(page);
     expect(content).toContain('# 稳定性测试');
     expect(content).toContain('## 章节一');
     expect(content).toContain('## 章节二');
@@ -431,24 +431,24 @@ test.describe('即时模式 (Live Preview)', () => {
 
     // Step 2: 切换到即时模式
     await switchToLiveMode(page);
-    let content = await getEditorContent(page);
+    let content = await getEditorContentFromBridge(page);
     expect(content).toContain('# 视图切换测试');
 
     // Step 3: 切回分栏模式
     await switchToSplitMode(page);
-    content = await getEditorContent(page);
+    content = await getEditorContentFromBridge(page);
     expect(content).toContain('# 视图切换测试');
     expect(content).toContain('内容在切换后应保持不变。');
 
     // Step 4: 再次切回即时模式
     await switchToLiveMode(page);
-    content = await getEditorContent(page);
+    content = await getEditorContentFromBridge(page);
     expect(content).toContain('# 视图切换测试');
     expect(content).toContain('内容在切换后应保持不变。');
 
     // Step 5: 验证编辑功能正常
     await appendInEditor(page, '\n\n末尾追加。');
-    content = await getEditorContent(page);
+    content = await getEditorContentFromBridge(page);
     expect(content).toContain('末尾追加。');
     await waitForAutoSave(page);
   });

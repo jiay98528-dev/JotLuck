@@ -336,6 +336,8 @@ test.describe('blackbox boundary and performance release gate', () => {
     expect(switchElapsedMs).toBeLessThan(LARGE_DOCUMENT_VIEW_SWITCH_BUDGET_MS);
 
     await switchView(page);
+    await expect(page.locator('.reader-workbench')).toBeVisible({ timeout: 5000 });
+    await switchView(page);
     await expect(page.locator('.cm-content')).toBeVisible({ timeout: 5000 });
     const marker = `\n${'x'.repeat(200)} blackbox-input-marker`;
     await page.locator('.cm-content').click();

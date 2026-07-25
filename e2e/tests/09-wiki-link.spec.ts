@@ -6,7 +6,7 @@
 import { test, expect } from '@playwright/test';
 import {
   waitForAppReady,
-  getEditorContent,
+  getEditorContentFromBridge,
   typeInEditor,
   appendInEditor,
   waitForAutoSave,
@@ -22,7 +22,7 @@ test.describe('Wiki-Link 输入与渲染', () => {
     await typeInEditor(page, '# Wiki-Link Test\n\n参考 [[快速入门]] 了解更多。');
     await waitForAutoSave(page);
 
-    const content = await getEditorContent(page);
+    const content = await getEditorContentFromBridge(page);
     expect(content).toContain('[[快速入门]]');
   });
 
@@ -30,7 +30,7 @@ test.describe('Wiki-Link 输入与渲染', () => {
     await typeInEditor(page, '# Alias Test\n\n参见 [[快速入门|入门指南]]。');
     await waitForAutoSave(page);
 
-    const content = await getEditorContent(page);
+    const content = await getEditorContentFromBridge(page);
     expect(content).toContain('[[快速入门|入门指南]]');
   });
 
@@ -38,7 +38,7 @@ test.describe('Wiki-Link 输入与渲染', () => {
     await typeInEditor(page, '# Multi Links\n\n- [[快速入门]]\n- [[设计笔记]]\n- [[项目规划]]\n');
     await waitForAutoSave(page);
 
-    const content = await getEditorContent(page);
+    const content = await getEditorContentFromBridge(page);
     expect(content).toContain('[[快速入门]]');
     expect(content).toContain('[[设计笔记]]');
     expect(content).toContain('[[项目规划]]');
@@ -48,7 +48,7 @@ test.describe('Wiki-Link 输入与渲染', () => {
     await typeInEditor(page, '# Dead Link\n\n参考 [[不存在的笔记XYZ123]]');
     await waitForAutoSave(page);
 
-    const content = await getEditorContent(page);
+    const content = await getEditorContentFromBridge(page);
     expect(content).toContain('[[不存在的笔记XYZ123]]');
     // App should not crash on dead links
     await expect(page.locator('.cm-editor')).toBeVisible();
@@ -113,7 +113,7 @@ test.describe('Wiki-Link 导航跳转', () => {
     await appendInEditor(page, '\n\n相关笔记：[[项目规划]]');
     await waitForAutoSave(page);
 
-    const content = await getEditorContent(page);
+    const content = await getEditorContentFromBridge(page);
     expect(content).toContain('[[项目规划]]');
   });
 
@@ -123,7 +123,7 @@ test.describe('Wiki-Link 导航跳转', () => {
 
     // 编辑器正常工作
     await expect(page.locator('.cm-editor')).toBeVisible();
-    const content = await getEditorContent(page);
+    const content = await getEditorContentFromBridge(page);
     expect(content).toContain('Normal Text');
   });
 });

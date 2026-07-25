@@ -1,7 +1,9 @@
 import { spawn } from 'node:child_process';
-import { access, copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { access, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { publishAtomicDirectory } from './autocomplete-v2s/atomic-directory';
 import {
   assertPathInsideV2RCache,
   canonicalSha256,
@@ -169,7 +171,7 @@ export async function buildAutocompleteV2REvaluationBundle(
 
   const outputDirectory = path.join(distDir, EVALUATION_DIRECTORY);
   await assertMissing(outputDirectory);
-  const temporaryDirectory = `${outputDirectory}.${process.pid}.tmp`;
+  const temporaryDirectory = `${outputDirectory}.${process.pid}.${randomUUID()}.tmp`;
   await rm(temporaryDirectory, { recursive: true, force: true });
   await mkdir(temporaryDirectory, { recursive: true });
 
@@ -247,7 +249,7 @@ export async function buildAutocompleteV2REvaluationBundle(
         { encoding: 'utf8', flag: 'wx' },
       ),
     ]);
-    await rename(temporaryDirectory, outputDirectory);
+    await publishAtomicDirectory(temporaryDirectory, outputDirectory);
   } catch (error) {
     await rm(temporaryDirectory, { recursive: true, force: true });
     throw error;
