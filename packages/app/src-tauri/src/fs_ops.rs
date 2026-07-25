@@ -82,7 +82,7 @@ impl ExternalAccessCapabilities {
     const fn opened_file() -> Self {
         Self {
             read: true,
-            write: true,
+            write: false,
             list: false,
             watch: false,
         }
@@ -104,14 +104,6 @@ fn can_read(capabilities: ExternalAccessCapabilities) -> bool {
 
 fn can_write(capabilities: ExternalAccessCapabilities) -> bool {
     capabilities.write
-}
-
-fn can_list(capabilities: ExternalAccessCapabilities) -> bool {
-    capabilities.list
-}
-
-fn can_watch(capabilities: ExternalAccessCapabilities) -> bool {
-    capabilities.watch
 }
 
 #[derive(Debug, Clone)]
@@ -226,6 +218,48 @@ impl ExternalAccessGrants {
         Ok(())
     }
 
+    /// Upgrade only the bootstrap file owned by this window.  Directory access
+    /// remains disabled until the explicit notebook-promotion command runs.
+    pub fn enable_file_write(
+        &self,
+        access_token: &str,
+        window_label: &str,
+        absolute_path: &str,
+    ) -> Result<(), String> {
+        let mut grants = self
+            .0
+            .lock()
+            .map_err(|_| "external access state lock poisoned".to_string())?;
+        let grant = grants
+            .get_mut(access_token)
+            .ok_or_else(|| "external access grant is invalid or expired".to_string())?;
+        if grant.expires_at <= Instant::now() {
+            grants.remove(access_token);
+            return Err("external access grant is invalid or expired".to_string());
+        }
+        if grant.owner_window_label != window_label
+            || external_path_to_slash(&grant.file) != absolute_path
+            || grant.directory_access
+        {
+            return Err(
+                "external edit grant does not match this window bootstrap file".to_string(),
+            );
+        }
+        grant.capabilities.write = true;
+        grant.expires_at = Instant::now() + EXTERNAL_GRANT_IDLE_TIMEOUT;
+        Ok(())
+    }
+
+    pub fn disable_file_write(&self, access_token: &str) {
+        if let Ok(mut grants) = self.0.lock() {
+            if let Some(grant) = grants.get_mut(access_token) {
+                if !grant.directory_access {
+                    grant.capabilities.write = false;
+                }
+            }
+        }
+    }
+
     fn grant(
         &self,
         access_token: &str,
@@ -315,46 +349,6 @@ impl ExternalAccessGrants {
             return Err("external file grant does not allow sibling files".to_string());
         }
         Ok(canonical_target)
-    }
-
-    pub fn resolve_directory(
-        &self,
-        access_token: &str,
-        relative_path: &str,
-    ) -> Result<PathBuf, String> {
-        let grant = self.grant(access_token, can_list)?;
-        if !grant.directory_access {
-            return Err("external file grant has not been promoted to a notebook".to_string());
-        }
-        let root = grant.root;
-        let target = resolve_safe_path(&root, relative_path).map_err(|e| e.to_string())?;
-        let canonical = target
-            .canonicalize()
-            .map_err(|e| format!("unable to resolve external directory: {e}"))?;
-        if !canonical.starts_with(&root) || !canonical.is_dir() {
-            return Err("external directory is outside the granted directory".to_string());
-        }
-        Ok(canonical)
-    }
-
-    pub fn resolve_watch_directory(
-        &self,
-        access_token: &str,
-        relative_path: &str,
-    ) -> Result<PathBuf, String> {
-        let grant = self.grant(access_token, can_watch)?;
-        if !grant.directory_access {
-            return Err("external file grant has not been promoted to a notebook".to_string());
-        }
-        let root = grant.root;
-        let target = resolve_safe_path(&root, relative_path).map_err(|e| e.to_string())?;
-        let canonical = target
-            .canonicalize()
-            .map_err(|e| format!("unable to resolve external watcher directory: {e}"))?;
-        if !canonical.starts_with(&root) || !canonical.is_dir() {
-            return Err("external watcher directory is outside the granted directory".to_string());
-        }
-        Ok(canonical)
     }
 
     pub fn promote_to_notebook(&self, access_token: &str) -> Result<PathBuf, String> {
@@ -549,13 +543,30 @@ fn assert_external_owner(
     access.assert_owner(access_token, window.label())
 }
 
+fn assert_workspace(
+    window: &WebviewWindow,
+    sessions: &WindowSessionRegistry,
+) -> Result<(), String> {
+    sessions.assert_workspace(window.label())
+}
+
+fn assert_external_edit(
+    window: &WebviewWindow,
+    sessions: &WindowSessionRegistry,
+    access_token: &str,
+) -> Result<(), String> {
+    sessions.assert_external_edit(window.label(), access_token)
+}
+
 /// Open a notebook folder — all subsequent operations are relative to this root.
 #[tauri::command]
 pub fn open_notebook(
     window: WebviewWindow,
     path: String,
     root: State<NotebookRoot>,
+    sessions: State<WindowSessionRegistry>,
 ) -> Result<String, String> {
+    assert_workspace(&window, &sessions)?;
     let p = PathBuf::from(&path);
     if !p.exists() {
         return Err(format!("文件夹不存在: {}", path));
@@ -611,7 +622,9 @@ fn write_sample_file_if_missing(root_path: &Path, name: &str, content: &str) -> 
 pub fn open_sample_notebook(
     window: WebviewWindow,
     root: State<NotebookRoot>,
+    sessions: State<WindowSessionRegistry>,
 ) -> Result<String, String> {
+    assert_workspace(&window, &sessions)?;
     let sample_root = local_app_data_dir()?.join("JotLuck").join("示例笔记本");
     fs::create_dir_all(&sample_root).map_err(|e| format!("创建示例笔记本失败: {}", e))?;
 
@@ -720,7 +733,9 @@ created: 2026-06-02
 pub fn get_notebook_root(
     window: WebviewWindow,
     root: State<NotebookRoot>,
+    sessions: State<WindowSessionRegistry>,
 ) -> Result<String, String> {
+    assert_workspace(&window, &sessions)?;
     root.get_for(window.label())
         .map(|p| p.to_string_lossy().to_string())
         .ok_or_else(|| "未打开笔记本".to_string())
@@ -732,23 +747,11 @@ pub fn list_directory(
     window: WebviewWindow,
     relative_path: String,
     root: State<NotebookRoot>,
+    sessions: State<WindowSessionRegistry>,
 ) -> Result<Vec<DirEntry>, String> {
+    assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
     list_directory_at(&root_path, &relative_path)
-}
-
-/// List supported note files and directories under an external root without opening it as notebook.
-#[tauri::command]
-pub fn list_external_note_directory(
-    window: WebviewWindow,
-    access_token: String,
-    relative_path: String,
-    access: State<ExternalAccessGrants>,
-) -> Result<Vec<DirEntry>, String> {
-    assert_external_owner(&window, &access, &access_token)?;
-    let root_path = access.resolve_directory(&access_token, "/")?;
-    let target = access.resolve_directory(&access_token, &relative_path)?;
-    list_directory_entries(&root_path, &target)
 }
 
 fn list_directory_at(root_path: &PathBuf, relative_path: &str) -> Result<Vec<DirEntry>, String> {
@@ -810,7 +813,9 @@ pub fn read_file(
     window: WebviewWindow,
     relative_path: String,
     root: State<NotebookRoot>,
+    sessions: State<WindowSessionRegistry>,
 ) -> Result<String, String> {
+    assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
     read_file_at(&root_path, &relative_path)
 }
@@ -882,7 +887,9 @@ pub fn write_file(
     relative_path: String,
     content: String,
     root: State<NotebookRoot>,
+    sessions: State<WindowSessionRegistry>,
 ) -> Result<(), String> {
+    assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
     write_file_at(&root_path, &relative_path, &content)
 }
@@ -908,7 +915,9 @@ pub fn write_external_markdown_file(
     relative_path: String,
     content: String,
     access: State<ExternalAccessGrants>,
+    sessions: State<WindowSessionRegistry>,
 ) -> Result<(), String> {
+    assert_external_edit(&window, &sessions, &access_token)?;
     assert_external_owner(&window, &access, &access_token)?;
     let target = access.resolve_file(&access_token, &relative_path, true, true)?;
     write_text_file_atomically(&target, &content)
@@ -933,7 +942,9 @@ pub fn write_external_note_file(
     relative_path: String,
     content: String,
     access: State<ExternalAccessGrants>,
+    sessions: State<WindowSessionRegistry>,
 ) -> Result<(), String> {
+    assert_external_edit(&window, &sessions, &access_token)?;
     assert_external_owner(&window, &access, &access_token)?;
     let target = access.resolve_file(&access_token, &relative_path, false, true)?;
     write_text_file_atomically(&target, &content).map_err(|e| format!("保存外部文件失败: {}", e))
@@ -948,7 +959,9 @@ pub fn save_external_note_as(
     default_file_name: String,
     content: String,
     access: State<ExternalAccessGrants>,
+    sessions: State<WindowSessionRegistry>,
 ) -> Result<ExternalFileHandle, String> {
+    assert_workspace(&window, &sessions)?;
     let selected = app
         .dialog()
         .file()
@@ -984,7 +997,9 @@ pub fn write_binary_file(
     relative_path: String,
     base64: String,
     root: State<NotebookRoot>,
+    sessions: State<WindowSessionRegistry>,
 ) -> Result<(), String> {
+    assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
     write_binary_file_at(&root_path, &relative_path, &base64)
 }
@@ -1012,7 +1027,9 @@ pub fn read_binary_file(
     window: WebviewWindow,
     relative_path: String,
     root: State<NotebookRoot>,
+    sessions: State<WindowSessionRegistry>,
 ) -> Result<String, String> {
+    assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
     read_binary_file_at(&root_path, &relative_path)
 }
@@ -1034,7 +1051,9 @@ pub fn delete_file(
     window: WebviewWindow,
     relative_path: String,
     root: State<NotebookRoot>,
+    sessions: State<WindowSessionRegistry>,
 ) -> Result<(), String> {
+    assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
     delete_file_at(&root_path, &relative_path)
 }
@@ -1055,7 +1074,9 @@ pub fn create_directory(
     window: WebviewWindow,
     relative_path: String,
     root: State<NotebookRoot>,
+    sessions: State<WindowSessionRegistry>,
 ) -> Result<(), String> {
+    assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
     create_directory_at(&root_path, &relative_path)
 }
@@ -1072,7 +1093,9 @@ pub fn rename_file(
     old_relative_path: String,
     new_relative_path: String,
     root: State<NotebookRoot>,
+    sessions: State<WindowSessionRegistry>,
 ) -> Result<(), String> {
+    assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
     rename_file_at(&root_path, &old_relative_path, &new_relative_path)
 }
@@ -1106,7 +1129,9 @@ pub fn get_file_meta(
     window: WebviewWindow,
     relative_path: String,
     root: State<NotebookRoot>,
+    sessions: State<WindowSessionRegistry>,
 ) -> Result<DirEntry, String> {
+    assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
     let target = resolve_safe_path(&root_path, &relative_path).map_err(|e| e.to_string())?;
 
@@ -1299,25 +1324,53 @@ mod tests {
     }
 
     #[test]
-    fn external_file_grant_rejects_sibling_file_until_promoted() {
+    fn opened_file_grant_is_readonly_until_exact_owner_enables_write() {
+        let root = temp_notebook("external-readonly-grant");
+        let target = root.join("external.md");
+        std::fs::write(&target, "# External").unwrap();
+        let access = ExternalAccessGrants::new();
+        let handle = access
+            .grant_for_existing_file(&target.to_string_lossy(), "window-a")
+            .unwrap();
+
+        assert!(!handle.capabilities.write);
+        assert!(access
+            .resolve_file(&handle.access_token, &handle.relative_path, true, true)
+            .is_err());
+        assert!(access
+            .enable_file_write(&handle.access_token, "window-b", &handle.absolute_path)
+            .is_err());
+        access
+            .enable_file_write(&handle.access_token, "window-a", &handle.absolute_path)
+            .unwrap();
+        assert!(access
+            .resolve_file(&handle.access_token, &handle.relative_path, true, true)
+            .is_ok());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn promoted_grant_never_becomes_a_sibling_write_backdoor() {
         let root = temp_notebook("external-new-file");
         let target = root.join("saved.md");
         let seed = root.join("seed.md");
         std::fs::write(&seed, "# Seed").unwrap();
+        std::fs::write(&target, "# Existing").unwrap();
         let access = ExternalAccessGrants::new();
         let handle = access
             .grant_for_existing_file(&seed.to_string_lossy(), "test")
             .unwrap();
         assert!(access
-            .resolve_file(&handle.access_token, "/saved.md", true, true)
+            .resolve_file(&handle.access_token, "/saved.md", true, false)
             .is_err());
         access.promote_to_notebook(&handle.access_token).unwrap();
-        let target_path = access
+        assert!(access
+            .resolve_file(&handle.access_token, "/saved.md", true, false)
+            .is_ok());
+        assert!(access
             .resolve_file(&handle.access_token, "/saved.md", true, true)
-            .unwrap();
-        write_text_file_atomically(&target_path, "# Saved").unwrap();
-
-        assert_eq!(std::fs::read_to_string(&target).unwrap(), "# Saved");
+            .is_err());
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "# Existing");
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -1415,7 +1468,7 @@ mod tests {
     }
 
     #[test]
-    fn saved_file_grant_records_capabilities_and_rejects_watcher_access() {
+    fn saved_file_grant_records_capabilities_without_directory_access() {
         let root = temp_notebook("external-capabilities");
         let target = root.join("external.md");
         std::fs::write(&target, "# External").unwrap();
@@ -1428,9 +1481,6 @@ mod tests {
         assert!(handle.capabilities.write);
         assert!(!handle.capabilities.list);
         assert!(!handle.capabilities.watch);
-        assert!(access
-            .resolve_watch_directory(&handle.access_token, "/")
-            .is_err());
         assert!(access.promote_to_notebook(&handle.access_token).is_ok());
 
         std::fs::remove_dir_all(root).unwrap();

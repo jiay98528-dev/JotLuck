@@ -5,6 +5,7 @@
 
 use crate::fs_ops::NotebookRoot;
 use crate::path::{display_path, is_ignored_notebook_directory_name, resolve_safe_path};
+use crate::window_session::WindowSessionRegistry;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -288,7 +289,9 @@ pub fn build_index(
     window: WebviewWindow,
     index: State<SearchIndexState>,
     root: State<NotebookRoot>,
+    sessions: State<WindowSessionRegistry>,
 ) -> Result<usize, String> {
+    sessions.assert_workspace(window.label())?;
     let root_path = root.get_for(window.label()).ok_or("未打开笔记本")?;
     let mut indices = index.0.lock().map_err(|e| e.to_string())?;
     let idx = indices
@@ -338,7 +341,9 @@ pub fn update_index_document(
     file_path: String,
     index: State<SearchIndexState>,
     root: State<NotebookRoot>,
+    sessions: State<WindowSessionRegistry>,
 ) -> Result<(), String> {
+    sessions.assert_workspace(window.label())?;
     let root_path = root.get_for(window.label()).ok_or("未打开笔记本")?;
     let indices = index.0.lock().map_err(|e| e.to_string())?;
     let idx = indices
@@ -369,7 +374,9 @@ pub fn search_index(
     window: WebviewWindow,
     query: String,
     index: State<SearchIndexState>,
+    sessions: State<WindowSessionRegistry>,
 ) -> Result<Vec<SearchResultItem>, String> {
+    sessions.assert_workspace(window.label())?;
     let indices = index.0.lock().map_err(|e| e.to_string())?;
     let idx = indices
         .get(window.label())

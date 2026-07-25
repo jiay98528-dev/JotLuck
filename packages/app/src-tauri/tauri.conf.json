@@ -43,14 +43,6 @@
     "resources": {
       "icons/file-icon.ico": "file-icon.ico"
     },
-    "fileAssociations": [
-      {
-        "ext": ["md", "markdown", "mdx", "txt"],
-        "name": "JotLuck.Note",
-        "description": "Markdown or Text Note",
-        "role": "Editor"
-      }
-    ],
     "windows": {
       "webviewInstallMode": {
         "type": "embedBootstrapper",

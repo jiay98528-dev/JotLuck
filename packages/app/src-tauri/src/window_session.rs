@@ -154,6 +154,32 @@ impl WindowSessionRegistry {
         Ok(())
     }
 
+    pub fn assert_external_edit(
+        &self,
+        window_label: &str,
+        access_token: &str,
+    ) -> Result<(), String> {
+        let state = self
+            .0
+            .lock()
+            .map_err(|_| "window session registry lock poisoned".to_string())?;
+        let session = state
+            .sessions
+            .get(window_label)
+            .ok_or_else(|| "window has no startup session".to_string())?;
+        match &session.payload {
+            WindowBootstrapPayload::ExternalEdit { opened_file }
+                if opened_file.access_token == access_token =>
+            {
+                Ok(())
+            }
+            WindowBootstrapPayload::ExternalEdit { .. } => {
+                Err("external edit token does not belong to this window bootstrap".to_string())
+            }
+            _ => Err("external file is not in single-file edit mode".to_string()),
+        }
+    }
+
     pub fn assert_workspace(&self, window_label: &str) -> Result<(), String> {
         let state = self
             .0
@@ -188,11 +214,11 @@ impl WindowSessionRegistry {
         }
     }
 
-    pub fn mark_promoted(
+    pub fn promote_external<T>(
         &self,
         window_label: &str,
-        initial_relative_path: String,
-    ) -> Result<(), String> {
+        promote_grant: impl FnOnce(&ExternalOpenedFile) -> Result<T, String>,
+    ) -> Result<(ExternalOpenedFile, T), String> {
         let mut state = self
             .0
             .lock()
@@ -201,10 +227,18 @@ impl WindowSessionRegistry {
             .sessions
             .get_mut(window_label)
             .ok_or_else(|| "window has no startup session".to_string())?;
-        session.payload = WindowBootstrapPayload::Workspace {
-            initial_relative_path: Some(initial_relative_path),
+        let opened_file = match &session.payload {
+            WindowBootstrapPayload::ExternalReadonly { opened_file }
+            | WindowBootstrapPayload::ExternalEdit { opened_file } => opened_file.clone(),
+            WindowBootstrapPayload::Workspace { .. } => {
+                return Err("workspace window is not an external-file session".to_string())
+            }
         };
-        Ok(())
+        let promoted = promote_grant(&opened_file)?;
+        session.payload = WindowBootstrapPayload::Workspace {
+            initial_relative_path: Some(opened_file.relative_path.clone()),
+        };
+        Ok((opened_file, promoted))
     }
 
     pub fn remove(&self, window_label: &str) {
@@ -240,8 +274,19 @@ pub fn get_window_bootstrap(
 pub fn enable_external_edit(
     window: WebviewWindow,
     sessions: State<'_, WindowSessionRegistry>,
+    access: State<'_, ExternalAccessGrants>,
 ) -> Result<(), String> {
-    sessions.enable_external_edit(window.label())
+    let opened_file = sessions.external_file_for(window.label())?;
+    access.enable_file_write(
+        &opened_file.access_token,
+        window.label(),
+        &opened_file.absolute_path,
+    )?;
+    if let Err(error) = sessions.enable_external_edit(window.label()) {
+        access.disable_file_write(&opened_file.access_token);
+        return Err(error);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -251,11 +296,11 @@ pub fn promote_external_file_to_notebook(
     access: State<'_, ExternalAccessGrants>,
     notebook_root: State<'_, NotebookRoot>,
 ) -> Result<PromotedNotebookPayload, String> {
-    let opened_file = sessions.external_file_for(window.label())?;
-    access.assert_owner(&opened_file.access_token, window.label())?;
-    let root = access.promote_to_notebook(&opened_file.access_token)?;
+    let (opened_file, root) = sessions.promote_external(window.label(), |opened_file| {
+        access.assert_owner(&opened_file.access_token, window.label())?;
+        access.promote_to_notebook(&opened_file.access_token)
+    })?;
     notebook_root.set_for(window.label(), root.clone());
-    sessions.mark_promoted(window.label(), opened_file.relative_path.clone())?;
     let name = root
         .file_name()
         .and_then(|value| value.to_str())
@@ -310,7 +355,7 @@ mod tests {
             relative_path: format!("/{}", path.file_name().unwrap().to_string_lossy()),
             capabilities: crate::fs_ops::ExternalAccessCapabilities {
                 read: true,
-                write: true,
+                write: false,
                 list: false,
                 watch: false,
             },
@@ -377,10 +422,27 @@ mod tests {
             WindowBootstrapPayload::ExternalReadonly { .. }
         ));
         assert!(registry.assert_workspace("first-window").is_err());
+        assert!(registry
+            .assert_external_edit("first-window", "first-token")
+            .is_ok());
+        assert!(registry
+            .assert_external_edit("first-window", "second-token")
+            .is_err());
 
-        registry
-            .mark_promoted("first-window", "/first.md".to_string())
+        let failed = registry.promote_external::<()>("second-window", |_| {
+            Err("simulated grant promotion failure".to_string())
+        });
+        assert!(failed.is_err());
+        assert!(matches!(
+            registry.payload_for("second-window"),
+            WindowBootstrapPayload::ExternalReadonly { .. }
+        ));
+
+        let (promoted_file, marker) = registry
+            .promote_external("first-window", |_| Ok("promoted"))
             .unwrap();
+        assert_eq!(promoted_file.access_token, "first-token");
+        assert_eq!(marker, "promoted");
         assert!(registry.assert_workspace("first-window").is_ok());
 
         registry.remove("first-window");

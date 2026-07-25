@@ -572,9 +572,7 @@
             <button class="btn btn--secondary" @click="showExternalEditConfirm = false">
               取消
             </button>
-            <button class="btn btn--primary" @click="confirmExternalEdit(false)">
-              仅编辑当前文件
-            </button>
+            <button class="btn btn--primary" @click="confirmExternalEdit()">仅编辑当前文件</button>
           </div>
         </div>
       </div>
@@ -767,7 +765,7 @@ interface OpenedFilePayload {
   accessToken?: string;
 }
 
-type ExternalSessionMode = 'none' | 'readonly' | 'edit-shell' | 'folder-indexed';
+type ExternalSessionMode = 'none' | 'readonly' | 'edit-shell';
 
 const files = ref<DirEntry[]>([]);
 const currentContent = ref('');
@@ -865,11 +863,7 @@ const externalOpenedNotes = ref<Array<{ path: string; title: string; lastOpenedA
 const externalOpenedFileMap = ref<Record<string, OpenedFilePayload>>({});
 const isExternalSession = computed(() => externalSessionMode.value !== 'none');
 const isExternalReadonly = computed(() => externalSessionMode.value === 'readonly');
-const isExternalEditing = computed(
-  () =>
-    externalSessionMode.value === 'edit-shell' || externalSessionMode.value === 'folder-indexed',
-);
-const isExternalFolderIndexed = computed(() => externalSessionMode.value === 'folder-indexed');
+const isExternalEditing = computed(() => externalSessionMode.value === 'edit-shell');
 const canSaveCurrentAsTemplate = computed(
   () =>
     Boolean(activeNotebookRoot.value) &&
@@ -1171,7 +1165,7 @@ const externalEditDialogSlotProps = computed(() => ({
   cancel: () => {
     showExternalEditConfirm.value = false;
   },
-  confirmEditOnly: () => confirmExternalEdit(false),
+  confirmEditOnly: () => confirmExternalEdit(),
 }));
 
 const scratchExitDialogSlotProps = computed(() => ({
@@ -1396,7 +1390,6 @@ const pendingDeleteName = computed(() =>
     : '',
 );
 
-const allTags = computed(() => indexStore.tags);
 const activeHeadingId = computed(() => getActiveHeadingId(editorStats.cursorLine ?? 0));
 const currentBacklinks = computed((): BacklinkEntry[] => {
   if (!activePath.value) return [];
@@ -1417,12 +1410,8 @@ const shellNotebookName = computed(() => {
   return root ? `外部文件 · ${displayNameFromPath(root)}` : '外部文件';
 });
 const shellFiles = computed(() => (isExternalEditing.value ? externalFiles.value : files.value));
-const shellBacklinks = computed((): BacklinkEntry[] =>
-  isExternalFolderIndexed.value && externalRelativePath.value
-    ? indexStore.getBacklinks(externalRelativePath.value)
-    : currentBacklinks.value,
-);
-const shellTags = computed(() => (isExternalFolderIndexed.value ? allTags.value : []));
+const shellBacklinks = computed((): BacklinkEntry[] => currentBacklinks.value);
+const shellTags = computed(() => []);
 
 // Recent notes with auto-assigned bookmark colors
 const recentNotesWithColors = computed(() =>
@@ -1921,61 +1910,6 @@ function exposeOnlyCurrentExternalFile(openedFile: OpenedFilePayload, content: s
       mtime: Date.now(),
     },
   ];
-}
-
-async function listExternalNoteDirectory(relativePath = '/'): Promise<DirEntry[]> {
-  const rootPath = externalFile.value?.notebookRoot;
-  if (!rootPath) return [];
-  if (isDesktopRuntime()) {
-    const accessToken = externalFile.value?.accessToken;
-    if (!accessToken) throw new Error('External file grant is missing or expired');
-    const entries = await invoke<
-      Array<{ name: string; path: string; is_dir: boolean; size: number; modified_at: number }>
-    >('list_external_note_directory', {
-      accessToken,
-      relativePath,
-    });
-    return entries.map((entry) => ({
-      name: entry.name,
-      path: entry.path,
-      isDirectory: entry.is_dir,
-      isFile: !entry.is_dir,
-      size: entry.size,
-      mtime: entry.modified_at * 1000,
-    }));
-  }
-
-  const filesByPath = peekJotLuckE2EBridge()?.externalFiles ?? {};
-  const normalizedRoot = normalizeOsPath(rootPath).replace(/\/+$/, '');
-  const normalizedDir = normalizePath(relativePath);
-  const dirPrefix = normalizedDir === '/' ? '/' : `${normalizedDir}/`;
-  const entryMap = new Map<string, DirEntry>();
-
-  for (const absolutePath of Object.keys(filesByPath)) {
-    const normalized = normalizeOsPath(absolutePath);
-    if (!normalized.startsWith(`${normalizedRoot}/`)) continue;
-    const rel = `/${normalized.slice(normalizedRoot.length + 1)}`;
-    if (!rel.startsWith(dirPrefix)) continue;
-    const rest = rel.slice(dirPrefix.length);
-    if (!rest) continue;
-    const [first] = rest.split('/');
-    if (!first) continue;
-    const entryPath = normalizedDir === '/' ? `/${first}` : `${normalizedDir}/${first}`;
-    const isDirectory = rest.includes('/');
-    if (!isDirectory && !isSupportedNoteFile(first)) continue;
-    entryMap.set(entryPath, {
-      name: first,
-      path: entryPath,
-      isDirectory,
-      isFile: !isDirectory,
-      size: isDirectory ? 0 : (filesByPath[absolutePath]?.length ?? 0),
-      mtime: Date.now(),
-    });
-  }
-
-  return [...entryMap.values()].sort(
-    (a, b) => Number(b.isDirectory) - Number(a.isDirectory) || a.name.localeCompare(b.name),
-  );
 }
 
 function syncCurrentContentFromEditor(): void {
@@ -2484,6 +2418,10 @@ async function selectNoteNow(path: string, selectionVersion: number): Promise<vo
     return;
   }
 
+  // Close the drawer in the same synchronous commit as the selected content. Index refresh below
+  // must not overwrite a later user action that reopens the drawer.
+  showLeftDrawer.value = false;
+
   // Now set reactive state — editor mounts with content already available
   isScratchSession.value = false;
   activePath.value = path;
@@ -2501,7 +2439,6 @@ async function selectNoteNow(path: string, selectionVersion: number): Promise<vo
     // eslint-disable-next-line no-console
     console.warn('[NotebookHome] indexStore.refreshDocument 失败', e);
   }
-  showLeftDrawer.value = false; // 选择笔记后关闭文件抽屉，避免 overlay 遮挡
   loading.value = false;
 }
 
@@ -2511,7 +2448,7 @@ async function onSelectExternalNote(path: string): Promise<void> {
   const entry = externalFiles.value.find((item) => normalizePath(item.path) === normalizedPath);
 
   if (entry?.isDirectory) {
-    await ensureExternalDirectoryListed(normalizedPath);
+    toast.show('单文件编辑不会扫描所在文件夹；请使用“添加到笔记”管理目录。', 'info', 3500);
     return;
   }
 
@@ -2542,11 +2479,6 @@ async function onSelectExternalNote(path: string): Promise<void> {
     updateHeadings(content);
     updateEditorStats(content);
     refreshSplitPreviewIfVisible();
-    if (isExternalFolderIndexed.value) {
-      await indexStore.refreshDocument(createExternalFolderFileSystem(), normalizedPath);
-      if (selectionVersion !== externalSelectionVersion) return;
-      wikiLinkRevision.value++;
-    }
     showLeftDrawer.value = false;
     void nextTick(() => editorRef.value?.focus());
   } catch (e) {
@@ -2571,7 +2503,7 @@ async function onToggleLeftDrawer(): Promise<void> {
 }
 
 function onOpenPalette(): void {
-  if (isExternalEditing.value && !isExternalFolderIndexed.value) {
+  if (isExternalEditing.value) {
     toast.show('单文件编辑未扫描所在文件夹，搜索和标签不会读取其他文件。', 'info', 3500);
     return;
   }
@@ -2783,98 +2715,10 @@ function updateExternalPreview(): void {
   }
 }
 
-async function ensureExternalDirectoryListed(relativePath = '/'): Promise<void> {
-  if (!isExternalSession.value) return;
-  loading.value = true;
-  errorMessage.value = '';
-  const normalizedDir = normalizeDir(relativePath);
-  try {
-    const entries = await listExternalNoteDirectory(normalizedDir);
-    if (normalizedDir === '/') {
-      externalFiles.value = entries;
-    } else {
-      const merged = new Map<string, DirEntry>();
-      for (const entry of externalFiles.value) merged.set(normalizePath(entry.path), entry);
-      for (const entry of entries) merged.set(normalizePath(entry.path), entry);
-      externalFiles.value = [...merged.values()];
-    }
-    currentDir.value = normalizedDir;
-  } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : String(e);
-  } finally {
-    loading.value = false;
-  }
-}
-
-function createExternalFolderFileSystem(): IFileSystemService {
-  return {
-    async readFile(path: string) {
-      return readExternalNoteFile(openedFileFromRelative(path));
-    },
-    async writeFile(path: string, content: string) {
-      await writeExternalNoteFile(openedFileFromRelative(path), content);
-    },
-    async writeBinary() {
-      throw new Error('外部单文件会话不支持写入二进制资产');
-    },
-    async readBinary() {
-      throw new Error('外部单文件会话不支持读取二进制资产');
-    },
-    isBinaryPath() {
-      return false;
-    },
-    async deleteFile() {
-      throw new Error('外部单文件会话不支持删除文件');
-    },
-    async renameFile() {
-      throw new Error('外部单文件会话不支持重命名文件');
-    },
-    async createDirectory() {
-      throw new Error('外部单文件会话不支持创建目录');
-    },
-    async listDirectory(path: string) {
-      return listExternalNoteDirectory(path);
-    },
-    async statFile(path: string) {
-      const entry = externalFiles.value.find(
-        (item) => normalizePath(item.path) === normalizePath(path),
-      );
-      return {
-        size: entry?.size ?? 0,
-        mtime: entry?.mtime ?? Date.now(),
-        isDirectory: entry?.isDirectory ?? false,
-        isFile: entry?.isFile ?? true,
-        path,
-      };
-    },
-    async watch() {
-      return () => undefined;
-    },
-    async unwatchAll() {
-      /* no watcher for external single-file shell */
-    },
-    resolvePath(root: string, ...segments: string[]) {
-      return [root, ...segments].join('/').replace(/\/+/g, '/');
-    },
-    async isPathInNotebook() {
-      return true;
-    },
-    async openNotebook() {
-      throw new Error('外部单文件会话不打开笔记本');
-    },
-    async openNotebookAt() {
-      throw new Error('外部单文件会话不打开笔记本');
-    },
-    async getRecentNotebooks() {
-      return [];
-    },
-  };
-}
-
-function confirmExternalEdit(scanRoot = false): void {
+function confirmExternalEdit(): void {
   if (!externalFile.value || externalError.value) return;
   showExternalEditConfirm.value = false;
-  externalSessionMode.value = scanRoot ? 'folder-indexed' : 'edit-shell';
+  externalSessionMode.value = 'edit-shell';
   showRightWing.value = true;
   saveError.value = null;
   void nextTick(() => editorRef.value?.focus());
@@ -2884,7 +2728,7 @@ async function enableExternalEdit(): Promise<void> {
   if (!externalFile.value || externalError.value) return;
   try {
     if (isDesktopRuntime()) await invoke('enable_external_edit');
-    confirmExternalEdit(false);
+    confirmExternalEdit();
   } catch (error) {
     externalError.value = error instanceof Error ? error.message : String(error);
   }
@@ -3212,7 +3056,7 @@ function onBacklinkNavigate(entry: BacklinkEntry): void {
   void onShellSelectNote(entry.notePath);
 }
 function onTagSelect(tagName: string): void {
-  if (isExternalEditing.value && !isExternalFolderIndexed.value) {
+  if (isExternalEditing.value) {
     toast.show('单文件编辑未扫描所在文件夹，标签面板不会读取其他文件。', 'info', 3500);
     return;
   }
@@ -3229,7 +3073,7 @@ function onLivePreviewTagClick(tagName: string): void {
 }
 
 async function onLivePreviewWikiLinkClick(noteTitle: string, anchor: null | string): Promise<void> {
-  if (isExternalEditing.value && !isExternalFolderIndexed.value) {
+  if (isExternalEditing.value) {
     toast.show('单文件编辑未扫描所在文件夹，无法跳转到其他 Wiki-link。', 'info', 3500);
     return;
   }
@@ -3318,7 +3162,7 @@ function onGlobalKeydown(e: KeyboardEvent): void {
     }
     return;
   }
-  if (isExternalSession.value && !isExternalFolderIndexed.value) return;
+  if (isExternalSession.value) return;
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'p') {
     e.preventDefault();
     e.stopPropagation();

@@ -27,10 +27,12 @@ Vue 3 + Pinia + Vite
 
 - 桌面端维持单进程。启动参数解析全部受支持的 `.md`、`.markdown`、`.mdx`、`.txt` 文件：首项使用 `main` 窗口，其余项创建唯一 label 的窗口；运行中接收关联文件也创建窗口。
 - 路径身份是规范化、规范大小写后的绝对路径。若已存在同一路径窗口，后端只恢复、置前并聚焦该窗口。创建窗口从 single-instance 回调异步调度；失败时必须回滚授权和窗口注册表。
-- `WindowSessionMode` 为 `workspace | external-readonly | external-edit`；窗口只能经后端从调用窗口身份读取自身 `WindowBootstrapPayload`，前端不得提交任意窗口 label。
-- `get_window_bootstrap` 仅返回调用窗口的一次性启动会话；`enable_external_edit` 仅把调用窗口切至 `external-edit`；`promote_external_file_to_notebook` 只将当前外部文件父目录绑定为调用窗口的 workspace 并返回初始目标文件。
+- `WindowSessionMode` 为 `workspace | external-readonly | external-edit`；窗口只能经后端从调用窗口身份读取自身 `WindowBootstrapPayload`，前端不得提交任意窗口 label。外部会话初始 grant 只包含该文件的只读访问。
+- `get_window_bootstrap` 仅返回调用窗口的一次性启动会话；`enable_external_edit` 仅把调用窗口切至 `external-edit` 并将同一文件 grant 提升为读写；`promote_external_file_to_notebook` 是唯一允许绑定其父目录为 workspace root 的命令，并返回初始目标文件。
+- 所有 workspace IPC 必须先由 Tauri 注入的调用窗口执行 `assert_workspace`，再访问 root、目录扫描、文件树、索引、watcher、completion、最近笔记本或跨文件读写。`external-readonly` 与 `external-edit` 不能通过遗留/通用 IPC 绕过该断言。
 - 笔记本 root、Tantivy 索引、notify watcher 和 Completion Retrieval 使用窗口 label 作为状态边界。所有 IPC 从调用窗口解析状态，watcher 事件定向发送，外部文件授权也绑定 owner window。窗口销毁只清理自己的授权和服务状态。
 - `external-readonly` 首屏为独立轻量入口：不得导入 CodeMirror、导出、文件抽屉、目录扫描、索引、监听、补全或版本检查；`external-edit` 保持单文件读写；仅 `workspace` 初始化目录级服务与最近笔记本持久化。
+- `0.1.0-preview` 的 release gate 单独验证 Public L3 architecture-stop 是可接受的 fail-closed 状态，同时从生产依赖图、Vite/Tauri bundle 和安装包清单验证 V2S Worker、factory、候选 manifest 与候选资产不可达。
 
 ## 离线补全架构（3.11）
 
@@ -82,6 +84,7 @@ Vue 3 + Pinia + Vite
 ## 变更记录
 
 - 2026-07-25：新增单进程多窗口窗口会话架构、窗口身份 IPC、规范路径去重、外部只读轻量入口以及窗口级 root/index/watcher/completion 隔离。
+- 2026-07-25：明确 P1 grant 升级与 `assert_workspace` 命令边界；增加 `0.1.0-preview` Public L3 stop / V2S 生产不可达 gate。
 - 2026-07-13：Public V2S 在有界 development 预检中未达到 Oracle 架构门槛，记录 architecture stop；不训练 Gate、不读取 final、不安装 v6 public 资产。
 - 2026-07-13：新增 Public V2S 目标架构：双语 Subword MKN + 小门控、256-byte Worker 边界、v6 单 manifest/单资产与 35% 绝对可用率双 final 合同。
 - 2026-07-13：`public-phrase-transformer-v1` 固定短语分类架构停止；训练、publisher 和 v5 verifier 由 architecture-stop 记录硬阻断，未来开放词表/组合生成需新 ADR 与 manifest schema。

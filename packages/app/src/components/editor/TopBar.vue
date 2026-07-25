@@ -372,4 +372,31 @@ const titleText = computed(() => props.noteTitle || '无标题');
     justify-content: center;
   }
 }
+
+@media (width <= 480px) {
+  .topbar-inner,
+  .topbar-inner--title-first,
+  .topbar-inner--search-first,
+  .topbar-inner--reader,
+  .topbar-inner--compact,
+  .topbar-inner--workbench {
+    gap: var(--space-4);
+    padding-inline: var(--space-4);
+  }
+
+  .topbar-right {
+    gap: var(--space-2);
+  }
+
+  .topbar-right :deep(.shell-action--search) {
+    justify-content: center;
+    width: 40px;
+    min-width: 40px;
+    padding-inline: 0;
+  }
+
+  .topbar-right :deep(.shell-action--search .shell-action__label) {
+    display: none;
+  }
+}
 </style>

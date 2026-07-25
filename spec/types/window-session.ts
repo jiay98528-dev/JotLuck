@@ -9,10 +9,14 @@ export interface ExternalFileAuthorization {
   filePath: string;
   /** Supported file type, used to select Markdown or plain-text reading. */
   kind: 'markdown' | 'text';
+  /** External bootstrap is read-only; only enable_external_edit can change it. */
+  access: 'read' | 'read-write';
 }
 
 export interface WorkspaceWindowBootstrapPayload {
   mode: 'workspace';
+  /** Present only after opening a notebook or promote_external_file_to_notebook. */
+  workspaceRoot?: string;
   /** Optional target selected after opening or promoting a notebook. */
   initialFilePath?: string;
 }

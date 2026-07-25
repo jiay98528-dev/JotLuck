@@ -1,3 +1,4 @@
+use crate::window_session::WindowSessionRegistry;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::mem::size_of;
@@ -749,8 +750,10 @@ impl CompletionRetrievalState {
 pub async fn completion_v2_set_scope(
     window: WebviewWindow,
     states: State<'_, CompletionRetrievalStates>,
+    sessions: State<'_, WindowSessionRegistry>,
     request: CompletionSetScopeRequest,
 ) -> Result<CompletionMutationResponse, String> {
+    sessions.assert_workspace(window.label())?;
     let state = states.for_window(window.label());
     tauri::async_runtime::spawn_blocking(move || state.set_scope(request))
         .await
@@ -761,8 +764,10 @@ pub async fn completion_v2_set_scope(
 pub async fn completion_v2_replace_document(
     window: WebviewWindow,
     states: State<'_, CompletionRetrievalStates>,
+    sessions: State<'_, WindowSessionRegistry>,
     request: CompletionReplaceRequest,
 ) -> Result<CompletionMutationResponse, String> {
+    sessions.assert_workspace(window.label())?;
     let state = states.for_window(window.label());
     tauri::async_runtime::spawn_blocking(move || state.replace_document(request))
         .await
@@ -773,8 +778,10 @@ pub async fn completion_v2_replace_document(
 pub async fn completion_v2_remove_document(
     window: WebviewWindow,
     states: State<'_, CompletionRetrievalStates>,
+    sessions: State<'_, WindowSessionRegistry>,
     request: CompletionRemoveRequest,
 ) -> Result<CompletionMutationResponse, String> {
+    sessions.assert_workspace(window.label())?;
     let state = states.for_window(window.label());
     tauri::async_runtime::spawn_blocking(move || state.remove_document(request))
         .await
@@ -785,8 +792,10 @@ pub async fn completion_v2_remove_document(
 pub async fn completion_v2_rename_document(
     window: WebviewWindow,
     states: State<'_, CompletionRetrievalStates>,
+    sessions: State<'_, WindowSessionRegistry>,
     request: CompletionRenameRequest,
 ) -> Result<CompletionMutationResponse, String> {
+    sessions.assert_workspace(window.label())?;
     let state = states.for_window(window.label());
     tauri::async_runtime::spawn_blocking(move || state.rename_document(request))
         .await
@@ -797,8 +806,10 @@ pub async fn completion_v2_rename_document(
 pub async fn completion_v2_clear(
     window: WebviewWindow,
     states: State<'_, CompletionRetrievalStates>,
+    sessions: State<'_, WindowSessionRegistry>,
     request: CompletionClearRequest,
 ) -> Result<CompletionMutationResponse, String> {
+    sessions.assert_workspace(window.label())?;
     let state = states.for_window(window.label());
     tauri::async_runtime::spawn_blocking(move || state.clear(request))
         .await
@@ -809,8 +820,10 @@ pub async fn completion_v2_clear(
 pub async fn completion_v2_apply_batch(
     window: WebviewWindow,
     states: State<'_, CompletionRetrievalStates>,
+    sessions: State<'_, WindowSessionRegistry>,
     request: CompletionBatchRequest,
 ) -> Result<CompletionMutationResponse, String> {
+    sessions.assert_workspace(window.label())?;
     let state = states.for_window(window.label());
     tauri::async_runtime::spawn_blocking(move || state.apply_batch(request))
         .await
@@ -821,8 +834,10 @@ pub async fn completion_v2_apply_batch(
 pub async fn completion_v2_query(
     window: WebviewWindow,
     states: State<'_, CompletionRetrievalStates>,
+    sessions: State<'_, WindowSessionRegistry>,
     request: CompletionQueryRequest,
 ) -> Result<CompletionQueryResponse, String> {
+    sessions.assert_workspace(window.label())?;
     let state = states.for_window(window.label());
     tauri::async_runtime::spawn_blocking(move || state.query(request))
         .await
@@ -833,8 +848,10 @@ pub async fn completion_v2_query(
 pub async fn completion_v2_diagnostics(
     window: WebviewWindow,
     states: State<'_, CompletionRetrievalStates>,
+    sessions: State<'_, WindowSessionRegistry>,
     workspace_scope: String,
 ) -> Result<CompletionRetrievalDiagnostics, String> {
+    sessions.assert_workspace(window.label())?;
     let state = states.for_window(window.label());
     state.diagnostics(&workspace_scope)
 }

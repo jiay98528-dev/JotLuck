@@ -26,7 +26,7 @@
 - 阅读器顶栏必须复用应用正式 Logo 资产，不得使用字母占位符或临时开发图标。
 - Markdown 标题目录、文内锚点和外部链接在只读态直接可用。Wiki-link、标签聚合和真实反链依赖笔记本目录；父目录未提升前，参考面板必须保留对应入口，并将反链空状态标注为“添加笔记后可用”，不得伪造结果或为此暗中扫描父目录。
 - `external-reader` slot 的 props 名称固定为 `enableEdit` 和 `openParentAsNotebook`，不得因文案调整而改名。默认宿主将 `openParentAsNotebook` 显示为“添加到笔记”。
-- `enableEdit` 只进入当前窗口的单文件 `external-edit` 壳；`openParentAsNotebook` 才提升父目录为当前窗口 `workspace`，并保留该文件选中。
+- `enableEdit` 只将当前窗口的初始只读 file grant 提升为该文件读写，并进入单文件 `external-edit` 壳；它不得暴露文件树、目录选择、跨文件导航或任何 workspace action。`openParentAsNotebook` 才提升父目录为当前窗口 `workspace`，并保留该文件选中。
 
 ## 交互要求
 
@@ -40,3 +40,4 @@
 
 - 2026-07-25：外部阅读器改为复用成熟阅读工作台视觉与参考面板，补充滚动、目录和链接交互约束，并明确未提升父目录时的反链边界。
 - 2026-07-25：补充 ExternalReader 的三态会话职责及 `external-reader` Theme API v2 props 兼容约束。
+- 2026-07-25：明确 ExternalReader 的初始只读 grant 与单文件编辑提升不能授予 workspace UI。

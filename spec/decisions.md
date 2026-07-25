@@ -73,11 +73,14 @@
 - **决策**：保留一个 JotLuck 进程，但每个不同的规范化绝对文件路径拥有一个独立窗口。首个冷启动文件使用 `main`，其余文件及运行时关联请求创建唯一 label 的窗口；重复路径只恢复并聚焦现有窗口。
 - **会话**：窗口会话固定为 `workspace`、`external-readonly`、`external-edit`。外部文件先只读；启用编辑只授权当前文件；添加到笔记才将父目录升级为该窗口的 workspace，并持久记录最近笔记本。四种支持格式为 `.md`、`.markdown`、`.mdx`、`.txt`，安装器仅注册可选打开程序。
 - **隔离与安全**：root、索引、watcher、completion、外部授权及事件路由均按窗口 label 隔离；命令仅从 Tauri 注入的调用窗口身份取得会话，禁止前端传入或伪造窗口 label。窗口关闭只回收本窗口资源。
+- **P1 授权边界**：外部文件初始 grant 是只读；`enable_external_edit` 只能把同一文件升为读写，不能授予父目录或任意工作区能力。所有 workspace IPC 必须对调用窗口执行 `assert_workspace`；只有 `promote_external_file_to_notebook` 可原子绑定父目录、更新会话并开启 workspace 服务。
+- **Preview gate**：`0.1.0-preview` 接受 Public L3 保持 architecture-stop / fail-closed，但 release gate 必须证明生产依赖图、bundle 和安装包不含可达的 V2S Worker、factory、候选资产或自动加载入口。
 - **后果**：外部只读入口可保持轻量并避免目录级副作用，但后端状态不再能够使用进程单例；必须为多窗口和关闭清理建立独立测试覆盖。
 
 ## 变更记录
 
 - 2026-07-25：新增 ADR-017，确立单进程多窗口关联文件、规范路径去重、三态窗口会话及窗口级服务隔离。
+- 2026-07-25：ADR-017 补充只读初始 grant、单文件编辑提升、`assert_workspace` 与唯一目录提升命令，并定义 preview 的 V2S 不可达门槛。
 - 2026-07-13：ADR-016 完成有界矩阵与逐语言组合预检；固定矩阵最好前沿 Oracle 37.5%/40.5% 未达 40%/45% 架构门槛，记录 architecture stop，未训练 Gate 或消费 final。
 - 2026-07-13：新增 ADR-016，确认 Public V2S 的组合式统计生成、Worker 信任边界、有界训练矩阵、双 final 与单一发布协议。
 - 2026-07-13：新增 ADR-015，移除停止 V2R 的生产运行时和重复 v4 profile，公共 L3 收口为一个默认未绑定的模型插槽。

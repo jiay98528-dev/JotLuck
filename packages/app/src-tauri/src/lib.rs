@@ -289,7 +289,6 @@ pub fn run() {
             fs_ops::open_sample_notebook,
             fs_ops::get_notebook_root,
             fs_ops::list_directory,
-            fs_ops::list_external_note_directory,
             fs_ops::read_file,
             fs_ops::read_external_note_file,
             fs_ops::write_file,

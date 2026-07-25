@@ -5,6 +5,7 @@
 // notebooks does not leak OS watcher handles.
 
 use crate::fs_ops::{ExternalAccessGrants, NotebookRoot};
+use crate::window_session::WindowSessionRegistry;
 use notify::event::{CreateKind, ModifyKind, RenameMode};
 use notify::{Event, EventKind, RecursiveMode, Watcher};
 use std::collections::HashMap;
@@ -241,31 +242,29 @@ pub fn start_file_watcher(
     state: State<'_, FileWatcherState>,
     root_path: String,
     access_token: Option<String>,
-    relative_path: Option<String>,
+    _relative_path: Option<String>,
     notebook_root: State<'_, NotebookRoot>,
-    external_grants: State<'_, ExternalAccessGrants>,
+    _external_grants: State<'_, ExternalAccessGrants>,
+    sessions: State<'_, WindowSessionRegistry>,
 ) -> Result<u64, String> {
-    let (canonical, notebook_allowed, external_allowed) =
-        if let Some(token) = access_token.as_deref() {
-            let relative = relative_path.as_deref().unwrap_or("/");
-            external_grants.assert_owner(token, window.label())?;
-            let canonical = external_grants.resolve_watch_directory(token, relative)?;
-            (canonical, false, true)
-        } else {
-            let path = PathBuf::from(&root_path);
-            if !path.exists() || !path.is_dir() {
-                return Err(format!("invalid watcher root path: {root_path}"));
-            }
-            let canonical = path
-                .canonicalize()
-                .map_err(|e| format!("invalid watcher root path: {root_path}: {e}"))?;
-            let notebook_allowed = notebook_root
-                .get_for(window.label())
-                .and_then(|root| root.canonicalize().ok())
-                .map(|root| canonical == root)
-                .unwrap_or(false);
-            (canonical, notebook_allowed, false)
-        };
+    sessions.assert_workspace(window.label())?;
+    let (canonical, notebook_allowed, external_allowed) = if access_token.is_some() {
+        return Err("external file windows cannot start directory watchers".to_string());
+    } else {
+        let path = PathBuf::from(&root_path);
+        if !path.exists() || !path.is_dir() {
+            return Err(format!("invalid watcher root path: {root_path}"));
+        }
+        let canonical = path
+            .canonicalize()
+            .map_err(|e| format!("invalid watcher root path: {root_path}: {e}"))?;
+        let notebook_allowed = notebook_root
+            .get_for(window.label())
+            .and_then(|root| root.canonicalize().ok())
+            .map(|root| canonical == root)
+            .unwrap_or(false);
+        (canonical, notebook_allowed, false)
+    };
     if !notebook_allowed && !external_allowed {
         return Err(
             "watcher root is not an active notebook or authorized external root".to_string(),
