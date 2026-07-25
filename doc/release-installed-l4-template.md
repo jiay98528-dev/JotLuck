@@ -1,9 +1,15 @@
 # JotLuck 安装版 L4 人工验收记录模板
 
-> 复制本模板为单次发行记录，例如 `验收报告/2026-06-30-JotLuck-0.15.0-installed-L4.md`。
+版本：2026-07-25（installed-app evidence v2）
+
+> 复制本模板为单次发行记录，例如 `验收报告/2026-07-25-JotLuck-0.1.0-preview-installed-L4.md`。
 > 所有 `状态` 必须填写 `PASS`，否则 `pnpm release:rc-gate` 必须阻断 RC 放行。任何失败项标记为 P0/P1/P2，不允许用 Web 自动化通过覆盖人工失败。
 >
-> **协议状态：本模板仅用于人工记录，不构成机器 PASS。** 文末 v1 JSON 示例是历史迁移参考，不能再被 `release:rc-gate` 接受。正式放行等待“候选 commit → 只读原始报告 → 结构化二次转录 → 证据 commit”的 v2 协议实现。
+> **协议状态：本模板仅用于人工记录，不构成机器 PASS。** 文末 v1 JSON 示例是历史迁移参考，不能再被 `release:rc-gate` 接受。正式放行必须把本记录转换为已实现的“候选 commit → 只读原始报告 → 同执行者结构化二次转录 → 证据 commit”v2 证据链，并由校验器复算。
+
+> **v2 证据要求**：每项 case 必须链接受版本管理的原始产物，并记录实际 passed/failed/skipped 计数、退出码、时间、产物 SHA256 与候选 commit；只读执行者的原始报告和同一执行者的结构化二次转录必须互相校验。命令文本、截图路径或自报 PASS 不能单独构成通过。
+>
+> required cases 和三份严格 JSON Schema 位于 `spec/release/`；证据目录固定为 `release-evidence/installed-app/v2/<release-id>/`。安装器本体来自 manifest 绑定的 GitHub Actions run/artifact，不提交进仓库，gate 下载后复算文件名、字节数和 SHA256。
 
 ## 发行对象
 
@@ -58,9 +64,9 @@
 - 状态: TODO
 - 失败级别:
 
-### L4-03-EXTERNAL-FILE
+### L4-03-EXTERNAL-FILE-GRANT
 
-- 操作: 双击外部 `.md/.markdown/.mdx` -> 只读预览 -> 启用编辑 -> 保存当前文件 -> 确认不扫描父目录。
+- 操作: 分别双击外部 `.md/.markdown/.mdx/.txt` -> 只读预览 -> 启用编辑 -> 保存当前文件 -> 确认不扫描父目录、不出现跨文件 workspace UI；再点击“添加到笔记”并确认只有此时父目录成为 notebook。
 - 可观测结果:
 - 证据路径/截图:
 - 状态: TODO
@@ -108,7 +114,7 @@
 
 ### L4-09-UNINSTALL-CLEANUP
 
-- 操作: 卸载 -> 验证安装目录、`.md/.markdown/.mdx` 文件关联、OpenWith 残留和图标残留。
+- 操作: 卸载 -> 验证安装目录、`.md/.markdown/.mdx/.txt` 可选文件关联、OpenWith 残留和图标残留；安装前后的系统默认应用必须一致。
 - 可观测结果:
 - 证据路径/截图:
 - 状态: TODO
@@ -116,7 +122,7 @@
 
 ## L4-EVIDENCE
 
-- L4-EVIDENCE-MANIFEST: `BLOCKED — independent evidence protocol v2 is not implemented`
+- L4-EVIDENCE-MANIFEST: `TODO — 填写 release-evidence/installed-app/v2/<release-id>/manifest.json；缺失时闸门必须失败`
 
 协议 v2 落地后，机器清单必须绑定独立的候选 commit、受版本管理的原始执行产物、逐 case 结果、安装包 SHA、只读审计原始报告及其结构化二次转录。禁止复制旧 v1 JSON 或只填写命令退出码。
 
@@ -125,8 +131,18 @@
 - 外部编辑器回读文件:
 - 导出文件:
 - 卸载残留检查记录:
+- 原始执行报告（受版本管理）:
+- 结构化二次转录（受版本管理）:
+- 候选 commit:
+- 证据 commit:
+- 每 case 实际 counters / exit code / 时间 / artifact SHA256:
+- Preview gate：V2S Worker/factory/候选资产在生产依赖图、bundle、安装包中不可达的报告:
 
 ## 结论
 
 - L4-CONCLUSION: TODO
 - 放行判断: 安装版 L4 全部 PASS 前不得称为“最终发布通过”。
+
+## 变更记录
+
+- 2026-07-25：模板升级为 installed-app evidence v2，增加原始产物、二次转录、counter/hash/commit 链及 `0.1.0-preview` V2S 不可达证据字段。

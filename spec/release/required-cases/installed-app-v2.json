@@ -1,0 +1,36 @@
+{
+  "schema": "jotluck.installed-app.required-cases.v2",
+  "version": 2,
+  "cases": [
+    "GUI-01-NOTE-LIFECYCLE",
+    "GUI-02-FILE-DRAWER",
+    "GUI-03-SEARCH-EDIT",
+    "GUI-04-LIVE-PREVIEW",
+    "GUI-05-SETTINGS-PERSISTENCE",
+    "GUI-06-EXPORT-CONTENT",
+    "GUI-07-IMAGE-ASSET",
+    "RF-01",
+    "RF-02",
+    "RF-03",
+    "RF-04",
+    "RF-05",
+    "RF-06",
+    "RF-07",
+    "RF-08",
+    "RF-09",
+    "RF-10",
+    "VER-01",
+    "ASSOC-01-MD",
+    "ASSOC-02-MARKDOWN",
+    "ASSOC-03-MDX",
+    "ASSOC-04-TXT",
+    "ASSOC-05-NO-DEFAULT-OVERRIDE",
+    "ASSOC-06-UNINSTALL"
+  ],
+  "performance": {
+    "coldStartSamples": 20,
+    "hotWindowSamples": 30,
+    "coldStartP90MaxMs": 2000,
+    "hotWindowP90MaxMs": 1000
+  }
+}

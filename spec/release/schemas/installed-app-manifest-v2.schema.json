@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jotluck.installed-app.manifest.v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "releaseId",
+    "candidate",
+    "ci",
+    "installer",
+    "catalog",
+    "rawReport",
+    "transcript",
+    "attachments",
+    "requiredCasesTree",
+    "performance"
+  ],
+  "properties": {
+    "schema": { "const": "jotluck.installed-app.manifest.v2" },
+    "releaseId": { "type": "string", "minLength": 1 },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "version"],
+      "properties": {
+        "commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "version": { "type": "string", "const": "0.1.0-preview" }
+      }
+    },
+    "ci": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "runId", "artifactId"],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "runId": { "type": "string", "minLength": 1 },
+        "artifactId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "installer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fileName", "bytes", "sha256"],
+      "properties": {
+        "fileName": { "type": "string", "minLength": 1 },
+        "bytes": { "type": "integer", "minimum": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "catalog": { "$ref": "installed-app-raw-report-v2.schema.json#/$defs/artifact" },
+    "rawReport": { "$ref": "installed-app-raw-report-v2.schema.json#/$defs/artifact" },
+    "transcript": { "$ref": "installed-app-raw-report-v2.schema.json#/$defs/artifact" },
+    "attachments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "bytes", "sha256", "caseId", "kind"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "bytes": { "type": "integer", "minimum": 1 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "caseId": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["case-result", "case-artifact"] }
+        }
+      }
+    },
+    "requiredCasesTree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "gitTreeSha"],
+      "properties": {
+        "commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "gitTreeSha": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" }
+      }
+    },
+    "performance": { "$ref": "installed-app-raw-report-v2.schema.json#/$defs/performance" }
+  }
+}

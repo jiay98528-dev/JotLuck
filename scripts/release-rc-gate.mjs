@@ -7,9 +7,11 @@ import {
   inspectAutocompletePublicState,
   verifyAutocompleteV2SEvidence,
 } from './verify-autocomplete-v2s-evidence.mjs';
+import { verifyInstalledAppEvidenceV2 } from './release/verify-installed-app-evidence-v2.mjs';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = new Set(process.argv.slice(2));
+const releaseId = process.argv.slice(2).find((arg) => !arg.startsWith('-'));
 const packageJson = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
 const appVersion = String(packageJson.version ?? '');
 const tauriConfig = JSON.parse(
@@ -34,10 +36,24 @@ if (args.has('--autocomplete-only')) {
   process.exit(0);
 }
 
-fail(
-  11,
-  '通用 RC 独立证据协议 v2 尚未实现，旧的自报 machine-evidence v1 已永久禁用。正式放行必须由候选 commit、独立只读原始报告、结构化二次转录和安装包哈希组成两阶段不可变证据链。',
-);
+if (!releaseId) {
+  fail(11, '缺少 release id；installed-app evidence v2 必须以固定 release directory 验证。');
+}
+try {
+  const verified = verifyInstalledAppEvidenceV2({
+    rootDir,
+    releaseId,
+    installerPath: process.env.JOTLUCK_INSTALLER_PATH,
+  });
+  console.log(
+    `[release:rc-gate] PASS: installed-app evidence v2 verified for ${verified.releaseId} (${verified.candidateCommit}).`,
+  );
+} catch (error) {
+  fail(
+    11,
+    `installed-app evidence v2 verification failed: ${error instanceof Error ? error.message : String(error)}`,
+  );
+}
 
 function verifyAutocompleteReleaseModels() {
   try {
@@ -89,12 +105,13 @@ function printHelp() {
 
 Usage:
   pnpm release:rc-gate
+  node scripts/release-rc-gate.mjs <release-id>
   node scripts/release-rc-gate.mjs --autocomplete-only
   node scripts/release-rc-gate.mjs --print-report-template
 
 State:
   - Autocomplete quality remains an independently recomputed fail-closed gate.
-  - Generic installed-app RC PASS is disabled until independent evidence protocol v2 exists.
+  - Generic installed-app RC PASS requires independent installed-app evidence protocol v2.
   - Self-attested machine-evidence v1 and commit-self-referential manifests are rejected.
 
 Expected installer identity for the future v2 protocol:

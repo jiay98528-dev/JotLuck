@@ -1,17 +1,19 @@
 # Known Limitations
 
-This document describes limitations for JotLuck `v0.15.0-rc.1`. These are not
+This document describes limitations for JotLuck `v0.1.0-preview`. These are not
 marketing claims; they are the remaining release constraints and expected
 behavior boundaries.
 
-## Release Candidate Status
+## Internal Preview Status
 
-- `v0.15.0-rc.1` is a release candidate, not a final stable release.
-- L1/L2, coverage, build, Rust fmt/check/test, Tauri packaging,
-  Chromium/Firefox/WebKit E2E, and GUI smoke have passed in the final external
-  audit.
-- Final publication still requires a completed real-installer L4 report and
-  Rust audit evidence from CI or a local `cargo-audit` run.
+- `v0.1.0-preview` is an internal preview candidate, not a formal RC or stable release.
+- L1/L2, coverage, production build, Rust fmt/check/test/audit, Chromium and
+  Firefox E2E, and a standalone Tauri WebView2 smoke have passed locally.
+  The latest full WebKit run did not produce final counters before the outer
+  timeout, so it is not recorded as PASS.
+- Preview publication still requires exact-candidate installed-app evidence v2,
+  including the Windows installer artifact, four file associations, uninstall
+  cleanup, multi-window journeys, and performance samples.
 
 ## Environment-Dependent Gates
 
@@ -32,20 +34,19 @@ behavior boundaries.
 
 ## Desktop App Limits
 
-- The RC installer path is
-  `packages/app/src-tauri/target/release/bundle/nsis/JotLuck_0.15.0_x64-setup.exe`.
+- The local preview installer path is
+  `packages/app/src-tauri/target/release/bundle/nsis/JotLuck_0.1.0-preview_x64-setup.exe`.
 - Tauri shell access is limited to the scoped `shell:default` capability.
   Unscoped `shell:allow-open`, `process:*`, and `fs:*` capabilities are not
   granted in the default desktop capability file.
-- The native file watcher is a single active notebook watcher. Opening a new
-  notebook replaces the previous watcher; closing/unwatching requests the Rust
-  watcher to stop.
+- Notebook root, native watcher, search index, and completion retrieval state
+  are isolated by window. Closing one window removes only that window's state.
 - Each published installer must have its exact SHA256 recorded in the
   installed-app L4 report.
 - Windows release packaging and installed desktop GUI risk validation have been
   verified for Windows x64; macOS and Linux packages still need host-specific
   release validation.
-- Opening `.md/.markdown/.mdx` from Windows starts a single-file read-only
+- Opening `.md/.markdown/.mdx/.txt` from Windows starts a single-file read-only
   session. It intentionally does not scan the parent directory as a notebook.
   Editing must be explicitly enabled and saves only the current file.
 
@@ -61,10 +62,8 @@ behavior boundaries.
 ## Data And Asset Behavior
 
 - Notes are plain text note files. The app opens `.md`, `.markdown`, `.mdx`,
-  and `.txt`; Windows default-app registration covers `.md/.markdown/.mdx` and
-  intentionally does not take over `.txt`.
-- `.txt` is an app-internal note format only. It is not accepted as a
-  system-level external launch format and is not registered by the installer.
+  and `.txt`; the Windows installer registers JotLuck as an optional handler
+  for all four extensions and does not replace the user's current default app.
 - Images are written into `assets/` and referenced by relative Markdown paths.
 - Deleting a note does not automatically delete assets because assets may be
   shared by multiple notes.

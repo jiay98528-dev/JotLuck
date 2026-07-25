@@ -44,7 +44,7 @@ describe('release RC autocomplete quality gate', () => {
     expect(source).toContain('verifyAutocompleteV2SEvidence');
   });
 
-  it('permanently rejects the self-attested v1 machine evidence path', () => {
+  it('uses the generic v2 verifier after the autocomplete quality gate', () => {
     const rootDir = existsSync(path.resolve(process.cwd(), 'scripts/release-rc-gate.mjs'))
       ? process.cwd()
       : path.resolve(process.cwd(), '..', '..');
@@ -52,6 +52,7 @@ describe('release RC autocomplete quality gate', () => {
     expect(source).not.toContain('jotluck-installed-l4-evidence');
     expect(source).not.toContain('workingTreeSha256');
     expect(source).not.toContain('command.exitCode');
-    expect(source).toContain('通用 RC 独立证据协议 v2 尚未实现');
+    expect(source).toContain('verifyInstalledAppEvidenceV2');
+    expect(source).toContain('installed-app evidence v2 verification failed');
   });
 });

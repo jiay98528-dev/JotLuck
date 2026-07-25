@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jotluck.installed-app.raw-report.v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "releaseId",
+    "candidateCommit",
+    "runner",
+    "startedAt",
+    "finishedAt",
+    "executions",
+    "performance"
+  ],
+  "properties": {
+    "schema": { "const": "jotluck.installed-app.raw-report.v2" },
+    "releaseId": { "type": "string", "minLength": 1 },
+    "candidateCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "runner": { "$ref": "#/$defs/actor" },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "finishedAt": { "type": "string", "format": "date-time" },
+    "executions": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/execution" } },
+    "performance": { "$ref": "#/$defs/performance" }
+  },
+  "$defs": {
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "role": { "const": "independent-readonly" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "bytes", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "bytes": { "type": "integer", "minimum": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "counters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executed", "passed", "failed", "skipped"],
+      "properties": {
+        "executed": { "type": "integer", "minimum": 1 },
+        "passed": { "type": "integer", "minimum": 1 },
+        "failed": { "const": 0 },
+        "skipped": { "const": 0 }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "caseId",
+        "command",
+        "startedAt",
+        "finishedAt",
+        "exitCode",
+        "counters",
+        "output"
+      ],
+      "properties": {
+        "caseId": { "type": "string", "minLength": 1 },
+        "command": { "type": "string", "minLength": 1 },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "finishedAt": { "type": "string", "format": "date-time" },
+        "exitCode": { "const": 0 },
+        "counters": { "$ref": "#/$defs/counters" },
+        "output": { "$ref": "#/$defs/artifact" }
+      }
+    },
+    "performance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coldStartMs", "hotWindowMs", "coldStartP90Ms", "hotWindowP90Ms"],
+      "properties": {
+        "coldStartMs": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0 } },
+        "hotWindowMs": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0 } },
+        "coldStartP90Ms": { "type": "number", "exclusiveMinimum": 0 },
+        "hotWindowP90Ms": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    }
+  }
+}
