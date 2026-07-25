@@ -1297,6 +1297,19 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           // Only decorate if the range is within a single line (no newline chars)
           if (block.raw.includes('\n')) continue; // safety: never decorate multi-line ranges
 
+          // Empty lines inside fenced code blocks have a valid visual widget but no
+          // replaceable document range. CodeMirror rejects replace(from === to), so
+          // keep the line styling with a zero-width widget instead.
+          if (block.from === block.to) {
+            decos.push(
+              Decoration.widget({
+                widget: new RenderedBlockWidget(block.html, block.key),
+                side: 1,
+              }).range(block.from),
+            );
+            continue;
+          }
+
           if (block.type === 'setextHeadingRule') {
             decos.push(
               Decoration.replace({ widget: new EmptyWidget() }).range(block.from, block.to),

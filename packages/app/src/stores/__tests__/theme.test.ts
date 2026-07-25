@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
+import { isReactive } from 'vue';
 import { ACTIVE_THEME_STYLE_ID, DEFAULT_THEME_ID } from '@/services/ThemeRegistry';
 import { THEME_CENTER_SHOW_DEV_THEMES_KEY, useThemeStore } from '../theme';
 
@@ -183,6 +184,7 @@ describe('useThemeStore', () => {
     expect(document.documentElement.getAttribute('data-theme-id')).toBe('jotluck.halo-canvas');
     expect(document.documentElement.hasAttribute('data-drawer-shell')).toBe(false);
     expect(document.getElementById(ACTIVE_THEME_STYLE_ID)?.textContent).toContain('halo-canvas');
+    expect(isReactive(theme.activeTheme.module?.plugin?.components?.topbar)).toBe(false);
 
     theme.activateTheme(DEFAULT_THEME_ID);
 

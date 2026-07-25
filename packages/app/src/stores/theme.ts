@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue';
+import { computed, ref, shallowRef } from 'vue';
 import { defineStore } from 'pinia';
 import type {
   InstalledThemePack,
@@ -166,8 +166,10 @@ export const useThemeStore = defineStore('theme', () => {
   const previewThemeId = ref<string | null>(null);
   const activeLayoutPreset = ref<ThemeLayoutPreset>('winged');
   const initialized = ref(false);
-  const registryThemes = ref<InstalledThemePack[]>(getAllRegistryThemePacks());
-  const installedThemes = ref<InstalledThemePack[]>([]);
+  // Theme packs may contain Vue component definitions. Keep the collection
+  // shallow so Vue never proxies component constructors or changes identity.
+  const registryThemes = shallowRef<InstalledThemePack[]>(getAllRegistryThemePacks());
+  const installedThemes = shallowRef<InstalledThemePack[]>([]);
   const entitlements = ref<Record<string, ThemeEntitlementDescriptor>>({});
   const commerceError = ref<string | null>(null);
   const showDeveloperThemesInCatalog = ref(readShowDeveloperThemes());

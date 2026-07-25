@@ -1,7 +1,7 @@
 /*
  * Halo Canvas
  *
- * A daylight writing cockpit. The environment is quiet silver mist; refraction
+ * A warm daylight writing cockpit. The environment is quiet parchment mist; refraction
  * belongs to glass edges, while prose remains a calm, opaque surface.
  */
 
@@ -116,7 +116,7 @@
   background:
     linear-gradient(124deg, var(--halo-glass-highlight), transparent 26%),
     radial-gradient(circle at 96% 2%, var(--halo-refraction-iris), transparent 22%);
-  opacity: 0.28;
+  opacity: 0.16;
   transform: translate3d(0, 0, 0);
 }
 
@@ -147,8 +147,8 @@
   pointer-events: none;
   border-radius: var(--radius-full);
   background: radial-gradient(ellipse, var(--halo-refraction-iris), transparent 68%);
-  filter: blur(10px) saturate(1.12);
-  opacity: 0.18;
+  filter: blur(12px) saturate(1.04);
+  opacity: 0.08;
   transform: rotate(-10deg);
 }
 
@@ -160,16 +160,16 @@
   [data-theme-id='jotluck.halo-canvas'] .file-drawer,
   [data-theme-id='jotluck.halo-canvas'] .theme-center {
     background: var(--halo-current-glass, var(--halo-glass-live));
-    -webkit-backdrop-filter: blur(16px) saturate(1.08) brightness(1.025);
-    backdrop-filter: blur(16px) saturate(1.08) brightness(1.025);
+    -webkit-backdrop-filter: blur(12px) saturate(1.02);
+    backdrop-filter: blur(12px) saturate(1.02);
   }
 
   [data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing,
   [data-theme-id='jotluck.halo-canvas'] .halo-frame--right-wing,
   [data-theme-id='jotluck.halo-canvas'] .halo-frame--status-bar {
     background: var(--halo-current-glass, var(--halo-glass-side));
-    -webkit-backdrop-filter: blur(10px) saturate(1.03);
-    backdrop-filter: blur(10px) saturate(1.03);
+    -webkit-backdrop-filter: blur(8px) saturate(1.01);
+    backdrop-filter: blur(8px) saturate(1.01);
   }
 }
 

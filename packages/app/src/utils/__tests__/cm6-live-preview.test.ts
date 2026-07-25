@@ -1,5 +1,14 @@
-import { describe, expect, it } from 'vitest';
-import { __parseLiveBlocksForTest } from '../cm6-live-preview';
+import { EditorState } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { __parseLiveBlocksForTest, livePreviewExtension } from '../cm6-live-preview';
+
+const mountedViews: EditorView[] = [];
+
+afterEach(() => {
+  while (mountedViews.length > 0) mountedViews.pop()?.destroy();
+  document.body.replaceChildren();
+});
 
 describe('cm6 live preview table rendering', () => {
   it('renders table rows with a shared grid template instead of fake table cells', () => {
@@ -55,6 +64,28 @@ describe('cm6 live preview markdown block boundaries', () => {
     expect(blocks.every((block) => block.type === 'codeFenceLine')).toBe(true);
     expect(blocks[0]?.html).toContain('cm-code-lang');
     expect(blocks[2]?.html).toContain('"ok": true');
+  });
+
+  it('renders fenced code containing blank lines without crashing the view plugin', async () => {
+    const doc = ['```json', '{', '', '  "ok": true', '}', '```', '', '# End'].join('\n');
+    const host = document.createElement('div');
+    document.body.append(host);
+    const view = new EditorView({
+      state: EditorState.create({
+        doc,
+        selection: { anchor: doc.length },
+        extensions: [livePreviewExtension()],
+      }),
+      parent: host,
+    });
+    mountedViews.push(view);
+
+    await vi.waitFor(() => {
+      expect(
+        view.dom.querySelectorAll('.cm-live-block[data-block-type="codeFenceLine"]').length,
+      ).toBeGreaterThanOrEqual(6);
+    });
+    expect(view.state.doc.toString()).toBe(doc);
   });
 
   it('renders a bare JSON block with preserved indentation', () => {
