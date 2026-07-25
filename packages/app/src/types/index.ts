@@ -130,3 +130,13 @@ export type {
   UnwatchFn,
   IFileSystemService,
 } from './file-system';
+
+// --- window-session.ts ---
+export type {
+  WindowSessionMode,
+  ExternalOpenedFile,
+  WorkspaceBootstrapPayload,
+  ExternalWindowBootstrapPayload,
+  WindowBootstrapPayload,
+  PromotedNotebookPayload,
+} from './window-session';

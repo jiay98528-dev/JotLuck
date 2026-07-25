@@ -167,7 +167,7 @@
                 <span class="backlink-context">{{ entry.context }}</span>
               </button>
             </template>
-            <p v-else class="empty-hint">无反链</p>
+            <p v-else class="empty-hint">{{ backlinksEmptyText }}</p>
           </div>
 
           <div
@@ -297,9 +297,11 @@ const props = withDefaults(
     activeHeadingId: string | null;
     collapsed?: boolean;
     region?: RightWingRegion;
+    backlinksEmptyText?: string;
   }>(),
   {
     collapsed: false,
+    backlinksEmptyText: '无反链',
     region: () => ({
       mode: 'balanced' as const,
       policy: 'outline' as const,

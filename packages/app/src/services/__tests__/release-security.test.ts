@@ -25,9 +25,14 @@ describe('release security configuration', () => {
     ) as { permissions?: string[] };
     const permissions = capability.permissions ?? [];
 
+    expect(permissions).not.toContain('core:window:allow-close');
     expect(permissions).toContain('shell:default');
     expect(permissions).not.toContain('shell:allow-open');
     expect(permissions.some((permission) => permission.startsWith('process:'))).toBe(false);
     expect(permissions.some((permission) => permission.startsWith('fs:'))).toBe(false);
+
+    const tauriEntry = readFileSync(appPath('src-tauri/src/lib.rs'), 'utf8');
+    expect(tauriEntry).toContain('fn destroy_current_window(window: tauri::WebviewWindow)');
+    expect(tauriEntry).toContain('window.destroy()');
   });
 });

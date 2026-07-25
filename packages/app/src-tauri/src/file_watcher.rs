@@ -7,12 +7,12 @@
 use crate::fs_ops::{ExternalAccessGrants, NotebookRoot};
 use notify::event::{CreateKind, ModifyKind, RenameMode};
 use notify::{Event, EventKind, RecursiveMode, Watcher};
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Mutex};
 use std::thread;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, State, WebviewWindow};
 
 /// File change event emitted to the frontend.
 #[derive(Clone, serde::Serialize)]
@@ -24,44 +24,68 @@ pub struct FileChangeEvent {
 }
 
 pub struct FileWatcherState {
-    guard: Mutex<Option<WatcherGuard>>,
-    generation: AtomicU64,
+    windows: Mutex<HashMap<String, WindowWatcherState>>,
+}
+
+#[derive(Default)]
+struct WindowWatcherState {
+    guard: Option<WatcherGuard>,
+    generation: u64,
 }
 
 impl FileWatcherState {
     pub fn new() -> Self {
         Self {
-            guard: Mutex::new(None),
-            generation: AtomicU64::new(0),
+            windows: Mutex::new(HashMap::new()),
         }
     }
 
-    fn next_generation(&self) -> u64 {
-        self.generation.fetch_add(1, Ordering::Relaxed) + 1
-    }
-
-    fn replace(&self, guard: WatcherGuard) -> Result<(), String> {
-        let mut current = self
-            .guard
+    fn next_generation(&self, window_label: &str) -> Result<u64, String> {
+        let mut windows = self
+            .windows
             .lock()
             .map_err(|_| "file watcher state lock poisoned".to_string())?;
-        if let Some(existing) = current.take() {
+        let state = windows.entry(window_label.to_string()).or_default();
+        state.generation = state.generation.saturating_add(1);
+        Ok(state.generation)
+    }
+
+    fn replace(&self, window_label: &str, guard: WatcherGuard) -> Result<(), String> {
+        let mut windows = self
+            .windows
+            .lock()
+            .map_err(|_| "file watcher state lock poisoned".to_string())?;
+        let state = windows.entry(window_label.to_string()).or_default();
+        if let Some(existing) = state.guard.take() {
             existing.stop();
         }
-        *current = Some(guard);
+        state.guard = Some(guard);
         Ok(())
     }
 
-    fn stop(&self) -> Result<bool, String> {
-        let mut current = self
-            .guard
+    pub fn stop_for(&self, window_label: &str) -> Result<bool, String> {
+        let mut windows = self
+            .windows
             .lock()
             .map_err(|_| "file watcher state lock poisoned".to_string())?;
-        let Some(existing) = current.take() else {
+        let Some(state) = windows.get_mut(window_label) else {
+            return Ok(false);
+        };
+        let Some(existing) = state.guard.take() else {
             return Ok(false);
         };
         existing.stop();
         Ok(true)
+    }
+
+    pub fn remove_for(&self, window_label: &str) {
+        if let Ok(mut windows) = self.windows.lock() {
+            if let Some(mut state) = windows.remove(window_label) {
+                if let Some(existing) = state.guard.take() {
+                    existing.stop();
+                }
+            }
+        }
     }
 }
 
@@ -83,6 +107,7 @@ impl WatcherGuard {
 /// Events are emitted to the frontend via the `file-change` event.
 fn start_watching(
     app_handle: AppHandle,
+    window_label: String,
     root_path: PathBuf,
     generation: u64,
 ) -> Result<WatcherGuard, String> {
@@ -126,7 +151,7 @@ fn start_watching(
             let change_event = event_to_change_event(&event, &root_path, generation);
 
             if let Some(ce) = change_event {
-                let _ = app_handle.emit("file-change", ce);
+                let _ = app_handle.emit_to(&window_label, "file-change", ce);
             }
         }
     });
@@ -211,6 +236,7 @@ fn is_supported_path(path: &PathBuf) -> bool {
 
 #[tauri::command]
 pub fn start_file_watcher(
+    window: WebviewWindow,
     app_handle: AppHandle,
     state: State<'_, FileWatcherState>,
     root_path: String,
@@ -222,6 +248,7 @@ pub fn start_file_watcher(
     let (canonical, notebook_allowed, external_allowed) =
         if let Some(token) = access_token.as_deref() {
             let relative = relative_path.as_deref().unwrap_or("/");
+            external_grants.assert_owner(token, window.label())?;
             let canonical = external_grants.resolve_watch_directory(token, relative)?;
             (canonical, false, true)
         } else {
@@ -233,7 +260,7 @@ pub fn start_file_watcher(
                 .canonicalize()
                 .map_err(|e| format!("invalid watcher root path: {root_path}: {e}"))?;
             let notebook_allowed = notebook_root
-                .get()
+                .get_for(window.label())
                 .and_then(|root| root.canonicalize().ok())
                 .map(|root| canonical == root)
                 .unwrap_or(false);
@@ -246,16 +273,24 @@ pub fn start_file_watcher(
     }
     // Stop and join the previous OS watcher before creating the replacement.
     // This prevents overlapping roots from racing events during a notebook switch.
-    state.stop()?;
-    let generation = state.next_generation();
-    let guard = start_watching(app_handle, canonical, generation)?;
-    state.replace(guard)?;
+    state.stop_for(window.label())?;
+    let generation = state.next_generation(window.label())?;
+    let guard = start_watching(
+        app_handle,
+        window.label().to_string(),
+        canonical,
+        generation,
+    )?;
+    state.replace(window.label(), guard)?;
     Ok(generation)
 }
 
 #[tauri::command]
-pub fn stop_file_watcher(state: State<'_, FileWatcherState>) -> Result<(), String> {
-    let _ = state.stop()?;
+pub fn stop_file_watcher(
+    window: WebviewWindow,
+    state: State<'_, FileWatcherState>,
+) -> Result<(), String> {
+    let _ = state.stop_for(window.label())?;
     Ok(())
 }
 
@@ -280,8 +315,8 @@ mod tests {
         let (first, first_rx) = guard_with_receiver();
         let (second, _second_rx) = guard_with_receiver();
 
-        state.replace(first).unwrap();
-        state.replace(second).unwrap();
+        state.replace("main", first).unwrap();
+        state.replace("main", second).unwrap();
 
         assert!(first_rx.recv_timeout(Duration::from_millis(200)).is_ok());
     }
@@ -290,7 +325,7 @@ mod tests {
     fn stopping_idle_watcher_is_noop() {
         let state = FileWatcherState::new();
 
-        assert!(!state.stop().unwrap());
+        assert!(!state.stop_for("main").unwrap());
     }
 
     #[test]
@@ -298,9 +333,22 @@ mod tests {
         let state = FileWatcherState::new();
         let (guard, stop_rx) = guard_with_receiver();
 
-        state.replace(guard).unwrap();
+        state.replace("main", guard).unwrap();
 
-        assert!(state.stop().unwrap());
+        assert!(state.stop_for("main").unwrap());
         assert!(stop_rx.recv_timeout(Duration::from_millis(200)).is_ok());
+    }
+
+    #[test]
+    fn stopping_one_window_keeps_other_watcher_alive() {
+        let state = FileWatcherState::new();
+        let (first, first_rx) = guard_with_receiver();
+        let (second, second_rx) = guard_with_receiver();
+        state.replace("first", first).unwrap();
+        state.replace("second", second).unwrap();
+
+        assert!(state.stop_for("first").unwrap());
+        assert!(first_rx.recv_timeout(Duration::from_millis(200)).is_ok());
+        assert!(second_rx.recv_timeout(Duration::from_millis(50)).is_err());
     }
 }

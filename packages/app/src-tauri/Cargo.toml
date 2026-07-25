@@ -1,6 +1,6 @@
 [package]
 name = "jotluck"
-version = "0.15.0"
+version = "0.1.0-preview"
 description = "JotLuck — local-first Markdown note-taking tool"
 authors = ["JotLuck"]
 license = "MIT"

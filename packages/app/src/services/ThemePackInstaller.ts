@@ -10,6 +10,7 @@ import type {
 } from '@/types/theme-pack';
 import { APP_THEME_VERSION } from './ThemeRegistry';
 import { findUnscopedCssSelector } from './theme-css-scope';
+import { isSemVerAtLeast } from '@/utils/semver';
 
 const STORAGE_KEY = 'jotluck:themes:installed:v2';
 const MAX_THEME_PACKAGE_BYTES = 8 * 1024 * 1024;
@@ -195,7 +196,7 @@ export function validateThemePackage(input: ThemePackageInput): ThemeValidationI
       });
     }
   }
-  if (manifest.minAppVersion > APP_THEME_VERSION) {
+  if (!isSemVerAtLeast(APP_THEME_VERSION, manifest.minAppVersion)) {
     issues.push({
       code: 'min-app-version',
       message: `主题要求 JotLuck ${manifest.minAppVersion} 或更高版本。`,

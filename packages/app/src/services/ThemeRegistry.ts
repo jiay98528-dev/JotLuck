@@ -1,5 +1,6 @@
 import { getAllThemeModules } from '@/themes/registry';
 import { localMarketModules } from '@/themes/market/local-catalog';
+import { APP_VERSION } from '@/config/app-meta';
 import type {
   InstalledThemePack,
   OfficialThemeModule,
@@ -14,7 +15,7 @@ import { findUnscopedCssSelector } from './theme-css-scope';
 
 export const ACTIVE_THEME_STYLE_ID = 'jotluck-active-theme';
 export const DEFAULT_THEME_ID = 'paper';
-export const APP_THEME_VERSION = '0.15.0';
+export const APP_THEME_VERSION = APP_VERSION;
 
 const BUILTIN_CHECKSUM = 'sha256-builtin';
 

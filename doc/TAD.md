@@ -1,6 +1,6 @@
 # JotLuck TAD
 
-版本：2026-07-13
+版本：2026-07-25
 
 ## UX Theme Runtime v2
 
@@ -22,6 +22,15 @@ Vue 3 + Pinia + Vite
   ├─ useThemeStore / ThemeCommerceProvider
   └─ MockFS / Tauri FS adapters
 ```
+
+## 关联文件窗口会话
+
+- 桌面端维持单进程。启动参数解析全部受支持的 `.md`、`.markdown`、`.mdx`、`.txt` 文件：首项使用 `main` 窗口，其余项创建唯一 label 的窗口；运行中接收关联文件也创建窗口。
+- 路径身份是规范化、规范大小写后的绝对路径。若已存在同一路径窗口，后端只恢复、置前并聚焦该窗口。创建窗口从 single-instance 回调异步调度；失败时必须回滚授权和窗口注册表。
+- `WindowSessionMode` 为 `workspace | external-readonly | external-edit`；窗口只能经后端从调用窗口身份读取自身 `WindowBootstrapPayload`，前端不得提交任意窗口 label。
+- `get_window_bootstrap` 仅返回调用窗口的一次性启动会话；`enable_external_edit` 仅把调用窗口切至 `external-edit`；`promote_external_file_to_notebook` 只将当前外部文件父目录绑定为调用窗口的 workspace 并返回初始目标文件。
+- 笔记本 root、Tantivy 索引、notify watcher 和 Completion Retrieval 使用窗口 label 作为状态边界。所有 IPC 从调用窗口解析状态，watcher 事件定向发送，外部文件授权也绑定 owner window。窗口销毁只清理自己的授权和服务状态。
+- `external-readonly` 首屏为独立轻量入口：不得导入 CodeMirror、导出、文件抽屉、目录扫描、索引、监听、补全或版本检查；`external-edit` 保持单文件读写；仅 `workspace` 初始化目录级服务与最近笔记本持久化。
 
 ## 离线补全架构（3.11）
 
@@ -68,9 +77,11 @@ Vue 3 + Pinia + Vite
 - 主题开发必须遵守 `doc/standards-theme-development.md`；不得新增未文档化 slot、Host API、Manifest 字段或宿主层 theme-id 特判。
 - 主题不得直接替换 Markdown 清洗、文件 IO、搜索索引、导出服务或系统 API；这些能力通过宿主 action/API 间接触发。
 - 商业化当前只提供接口和 mock 状态，不做真实支付、远程下载、账号体系或社区审核。
+- 系统关联只注册为可选打开程序，不擅自覆盖系统默认应用；`.txt` 关联是本版本明确覆盖旧策略的产品决定。
 
 ## 变更记录
 
+- 2026-07-25：新增单进程多窗口窗口会话架构、窗口身份 IPC、规范路径去重、外部只读轻量入口以及窗口级 root/index/watcher/completion 隔离。
 - 2026-07-13：Public V2S 在有界 development 预检中未达到 Oracle 架构门槛，记录 architecture stop；不训练 Gate、不读取 final、不安装 v6 public 资产。
 - 2026-07-13：新增 Public V2S 目标架构：双语 Subword MKN + 小门控、256-byte Worker 边界、v6 单 manifest/单资产与 35% 绝对可用率双 final 合同。
 - 2026-07-13：`public-phrase-transformer-v1` 固定短语分类架构停止；训练、publisher 和 v5 verifier 由 architecture-stop 记录硬阻断，未来开放词表/组合生成需新 ADR 与 manifest schema。

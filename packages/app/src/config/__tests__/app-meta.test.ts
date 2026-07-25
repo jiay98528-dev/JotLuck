@@ -8,6 +8,7 @@ import {
   APP_RELEASES_URL,
   APP_REPOSITORY_URL,
   APP_VERSION,
+  APP_VERSION_LABEL,
 } from '../app-meta';
 
 describe('app-meta', () => {
@@ -17,6 +18,7 @@ describe('app-meta', () => {
     ) as { version: string };
 
     expect(APP_VERSION).toBe(packageJson.version);
+    expect(APP_VERSION_LABEL).toBe(`v${packageJson.version}`);
   });
 
   it('derives public links from a single repository URL', () => {

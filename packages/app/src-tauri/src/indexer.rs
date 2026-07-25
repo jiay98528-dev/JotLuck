@@ -4,8 +4,9 @@
 // in the notebook directory. Supports incremental updates.
 
 use crate::fs_ops::NotebookRoot;
-use crate::path::{display_path, resolve_safe_path};
+use crate::path::{display_path, is_ignored_notebook_directory_name, resolve_safe_path};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::sync::Mutex;
@@ -14,7 +15,39 @@ use tantivy::query::QueryParser;
 use tantivy::schema::*;
 use tantivy::tokenizer::*;
 use tantivy::{doc, Index, IndexReader, IndexWriter, ReloadPolicy};
-use tauri::State;
+use tauri::{State, WebviewWindow};
+
+const MAX_INDEXED_NOTE_BYTES: u64 = 5 * 1024 * 1024;
+
+fn read_indexable_note(path: &Path) -> Option<String> {
+    let size = match fs::metadata(path) {
+        Ok(metadata) => metadata.len(),
+        Err(error) => {
+            log::warn!("无法读取索引文件元数据 {}: {}", path.display(), error);
+            return None;
+        }
+    };
+    if size > MAX_INDEXED_NOTE_BYTES {
+        log::warn!(
+            "跳过超过 5 MB 的索引文件 {} ({:.1} MB)",
+            path.display(),
+            size as f64 / (1024.0 * 1024.0)
+        );
+        return None;
+    }
+
+    match fs::read_to_string(path) {
+        Ok(content) => Some(content),
+        Err(error) => {
+            log::warn!(
+                "跳过无法读取为 UTF-8 的索引文件 {}: {}",
+                path.display(),
+                error
+            );
+            None
+        }
+    }
+}
 
 /// Search result returned to the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,6 +64,20 @@ pub struct SearchIndex {
     pub reader: Option<IndexReader>,
     pub writer: Option<std::sync::Mutex<IndexWriter>>,
     pub schema: Schema,
+}
+
+pub struct SearchIndexState(Mutex<HashMap<String, SearchIndex>>);
+
+impl SearchIndexState {
+    pub fn new() -> Self {
+        Self(Mutex::new(HashMap::new()))
+    }
+
+    pub fn remove_for(&self, window_label: &str) {
+        if let Ok(mut indices) = self.0.lock() {
+            indices.remove(window_label);
+        }
+    }
 }
 
 fn is_supported_note_path(path: &Path) -> bool {
@@ -238,11 +285,15 @@ fn generate_snippet(content: &str, query: &str, max_len: usize) -> String {
 /// Build full index from all supported note files in the notebook.
 #[tauri::command]
 pub fn build_index(
-    index: State<Mutex<SearchIndex>>,
+    window: WebviewWindow,
+    index: State<SearchIndexState>,
     root: State<NotebookRoot>,
 ) -> Result<usize, String> {
-    let root_path = root.get().ok_or("未打开笔记本")?;
-    let mut idx = index.lock().map_err(|e| e.to_string())?;
+    let root_path = root.get_for(window.label()).ok_or("未打开笔记本")?;
+    let mut indices = index.0.lock().map_err(|e| e.to_string())?;
+    let idx = indices
+        .entry(window.label().to_string())
+        .or_insert_with(SearchIndex::new);
     let index_dir = root_path.join(".JotLuck_index");
     idx.open(&index_dir)?;
 
@@ -252,12 +303,17 @@ pub fn build_index(
     for entry in walkdir::WalkDir::new(root)
         .max_depth(10)
         .into_iter()
+        .filter_entry(|entry| {
+            entry.depth() == 0 || !is_ignored_notebook_directory_name(entry.file_name())
+        })
         .filter_map(|e| e.ok())
     {
         if entry.file_type().is_file() {
             let path = entry.path();
             if is_supported_note_path(path) {
-                let content = fs::read_to_string(path).unwrap_or_default();
+                let Some(content) = read_indexable_note(path) else {
+                    continue;
+                };
                 let title = extract_title(&content);
                 let tags = extract_tags(&content);
                 let rel = display_path(root, path);
@@ -278,20 +334,27 @@ pub fn build_index(
 /// Incrementally update a single file in the index.
 #[tauri::command]
 pub fn update_index_document(
+    window: WebviewWindow,
     file_path: String,
-    index: State<Mutex<SearchIndex>>,
+    index: State<SearchIndexState>,
     root: State<NotebookRoot>,
 ) -> Result<(), String> {
-    let root_path = root.get().ok_or("未打开笔记本")?;
-    let idx = index.lock().map_err(|e| e.to_string())?;
+    let root_path = root.get_for(window.label()).ok_or("未打开笔记本")?;
+    let indices = index.0.lock().map_err(|e| e.to_string())?;
+    let idx = indices
+        .get(window.label())
+        .ok_or_else(|| "索引未打开".to_string())?;
     let full = resolve_safe_path(&root_path, &file_path).map_err(|e| e.to_string())?;
     let indexed_path = display_path(&root_path, &full);
 
     if full.exists() {
-        let content = fs::read_to_string(&full).unwrap_or_default();
-        let title = extract_title(&content);
-        let tags = extract_tags(&content);
-        idx.index_document(&indexed_path, &title, &content, &tags)?;
+        if let Some(content) = read_indexable_note(&full) {
+            let title = extract_title(&content);
+            let tags = extract_tags(&content);
+            idx.index_document(&indexed_path, &title, &content, &tags)?;
+        } else {
+            idx.remove_document(&indexed_path)?;
+        }
     } else {
         idx.remove_document(&indexed_path)?;
     }
@@ -303,10 +366,14 @@ pub fn update_index_document(
 /// Search the index.
 #[tauri::command]
 pub fn search_index(
+    window: WebviewWindow,
     query: String,
-    index: State<Mutex<SearchIndex>>,
+    index: State<SearchIndexState>,
 ) -> Result<Vec<SearchResultItem>, String> {
-    let idx = index.lock().map_err(|e| e.to_string())?;
+    let indices = index.0.lock().map_err(|e| e.to_string())?;
+    let idx = indices
+        .get(window.label())
+        .ok_or_else(|| "索引未打开".to_string())?;
     idx.search(&query, 50)
 }
 
@@ -332,4 +399,45 @@ fn extract_tags(content: &str) -> String {
         .map(|m| m.as_str())
         .collect();
     tags.join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_file(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "jotluck-indexer-{name}-{}-{}.md",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+
+    #[test]
+    fn indexable_note_accepts_small_utf8_content() {
+        let path = temp_file("small");
+        fs::write(&path, "# Small\n\n正文").unwrap();
+        assert_eq!(
+            read_indexable_note(&path).as_deref(),
+            Some("# Small\n\n正文")
+        );
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn indexable_note_skips_large_and_invalid_utf8_files() {
+        let large = temp_file("large");
+        let file = fs::File::create(&large).unwrap();
+        file.set_len(MAX_INDEXED_NOTE_BYTES + 1).unwrap();
+        assert!(read_indexable_note(&large).is_none());
+        fs::remove_file(large).unwrap();
+
+        let invalid = temp_file("invalid");
+        fs::write(&invalid, [0xff, 0xfe, 0xfd]).unwrap();
+        assert!(read_indexable_note(&invalid).is_none());
+        fs::remove_file(invalid).unwrap();
+    }
 }

@@ -16,7 +16,7 @@ function manifest(overrides: Partial<ThemeManifestV2> = {}): ThemeManifestV2 {
     version: '1.0.0',
     themeApi: 2,
     runtime: 'declarative',
-    minAppVersion: '0.15.0',
+    minAppVersion: '0.1.0-preview',
     name: 'Test Theme',
     author: 'Tester',
     capabilities: ['tokens', 'layout-preset'],
@@ -34,6 +34,27 @@ describe('ThemePackInstaller', () => {
 
   it('validates declarative theme packages', () => {
     expect(validateThemePackage({ manifest: manifest() })).toEqual([]);
+  });
+
+  it('uses SemVer precedence for minimum app versions and rejects invalid versions', () => {
+    expect(
+      validateThemePackage({ manifest: manifest({ minAppVersion: '0.1.0-preview' }) }),
+    ).toEqual([]);
+    expect(
+      validateThemePackage({ manifest: manifest({ minAppVersion: '0.1.0' }) }).map(
+        (issue) => issue.code,
+      ),
+    ).toContain('min-app-version');
+    expect(
+      validateThemePackage({ manifest: manifest({ minAppVersion: '0.1.0-preview.1' }) }).map(
+        (issue) => issue.code,
+      ),
+    ).toContain('min-app-version');
+    expect(
+      validateThemePackage({ manifest: manifest({ minAppVersion: 'not-a-version' }) }).map(
+        (issue) => issue.code,
+      ),
+    ).toContain('min-app-version');
   });
 
   it('rejects unscoped theme css selectors', () => {

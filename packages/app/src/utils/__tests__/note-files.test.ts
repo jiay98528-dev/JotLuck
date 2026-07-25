@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isIgnoredNotebookDirectory,
   isMarkdownLikeFile,
   isSupportedNoteFile,
   stripSupportedNoteExtension,
@@ -34,5 +35,13 @@ describe('note file helpers', () => {
 
   it('exposes a stable user-facing extension label', () => {
     expect(supportedNoteExtensionsLabel()).toBe('.md/.markdown/.mdx/.txt');
+  });
+
+  it('skips generated dependency trees while preserving user folders', () => {
+    for (const name of ['node_modules', 'DIST', 'target', 'coverage', '.git', '.JotLuck_index']) {
+      expect(isIgnoredNotebookDirectory(name)).toBe(true);
+    }
+    expect(isIgnoredNotebookDirectory('notes')).toBe(false);
+    expect(isIgnoredNotebookDirectory('项目文档')).toBe(false);
   });
 });

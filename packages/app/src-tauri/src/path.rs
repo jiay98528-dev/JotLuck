@@ -3,8 +3,32 @@
 // Ensures all file operations stay within the notebook root directory.
 // Prevents path traversal attacks and cross-directory access.
 
+use std::ffi::OsStr;
 use std::fmt;
 use std::path::{Path, PathBuf};
+
+const GENERATED_NOTEBOOK_DIRECTORIES: &[&str] = &[
+    "__pycache__",
+    "build",
+    "coverage",
+    "dist",
+    "node_modules",
+    "out",
+    "target",
+    "test-results",
+    "vendor",
+    "venv",
+];
+
+pub fn is_ignored_notebook_directory_name(name: &OsStr) -> bool {
+    let Some(name) = name.to_str() else {
+        return true;
+    };
+    let normalized = name.trim().to_ascii_lowercase();
+    normalized.is_empty()
+        || normalized.starts_with('.')
+        || GENERATED_NOTEBOOK_DIRECTORIES.contains(&normalized.as_str())
+}
 
 /// Errors that can occur during path validation.
 #[derive(Debug)]
@@ -218,5 +242,14 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(root);
         let _ = std::fs::remove_dir_all(outside);
+    }
+
+    #[test]
+    fn generated_notebook_directories_are_ignored_case_insensitively() {
+        for name in ["node_modules", "DIST", "target", "coverage", ".git"] {
+            assert!(is_ignored_notebook_directory_name(OsStr::new(name)));
+        }
+        assert!(!is_ignored_notebook_directory_name(OsStr::new("notes")));
+        assert!(!is_ignored_notebook_directory_name(OsStr::new("项目文档")));
     }
 }

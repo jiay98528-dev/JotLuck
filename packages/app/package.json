@@ -1,6 +1,6 @@
 {
   "name": "@jotluck/app",
-  "version": "0.15.0",
+  "version": "0.1.0-preview",
   "private": true,
   "type": "module",
   "scripts": {

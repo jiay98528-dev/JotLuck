@@ -95,29 +95,6 @@
                   <span class="toggle-thumb"></span>
                 </span>
               </div>
-
-              <div class="setting-row">
-                <div class="setting-info">
-                  <span class="setting-label">扫描根目录文本文件</span>
-                  <span class="setting-value">外部文件</span>
-                </div>
-                <span
-                  class="toggle-track"
-                  :class="{ active: externalScanRootTextFiles }"
-                  role="switch"
-                  tabindex="0"
-                  aria-label="扫描根目录文本文件"
-                  :aria-checked="externalScanRootTextFiles"
-                  @click="externalScanRootTextFiles = !externalScanRootTextFiles"
-                  @keydown.enter.prevent="externalScanRootTextFiles = !externalScanRootTextFiles"
-                  @keydown.space.prevent="externalScanRootTextFiles = !externalScanRootTextFiles"
-                >
-                  <span class="toggle-thumb"></span>
-                </span>
-                <p class="setting-help">
-                  仅影响外部只读文件会话的搜索与标签扫描，不会把未打开文件加入最近笔记。
-                </p>
-              </div>
             </section>
 
             <section v-show="activeTab === 'autosave'" class="section">
@@ -298,19 +275,16 @@ const props = withDefaults(
     visible: boolean;
     completionSettings?: CompletionSettings;
     completionTrainingMeta?: CompletionTrainingMeta;
-    externalScanRootTextFiles?: boolean;
   }>(),
   {
     completionSettings: () => ({ ...DEFAULT_COMPLETION_SETTINGS }),
     completionTrainingMeta: undefined,
-    externalScanRootTextFiles: false,
   },
 );
 
 const emit = defineEmits<{
   'update:visible': [boolean];
   'update-completion-settings': [CompletionSettings];
-  'update-external-scan-root': [boolean];
   'clear-completion-data': [];
 }>();
 
@@ -334,7 +308,6 @@ const fontSize = ref(16);
 const lineHeight = ref(1.6);
 const tabSize = ref(2);
 const wordWrap = ref(true);
-const externalScanRootTextFiles = ref(props.externalScanRootTextFiles);
 const autoSaveEnabled = ref(true);
 const autoSaveDelay = ref(3000);
 
@@ -364,18 +337,6 @@ const trainingStatusLabel = computed(() => {
   if (status === 'error') return '失败';
   if (status === 'done') return '已完成';
   return '待训练';
-});
-
-watch(
-  () => props.externalScanRootTextFiles,
-  (value) => {
-    externalScanRootTextFiles.value = value;
-  },
-);
-
-watch(externalScanRootTextFiles, (value) => {
-  localStorage.setItem('jotluck:external:scanRootTextFiles', String(value));
-  emit('update-external-scan-root', value);
 });
 
 watch(

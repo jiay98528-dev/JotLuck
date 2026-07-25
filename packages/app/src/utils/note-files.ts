@@ -6,6 +6,19 @@ const SUPPORTED_NOTE_EXTENSIONS = [
   ...PLAIN_TEXT_NOTE_EXTENSIONS,
 ] as const;
 
+const IGNORED_NOTEBOOK_DIRECTORY_NAMES = new Set([
+  '__pycache__',
+  'build',
+  'coverage',
+  'dist',
+  'node_modules',
+  'out',
+  'target',
+  'test-results',
+  'vendor',
+  'venv',
+]);
+
 function extensionOf(fileName: string): string {
   const cleanName = fileName.split(/[\\/]/).pop() ?? fileName;
   const dotIndex = cleanName.lastIndexOf('.');
@@ -21,6 +34,15 @@ export function isMarkdownLikeFile(fileName: string): boolean {
 export function isSupportedNoteFile(fileName: string): boolean {
   const ext = extensionOf(fileName);
   return SUPPORTED_NOTE_EXTENSIONS.includes(ext as (typeof SUPPORTED_NOTE_EXTENSIONS)[number]);
+}
+
+export function isIgnoredNotebookDirectory(directoryName: string): boolean {
+  const normalized = directoryName.trim().toLowerCase();
+  return (
+    normalized.length === 0 ||
+    normalized.startsWith('.') ||
+    IGNORED_NOTEBOOK_DIRECTORY_NAMES.has(normalized)
+  );
 }
 
 export function stripSupportedNoteExtension(fileName: string): string {

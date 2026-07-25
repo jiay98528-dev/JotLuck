@@ -11,6 +11,7 @@
 
 import { ref, computed } from 'vue';
 import { APP_RELEASES_API_URL, APP_VERSION } from '@/config/app-meta';
+import { isSemVerNewer, normalizeReleaseVersion } from '@/utils/semver';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -29,12 +30,6 @@ const LS_KEYS = {
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-interface SemverParts {
-  major: number;
-  minor: number;
-  patch: number;
-}
 
 interface CachedLatestInfo {
   latest: string;
@@ -70,51 +65,15 @@ let pendingCheck: Promise<void> | null = null;
 let initialized = false;
 
 // ---------------------------------------------------------------------------
-// Semver utilities
+// Version utilities
 // ---------------------------------------------------------------------------
 
 /**
- * Strip leading 'v'/'V' and return the clean version string.
+ * GitHub release tags conventionally use a leading `v`, while the stored
+ * application version remains strict SemVer without that prefix.
  */
 function cleanVersion(raw: string): string {
-  return raw.replace(/^[vV]/, '');
-}
-
-/**
- * Parse a semver string into { major, minor, patch }.
- * Returns null if the string is not valid semver.
- */
-function parseSemver(version: string): SemverParts | null {
-  const cleaned = cleanVersion(version);
-  const match = cleaned.match(/^(\d+)\.(\d+)\.(\d+)/);
-  if (!match) return null;
-  // Destructure with defaults — groups always present when match succeeds
-  const [, majorStr = '0', minorStr = '0', patchStr = '0'] = match;
-  return {
-    major: parseInt(majorStr, 10),
-    minor: parseInt(minorStr, 10),
-    patch: parseInt(patchStr, 10),
-  };
-}
-
-/**
- * Compare two semver strings.
- * @returns negative if a < b, 0 if equal, positive if a > b
- */
-function compareSemver(a: string, b: string): number {
-  const pa = parseSemver(a);
-  const pb = parseSemver(b);
-  if (!pa || !pb) return 0;
-  if (pa.major !== pb.major) return pa.major - pb.major;
-  if (pa.minor !== pb.minor) return pa.minor - pb.minor;
-  return pa.patch - pb.patch;
-}
-
-/**
- * @returns true if `latest` is a strictly newer version than `current`.
- */
-function isNewer(latest: string, current: string): boolean {
-  return compareSemver(latest, current) > 0;
+  return normalizeReleaseVersion(raw) ?? '';
 }
 
 // ---------------------------------------------------------------------------
@@ -182,7 +141,7 @@ function applyLatestInfo(info: CachedLatestInfo): void {
   releaseNotes.value = info.releaseNotes;
   lastChecked.value = info.checkedAt;
 
-  if (isNewer(info.latest, APP_VERSION) && !isDismissed(info.latest)) {
+  if (isSemVerNewer(info.latest, APP_VERSION) && !isDismissed(info.latest)) {
     hasUpdate.value = true;
   } else {
     hasUpdate.value = false;
@@ -246,6 +205,10 @@ export function useVersionCheck() {
 
         const release: GitHubRelease = await response.json();
         const latest = cleanVersion(release.tag_name);
+        if (!latest) {
+          error.value = `GitHub API returned an invalid release tag: ${release.tag_name}`;
+          return;
+        }
         const info: CachedLatestInfo = {
           latest,
           releaseUrl: release.html_url,

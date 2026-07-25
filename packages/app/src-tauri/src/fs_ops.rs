@@ -3,7 +3,8 @@
 // Tauri IPC commands for reading, writing, deleting, and listing note files.
 // All operations go through path::resolve_safe_path for security.
 
-use crate::path::resolve_safe_path;
+use crate::path::{is_ignored_notebook_directory_name, resolve_safe_path};
+use crate::window_session::WindowSessionRegistry;
 use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -12,27 +13,35 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
 static WRITE_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+const MAX_EXTERNAL_NOTE_BYTES: u64 = 5 * 1024 * 1024;
 
-/// In-memory state: the current notebook root directory.
-pub struct NotebookRoot(pub std::sync::Mutex<Option<PathBuf>>);
+/// Per-window notebook roots. A webview must never observe another window's
+/// active notebook simply because both windows share the same process.
+pub struct NotebookRoot(pub std::sync::Mutex<HashMap<String, PathBuf>>);
 
 impl NotebookRoot {
     pub fn new() -> Self {
-        Self(std::sync::Mutex::new(None))
+        Self(std::sync::Mutex::new(HashMap::new()))
     }
 
-    pub fn get(&self) -> Option<PathBuf> {
-        self.0.lock().ok()?.clone()
+    pub fn get_for(&self, window_label: &str) -> Option<PathBuf> {
+        self.0.lock().ok()?.get(window_label).cloned()
     }
 
-    pub fn set(&self, path: PathBuf) {
-        if let Ok(mut root) = self.0.lock() {
-            *root = Some(path);
+    pub fn set_for(&self, window_label: &str, path: PathBuf) {
+        if let Ok(mut roots) = self.0.lock() {
+            roots.insert(window_label.to_string(), path);
+        }
+    }
+
+    pub fn remove_for(&self, window_label: &str) {
+        if let Ok(mut roots) = self.0.lock() {
+            roots.remove(window_label);
         }
     }
 }
@@ -40,7 +49,12 @@ impl NotebookRoot {
 const EXTERNAL_GRANT_IDLE_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 fn external_path_to_slash(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
+    let slash = path.to_string_lossy().replace('\\', "/");
+    if let Some(unc) = slash.strip_prefix("//?/UNC/") {
+        format!("//{unc}")
+    } else {
+        slash.strip_prefix("//?/").unwrap_or(&slash).to_string()
+    }
 }
 
 /// Opaque capability returned by the backend after a native file association or dialog.
@@ -102,6 +116,7 @@ fn can_watch(capabilities: ExternalAccessCapabilities) -> bool {
 
 #[derive(Debug, Clone)]
 struct ExternalAccessGrant {
+    owner_window_label: String,
     root: PathBuf,
     file: PathBuf,
     directory_access: bool,
@@ -121,20 +136,34 @@ impl ExternalAccessGrants {
     pub fn grant_for_existing_file(
         &self,
         absolute_path: &str,
+        owner_window_label: &str,
     ) -> Result<ExternalFileHandle, String> {
         let target = resolve_external_note_file(absolute_path)?;
-        self.issue_grant(target, ExternalAccessCapabilities::opened_file())
+        self.issue_grant(
+            target,
+            ExternalAccessCapabilities::opened_file(),
+            owner_window_label,
+        )
     }
 
-    pub fn grant_for_saved_file(&self, absolute_path: &str) -> Result<ExternalFileHandle, String> {
+    pub fn grant_for_saved_file(
+        &self,
+        absolute_path: &str,
+        owner_window_label: &str,
+    ) -> Result<ExternalFileHandle, String> {
         let target = resolve_external_note_file_for_write(absolute_path)?;
-        self.issue_grant(target, ExternalAccessCapabilities::saved_file())
+        self.issue_grant(
+            target,
+            ExternalAccessCapabilities::saved_file(),
+            owner_window_label,
+        )
     }
 
     fn issue_grant(
         &self,
         target: PathBuf,
         capabilities: ExternalAccessCapabilities,
+        owner_window_label: &str,
     ) -> Result<ExternalFileHandle, String> {
         let root = target
             .parent()
@@ -150,6 +179,7 @@ impl ExternalAccessGrants {
         );
         let access_token = Uuid::new_v4().simple().to_string();
         let grant = ExternalAccessGrant {
+            owner_window_label: owner_window_label.to_string(),
             root: root.clone(),
             file: target.clone(),
             directory_access: false,
@@ -176,10 +206,24 @@ impl ExternalAccessGrants {
         }
     }
 
-    pub fn revoke_all(&self) {
+    pub fn revoke_for_window(&self, window_label: &str) {
         if let Ok(mut grants) = self.0.lock() {
-            grants.clear();
+            grants.retain(|_, grant| grant.owner_window_label != window_label);
         }
+    }
+
+    pub fn assert_owner(&self, access_token: &str, window_label: &str) -> Result<(), String> {
+        let grants = self
+            .0
+            .lock()
+            .map_err(|_| "external access state lock poisoned".to_string())?;
+        let grant = grants
+            .get(access_token)
+            .ok_or_else(|| "external access grant is invalid or expired".to_string())?;
+        if grant.owner_window_label != window_label {
+            return Err("external access grant belongs to another window".to_string());
+        }
+        Ok(())
     }
 
     fn grant(
@@ -492,9 +536,26 @@ fn write_text_file_atomically(target: &Path, content: &str) -> Result<(), String
 // IPC Commands
 // ============================================================
 
+fn notebook_root_for(window: &WebviewWindow, root: &NotebookRoot) -> Result<PathBuf, String> {
+    root.get_for(window.label())
+        .ok_or_else(|| "未打开笔记本".to_string())
+}
+
+fn assert_external_owner(
+    window: &WebviewWindow,
+    access: &ExternalAccessGrants,
+    access_token: &str,
+) -> Result<(), String> {
+    access.assert_owner(access_token, window.label())
+}
+
 /// Open a notebook folder — all subsequent operations are relative to this root.
 #[tauri::command]
-pub fn open_notebook(path: String, root: State<NotebookRoot>) -> Result<String, String> {
+pub fn open_notebook(
+    window: WebviewWindow,
+    path: String,
+    root: State<NotebookRoot>,
+) -> Result<String, String> {
     let p = PathBuf::from(&path);
     if !p.exists() {
         return Err(format!("文件夹不存在: {}", path));
@@ -505,7 +566,7 @@ pub fn open_notebook(path: String, root: State<NotebookRoot>) -> Result<String, 
     let canonical = p
         .canonicalize()
         .map_err(|e| format!("无法解析路径: {}", e))?;
-    root.set(canonical.clone());
+    root.set_for(window.label(), canonical.clone());
     Ok(canonical.to_string_lossy().to_string())
 }
 
@@ -514,12 +575,19 @@ pub fn open_notebook(path: String, root: State<NotebookRoot>) -> Result<String, 
 /// canonical directory and becomes the sole owner of the active notebook root.
 #[tauri::command]
 pub fn open_external_notebook(
+    window: WebviewWindow,
     access_token: String,
     access: State<ExternalAccessGrants>,
     root: State<NotebookRoot>,
+    sessions: State<WindowSessionRegistry>,
 ) -> Result<String, String> {
+    // This legacy path is retained for saving a scratch note from a workspace
+    // window. External-file windows must use promote_external_file_to_notebook,
+    // which updates the bootstrap session and notebook root atomically.
+    sessions.assert_workspace(window.label())?;
+    assert_external_owner(&window, &access, &access_token)?;
     let canonical = access.promote_to_notebook(&access_token)?;
-    root.set(canonical.clone());
+    root.set_for(window.label(), canonical.clone());
     Ok(canonical.to_string_lossy().to_string())
 }
 
@@ -540,7 +608,10 @@ fn write_sample_file_if_missing(root_path: &Path, name: &str, content: &str) -> 
 
 /// Open or create the first-run sample notebook under the user's app data directory.
 #[tauri::command]
-pub fn open_sample_notebook(root: State<NotebookRoot>) -> Result<String, String> {
+pub fn open_sample_notebook(
+    window: WebviewWindow,
+    root: State<NotebookRoot>,
+) -> Result<String, String> {
     let sample_root = local_app_data_dir()?.join("JotLuck").join("示例笔记本");
     fs::create_dir_all(&sample_root).map_err(|e| format!("创建示例笔记本失败: {}", e))?;
 
@@ -640,14 +711,17 @@ created: 2026-06-02
     let canonical = sample_root
         .canonicalize()
         .map_err(|e| format!("无法解析示例笔记本路径: {}", e))?;
-    root.set(canonical.clone());
+    root.set_for(window.label(), canonical.clone());
     Ok(canonical.to_string_lossy().to_string())
 }
 
 /// Get the current notebook root path.
 #[tauri::command]
-pub fn get_notebook_root(root: State<NotebookRoot>) -> Result<String, String> {
-    root.get()
+pub fn get_notebook_root(
+    window: WebviewWindow,
+    root: State<NotebookRoot>,
+) -> Result<String, String> {
+    root.get_for(window.label())
         .map(|p| p.to_string_lossy().to_string())
         .ok_or_else(|| "未打开笔记本".to_string())
 }
@@ -655,20 +729,23 @@ pub fn get_notebook_root(root: State<NotebookRoot>) -> Result<String, String> {
 /// List supported note files and directories in a given directory (relative to notebook root).
 #[tauri::command]
 pub fn list_directory(
+    window: WebviewWindow,
     relative_path: String,
     root: State<NotebookRoot>,
 ) -> Result<Vec<DirEntry>, String> {
-    let root_path = root.get().ok_or("未打开笔记本")?;
+    let root_path = notebook_root_for(&window, &root)?;
     list_directory_at(&root_path, &relative_path)
 }
 
 /// List supported note files and directories under an external root without opening it as notebook.
 #[tauri::command]
 pub fn list_external_note_directory(
+    window: WebviewWindow,
     access_token: String,
     relative_path: String,
     access: State<ExternalAccessGrants>,
 ) -> Result<Vec<DirEntry>, String> {
+    assert_external_owner(&window, &access, &access_token)?;
     let root_path = access.resolve_directory(&access_token, "/")?;
     let target = access.resolve_directory(&access_token, &relative_path)?;
     list_directory_entries(&root_path, &target)
@@ -692,6 +769,9 @@ fn list_directory_entries(root_path: &Path, target: &Path) -> Result<Vec<DirEntr
 
         // The file drawer is a note manager: show directories and editable text notes only.
         let name = entry.file_name().to_string_lossy().to_string();
+        if file_type.is_dir() && is_ignored_notebook_directory_name(&entry.file_name()) {
+            continue;
+        }
         if name.starts_with('.') {
             continue;
         }
@@ -726,8 +806,12 @@ fn list_directory_entries(root_path: &Path, target: &Path) -> Result<Vec<DirEntr
 
 /// Read a file's content (relative to notebook root).
 #[tauri::command]
-pub fn read_file(relative_path: String, root: State<NotebookRoot>) -> Result<String, String> {
-    let root_path = root.get().ok_or("未打开笔记本")?;
+pub fn read_file(
+    window: WebviewWindow,
+    relative_path: String,
+    root: State<NotebookRoot>,
+) -> Result<String, String> {
+    let root_path = notebook_root_for(&window, &root)?;
     read_file_at(&root_path, &relative_path)
 }
 
@@ -741,15 +825,30 @@ fn read_file_at(root_path: &PathBuf, relative_path: &str) -> Result<String, Stri
     fs::read_to_string(&target).map_err(|e| format!("读取文件失败: {}", e))
 }
 
+fn read_external_note_content(target: &Path) -> Result<String, String> {
+    let size = fs::metadata(target)
+        .map_err(|e| format!("读取外部文件元数据失败: {e}"))?
+        .len();
+    if size > MAX_EXTERNAL_NOTE_BYTES {
+        return Err(format!(
+            "外部文件超过 5 MB，已停止加载以避免应用无响应（当前 {:.1} MB）",
+            size as f64 / (1024.0 * 1024.0)
+        ));
+    }
+    fs::read_to_string(target).map_err(|e| format!("读取外部文件失败: {e}"))
+}
+
 /// Read one markdown-family file by absolute path without opening its parent as notebook.
 #[tauri::command]
 pub fn read_external_markdown_file(
+    window: WebviewWindow,
     access_token: String,
     relative_path: String,
     access: State<ExternalAccessGrants>,
 ) -> Result<String, String> {
+    assert_external_owner(&window, &access, &access_token)?;
     let target = access.resolve_file(&access_token, &relative_path, true, false)?;
-    fs::read_to_string(&target).map_err(|e| format!("读取外部文件失败: {}", e))
+    read_external_note_content(&target)
 }
 
 #[cfg(test)]
@@ -757,31 +856,34 @@ fn read_external_markdown_file_with_access(
     absolute_path: &str,
     access: &ExternalAccessGrants,
 ) -> Result<String, String> {
-    let handle = access.grant_for_saved_file(absolute_path)?;
+    let handle = access.grant_for_saved_file(absolute_path, "test")?;
     let target = access.resolve_file(&handle.access_token, &handle.relative_path, true, false)?;
-    fs::read_to_string(&target).map_err(|e| format!("读取外部文件失败: {}", e))
+    read_external_note_content(&target)
 }
 
 /// Read one supported text note by absolute path without opening its parent as notebook.
 #[tauri::command]
 pub fn read_external_note_file(
+    window: WebviewWindow,
     access_token: String,
     relative_path: String,
     access: State<ExternalAccessGrants>,
 ) -> Result<String, String> {
+    assert_external_owner(&window, &access, &access_token)?;
     let target = access.resolve_file(&access_token, &relative_path, false, false)?;
-    fs::read_to_string(&target).map_err(|e| format!("读取外部文件失败: {}", e))
+    read_external_note_content(&target)
 }
 
 /// Write content to a file (relative to notebook root).
 /// Uses atomic write: write to temp file first, then rename.
 #[tauri::command]
 pub fn write_file(
+    window: WebviewWindow,
     relative_path: String,
     content: String,
     root: State<NotebookRoot>,
 ) -> Result<(), String> {
-    let root_path = root.get().ok_or("未打开笔记本")?;
+    let root_path = notebook_root_for(&window, &root)?;
     write_file_at(&root_path, &relative_path, &content)
 }
 
@@ -801,11 +903,13 @@ fn write_file_at(root_path: &PathBuf, relative_path: &str, content: &str) -> Res
 /// Write one markdown-family file by absolute path without opening its parent as notebook.
 #[tauri::command]
 pub fn write_external_markdown_file(
+    window: WebviewWindow,
     access_token: String,
     relative_path: String,
     content: String,
     access: State<ExternalAccessGrants>,
 ) -> Result<(), String> {
+    assert_external_owner(&window, &access, &access_token)?;
     let target = access.resolve_file(&access_token, &relative_path, true, true)?;
     write_text_file_atomically(&target, &content)
 }
@@ -816,7 +920,7 @@ fn write_external_markdown_file_with_access(
     content: &str,
     access: &ExternalAccessGrants,
 ) -> Result<(), String> {
-    let handle = access.grant_for_saved_file(absolute_path)?;
+    let handle = access.grant_for_saved_file(absolute_path, "test")?;
     let target = access.resolve_file(&handle.access_token, &handle.relative_path, true, true)?;
     write_text_file_atomically(&target, content).map_err(|e| format!("保存外部文件失败: {}", e))
 }
@@ -824,11 +928,13 @@ fn write_external_markdown_file_with_access(
 /// Write one supported text note by absolute path without opening its parent as notebook.
 #[tauri::command]
 pub fn write_external_note_file(
+    window: WebviewWindow,
     access_token: String,
     relative_path: String,
     content: String,
     access: State<ExternalAccessGrants>,
 ) -> Result<(), String> {
+    assert_external_owner(&window, &access, &access_token)?;
     let target = access.resolve_file(&access_token, &relative_path, false, true)?;
     write_text_file_atomically(&target, &content).map_err(|e| format!("保存外部文件失败: {}", e))
 }
@@ -837,6 +943,7 @@ pub fn write_external_note_file(
 /// The renderer receives only the opaque handle and never authorizes the path.
 #[tauri::command]
 pub fn save_external_note_as(
+    window: WebviewWindow,
     app: AppHandle,
     default_file_name: String,
     content: String,
@@ -856,14 +963,16 @@ pub fn save_external_note_as(
     let path_text = path.to_string_lossy().to_string();
     let target = resolve_external_note_file_for_write(&path_text)?;
     write_text_file_atomically(&target, &content)?;
-    access.grant_for_saved_file(&path_text)
+    access.grant_for_saved_file(&path_text, window.label())
 }
 
 #[tauri::command]
 pub fn revoke_external_access(
+    window: WebviewWindow,
     access_token: String,
     access: State<ExternalAccessGrants>,
 ) -> Result<(), String> {
+    assert_external_owner(&window, &access, &access_token)?;
     access.revoke(&access_token);
     Ok(())
 }
@@ -871,11 +980,12 @@ pub fn revoke_external_access(
 /// Write binary content to a file (base64 payload, relative to notebook root).
 #[tauri::command]
 pub fn write_binary_file(
+    window: WebviewWindow,
     relative_path: String,
     base64: String,
     root: State<NotebookRoot>,
 ) -> Result<(), String> {
-    let root_path = root.get().ok_or("未打开笔记本")?;
+    let root_path = notebook_root_for(&window, &root)?;
     write_binary_file_at(&root_path, &relative_path, &base64)
 }
 
@@ -899,10 +1009,11 @@ fn write_binary_file_at(
 /// Read binary content from a file (returns base64 payload).
 #[tauri::command]
 pub fn read_binary_file(
+    window: WebviewWindow,
     relative_path: String,
     root: State<NotebookRoot>,
 ) -> Result<String, String> {
-    let root_path = root.get().ok_or("未打开笔记本")?;
+    let root_path = notebook_root_for(&window, &root)?;
     read_binary_file_at(&root_path, &relative_path)
 }
 
@@ -919,8 +1030,12 @@ fn read_binary_file_at(root_path: &PathBuf, relative_path: &str) -> Result<Strin
 
 /// Delete a file — moves to system recycle bin (Windows/macOS/Linux).
 #[tauri::command]
-pub fn delete_file(relative_path: String, root: State<NotebookRoot>) -> Result<(), String> {
-    let root_path = root.get().ok_or("未打开笔记本")?;
+pub fn delete_file(
+    window: WebviewWindow,
+    relative_path: String,
+    root: State<NotebookRoot>,
+) -> Result<(), String> {
+    let root_path = notebook_root_for(&window, &root)?;
     delete_file_at(&root_path, &relative_path)
 }
 
@@ -936,8 +1051,12 @@ fn delete_file_at(root_path: &PathBuf, relative_path: &str) -> Result<(), String
 
 /// Create a new directory (relative to notebook root).
 #[tauri::command]
-pub fn create_directory(relative_path: String, root: State<NotebookRoot>) -> Result<(), String> {
-    let root_path = root.get().ok_or("未打开笔记本")?;
+pub fn create_directory(
+    window: WebviewWindow,
+    relative_path: String,
+    root: State<NotebookRoot>,
+) -> Result<(), String> {
+    let root_path = notebook_root_for(&window, &root)?;
     create_directory_at(&root_path, &relative_path)
 }
 
@@ -949,11 +1068,12 @@ fn create_directory_at(root_path: &PathBuf, relative_path: &str) -> Result<(), S
 /// Rename / move a file within the notebook.
 #[tauri::command]
 pub fn rename_file(
+    window: WebviewWindow,
     old_relative_path: String,
     new_relative_path: String,
     root: State<NotebookRoot>,
 ) -> Result<(), String> {
-    let root_path = root.get().ok_or("未打开笔记本")?;
+    let root_path = notebook_root_for(&window, &root)?;
     rename_file_at(&root_path, &old_relative_path, &new_relative_path)
 }
 
@@ -982,8 +1102,12 @@ fn rename_file_at(
 
 /// Get file metadata (mtime, size) for conflict detection.
 #[tauri::command]
-pub fn get_file_meta(relative_path: String, root: State<NotebookRoot>) -> Result<DirEntry, String> {
-    let root_path = root.get().ok_or("未打开笔记本")?;
+pub fn get_file_meta(
+    window: WebviewWindow,
+    relative_path: String,
+    root: State<NotebookRoot>,
+) -> Result<DirEntry, String> {
+    let root_path = notebook_root_for(&window, &root)?;
     let target = resolve_safe_path(&root_path, &relative_path).map_err(|e| e.to_string())?;
 
     let metadata = target
@@ -1095,11 +1219,16 @@ mod tests {
         write_file_at(&root, "/notes/plain.txt", "Plain text").unwrap();
         std::fs::write(root.join("notes").join("export.pdf"), b"not listed").unwrap();
         std::fs::write(root.join("notes").join("renamed.md.bak"), b"not listed").unwrap();
+        std::fs::create_dir_all(root.join("node_modules")).unwrap();
+        std::fs::write(root.join("node_modules").join("README.md"), "generated").unwrap();
 
         let root_entries = list_directory_at(&root, "/").unwrap();
         assert!(root_entries
             .iter()
             .any(|entry| entry.path == "/notes" && entry.is_dir));
+        assert!(!root_entries
+            .iter()
+            .any(|entry| entry.path == "/node_modules"));
         let note_entries = list_directory_at(&root, "/notes").unwrap();
         let note_paths = note_entries
             .iter()
@@ -1122,8 +1251,14 @@ mod tests {
         std::fs::write(root.join("target.md"), "# Target").unwrap();
 
         assert!(rename_file_at(&root, "/source.md", "/target.md").is_err());
-        assert_eq!(std::fs::read_to_string(root.join("source.md")).unwrap(), "# Source");
-        assert_eq!(std::fs::read_to_string(root.join("target.md")).unwrap(), "# Target");
+        assert_eq!(
+            std::fs::read_to_string(root.join("source.md")).unwrap(),
+            "# Source"
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join("target.md")).unwrap(),
+            "# Target"
+        );
 
         std::fs::remove_dir_all(root).unwrap();
     }
@@ -1143,7 +1278,7 @@ mod tests {
         std::fs::write(&target, "# External").unwrap();
         let path = target.to_string_lossy().to_string();
         let access = ExternalAccessGrants::new();
-        let handle = access.grant_for_existing_file(&path).unwrap();
+        let handle = access.grant_for_existing_file(&path, "test").unwrap();
 
         assert_eq!(
             std::fs::read_to_string(
@@ -1171,7 +1306,7 @@ mod tests {
         std::fs::write(&seed, "# Seed").unwrap();
         let access = ExternalAccessGrants::new();
         let handle = access
-            .grant_for_existing_file(&seed.to_string_lossy())
+            .grant_for_existing_file(&seed.to_string_lossy(), "test")
             .unwrap();
         assert!(access
             .resolve_file(&handle.access_token, "/saved.md", true, true)
@@ -1183,6 +1318,54 @@ mod tests {
         write_text_file_atomically(&target_path, "# Saved").unwrap();
 
         assert_eq!(std::fs::read_to_string(&target).unwrap(), "# Saved");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn external_grants_and_notebook_roots_are_window_scoped() {
+        let root = temp_notebook("window-isolation");
+        let first = root.join("first.md");
+        let second = root.join("second.md");
+        std::fs::write(&first, "first").unwrap();
+        std::fs::write(&second, "second").unwrap();
+        let access = ExternalAccessGrants::new();
+        let first_handle = access
+            .grant_for_existing_file(&first.to_string_lossy(), "window-a")
+            .unwrap();
+        let second_handle = access
+            .grant_for_existing_file(&second.to_string_lossy(), "window-b")
+            .unwrap();
+
+        assert!(access
+            .assert_owner(&first_handle.access_token, "window-b")
+            .is_err());
+        assert!(access
+            .assert_owner(&second_handle.access_token, "window-a")
+            .is_err());
+        access.revoke_for_window("window-a");
+        assert!(access
+            .resolve_file(
+                &first_handle.access_token,
+                &first_handle.relative_path,
+                true,
+                false,
+            )
+            .is_err());
+        assert!(access
+            .resolve_file(
+                &second_handle.access_token,
+                &second_handle.relative_path,
+                true,
+                false,
+            )
+            .is_ok());
+
+        let roots = NotebookRoot::new();
+        roots.set_for("window-a", root.join("a"));
+        roots.set_for("window-b", root.join("b"));
+        roots.remove_for("window-a");
+        assert!(roots.get_for("window-a").is_none());
+        assert_eq!(roots.get_for("window-b"), Some(root.join("b")));
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -1219,13 +1402,26 @@ mod tests {
     }
 
     #[test]
+    fn external_note_read_rejects_files_larger_than_safe_startup_limit() {
+        let root = temp_notebook("external-too-large");
+        let target = root.join("large.md");
+        let file = std::fs::File::create(&target).unwrap();
+        file.set_len(MAX_EXTERNAL_NOTE_BYTES + 1).unwrap();
+
+        let error = read_external_note_content(&target).unwrap_err();
+        assert!(error.contains("超过 5 MB"));
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn saved_file_grant_records_capabilities_and_rejects_watcher_access() {
         let root = temp_notebook("external-capabilities");
         let target = root.join("external.md");
         std::fs::write(&target, "# External").unwrap();
         let access = ExternalAccessGrants::new();
         let handle = access
-            .grant_for_saved_file(&target.to_string_lossy())
+            .grant_for_saved_file(&target.to_string_lossy(), "test")
             .unwrap();
 
         assert!(handle.capabilities.read);

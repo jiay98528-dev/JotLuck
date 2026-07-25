@@ -6,7 +6,11 @@
  * @see migration-map.md §4
  */
 import type { IFileSystemService, SearchIndex, DocumentEntry, BacklinkEntry } from '@/types';
-import { isSupportedNoteFile, stripSupportedNoteExtension } from '@/utils/note-files';
+import {
+  isIgnoredNotebookDirectory,
+  isSupportedNoteFile,
+  stripSupportedNoteExtension,
+} from '@/utils/note-files';
 import { SearchEngine } from './SearchEngine';
 import { parseFrontmatter, extractTitle } from './YAMLParser';
 
@@ -189,7 +193,7 @@ export class IndexService {
     try {
       const entries = await this.fs.listDirectory(dir);
       const noteEntries = entries.filter(
-        (entry) => entry.isFile && isSupportedNoteFile(entry.name),
+        (entry) => entry.isFile && !entry.name.startsWith('.') && isSupportedNoteFile(entry.name),
       );
       if (this.indexedNoteCount + noteEntries.length > MAX_INDEXED_NOTE_FILES) {
         throw new Error(
@@ -203,7 +207,9 @@ export class IndexService {
       });
 
       for (const entry of entries) {
-        if (entry.isDirectory) await this.scanDirectory(entry.path);
+        if (entry.isDirectory && !isIgnoredNotebookDirectory(entry.name)) {
+          await this.scanDirectory(entry.path);
+        }
       }
     } catch (e) {
       if (String(e).includes(INDEX_LIMIT_ERROR)) throw e;

@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::mem::size_of;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
-use tauri::State;
+use tauri::{State, WebviewWindow};
 use unicode_normalization::UnicodeNormalization;
 
 const MIN_CHINESE_CONTEXT: usize = 2;
@@ -297,6 +297,34 @@ impl Default for CompletionRetrievalState {
             total_build_duration_micros: Arc::new(AtomicU64::new(0)),
             long_task_count: Arc::new(AtomicUsize::new(0)),
         }
+    }
+}
+
+/// Keeps the completion retrieval corpus isolated per webview window.
+///
+/// A window receives its own state lazily when it first enables the editor or
+/// opens a notebook. Read-only external-file windows never touch this map.
+#[derive(Debug, Default)]
+pub struct CompletionRetrievalStates(Mutex<HashMap<String, CompletionRetrievalState>>);
+
+impl CompletionRetrievalStates {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn for_window(&self, window_label: &str) -> CompletionRetrievalState {
+        let mut states = self
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        states.entry(window_label.to_string()).or_default().clone()
+    }
+
+    pub fn remove_for(&self, window_label: &str) {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(window_label);
     }
 }
 
@@ -719,10 +747,11 @@ impl CompletionRetrievalState {
 
 #[tauri::command]
 pub async fn completion_v2_set_scope(
-    state: State<'_, CompletionRetrievalState>,
+    window: WebviewWindow,
+    states: State<'_, CompletionRetrievalStates>,
     request: CompletionSetScopeRequest,
 ) -> Result<CompletionMutationResponse, String> {
-    let state = state.inner().clone();
+    let state = states.for_window(window.label());
     tauri::async_runtime::spawn_blocking(move || state.set_scope(request))
         .await
         .map_err(join_error)?
@@ -730,10 +759,11 @@ pub async fn completion_v2_set_scope(
 
 #[tauri::command]
 pub async fn completion_v2_replace_document(
-    state: State<'_, CompletionRetrievalState>,
+    window: WebviewWindow,
+    states: State<'_, CompletionRetrievalStates>,
     request: CompletionReplaceRequest,
 ) -> Result<CompletionMutationResponse, String> {
-    let state = state.inner().clone();
+    let state = states.for_window(window.label());
     tauri::async_runtime::spawn_blocking(move || state.replace_document(request))
         .await
         .map_err(join_error)?
@@ -741,10 +771,11 @@ pub async fn completion_v2_replace_document(
 
 #[tauri::command]
 pub async fn completion_v2_remove_document(
-    state: State<'_, CompletionRetrievalState>,
+    window: WebviewWindow,
+    states: State<'_, CompletionRetrievalStates>,
     request: CompletionRemoveRequest,
 ) -> Result<CompletionMutationResponse, String> {
-    let state = state.inner().clone();
+    let state = states.for_window(window.label());
     tauri::async_runtime::spawn_blocking(move || state.remove_document(request))
         .await
         .map_err(join_error)?
@@ -752,10 +783,11 @@ pub async fn completion_v2_remove_document(
 
 #[tauri::command]
 pub async fn completion_v2_rename_document(
-    state: State<'_, CompletionRetrievalState>,
+    window: WebviewWindow,
+    states: State<'_, CompletionRetrievalStates>,
     request: CompletionRenameRequest,
 ) -> Result<CompletionMutationResponse, String> {
-    let state = state.inner().clone();
+    let state = states.for_window(window.label());
     tauri::async_runtime::spawn_blocking(move || state.rename_document(request))
         .await
         .map_err(join_error)?
@@ -763,10 +795,11 @@ pub async fn completion_v2_rename_document(
 
 #[tauri::command]
 pub async fn completion_v2_clear(
-    state: State<'_, CompletionRetrievalState>,
+    window: WebviewWindow,
+    states: State<'_, CompletionRetrievalStates>,
     request: CompletionClearRequest,
 ) -> Result<CompletionMutationResponse, String> {
-    let state = state.inner().clone();
+    let state = states.for_window(window.label());
     tauri::async_runtime::spawn_blocking(move || state.clear(request))
         .await
         .map_err(join_error)?
@@ -774,10 +807,11 @@ pub async fn completion_v2_clear(
 
 #[tauri::command]
 pub async fn completion_v2_apply_batch(
-    state: State<'_, CompletionRetrievalState>,
+    window: WebviewWindow,
+    states: State<'_, CompletionRetrievalStates>,
     request: CompletionBatchRequest,
 ) -> Result<CompletionMutationResponse, String> {
-    let state = state.inner().clone();
+    let state = states.for_window(window.label());
     tauri::async_runtime::spawn_blocking(move || state.apply_batch(request))
         .await
         .map_err(join_error)?
@@ -785,10 +819,11 @@ pub async fn completion_v2_apply_batch(
 
 #[tauri::command]
 pub async fn completion_v2_query(
-    state: State<'_, CompletionRetrievalState>,
+    window: WebviewWindow,
+    states: State<'_, CompletionRetrievalStates>,
     request: CompletionQueryRequest,
 ) -> Result<CompletionQueryResponse, String> {
-    let state = state.inner().clone();
+    let state = states.for_window(window.label());
     tauri::async_runtime::spawn_blocking(move || state.query(request))
         .await
         .map_err(join_error)?
@@ -796,9 +831,11 @@ pub async fn completion_v2_query(
 
 #[tauri::command]
 pub async fn completion_v2_diagnostics(
-    state: State<'_, CompletionRetrievalState>,
+    window: WebviewWindow,
+    states: State<'_, CompletionRetrievalStates>,
     workspace_scope: String,
 ) -> Result<CompletionRetrievalDiagnostics, String> {
+    let state = states.for_window(window.label());
     state.diagnostics(&workspace_scope)
 }
 
@@ -2617,5 +2654,38 @@ mod tests {
             assert_eq!(diagnostics.pending_mutations, 0);
             assert_eq!(diagnostics.pending_mutation_batches, 0);
         }
+    }
+
+    #[test]
+    fn completion_retrieval_states_do_not_share_window_scopes() {
+        let states = CompletionRetrievalStates::new();
+        let first = states.for_window("window-a");
+        let second = states.for_window("window-b");
+        first
+            .set_scope(CompletionSetScopeRequest {
+                workspace_scope: "scope-a".to_string(),
+            })
+            .unwrap();
+        second
+            .set_scope(CompletionSetScopeRequest {
+                workspace_scope: "scope-b".to_string(),
+            })
+            .unwrap();
+        first
+            .replace_document(CompletionReplaceRequest {
+                workspace_scope: "scope-a".to_string(),
+                path: "/a.md".to_string(),
+                content: "alpha beta gamma".to_string(),
+            })
+            .unwrap();
+
+        assert_eq!(first.diagnostics("scope-a").unwrap().document_count, 1);
+        assert_eq!(second.diagnostics("scope-b").unwrap().document_count, 0);
+        states.remove_for("window-a");
+        assert!(states
+            .for_window("window-a")
+            .diagnostics("scope-a")
+            .is_err());
+        assert_eq!(second.diagnostics("scope-b").unwrap().document_count, 0);
     }
 }

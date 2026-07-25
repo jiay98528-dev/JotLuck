@@ -1,6 +1,6 @@
 # JotLuck 主题开发标准
 
-版本：2026-07-11
+版本：2026-07-25
 适用范围：Theme API v2、本地主题市场、`.mltheme` 导入包、官方主题模块、UX Theme Plugin
 
 ## 1. 规范地位
@@ -489,6 +489,8 @@ type ThemeSlotId =
 | `editor-surface`  | `activePath`, `isDraftSession`, `viewMode`, `splitRatio`, `charCount`, `wordCount`, `headings`, `setViewMode`               |
 | `external-reader` | `fileName`, `filePath`, `stats`, `headings`, `loading`, `error`, `enableEdit`, `openParentAsNotebook`, `scrollHeading`      |
 
+`external-reader` 的 `enableEdit` 与 `openParentAsNotebook` 是 Theme API v2 的稳定 props 名称，不得重命名或以新 slot/action 替换。宿主默认将后者展示为“添加到笔记”：它会将父目录提升为当前窗口的 notebook；前者只启用当前外部授权文件的单文件编辑。主题不得让这两个动作绕过宿主窗口会话和文件授权边界。
+
 ### 10.3 弹窗与状态层 slots
 
 | Slot                    | Props                                                                                                                  |
@@ -600,5 +602,6 @@ pnpm.cmd --filter @jotluck/app build
 
 ## 变更记录
 
+- 2026-07-25：澄清 `external-reader` 保持 `enableEdit` / `openParentAsNotebook` props 兼容；默认文案为“添加到笔记”，不新增 ThemeSlotId 或 ThemeActionId。
 - 2026-07-11：为 `RightWing` 增加 `inspector-rail-toggle` 稳定样式部件契约；明确窄轨状态为组件本地 ARIA 交互，不扩展 Theme API 或 action 路由。
 - 2026-07-10：新增默认 slot `data-theme-part` 稳定样式部件契约；明确 wrapper 保留宿主控件、官方主题 CSS 资产化、spacing/玻璃 computed-style 与真实运行时预览验收要求。

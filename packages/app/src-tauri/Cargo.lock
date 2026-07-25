@@ -2122,7 +2122,7 @@ dependencies = [
 
 [[package]]
 name = "jotluck"
-version = "0.15.0"
+version = "0.1.0-preview"
 dependencies = [
  "base64 0.22.1",
  "chrono",

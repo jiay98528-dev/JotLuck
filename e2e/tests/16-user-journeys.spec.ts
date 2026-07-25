@@ -492,11 +492,13 @@ test.describe('V6 用户旅程', () => {
 });
 
 test.describe('外部文件父目录笔记本会话', () => {
-  test('双击 Markdown 文件进入只读预览，启用编辑后打开父目录笔记本', async ({ page }) => {
+  test('只读预览先进入单文件编辑，添加到笔记后才扫描父目录', async ({ page }) => {
+    await page.setViewportSize({ width: 2200, height: 1000 });
     const externalPath = 'C:/Users/alice/Desktop/external.md';
     const siblingPath = 'C:/Users/alice/Desktop/sibling.md';
     await page.addInitScript((path) => {
       const sibling = 'C:/Users/alice/Desktop/sibling.md';
+      const generated = 'C:/Users/alice/Desktop/node_modules/dependency/README.md';
       localStorage.removeItem('jotluck:welcome:completed');
       localStorage.setItem(
         'jotluck-recent-notebooks',
@@ -515,6 +517,7 @@ test.describe('外部文件父目录笔记本会话', () => {
             '只读打开。',
           ].join('\n'),
           [sibling]: '# 同目录文件\n\n需要点击后才读取。',
+          [generated]: '# Generated dependency documentation',
         },
       };
     }, externalPath);
@@ -531,6 +534,11 @@ test.describe('外部文件父目录笔记本会话', () => {
     await expect(page.locator('.left-wing, .right-wing, .file-drawer')).toHaveCount(0);
     await expect(page.locator('.external-reader-kicker')).toContainText('只读预览');
     await expect(page.locator('.external-preview table')).toBeVisible();
+    const readerBounds = await page.locator('.external-reader-content').boundingBox();
+    expect(readerBounds).not.toBeNull();
+    expect(Math.abs((readerBounds?.x ?? 0) + (readerBounds?.width ?? 0) / 2 - 1100)).toBeLessThan(
+      120,
+    );
     await expect(page.getByRole('button', { name: '启用编辑' })).toBeVisible();
     const editorAssetsBeforeEdit = await page.evaluate(() =>
       performance
@@ -556,13 +564,32 @@ test.describe('外部文件父目录笔记本会话', () => {
       )
       .toBe(true);
     await expect.poll(visibleEditorText, { timeout: 5000 }).toContain('外部文档');
+    await expect(page.getByRole('button', { name: '添加到笔记' })).toBeVisible();
+    expect(
+      await page.evaluate(() => (window as any).__jotluck_e2e?.debugState?.().externalSessionMode),
+    ).toBe('edit-shell');
+    await page.locator('.topbar-btn--menu').click();
+    await expect(page.locator('.file-drawer')).toBeVisible({ timeout: 3000 });
+    await expect(page.locator('.tree-item:has-text("sibling.md")')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.file-drawer')).toBeHidden();
+
+    const deleteGuardContent = '# 外部文档\n\nDelete guard sample';
+    await page.evaluate((content) => {
+      (window as any).__jotluck_e2e?.editor?.setContent?.(content);
+    }, deleteGuardContent);
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('Delete');
+    await expect
+      .poll(() => page.evaluate(() => (window as any).__jotluck_e2e?.editor?.getContent?.()))
+      .toBe(deleteGuardContent.slice(0, -1));
+
     await page.getByRole('button', { name: '切换到分栏视图', exact: true }).click();
     await expect(page.getByRole('button', { name: '切换到只读渲染', exact: true })).toBeVisible({
       timeout: 5000,
     });
 
-    const visibleEditorFrame = page.locator('.editor-shell-frame .cm-editor').last();
-    await visibleEditorFrame.click({ position: { x: 32, y: 32 } });
+    await page.locator('.editor-shell-frame .cm-content .cm-line').first().click();
     await expect(page.locator('.editor-shell-frame .cm-editor.cm-focused')).toBeVisible({
       timeout: 3000,
     });
@@ -571,10 +598,10 @@ test.describe('外部文件父目录笔记本会话', () => {
     });
     expect(
       await page.evaluate(() => (window as any).__jotluck_e2e?.debugState?.().activePath),
-    ).toBe('/external.md');
+    ).toBe('');
     expect(
       await page.evaluate(() => (window as any).__jotluck_e2e?.debugState?.().externalSessionMode),
-    ).toBe('none');
+    ).toBe('edit-shell');
     await expect.poll(visibleEditorText, { timeout: 5000 }).toContain('已进入父目录笔记本编辑');
     await expect
       .poll(
@@ -583,12 +610,33 @@ test.describe('外部文件父目录笔记本会话', () => {
         { timeout: 5000 },
       )
       .toContain('已进入父目录笔记本编辑');
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            (path) => (window as any).__jotluck_e2e?.externalFiles?.[path] ?? '',
+            externalPath,
+          ),
+        { timeout: 5000 },
+      )
+      .toContain('已进入父目录笔记本编辑');
+
+    await page.getByRole('button', { name: '添加到笔记' }).click();
+    await expect
+      .poll(() => page.evaluate(() => (window as any).__jotluck_e2e?.debugState?.().activePath))
+      .toBe('/external.md');
+    await expect
+      .poll(() =>
+        page.evaluate(() => (window as any).__jotluck_e2e?.debugState?.().externalSessionMode),
+      )
+      .toBe('none');
     await waitForMockFileContent(page, '/external.md', '已进入父目录笔记本编辑');
 
     await page.locator('.topbar-btn--menu').click();
     await expect(page.locator('.file-drawer')).toBeVisible({ timeout: 3000 });
     await expect(page.locator('.tree-item:has-text("external.md")')).toBeVisible();
     await expect(page.locator('.tree-item:has-text("sibling.md")')).toBeVisible();
+    await expect(page.locator('.tree-item:has-text("node_modules")')).toHaveCount(0);
     await page.locator('.tree-item:has-text("sibling.md")').click({ force: true });
     await expect.poll(visibleEditorText, { timeout: 5000 }).toContain('同目录文件');
     await page.locator('.topbar-btn--menu').click();
