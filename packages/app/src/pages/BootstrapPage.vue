@@ -35,14 +35,14 @@ onMounted(async () => {
   display: grid;
   min-height: 100vh;
   place-content: center;
-  gap: var(--space-3);
+  gap: var(--space-8);
   color: var(--ink-secondary);
   font-size: var(--text-sm);
 }
 
 .bootstrap-page__mark {
-  width: var(--space-5);
-  height: var(--space-5);
+  width: var(--space-8);
+  height: var(--space-8);
   margin-inline: auto;
   border: var(--border-thin) solid var(--rule-strong);
   border-radius: 50%;
