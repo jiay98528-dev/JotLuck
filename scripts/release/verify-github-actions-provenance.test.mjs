@@ -15,11 +15,13 @@ const manifest = {
       id: '456',
       name: 'jotluck-windows-candidate',
       digest: `sha256:${'1'.repeat(64)}`,
+      sizeInBytes: 1024,
     },
     evidenceArtifact: {
       id: '789',
       name: `jotluck-installed-app-evidence-v2-${releaseId}`,
       digest: `sha256:${'2'.repeat(64)}`,
+      sizeInBytes: 1024,
     },
   },
 };
@@ -69,6 +71,20 @@ describe('GitHub Actions installed-app provenance', () => {
       },
     ],
     ['wrong artifact digest', { evidenceArtifact: { digest: `sha256:${'3'.repeat(64)}` } }],
+    ['wrong artifact size', { evidenceArtifact: { size_in_bytes: 2048 } }],
+    [
+      'duplicate fixed artifact name',
+      {
+        runArtifacts: {
+          total_count: 3,
+          artifacts: [
+            { id: 456, name: 'jotluck-windows-candidate' },
+            { id: 457, name: 'jotluck-windows-candidate' },
+            { id: 789, name: `jotluck-installed-app-evidence-v2-${releaseId}` },
+          ],
+        },
+      },
+    ],
   ])('rejects %s', async (_label, overrides) => {
     await expect(verify(overrides)).rejects.toThrow();
   });
@@ -151,6 +167,16 @@ function makeResponses(overrides = {}) {
       overrides.jobs ?? jobs(),
     ],
     [
+      '/repos/fixture/jotluck/actions/runs/123/artifacts?per_page=100',
+      overrides.runArtifacts ?? {
+        total_count: 2,
+        artifacts: [
+          { id: 456, name: 'jotluck-windows-candidate' },
+          { id: 789, name: `jotluck-installed-app-evidence-v2-${releaseId}` },
+        ],
+      },
+    ],
+    [
       '/repos/fixture/jotluck/actions/artifacts/456',
       {
         ...artifactBase,
@@ -208,8 +234,17 @@ function jobs() {
         'Upload trusted installed-app execution evidence',
       ],
     ],
+    [
+      'Installed-app Evidence Materialization',
+      [
+        'Resolve current-run provenance',
+        'Materialize managed evidence bundle',
+        'Upload managed evidence bundle',
+      ],
+    ],
   ];
   return {
+    total_count: definitions.length,
     jobs: definitions.map(([name, steps]) => ({
       name,
       status: 'completed',

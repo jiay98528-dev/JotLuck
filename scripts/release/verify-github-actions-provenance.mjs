@@ -40,6 +40,14 @@ const REQUIRED_JOB_STEPS = new Map([
       'Upload trusted installed-app execution evidence',
     ],
   ],
+  [
+    'Installed-app Evidence Materialization',
+    [
+      'Resolve current-run provenance',
+      'Materialize managed evidence bundle',
+      'Upload managed evidence bundle',
+    ],
+  ],
 ]);
 
 export async function verifyGitHubActionsProvenance({
@@ -115,6 +123,11 @@ export async function verifyGitHubActionsProvenance({
   );
   verifyRequiredJobs(jobsResponse);
 
+  const runArtifacts = await request(
+    `/repos/${encodedRepository}/actions/runs/${runId}/artifacts?per_page=100`,
+  );
+  verifyUniqueRunArtifacts(runArtifacts, ci, releaseId);
+
   const candidateArtifact = await request(
     `/repos/${encodedRepository}/actions/artifacts/${assertPositiveId(
       ci.candidateArtifact?.id,
@@ -179,20 +192,51 @@ function verifyWorkflowRun(run, expected) {
 }
 
 function verifyRequiredJobs(response) {
-  if (!response || !Array.isArray(response.jobs)) {
-    throw new Error('GitHub workflow jobs response is invalid');
+  if (
+    !response ||
+    !Array.isArray(response.jobs) ||
+    response.total_count !== response.jobs.length ||
+    response.total_count > 100
+  ) {
+    throw new Error('GitHub workflow jobs response is incomplete or invalid');
   }
   for (const [jobName, requiredSteps] of REQUIRED_JOB_STEPS) {
-    const job = response.jobs.find((entry) => entry?.name === jobName);
-    if (!job || job.status !== 'completed' || job.conclusion !== 'success') {
+    const matching = response.jobs.filter((entry) => entry?.name === jobName);
+    const job = matching[0];
+    if (matching.length !== 1 || job.status !== 'completed' || job.conclusion !== 'success') {
       throw new Error(`required GitHub job did not succeed: ${jobName}`);
     }
     if (!Array.isArray(job.steps)) throw new Error(`required GitHub job has no steps: ${jobName}`);
     for (const stepName of requiredSteps) {
-      const step = job.steps.find((entry) => entry?.name === stepName);
-      if (!step || step.status !== 'completed' || step.conclusion !== 'success') {
+      const matchingSteps = job.steps.filter((entry) => entry?.name === stepName);
+      const step = matchingSteps[0];
+      if (
+        matchingSteps.length !== 1 ||
+        step.status !== 'completed' ||
+        step.conclusion !== 'success'
+      ) {
         throw new Error(`required GitHub step did not succeed: ${jobName} / ${stepName}`);
       }
+    }
+  }
+}
+
+function verifyUniqueRunArtifacts(response, ci, releaseId) {
+  if (
+    !response ||
+    !Array.isArray(response.artifacts) ||
+    response.total_count !== response.artifacts.length ||
+    response.total_count > 100
+  ) {
+    throw new Error('GitHub run artifacts response is incomplete or invalid');
+  }
+  for (const [name, id] of [
+    ['jotluck-windows-candidate', ci.candidateArtifact?.id],
+    [`jotluck-installed-app-evidence-v2-${releaseId}`, ci.evidenceArtifact?.id],
+  ]) {
+    const matching = response.artifacts.filter((artifact) => artifact?.name === name);
+    if (matching.length !== 1 || String(matching[0].id) !== String(id)) {
+      throw new Error(`GitHub run artifact identity is not unique: ${name}`);
     }
   }
 }
@@ -213,6 +257,7 @@ function verifyArtifact(actual, binding, { label, expectedName, run }) {
     actual.size_in_bytes <= 0 ||
     !/^sha256:[a-f0-9]{64}$/u.test(String(actual.digest)) ||
     actual.digest !== binding.digest ||
+    actual.size_in_bytes !== binding.sizeInBytes ||
     String(actual.workflow_run?.id) !== String(run.id) ||
     actual.workflow_run?.head_sha !== run.head_sha ||
     actual.workflow_run?.repository_id !== run.repository.id ||

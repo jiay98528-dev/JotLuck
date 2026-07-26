@@ -37,7 +37,8 @@
         "runId",
         "runAttempt",
         "candidateArtifact",
-        "evidenceArtifact"
+        "evidenceArtifact",
+        "materialization"
       ],
       "properties": {
         "provider": { "const": "github-actions" },
@@ -45,7 +46,16 @@
         "runId": { "type": "string", "minLength": 1 },
         "runAttempt": { "type": "integer", "minimum": 1 },
         "candidateArtifact": { "$ref": "#/$defs/githubArtifact" },
-        "evidenceArtifact": { "$ref": "#/$defs/githubArtifact" }
+        "evidenceArtifact": { "$ref": "#/$defs/githubArtifact" },
+        "materialization": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["job", "step"],
+          "properties": {
+            "job": { "const": "Installed-app Evidence Materialization" },
+            "step": { "const": "Materialize managed evidence bundle" }
+          }
+        }
       }
     },
     "installer": {
@@ -92,11 +102,12 @@
     "githubArtifact": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "digest"],
+      "required": ["id", "name", "digest", "sizeInBytes"],
       "properties": {
         "id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
         "name": { "type": "string", "minLength": 1 },
-        "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+        "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "sizeInBytes": { "type": "integer", "minimum": 1 }
       }
     }
   }

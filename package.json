@@ -31,6 +31,8 @@
     "release:rc-gate": "node scripts/release-rc-gate.mjs",
     "release:preview-gate": "node scripts/release/verify-preview-release-gate.mjs",
     "release:capture-installed-evidence": "node scripts/release/capture-installed-app-evidence-v2.mjs",
+    "release:resolve-current-run-provenance": "node scripts/release/resolve-current-run-provenance.mjs",
+    "release:materialize-installed-evidence": "node scripts/release/materialize-installed-app-evidence-v2.mjs",
     "typecheck": "pnpm --filter @jotluck/app typecheck",
     "prepare": "husky"
   },

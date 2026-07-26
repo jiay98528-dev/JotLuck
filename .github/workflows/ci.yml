@@ -243,6 +243,9 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     needs: [lint-and-typecheck, test, rust]
+    outputs:
+      candidate-artifact-id: ${{ steps.candidate-upload.outputs.artifact-id }}
+      candidate-artifact-digest: ${{ steps.candidate-upload.outputs.artifact-digest }}
 
     steps:
       - name: Checkout
@@ -310,6 +313,9 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     needs: [lint-and-typecheck, test, rust, e2e, e2e-visual-windows, tauri-build-windows]
+    outputs:
+      evidence-artifact-id: ${{ steps.evidence-upload.outputs.artifact-id }}
+      evidence-artifact-digest: ${{ steps.evidence-upload.outputs.artifact-digest }}
 
     steps:
       - name: Checkout
@@ -343,7 +349,7 @@ jobs:
       - name: Download same-run immutable Windows candidate
         uses: actions/download-artifact@v4
         with:
-          name: jotluck-windows-candidate
+          artifact-ids: ${{ needs.tauri-build-windows.outputs.candidate-artifact-id }}
           path: candidate
 
       - name: Run fixed installed-app evidence adapters
@@ -351,12 +357,73 @@ jobs:
           RELEASE_ID: ${{ inputs.release_id }}
         run: pnpm release:capture-installed-evidence -- "$env:RELEASE_ID" "candidate" "installed-app-evidence"
 
+      - name: Upload installed-app failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jotluck-installed-app-diagnostics-v2-${{ inputs.release_id }}
+          path: installed-app-evidence-diagnostics/**
+          if-no-files-found: warn
+
       - name: Upload trusted installed-app execution evidence
         id: evidence-upload
         uses: actions/upload-artifact@v4
         with:
           name: jotluck-installed-app-evidence-v2-${{ inputs.release_id }}
           path: installed-app-evidence/**
+          if-no-files-found: error
+
+  installed-app-evidence-materialize:
+    name: Installed-app Evidence Materialization
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.capture_installed_evidence == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [tauri-build-windows, installed-app-evidence-capture]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Resolve current-run provenance
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ inputs.release_id }}
+          CANDIDATE_ARTIFACT_ID: ${{ needs.tauri-build-windows.outputs.candidate-artifact-id }}
+          EVIDENCE_ARTIFACT_ID: ${{ needs.installed-app-evidence-capture.outputs.evidence-artifact-id }}
+        run: node scripts/release/resolve-current-run-provenance.mjs "$RELEASE_ID" "$CANDIDATE_ARTIFACT_ID" "$EVIDENCE_ARTIFACT_ID" trusted-provenance.json
+
+      - name: Download candidate by verified artifact ID
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.tauri-build-windows.outputs.candidate-artifact-id }}
+          path: candidate
+
+      - name: Download execution evidence by verified artifact ID
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.installed-app-evidence-capture.outputs.evidence-artifact-id }}
+          path: installed-app-evidence
+
+      - name: Materialize managed evidence bundle
+        env:
+          RELEASE_ID: ${{ inputs.release_id }}
+        run: pnpm release:materialize-installed-evidence -- "$RELEASE_ID" candidate installed-app-evidence trusted-provenance.json managed-evidence
+
+      - name: Upload managed evidence bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: jotluck-managed-installed-app-evidence-v2-${{ inputs.release_id }}
+          path: managed-evidence/release-evidence/installed-app/v2/${{ inputs.release_id }}/**
           if-no-files-found: error
 
   release-installed-app-gate:
