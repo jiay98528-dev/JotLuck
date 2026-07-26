@@ -2,6 +2,7 @@
 import { createHash } from 'node:crypto';
 import {
   copyFileSync,
+  existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -13,6 +14,7 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { buildPerformanceEvidence } from './installed-app-performance.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const [releaseId, candidatePath, outputPath] = process.argv.slice(2);
@@ -72,6 +74,8 @@ const runner = {
 };
 const evidenceBase = `release-evidence/installed-app/v2/${releaseId}`;
 
+let captureError = null;
+let completedCases = 0;
 try {
   const executions = [];
   for (const definition of catalog.cases) {
@@ -94,7 +98,10 @@ try {
   if (typeof adapters.readPerformanceSummary !== 'function') {
     throw new Error('fixed installed-app adapter module does not export readPerformanceSummary');
   }
-  const performance = await adapters.readPerformanceSummary();
+  const performance = buildPerformanceEvidence(
+    await adapters.readPerformanceSummary(),
+    catalog.performance,
+  );
   const rawReport = {
     schema: 'jotluck.installed-app.raw-report.v2',
     releaseId,
@@ -109,11 +116,45 @@ try {
   rmSync(path.join(temporaryRoot, '_work'), { recursive: true, force: true });
   mkdirSync(path.dirname(outputRoot), { recursive: true });
   renameSync(temporaryRoot, outputRoot);
-  console.log(JSON.stringify({ releaseId, cases: executions.length, outputRoot }));
+  completedCases = executions.length;
 } catch (error) {
-  rmSync(temporaryRoot, { recursive: true, force: true });
-  fail(error instanceof Error ? error.message : String(error));
+  captureError = error instanceof Error ? error : new Error(String(error));
+} finally {
+  if (typeof adapters.disposeInstalledAppEvidence === 'function') {
+    try {
+      await adapters.disposeInstalledAppEvidence();
+    } catch (error) {
+      if (!captureError) {
+        captureError = error instanceof Error ? error : new Error(String(error));
+      }
+    }
+  }
 }
+if (captureError) {
+  const diagnosticRoot = `${outputRoot}-diagnostics`;
+  try {
+    const sourceRoot = existsSync(outputRoot) ? outputRoot : temporaryRoot;
+    writeCanonical(path.join(sourceRoot, 'failure.json'), {
+      schema: 'jotluck.installed-app.capture-failure.v1',
+      releaseId,
+      candidateCommit: process.env.GITHUB_SHA,
+      runner,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      error: { name: captureError.name, message: captureError.message },
+    });
+    mkdirSync(path.dirname(diagnosticRoot), { recursive: true });
+    renameSync(sourceRoot, diagnosticRoot);
+  } catch (diagnosticError) {
+    fail(
+      `${captureError.message}; diagnostic preservation failed: ${
+        diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError)
+      }`,
+    );
+  }
+  fail(captureError.message);
+}
+console.log(JSON.stringify({ releaseId, cases: completedCases, outputRoot }));
 
 function materializeCaseResult({ definition, result, runner, temporaryRoot, evidenceBase }) {
   if (!result || typeof result !== 'object' || Array.isArray(result)) {

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 const projectRoot = path.resolve(import.meta.dirname, '../..');
 const scriptPath = path.join(projectRoot, 'scripts/release/capture-installed-app-evidence-v2.mjs');
+const workflowPath = path.join(projectRoot, '.github/workflows/ci.yml');
 
 describe('installed-app evidence capture entrypoint', () => {
   it('fails closed outside GitHub workflow_dispatch', () => {
@@ -27,5 +28,32 @@ describe('installed-app evidence capture entrypoint', () => {
     expect(source).not.toContain('JOTLUCK_INSTALLED_APP_ADAPTER');
     expect(source).not.toContain('exec(');
     expect(source).not.toContain('spawn(');
+  });
+
+  it('defers a capture failure exit until the fixed adapter cleanup has completed', () => {
+    const source = readFileSync(scriptPath, 'utf8');
+    const captureTryIndex = source.indexOf('try {', source.indexOf('let captureError'));
+    const catchIndex = source.indexOf('} catch (error) {', captureTryIndex);
+    const finallyIndex = source.indexOf('} finally {', catchIndex);
+    const disposeIndex = source.indexOf(
+      'await adapters.disposeInstalledAppEvidence()',
+      finallyIndex,
+    );
+    const diagnosticIndex = source.indexOf('const diagnosticRoot', disposeIndex);
+    const exitIndex = source.indexOf('fail(captureError.message)', diagnosticIndex);
+
+    expect(captureTryIndex).toBeGreaterThan(0);
+    expect(catchIndex).toBeGreaterThan(captureTryIndex);
+    expect(finallyIndex).toBeGreaterThan(catchIndex);
+    expect(disposeIndex).toBeGreaterThan(finallyIndex);
+    expect(diagnosticIndex).toBeGreaterThan(disposeIndex);
+    expect(exitIndex).toBeGreaterThan(diagnosticIndex);
+    expect(source.slice(catchIndex, finallyIndex)).not.toContain('fail(');
+    expect(source).toContain('const diagnosticRoot = `${outputRoot}-diagnostics`');
+    expect(source).toContain('jotluck.installed-app.capture-failure.v1');
+
+    const workflow = readFileSync(workflowPath, 'utf8');
+    expect(workflow).toContain('Upload installed-app failure diagnostics');
+    expect(workflow).toContain('installed-app-evidence-diagnostics/**');
   });
 });

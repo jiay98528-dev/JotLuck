@@ -6,8 +6,7 @@ export default mergeConfig(
   defineConfig({
     test: {
       environment: 'node',
-      include: ['../../scripts/**/*.test.{ts,mjs}'],
-      exclude: ['../../scripts/release/verify-installed-app-evidence-v2.test.mjs'],
+      include: ['../../scripts/release/verify-installed-app-evidence-v2.test.mjs'],
       maxWorkers: 1,
       minWorkers: 1,
       fileParallelism: false,

@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
-import { remote } from 'webdriverio';
+import { createTauriDriverHost } from './tauri-webdriver-host.mjs';
 
 const binaryPath = resolve(
   process.env.JOTLUCK_TAURI_BINARY ?? 'packages/app/src-tauri/target/release/jotluck.exe',
@@ -28,8 +26,7 @@ if (isAutocompleteRc && isV2RAutocompleteRc) {
 }
 
 let browser;
-let tauriDriver;
-let stoppingDriver = false;
+const driverHost = createTauriDriverHost({ logLevel: 'info' });
 
 async function main() {
   if (process.platform !== 'win32') {
@@ -37,9 +34,8 @@ async function main() {
   }
 
   await stat(binaryPath);
-  tauriDriver = startTauriDriver();
   try {
-    browser = await connectToTauriDriver(tauriDriver);
+    browser = await driverHost.createSession({ application: binaryPath });
 
     const appRoot = await browser.$('#jotluck-app');
     await appRoot.waitForExist();
@@ -92,58 +88,9 @@ async function main() {
       flag: 'wx',
     });
   } finally {
-    await browser?.deleteSession().catch(() => undefined);
-    await stopTauriDriver();
+    await driverHost.deleteSession(browser);
+    await driverHost.dispose();
   }
-}
-
-function startTauriDriver() {
-  const command =
-    process.env.JOTLUCK_TAURI_DRIVER ??
-    (process.platform === 'win32' ? 'tauri-driver.exe' : 'tauri-driver');
-  const args = process.env.JOTLUCK_EDGE_DRIVER
-    ? ['--native-driver', resolve(process.env.JOTLUCK_EDGE_DRIVER)]
-    : [];
-  return spawn(command, args, {
-    stdio: 'inherit',
-    windowsHide: true,
-  });
-}
-
-async function connectToTauriDriver(driverProcess) {
-  const earlyExit = new Promise((_, reject) => {
-    driverProcess.once('error', reject);
-    driverProcess.once('exit', (code, signal) => {
-      if (!stoppingDriver) {
-        reject(
-          new Error(`tauri-driver exited before session creation: code=${code} signal=${signal}`),
-        );
-      }
-    });
-  });
-  const connection = remote({
-    hostname: '127.0.0.1',
-    port: 4444,
-    logLevel: 'info',
-    connectionRetryTimeout: 120_000,
-    connectionRetryCount: 20,
-    capabilities: {
-      'tauri:options': {
-        application: binaryPath,
-      },
-    },
-  });
-  return Promise.race([connection, earlyExit]);
-}
-
-async function stopTauriDriver() {
-  if (!tauriDriver || tauriDriver.exitCode !== null) return;
-  stoppingDriver = true;
-  tauriDriver.kill();
-  for (let attempt = 0; attempt < 20 && tauriDriver.exitCode === null; attempt += 1) {
-    await delay(50);
-  }
-  if (tauriDriver.exitCode === null) tauriDriver.kill('SIGKILL');
 }
 
 async function runLegacyWebviewSmoke() {

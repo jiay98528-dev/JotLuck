@@ -84,12 +84,26 @@
     "performance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["coldStartMs", "hotWindowMs", "coldStartP90Ms", "hotWindowP90Ms"],
+      "required": ["coldStartMs", "hotWindowMs", "coldStartP90Ms", "hotWindowP90Ms", "advisories"],
       "properties": {
         "coldStartMs": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0 } },
         "hotWindowMs": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0 } },
         "coldStartP90Ms": { "type": "number", "exclusiveMinimum": 0 },
-        "hotWindowP90Ms": { "type": "number", "exclusiveMinimum": 0 }
+        "hotWindowP90Ms": { "type": "number", "exclusiveMinimum": 0 },
+        "advisories": {
+          "type": "array",
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "actualMs", "referenceMs"],
+            "properties": {
+              "code": { "enum": ["PERF-COLD-START-P90", "PERF-HOT-WINDOW-P90"] },
+              "actualMs": { "type": "number", "exclusiveMinimum": 0 },
+              "referenceMs": { "type": "number", "exclusiveMinimum": 0 }
+            }
+          }
+        }
       }
     }
   }

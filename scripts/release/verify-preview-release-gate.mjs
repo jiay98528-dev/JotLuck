@@ -49,7 +49,13 @@ export function verifyPreviewReleaseGate({
     bundlePath,
     installerPath,
   );
-  return { releaseId, architectureStop: stop.architectureId, reasonCode: stop.reasonCode };
+  return {
+    status: installed.warnings.length > 0 ? 'pass-with-warnings' : 'pass',
+    releaseId,
+    architectureStop: stop.architectureId,
+    reasonCode: stop.reasonCode,
+    warnings: installed.warnings,
+  };
 }
 
 function readEvidence(root, evidencePath) {

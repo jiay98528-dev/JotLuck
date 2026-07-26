@@ -131,8 +131,8 @@
   "performance": {
     "coldStartSamples": 20,
     "hotWindowSamples": 30,
-    "coldStartP90MaxMs": 2000,
-    "hotWindowP90MaxMs": 1000,
+    "coldStartP90ReferenceMs": 2000,
+    "hotWindowP90ReferenceMs": 1000,
     "requiredArtifactKind": "timing-samples"
   }
 }

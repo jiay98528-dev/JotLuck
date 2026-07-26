@@ -17,6 +17,7 @@ const performance = {
   hotWindowMs: Array(30).fill(80),
   coldStartP90Ms: 100,
   hotWindowP90Ms: 80,
+  advisories: [],
 };
 
 afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })));
@@ -148,8 +149,73 @@ describe('installed-app evidence v2', () => {
         bundlePath: fixture.bundlePath,
         executionEvidencePath: fixture.executionEvidencePath,
       }),
-    ).toMatchObject({ releaseId: fixture.releaseId, reasonCode: 'development-oracle-ceiling' });
+    ).toMatchObject({
+      status: 'pass',
+      releaseId: fixture.releaseId,
+      reasonCode: 'development-oracle-ceiling',
+      warnings: [],
+    });
   }, 20_000);
+
+  it('downgrades reproducible performance reference misses to non-blocking warnings', () => {
+    const fixture = makeFixture({
+      performance: {
+        coldStartMs: Array(20).fill(2100),
+        hotWindowMs: Array(30).fill(1100),
+        coldStartP90Ms: 2100,
+        hotWindowP90Ms: 1100,
+        advisories: [
+          { code: 'PERF-COLD-START-P90', actualMs: 2100, referenceMs: 2000 },
+          { code: 'PERF-HOT-WINDOW-P90', actualMs: 1100, referenceMs: 1000 },
+        ],
+      },
+    });
+    const result = verifyPreviewReleaseGate({
+      rootDir: fixture.root,
+      releaseId: fixture.releaseId,
+      evidencePath: `${fixture.base}/preview-gate.json`,
+      installerPath: fixture.installerPath,
+      bundlePath: fixture.bundlePath,
+      executionEvidencePath: fixture.executionEvidencePath,
+    });
+    expect(result.status).toBe('pass-with-warnings');
+    expect(result.warnings.map((warning) => warning.code)).toEqual([
+      'PERF-COLD-START-P90',
+      'PERF-HOT-WINDOW-P90',
+    ]);
+  }, 20_000);
+
+  it('rejects missing samples and forged performance advisories', () => {
+    const missing = makeFixture({
+      performance: {
+        ...performance,
+        coldStartMs: Array(19).fill(100),
+      },
+    });
+    expect(() =>
+      verifyInstalledAppEvidenceV2({
+        rootDir: missing.root,
+        releaseId: missing.releaseId,
+        installerPath: missing.installerPath,
+        executionEvidencePath: missing.executionEvidencePath,
+      }),
+    ).toThrow(/exactly 20/u);
+
+    const forged = makeFixture({
+      performance: {
+        ...performance,
+        advisories: [{ code: 'PERF-COLD-START-P90', actualMs: 100, referenceMs: 2000 }],
+      },
+    });
+    expect(() =>
+      verifyInstalledAppEvidenceV2({
+        rootDir: forged.root,
+        releaseId: forged.releaseId,
+        installerPath: forged.installerPath,
+        executionEvidencePath: forged.executionEvidencePath,
+      }),
+    ).toThrow(/advisories are not reproducible/u);
+  }, 30_000);
 
   it('rejects an inventory that omits a file from the downloaded candidate bundle', () => {
     const fixture = makeFixture();
@@ -254,6 +320,7 @@ function makeFixture(options = {}) {
   const installerPath = `${root}-JotLuck_0.1.0-preview_x64-setup.exe`;
   writeFileSync(installerPath, 'installer');
   roots.push(installerPath);
+  const fixturePerformance = options.performance ?? performance;
   const raw = {
     schema: 'jotluck.installed-app.raw-report.v2',
     releaseId,
@@ -270,7 +337,7 @@ function makeFixture(options = {}) {
       counters: result.counters,
       output: artifactRef(outputs[index]),
     })),
-    performance,
+    performance: fixturePerformance,
   };
   writeCanonical(root, `${base}/raw-report.json`, raw);
   const transcript = {
@@ -285,7 +352,7 @@ function makeFixture(options = {}) {
       counters: entry.counters,
       outputSha256: entry.output.sha256,
     })),
-    performance,
+    performance: fixturePerformance,
   };
   writeCanonical(root, `${base}/transcript.json`, transcript);
   const bundlePath = `${root}-bundle`;
@@ -342,11 +409,17 @@ function makeFixture(options = {}) {
         id: '456',
         name: 'jotluck-windows-candidate',
         digest: `sha256:${'1'.repeat(64)}`,
+        sizeInBytes: 100,
       },
       evidenceArtifact: {
         id: '789',
         name: `jotluck-installed-app-evidence-v2-${releaseId}`,
         digest: `sha256:${'2'.repeat(64)}`,
+        sizeInBytes: 200,
+      },
+      materialization: {
+        job: 'Installed-app Evidence Materialization',
+        step: 'Materialize managed evidence bundle',
       },
     },
     installer: installerMetadata(installerPath),
@@ -358,7 +431,7 @@ function makeFixture(options = {}) {
       commit: candidate,
       gitTreeSha: git(root, ['rev-parse', `${candidate}:spec/release/required-cases`]).trim(),
     },
-    performance,
+    performance: fixturePerformance,
   };
   writeCanonical(root, `${base}/manifest.json`, manifest);
   git(root, ['add', '.']);

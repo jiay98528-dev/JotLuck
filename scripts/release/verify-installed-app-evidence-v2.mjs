@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { lstatSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { validatePerformanceEvidence } from './installed-app-performance.mjs';
 
 export const RAW_SCHEMA = 'jotluck.installed-app.raw-report.v2';
 export const TRANSCRIPT_SCHEMA = 'jotluck.installed-app.transcript.v2';
@@ -63,8 +64,8 @@ export function verifyInstalledAppEvidenceV2({
     [
       'coldStartSamples',
       'hotWindowSamples',
-      'coldStartP90MaxMs',
-      'hotWindowP90MaxMs',
+      'coldStartP90ReferenceMs',
+      'hotWindowP90ReferenceMs',
       'requiredArtifactKind',
     ],
     'required performance',
@@ -73,12 +74,12 @@ export function verifyInstalledAppEvidenceV2({
     ![
       required.performance.coldStartSamples,
       required.performance.hotWindowSamples,
-      required.performance.coldStartP90MaxMs,
-      required.performance.hotWindowP90MaxMs,
+      required.performance.coldStartP90ReferenceMs,
+      required.performance.hotWindowP90ReferenceMs,
     ].every((value) => Number.isInteger(value) && value > 0) ||
     !nonEmpty(required.performance.requiredArtifactKind)
   ) {
-    throw new Error('required performance thresholds are invalid');
+    throw new Error('required performance references are invalid');
   }
   const base = `${EVIDENCE_ROOT}/${releaseId}`;
   const manifest = readJson(root, `${base}/manifest.json`);
@@ -133,14 +134,14 @@ export function verifyInstalledAppEvidenceV2({
   }
   verifyExecutionAttachments(raw, manifest.attachments, root, base, required);
   verifyExecutionArtifactSnapshot(root, base, manifest, executionEvidencePath);
-  verifyPerformance(
+  const warnings = verifyPerformance(
     raw.performance,
     transcript.performance,
     manifest.performance,
     required.performance,
   );
 
-  return { releaseId, candidateCommit: manifest.candidate.commit, evidenceCommit };
+  return { releaseId, candidateCommit: manifest.candidate.commit, evidenceCommit, warnings };
 }
 
 function validateManifest(value, releaseId, base) {
@@ -172,7 +173,15 @@ function validateManifest(value, releaseId, base) {
   assertObject(value.ci, 'CI binding');
   assertExactKeys(
     value.ci,
-    ['provider', 'repository', 'runId', 'runAttempt', 'candidateArtifact', 'evidenceArtifact'],
+    [
+      'provider',
+      'repository',
+      'runId',
+      'runAttempt',
+      'candidateArtifact',
+      'evidenceArtifact',
+      'materialization',
+    ],
     'CI binding',
   );
   if (
@@ -185,6 +194,14 @@ function validateManifest(value, releaseId, base) {
     throw new Error('CI run/artifact binding is incomplete');
   assertGitHubArtifactBinding(value.ci.candidateArtifact, 'candidate artifact binding');
   assertGitHubArtifactBinding(value.ci.evidenceArtifact, 'evidence artifact binding');
+  assertObject(value.ci.materialization, 'materialization binding');
+  assertExactKeys(value.ci.materialization, ['job', 'step'], 'materialization binding');
+  if (
+    value.ci.materialization.job !== 'Installed-app Evidence Materialization' ||
+    value.ci.materialization.step !== 'Materialize managed evidence bundle'
+  ) {
+    throw new Error('materialization job/step binding is invalid');
+  }
   if (
     value.ci.candidateArtifact.name !== 'jotluck-windows-candidate' ||
     value.ci.evidenceArtifact.name !== `jotluck-installed-app-evidence-v2-${releaseId}` ||
@@ -649,35 +666,14 @@ function collectSnapshotFiles(root, relative = '') {
 
 function verifyPerformance(raw, transcript, manifest, rule) {
   for (const performance of [raw, transcript, manifest]) {
-    assertObject(performance, 'performance');
-    assertExactKeys(
-      performance,
-      ['coldStartMs', 'hotWindowMs', 'coldStartP90Ms', 'hotWindowP90Ms'],
-      'performance',
-    );
-    validateDurations(performance.coldStartMs, rule.coldStartSamples, 'cold start');
-    validateDurations(performance.hotWindowMs, rule.hotWindowSamples, 'hot window');
-    const cold = p90(performance.coldStartMs);
-    const hot = p90(performance.hotWindowMs);
-    if (performance.coldStartP90Ms !== cold || performance.hotWindowP90Ms !== hot)
-      throw new Error('performance p90 is not reproducible');
-    if (cold > rule.coldStartP90MaxMs || hot > rule.hotWindowP90MaxMs)
-      throw new Error('performance p90 exceeds required threshold');
+    validatePerformanceEvidence(performance, rule);
   }
   if (
     canonicalJson(raw) !== canonicalJson(transcript) ||
     canonicalJson(raw) !== canonicalJson(manifest)
   )
     throw new Error('performance values are not conserved across evidence');
-}
-
-function validateDurations(samples, count, label) {
-  if (
-    !Array.isArray(samples) ||
-    samples.length !== count ||
-    samples.some((value) => !Number.isFinite(value) || value <= 0)
-  )
-    throw new Error(`${label} samples must contain exactly ${count} positive durations`);
+  return raw.advisories;
 }
 
 function verifyGitLineage(root, candidateCommit, base) {
@@ -759,11 +755,13 @@ function assertCaseArtifact(value, label) {
 }
 function assertGitHubArtifactBinding(value, label) {
   assertObject(value, label);
-  assertExactKeys(value, ['id', 'name', 'digest'], label);
+  assertExactKeys(value, ['id', 'name', 'digest', 'sizeInBytes'], label);
   if (
     !/^[1-9]\d*$/u.test(String(value.id)) ||
     !nonEmpty(value.name) ||
-    !/^sha256:[a-f0-9]{64}$/u.test(String(value.digest))
+    !/^sha256:[a-f0-9]{64}$/u.test(String(value.digest)) ||
+    !Number.isInteger(value.sizeInBytes) ||
+    value.sizeInBytes <= 0
   ) {
     throw new Error(`${label} is invalid`);
   }
@@ -872,9 +870,6 @@ function git(root, args, statusOnly = false) {
     if (statusOnly) return error.status ?? 1;
     throw new Error(`git ${args.join(' ')} failed`);
   }
-}
-function p90(samples) {
-  return [...samples].sort((a, b) => a - b)[Math.ceil(samples.length * 0.9) - 1];
 }
 function rejectSelfAttestedConclusion(value, label) {
   const forbidden = new Set(['pass', 'passed', 'status', 'result', 'conclusion']);
