@@ -29,4 +29,33 @@ describe('Windows optional file association contract', () => {
       expect(hooks).toContain(`_JotLuck_REMOVE_OPTIONAL_ASSOC "${extension}"`);
     },
   );
+
+  it('removes only JotLuck OpenWithList slots and preserves the remaining MRU order', () => {
+    const removeSlotMacro = hooks.match(
+      /!macro _JotLuck_REMOVE_OPENWITH_SLOT[\s\S]*?!macroend/u,
+    )?.[0];
+    const removeAssociationMacro = hooks.match(
+      /!macro _JotLuck_REMOVE_OPTIONAL_ASSOC[\s\S]*?!macroend/u,
+    )?.[0];
+
+    expect(removeSlotMacro).toContain('ReadRegStr $4');
+    expect(removeSlotMacro).toContain('StrCpy $8 $4 1 $6');
+    expect(removeSlotMacro).toContain('${If} $8 != "${SLOT}"');
+    expect(removeSlotMacro).toContain('WriteRegStr SHCTX');
+    expect(removeSlotMacro).toContain('"MRUList" "$5"');
+    expect(removeAssociationMacro).not.toMatch(/DeleteRegValue[^\n]+"MRUList"/u);
+  });
+
+  it.each([
+    ['cba', ['b'], 'ca'],
+    ['dcba', ['b', 'd'], 'ca'],
+    ['cba', [], 'cba'],
+    ['b', ['b'], ''],
+  ])('keeps MRU order for %s after removing %j', (mru, slots, expected) => {
+    expect(removeSlotsFromMru(mru, slots)).toBe(expected);
+  });
 });
+
+function removeSlotsFromMru(mru: string, slots: string[]): string {
+  return [...mru].filter((slot) => !slots.includes(slot)).join('');
+}

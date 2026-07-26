@@ -2,7 +2,22 @@
   ReadRegStr $0 SHCTX "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\${EXT}\OpenWithList" "${SLOT}"
   ${If} $0 == "JotLuck.exe"
     DeleteRegValue SHCTX "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\${EXT}\OpenWithList" "${SLOT}"
-    StrCpy $3 "1"
+    ReadRegStr $4 SHCTX "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\${EXT}\OpenWithList" "MRUList"
+    StrCpy $5 ""
+    StrCpy $6 "0"
+    StrLen $7 $4
+    ${DoWhile} $6 < $7
+      StrCpy $8 $4 1 $6
+      ${If} $8 != "${SLOT}"
+        StrCpy $5 "$5$8"
+      ${EndIf}
+      IntOp $6 $6 + 1
+    ${Loop}
+    ${If} $5 == ""
+      DeleteRegValue SHCTX "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\${EXT}\OpenWithList" "MRUList"
+    ${Else}
+      WriteRegStr SHCTX "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\${EXT}\OpenWithList" "MRUList" "$5"
+    ${EndIf}
   ${EndIf}
 !macroend
 
@@ -55,7 +70,6 @@
   DeleteRegValue SHCTX "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\${EXT}\OpenWithProgids" "JotLuck.Markdown"
   DeleteRegValue SHCTX "Software\Classes\Applications\JotLuck.exe\SupportedTypes" "${EXT}"
 
-  StrCpy $3 "0"
   !insertmacro _JotLuck_REMOVE_OPENWITH_SLOT "${EXT}" "a"
   !insertmacro _JotLuck_REMOVE_OPENWITH_SLOT "${EXT}" "b"
   !insertmacro _JotLuck_REMOVE_OPENWITH_SLOT "${EXT}" "c"
@@ -82,9 +96,6 @@
   !insertmacro _JotLuck_REMOVE_OPENWITH_SLOT "${EXT}" "x"
   !insertmacro _JotLuck_REMOVE_OPENWITH_SLOT "${EXT}" "y"
   !insertmacro _JotLuck_REMOVE_OPENWITH_SLOT "${EXT}" "z"
-  ${If} $3 == "1"
-    DeleteRegValue SHCTX "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\${EXT}\OpenWithList" "MRUList"
-  ${EndIf}
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
