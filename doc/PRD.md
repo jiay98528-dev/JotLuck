@@ -1,6 +1,6 @@
 # JotLuck PRD
 
-版本：2026-07-25
+版本：2026-07-27
 
 ## 产品定位
 
@@ -56,6 +56,7 @@ JotLuck 是本地优先、离线可用的 Markdown 笔记工具。数据以普�
 - `0.1.0-preview` 的独立 preview gate 允许 Public L3 继续 architecture-stop / fail-closed；但生产依赖图、桌面 bundle 和安装包均不得包含或可达 V2S Worker、factory、候选资产或自动加载路径。
 - 文件关联安装只注册 `.md/.markdown/.mdx/.txt` 的可选打开程序；卸载只移除 JotLuck 自身槽位，并保持其他应用的 Open With 项和 `MRUList` 原有顺序，不修改当前默认 ProgID。
 - 正式 installed-app evidence 必须来自候选提交在 `main` 上触发的 GitHub Actions `workflow_dispatch`：固定 adapter 产生执行日志和可观察产物，GitHub REST 同时核验 workflow run、head SHA、attempt、job/step conclusion 及候选/证据 artifact 来源；本地结构校验不得单独产生正式 PASS。
+- 安装版性能必须保留 20 次冷启动和 30 次运行中新窗口的全部正数原始样本，并由捕获器、物化器和校验器复算 P90。样本缺失、数量错误、不可复算或证据不守恒继续阻断；参考机上冷启动 P90 超过 2 秒或热开窗 P90 超过 1 秒只产生固定代码的非阻断警告，不得因测试机并行负载单独否决内测候选。
 - 任何主题、Theme API、slot、Host API、manifest、runtime 或 `.mltheme` 示例变更都必须符合 `doc/standards-theme-development.md`，并同步更新类型和测试。
 - 启动后默认应用 `paper`；用户可启用 `super-workbench` 验证主题接管能力。
 - 主题中心显示本地市场、已安装、导入、商业状态和开发者信息。
@@ -64,6 +65,7 @@ JotLuck 是本地优先、离线可用的 Markdown 笔记工具。数据以普�
 
 ## 变更记录
 
+- 2026-07-27：补齐 24 个固定安装版 adapter 与可信 evidence materialization 契约；将可复算的 2 秒/1 秒性能参考线降为非阻断警告，样本和来源完整性仍保持硬门控。
 - 2026-07-26：收紧 installed-app evidence v2 的真实执行与 GitHub Actions provenance 契约；补充卸载保持其他应用 Open With 顺序的产品约束。
 
 - 2026-07-25：新增关联文件多窗口产品合同：单进程一文件一窗口、路径去重、只读/单文件编辑/完整笔记本三态、四扩展名可选关联及窗口级服务隔离；构建版本指定为 `0.1.0-preview`。

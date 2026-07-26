@@ -1,6 +1,6 @@
 # Decisions
 
-版本：2026-07-25
+版本：2026-07-27
 
 ## 已确认决策
 
@@ -77,8 +77,18 @@
 - **Preview gate**：`0.1.0-preview` 接受 Public L3 保持 architecture-stop / fail-closed，但 release gate 必须证明生产依赖图、bundle 和安装包不含可达的 V2S Worker、factory、候选资产或自动加载入口。
 - **后果**：外部只读入口可保持轻量并避免目录级副作用，但后端状态不再能够使用进程单例；必须为多窗口和关闭清理建立独立测试覆盖。
 
+## ADR-018：安装版证据采用固定执行、同源解析和独立物化
+
+- **状态**：已接受（2026-07-27）。
+- **决策**：installed-app v2 的 24 个 required case 只允许由仓库内固定 adapter 执行；capture artifact 保存原始报告、逐 case 结果、执行日志和可观察产物。任何 manifest、命令行或环境变量都不能提供替代命令。
+- **来源边界**：GitHub REST 是正式来源信任根。同一 `main`/`workflow_dispatch` run 必须绑定精确 candidate SHA、attempt、成功前置 job/step，以及名称唯一、未过期、非空且 digest/size 可核验的 candidate 与 execution artifact。物化前按 API 已核验的 ID 下载，不能先下载再为任意文件补来源说明。
+- **物化边界**：materializer 只复制可信 execution artifact 中由 raw report 守恒列出的普通非空文件，并生成 transcript、manifest 和生产 inventory。它的本地自检只能输出 `structural-diagnostic`；正式 PASS 仍要求独立 evidence commit、在线 provenance、精确 candidate 二进制和完整 GUI/安装旅程。
+- **性能语义**：20 次冷启动与 30 次热开窗原始样本、正数、数量、P90 和 advisory 必须可复算且跨报告守恒。2 秒/1 秒是参考环境目标，不是能力或安全边界；超过时返回固定 advisory 与 `pass-with-warnings`，缺样本或伪造结果仍硬失败。
+- **后果**：测试机并行负载不会单独阻断 preview，但也不能用“环境抖动”豁免缺安装旅程、缺样本、缺 provenance、缺证据提交或产品功能失败。
+
 ## 变更记录
 
+- 2026-07-27：新增 ADR-018，确立固定 adapter、REST 同源解析、独立物化及性能参考警告语义。
 - 2026-07-25：新增 ADR-017，确立单进程多窗口关联文件、规范路径去重、三态窗口会话及窗口级服务隔离。
 - 2026-07-25：ADR-017 补充只读初始 grant、单文件编辑提升、`assert_workspace` 与唯一目录提升命令，并定义 preview 的 V2S 不可达门槛。
 - 2026-07-13：ADR-016 完成有界矩阵与逐语言组合预检；固定矩阵最好前沿 Oracle 37.5%/40.5% 未达 40%/45% 架构门槛，记录 architecture stop，未训练 Gate 或消费 final。

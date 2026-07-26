@@ -1,6 +1,6 @@
 # JotLuck TAD
 
-版本：2026-07-25
+版本：2026-07-27
 
 ## UX Theme Runtime v2
 
@@ -83,9 +83,13 @@ Vue 3 + Pinia + Vite
 - NSIS 卸载按字母槽识别 `JotLuck.exe`，仅从 `MRUList` 删除对应字母并保持剩余顺序；不存在 JotLuck 槽时不得写 MRU，仍有其他槽时不得删除整个 `MRUList`。
 - installed-app evidence 的正式信任根为 GitHub Actions + REST provenance。候选和 execution evidence artifact 必须来自同一个 `main`/`workflow_dispatch` run，`head_sha` 等于候选提交且 required jobs/steps 全部成功；缺 token、REST 失败、artifact 过期或 digest 不一致一律 fail-closed。
 - required-case catalog 固定 adapter 与 artifact kinds；case result 必须包含可解析的 `execution-log.ndjson` 和指定观察产物。证据提交中的 raw report、case results 和附件必须与下载的 execution artifact 精确同构，transcript 只允许守恒转录。
+- capture 只调用仓库内固定的 24 个 adapter，不接受 manifest、参数或环境变量注入测试命令。Windows runner 从卸载注册表解析真实安装位置，复用 standalone WebDriver host；所有 case 完成或失败后统一回收 WebDriver、应用进程、安装状态、临时文件和测试注册表项。
+- materialization job 必须先通过同一 run 的 REST resolver 核验 repository/workflow/event/branch/SHA/attempt、前置 job、固定 artifact ID/name/digest/size/唯一性，再按 ID 下载。materializer 对 raw report、case results 和附件逐文件验证增删改，生成 transcript、manifest、构建 inventory 与 preview-gate；该输出在进入独立 evidence commit 并通过在线 provenance 前只能称为 `structural-diagnostic`。
+- 安装版性能使用 catalog 中的 `coldStartP90ReferenceMs` / `hotWindowP90ReferenceMs`。20/30 原始样本、正数约束、P90 复算和 advisory 守恒是硬门控；超过参考线只返回 `pass-with-warnings`，不改变退出码。
 
 ## 变更记录
 
+- 2026-07-27：增加固定 installed-app adapter、同 run REST resolver 和 evidence materializer；性能参考线改为可复算 advisory，证据完整性仍 fail-closed。
 - 2026-07-26：installed-app evidence v2 改用 GitHub REST run/artifact provenance，并加入固定 adapter、执行日志和 execution artifact 精确快照；NSIS 卸载改为 MRU 保序清理。
 - 2026-07-25：新增单进程多窗口窗口会话架构、窗口身份 IPC、规范路径去重、外部只读轻量入口以及窗口级 root/index/watcher/completion 隔离。
 - 2026-07-25：明确 P1 grant 升级与 `assert_workspace` 命令边界；增加 `0.1.0-preview` Public L3 stop / V2S 生产不可达 gate。

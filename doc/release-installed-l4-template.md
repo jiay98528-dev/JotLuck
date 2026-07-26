@@ -1,6 +1,6 @@
 # JotLuck 安装版 L4 人工验收记录模板
 
-版本：2026-07-26（installed-app evidence v2）
+版本：2026-07-27（installed-app evidence v2）
 
 > 复制本模板为单次发行记录，例如 `验收报告/2026-07-25-JotLuck-0.1.0-preview-installed-L4.md`。
 > 所有 `状态` 必须填写 `PASS`，否则 `pnpm release:rc-gate` 必须阻断 RC 放行。任何失败项标记为 P0/P1/P2，不允许用 Web 自动化通过覆盖人工失败。
@@ -129,7 +129,9 @@
 - GitHub repository / workflow run ID / run attempt / candidate head SHA:
 - candidate artifact ID / fixed name / API digest:
 - execution evidence artifact ID / fixed name / API digest:
+- candidate / execution artifact API size、materialization job/step:
 - 每 case 固定 adapter / `execution-log.ndjson` / required artifact kinds:
+- RF-10 20 次冷启动 / 30 次热开窗原始样本、复算 P90、advisory（超过参考线为非阻断警告；缺样本仍失败）:
 
 - 截图目录:
 - 验证用本地文件夹:
@@ -150,5 +152,6 @@
 
 ## 变更记录
 
+- 2026-07-27：增加 materialization 来源绑定和 RF-10 原始性能样本/advisory 记录；参考线超标不再单独阻断。
 - 2026-07-26：增加 GitHub REST provenance、同 run 双 artifact、固定 adapter/execution log 和卸载 MRU 保序记录。
 - 2026-07-25：模板升级为 installed-app evidence v2，增加原始产物、二次转录、counter/hash/commit 链及 `0.1.0-preview` V2S 不可达证据字段。
