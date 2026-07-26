@@ -8,12 +8,14 @@ import {
   verifyInstalledAppEvidenceV2,
   verifyTrackedArtifact,
 } from './verify-installed-app-evidence-v2.mjs';
+import {
+  readEvidenceManifest,
+  verifyGitHubActionsProvenance,
+} from './verify-github-actions-provenance.mjs';
 
 const SCHEMA = 'jotluck.preview-release-gate.v2';
-const COMMAND_SCHEMA = 'jotluck.release-command-execution.v2';
 const INVENTORY_SCHEMA = 'jotluck.production-file-inventory.v1';
 const SHA256 = /^[a-f0-9]{64}$/u;
-const ISO_TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/u;
 const PUBLIC_V2S = /(?:public-v2s|autocomplete-public\.manifest|public-v2s\.worker)/iu;
 
 export function verifyPreviewReleaseGate({
@@ -22,6 +24,7 @@ export function verifyPreviewReleaseGate({
   evidencePath,
   installerPath,
   bundlePath,
+  executionEvidencePath,
 }) {
   const root = realpathSync(path.resolve(rootDir));
   const stop = inspectV2SArchitectureStop(root);
@@ -29,25 +32,16 @@ export function verifyPreviewReleaseGate({
   const expectedPath = `release-evidence/installed-app/v2/${releaseId}/preview-gate.json`;
   if (evidencePath !== expectedPath) throw new Error('preview evidence path is not fixed');
   const evidence = readEvidence(root, evidencePath);
-  assertExactKeys(
-    evidence,
-    [
-      'schema',
-      'releaseId',
-      'productionDependencyAudit',
-      'fullDependencyAudit',
-      'fullTest',
-      'productionBuild',
-    ],
-    'preview evidence',
-  );
+  assertExactKeys(evidence, ['schema', 'releaseId', 'productionBuild'], 'preview evidence');
   if (evidence.schema !== SCHEMA || evidence.releaseId !== releaseId)
     throw new Error('preview gate evidence schema or release id is invalid');
 
-  const installed = verifyInstalledAppEvidenceV2({ rootDir: root, releaseId, installerPath });
-  verifyExecution(root, evidence.productionDependencyAudit, 'production dependency audit');
-  verifyExecution(root, evidence.fullDependencyAudit, 'full dependency audit');
-  verifyExecution(root, evidence.fullTest, 'full test');
+  const installed = verifyInstalledAppEvidenceV2({
+    rootDir: root,
+    releaseId,
+    installerPath,
+    executionEvidencePath,
+  });
   verifyProductionBuild(
     root,
     evidence.productionBuild,
@@ -73,66 +67,9 @@ function readEvidence(root, evidencePath) {
   }
 }
 
-function verifyExecution(root, value, label) {
-  assertObject(value, `${label} execution`);
-  assertExactKeys(
-    value,
-    ['command', 'startedAt', 'finishedAt', 'exitCode', 'counters', 'output'],
-    `${label} execution`,
-  );
-  validateSuccessfulExecution(value, label);
-  verifyTrackedArtifact(root, value.output, `${label} output`);
-  const parsed = JSON.parse(readFileSync(path.join(root, value.output.path), 'utf8'));
-  assertObject(parsed, `${label} parsed output`);
-  assertExactKeys(
-    parsed,
-    ['schema', 'command', 'startedAt', 'finishedAt', 'exitCode', 'counters'],
-    `${label} parsed output`,
-  );
-  if (
-    parsed.schema !== COMMAND_SCHEMA ||
-    parsed.command !== value.command ||
-    parsed.startedAt !== value.startedAt ||
-    parsed.finishedAt !== value.finishedAt ||
-    parsed.exitCode !== value.exitCode ||
-    canonicalJson(parsed.counters) !== canonicalJson(value.counters)
-  ) {
-    throw new Error(`${label} summary does not match its parsed execution output`);
-  }
-  validateSuccessfulExecution(parsed, `${label} parsed output`);
-}
-
-function validateSuccessfulExecution(value, label) {
-  assertObject(value.counters, `${label} counters`);
-  assertExactKeys(value.counters, ['executed', 'passed', 'failed', 'skipped'], `${label} counters`);
-  const counters = value.counters;
-  if (
-    value.exitCode !== 0 ||
-    !Number.isInteger(counters.executed) ||
-    !Number.isInteger(counters.passed) ||
-    !Number.isInteger(counters.failed) ||
-    !Number.isInteger(counters.skipped) ||
-    counters.executed <= 0 ||
-    counters.passed !== counters.executed ||
-    counters.failed !== 0 ||
-    counters.skipped !== 0 ||
-    typeof value.command !== 'string' ||
-    value.command.length === 0 ||
-    !ISO_TIME.test(String(value.startedAt)) ||
-    !ISO_TIME.test(String(value.finishedAt))
-  ) {
-    throw new Error(`${label} is not strict successful execution evidence`);
-  }
-}
-
 function verifyProductionBuild(root, value, candidateCommit, bundlePath, installerPath) {
   assertObject(value, 'production build');
-  assertExactKeys(
-    value,
-    ['execution', 'bundleInventory', 'installerInventory'],
-    'production build',
-  );
-  verifyExecution(root, value.execution, 'production build');
+  assertExactKeys(value, ['bundleInventory', 'installerInventory'], 'production build');
   verifyInventory(root, value.bundleInventory, 'bundle', candidateCommit, bundlePath);
   verifyInventory(root, value.installerInventory, 'installer', candidateCommit, installerPath);
 }
@@ -285,33 +222,46 @@ function sortValue(value) {
   return value;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+async function main() {
   const [
     releaseId,
     evidencePath,
     installerPath = process.env.JOTLUCK_INSTALLER_PATH,
     bundlePath = process.env.JOTLUCK_PRODUCTION_BUNDLE_PATH,
+    executionEvidencePath = process.env.JOTLUCK_EXECUTION_EVIDENCE_PATH,
   ] = process.argv.slice(2);
-  if (!releaseId || !evidencePath || !installerPath || !bundlePath) {
+  if (!releaseId || !evidencePath || !installerPath || !bundlePath || !executionEvidencePath) {
     console.error(
-      'usage: node scripts/release/verify-preview-release-gate.mjs <release-id> <preview-evidence.json> <installer-path> <bundle-path>',
+      'usage: node scripts/release/verify-preview-release-gate.mjs <release-id> <preview-evidence.json> <installer-path> <bundle-path> <execution-evidence-path>',
     );
     process.exit(2);
   }
-  try {
-    console.log(
-      JSON.stringify(
-        verifyPreviewReleaseGate({
-          rootDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'),
-          releaseId,
-          evidencePath,
-          installerPath,
-          bundlePath,
-        }),
-      ),
-    );
-  } catch (error) {
+  const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const manifest = readEvidenceManifest(rootDir, releaseId);
+  await verifyGitHubActionsProvenance({
+    manifest,
+    releaseId,
+    repository: process.env.GITHUB_REPOSITORY,
+    token: process.env.GITHUB_TOKEN,
+    apiUrl: process.env.GITHUB_API_URL,
+  });
+  console.log(
+    JSON.stringify(
+      verifyPreviewReleaseGate({
+        rootDir,
+        releaseId,
+        evidencePath,
+        installerPath,
+        bundlePath,
+        executionEvidencePath,
+      }),
+    ),
+  );
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
     console.error(`[preview-release-gate] FAIL: ${error.message}`);
     process.exit(12);
-  }
+  });
 }

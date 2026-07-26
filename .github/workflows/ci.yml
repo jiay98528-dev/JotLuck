@@ -17,6 +17,11 @@ on:
         required: true
         default: false
         type: boolean
+      capture_installed_evidence:
+        description: 'Capture trusted installed-app evidence for the frozen main candidate'
+        required: true
+        default: false
+        type: boolean
       release_id:
         description: 'release-evidence/installed-app/v2/<release-id> directory name'
         required: false
@@ -26,6 +31,10 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
   lint-and-typecheck:
@@ -285,7 +294,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload immutable Windows candidate
-        if: always()
+        id: candidate-upload
         uses: actions/upload-artifact@v4
         with:
           name: jotluck-windows-candidate
@@ -293,6 +302,61 @@ jobs:
             packages/app/dist/**
             packages/app/src-tauri/target/release/jotluck.exe
             packages/app/src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+
+  installed-app-evidence-capture:
+    name: Installed-app Evidence Capture
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.capture_installed_evidence == true }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    needs: [lint-and-typecheck, test, rust, e2e, e2e-visual-windows, tauri-build-windows]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --locked
+
+      - name: Install matching Microsoft Edge Driver
+        shell: pwsh
+        run: |
+          cargo install --git https://github.com/chippers/msedgedriver-tool --rev 8c4b34f51b45f5cf08013366d703de464ab871d1 --locked
+          & "$env:USERPROFILE\.cargo\bin\msedgedriver-tool.exe"
+          $edgeDriver = (Resolve-Path ".\msedgedriver.exe").Path
+          "JOTLUCK_EDGE_DRIVER=$edgeDriver" >> $env:GITHUB_ENV
+
+      - name: Download same-run immutable Windows candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: jotluck-windows-candidate
+          path: candidate
+
+      - name: Run fixed installed-app evidence adapters
+        env:
+          RELEASE_ID: ${{ inputs.release_id }}
+        run: pnpm release:capture-installed-evidence -- "$env:RELEASE_ID" "candidate" "installed-app-evidence"
+
+      - name: Upload trusted installed-app execution evidence
+        id: evidence-upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: jotluck-installed-app-evidence-v2-${{ inputs.release_id }}
+          path: installed-app-evidence/**
           if-no-files-found: error
 
   release-installed-app-gate:
@@ -320,31 +384,30 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Read immutable candidate artifact binding
-        id: candidate
-        shell: pwsh
+      - name: Verify candidate and evidence provenance before download
+        id: provenance
         env:
           RELEASE_ID: ${{ inputs.release_id }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:RELEASE_ID)) {
-            throw 'release_id is required for an installed-app gate'
-          }
-          $manifestPath = "release-evidence/installed-app/v2/$env:RELEASE_ID/manifest.json"
-          if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
-            throw "evidence manifest not found: $manifestPath"
-          }
-          $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-          "run_id=$($manifest.ci.runId)" >> $env:GITHUB_OUTPUT
-          "artifact_id=$($manifest.ci.artifactId)" >> $env:GITHUB_OUTPUT
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/release/verify-github-actions-provenance.mjs "$env:RELEASE_ID"
 
       - name: Download exact candidate Windows installer artifact
         uses: actions/download-artifact@v4
         with:
-          artifact-ids: ${{ steps.candidate.outputs.artifact_id }}
-          run-id: ${{ steps.candidate.outputs.run_id }}
+          artifact-ids: ${{ steps.provenance.outputs.candidate_artifact_id }}
+          run-id: ${{ steps.provenance.outputs.run_id }}
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           path: candidate-installer
+
+      - name: Download exact trusted installed-app execution evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.provenance.outputs.evidence_artifact_id }}
+          run-id: ${{ steps.provenance.outputs.run_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          path: installed-app-execution
 
       - name: Resolve candidate installer
         shell: pwsh
@@ -359,6 +422,11 @@ jobs:
             throw "expected exactly one production dist directory, found $($bundles.Count)"
           }
           "JOTLUCK_PRODUCTION_BUNDLE_PATH=$($bundles[0].FullName)" >> $env:GITHUB_ENV
+          $rawReports = @(Get-ChildItem -LiteralPath 'installed-app-execution' -Recurse -File -Filter 'raw-report.json')
+          if ($rawReports.Count -ne 1) {
+            throw "expected exactly one trusted raw-report.json, found $($rawReports.Count)"
+          }
+          "JOTLUCK_EXECUTION_EVIDENCE_PATH=$($rawReports[0].DirectoryName)" >> $env:GITHUB_ENV
 
       - name: Run installed-app RC gate
         if: ${{ inputs.run_rc_gate == true }}
@@ -370,4 +438,4 @@ jobs:
         if: ${{ inputs.run_preview_gate == true }}
         env:
           RELEASE_ID: ${{ inputs.release_id }}
-        run: node scripts/release/verify-preview-release-gate.mjs "$env:RELEASE_ID" "release-evidence/installed-app/v2/$env:RELEASE_ID/preview-gate.json" "$env:JOTLUCK_INSTALLER_PATH" "$env:JOTLUCK_PRODUCTION_BUNDLE_PATH"
+        run: node scripts/release/verify-preview-release-gate.mjs "$env:RELEASE_ID" "release-evidence/installed-app/v2/$env:RELEASE_ID/preview-gate.json" "$env:JOTLUCK_INSTALLER_PATH" "$env:JOTLUCK_PRODUCTION_BUNDLE_PATH" "$env:JOTLUCK_EXECUTION_EVIDENCE_PATH"

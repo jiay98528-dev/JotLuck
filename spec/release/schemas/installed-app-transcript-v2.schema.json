@@ -32,9 +32,10 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["caseId", "counters", "outputSha256"],
+        "required": ["caseId", "adapter", "counters", "outputSha256"],
         "properties": {
           "caseId": { "type": "string", "minLength": 1 },
+          "adapter": { "type": "string", "minLength": 1 },
           "counters": {
             "type": "object",
             "additionalProperties": false,

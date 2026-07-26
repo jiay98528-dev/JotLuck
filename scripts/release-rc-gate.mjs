@@ -8,6 +8,10 @@ import {
   verifyAutocompleteV2SEvidence,
 } from './verify-autocomplete-v2s-evidence.mjs';
 import { verifyInstalledAppEvidenceV2 } from './release/verify-installed-app-evidence-v2.mjs';
+import {
+  readEvidenceManifest,
+  verifyGitHubActionsProvenance,
+} from './release/verify-github-actions-provenance.mjs';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = new Set(process.argv.slice(2));
@@ -40,10 +44,19 @@ if (!releaseId) {
   fail(11, '缺少 release id；installed-app evidence v2 必须以固定 release directory 验证。');
 }
 try {
+  const manifest = readEvidenceManifest(rootDir, releaseId);
+  await verifyGitHubActionsProvenance({
+    manifest,
+    releaseId,
+    repository: process.env.GITHUB_REPOSITORY,
+    token: process.env.GITHUB_TOKEN,
+    apiUrl: process.env.GITHUB_API_URL,
+  });
   const verified = verifyInstalledAppEvidenceV2({
     rootDir,
     releaseId,
     installerPath: process.env.JOTLUCK_INSTALLER_PATH,
+    executionEvidencePath: process.env.JOTLUCK_EXECUTION_EVIDENCE_PATH,
   });
   console.log(
     `[release:rc-gate] PASS: installed-app evidence v2 verified for ${verified.releaseId} (${verified.candidateCommit}).`,

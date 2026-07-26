@@ -31,11 +31,21 @@
     "ci": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["provider", "runId", "artifactId"],
+      "required": [
+        "provider",
+        "repository",
+        "runId",
+        "runAttempt",
+        "candidateArtifact",
+        "evidenceArtifact"
+      ],
       "properties": {
-        "provider": { "type": "string", "minLength": 1 },
+        "provider": { "const": "github-actions" },
+        "repository": { "type": "string", "pattern": "^[^/]+/[^/]+$" },
         "runId": { "type": "string", "minLength": 1 },
-        "artifactId": { "type": "string", "minLength": 1 }
+        "runAttempt": { "type": "integer", "minimum": 1 },
+        "candidateArtifact": { "$ref": "#/$defs/githubArtifact" },
+        "evidenceArtifact": { "$ref": "#/$defs/githubArtifact" }
       }
     },
     "installer": {
@@ -77,5 +87,17 @@
       }
     },
     "performance": { "$ref": "installed-app-raw-report-v2.schema.json#/$defs/performance" }
+  },
+  "$defs": {
+    "githubArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "digest"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "name": { "type": "string", "minLength": 1 },
+        "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      }
+    }
   }
 }

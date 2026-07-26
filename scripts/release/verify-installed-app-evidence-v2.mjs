@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { lstatSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,8 +16,14 @@ const REQUIRED_CASES_TREE = 'spec/release/required-cases';
 const SHA256 = /^[a-f0-9]{64}$/u;
 const COMMIT = /^[a-f0-9]{40}$/u;
 const ISO_TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/u;
+const trackedFilesByRoot = new Map();
 
-export function verifyInstalledAppEvidenceV2({ rootDir, releaseId, installerPath }) {
+export function verifyInstalledAppEvidenceV2({
+  rootDir,
+  releaseId,
+  installerPath,
+  executionEvidencePath,
+}) {
   const root = realpathSync(path.resolve(rootDir));
   assertSafeSegment(releaseId, 'release id');
   const required = readJson(root, REQUIRED_CASES_PATH);
@@ -31,15 +37,36 @@ export function verifyInstalledAppEvidenceV2({ rootDir, releaseId, installerPath
   if (
     required.version !== 2 ||
     required.cases.length === 0 ||
-    required.cases.some((caseId) => !nonEmpty(caseId)) ||
-    new Set(required.cases).size !== required.cases.length
+    required.cases.some(
+      (entry) =>
+        !entry ||
+        typeof entry !== 'object' ||
+        Array.isArray(entry) ||
+        canonicalJson(Object.keys(entry).sort()) !==
+          canonicalJson(['adapter', 'id', 'requiredArtifactKinds']) ||
+        !nonEmpty(entry.id) ||
+        !nonEmpty(entry.adapter) ||
+        !Array.isArray(entry.requiredArtifactKinds) ||
+        entry.requiredArtifactKinds.length < 2 ||
+        entry.requiredArtifactKinds.some((kind) => !nonEmpty(kind)) ||
+        !entry.requiredArtifactKinds.includes('execution-log') ||
+        new Set(entry.requiredArtifactKinds).size !== entry.requiredArtifactKinds.length,
+    ) ||
+    new Set(required.cases.map((entry) => entry.id)).size !== required.cases.length ||
+    new Set(required.cases.map((entry) => entry.adapter)).size !== required.cases.length
   ) {
     throw new Error('required installed-app case catalog contains invalid or duplicate cases');
   }
   assertObject(required.performance, 'required performance');
   assertExactKeys(
     required.performance,
-    ['coldStartSamples', 'hotWindowSamples', 'coldStartP90MaxMs', 'hotWindowP90MaxMs'],
+    [
+      'coldStartSamples',
+      'hotWindowSamples',
+      'coldStartP90MaxMs',
+      'hotWindowP90MaxMs',
+      'requiredArtifactKind',
+    ],
     'required performance',
   );
   if (
@@ -48,7 +75,8 @@ export function verifyInstalledAppEvidenceV2({ rootDir, releaseId, installerPath
       required.performance.hotWindowSamples,
       required.performance.coldStartP90MaxMs,
       required.performance.hotWindowP90MaxMs,
-    ].every((value) => Number.isInteger(value) && value > 0)
+    ].every((value) => Number.isInteger(value) && value > 0) ||
+    !nonEmpty(required.performance.requiredArtifactKind)
   ) {
     throw new Error('required performance thresholds are invalid');
   }
@@ -67,6 +95,7 @@ export function verifyInstalledAppEvidenceV2({ rootDir, releaseId, installerPath
   ) {
     throw new Error('manifest, raw report, and transcript candidate commits do not match');
   }
+  verifyRunnerBinding(raw.runner, manifest);
   if (raw.runner.id !== transcript.transcriber.id) {
     throw new Error('raw report and transcript must be produced by the same readonly actor');
   }
@@ -102,7 +131,8 @@ export function verifyInstalledAppEvidenceV2({ rootDir, releaseId, installerPath
   ) {
     throw new Error('manifest report hash is not the canonical JSON hash');
   }
-  verifyExecutionAttachments(raw, manifest.attachments, root, base);
+  verifyExecutionAttachments(raw, manifest.attachments, root, base, required);
+  verifyExecutionArtifactSnapshot(root, base, manifest, executionEvidencePath);
   verifyPerformance(
     raw.performance,
     transcript.performance,
@@ -140,13 +170,28 @@ function validateManifest(value, releaseId, base) {
   if (typeof value.candidate.version !== 'string' || !value.candidate.version)
     throw new Error('manifest candidate version is invalid');
   assertObject(value.ci, 'CI binding');
-  assertExactKeys(value.ci, ['provider', 'runId', 'artifactId'], 'CI binding');
+  assertExactKeys(
+    value.ci,
+    ['provider', 'repository', 'runId', 'runAttempt', 'candidateArtifact', 'evidenceArtifact'],
+    'CI binding',
+  );
   if (
     value.ci.provider !== 'github-actions' ||
+    !/^[^/]+\/[^/]+$/u.test(String(value.ci.repository)) ||
     !/^[1-9]\d*$/u.test(String(value.ci.runId)) ||
-    !/^[1-9]\d*$/u.test(String(value.ci.artifactId))
+    !Number.isInteger(value.ci.runAttempt) ||
+    value.ci.runAttempt <= 0
   )
     throw new Error('CI run/artifact binding is incomplete');
+  assertGitHubArtifactBinding(value.ci.candidateArtifact, 'candidate artifact binding');
+  assertGitHubArtifactBinding(value.ci.evidenceArtifact, 'evidence artifact binding');
+  if (
+    value.ci.candidateArtifact.name !== 'jotluck-windows-candidate' ||
+    value.ci.evidenceArtifact.name !== `jotluck-installed-app-evidence-v2-${releaseId}` ||
+    value.ci.candidateArtifact.id === value.ci.evidenceArtifact.id
+  ) {
+    throw new Error('CI artifact identity is invalid');
+  }
   assertInstaller(value.installer);
   assertArtifact(value.catalog, 'catalog');
   assertArtifact(value.rawReport, 'raw report');
@@ -232,8 +277,21 @@ function validateRaw(value, required, releaseId) {
     throw new Error('raw report schema or release id is invalid');
   assertCommit(value.candidateCommit, 'raw candidate commit');
   assertObject(value.runner, 'raw runner');
-  assertExactKeys(value.runner, ['id', 'role'], 'raw runner');
-  if (value.runner.role !== 'independent-readonly' || !nonEmpty(value.runner.id))
+  assertExactKeys(
+    value.runner,
+    ['id', 'role', 'provider', 'repository', 'runId', 'runAttempt', 'headSha'],
+    'raw runner',
+  );
+  if (
+    value.runner.role !== 'independent-readonly' ||
+    value.runner.provider !== 'github-actions' ||
+    !nonEmpty(value.runner.id) ||
+    !/^[^/]+\/[^/]+$/u.test(String(value.runner.repository)) ||
+    !/^[1-9]\d*$/u.test(String(value.runner.runId)) ||
+    !Number.isInteger(value.runner.runAttempt) ||
+    value.runner.runAttempt <= 0 ||
+    !COMMIT.test(String(value.runner.headSha))
+  )
     throw new Error('raw runner is not independent readonly');
   if (!ISO_TIME.test(String(value.startedAt)) || !ISO_TIME.test(String(value.finishedAt)))
     throw new Error('raw report timestamps are invalid');
@@ -271,6 +329,7 @@ function validateTranscript(value, raw, required, releaseId) {
     const copy = value.executions.find((item) => item.caseId === execution.caseId);
     if (
       !copy ||
+      copy.adapter !== execution.adapter ||
       canonicalJson(copy.counters) !== canonicalJson(execution.counters) ||
       copy.outputSha256 !== execution.output.sha256
     ) {
@@ -283,16 +342,20 @@ function validateExecutions(executions, requiredCases, label) {
   if (!Array.isArray(executions) || executions.length !== requiredCases.length)
     throw new Error(`${label} execution count does not match fixed cases`);
   const actual = executions.map((item) => item?.caseId).sort();
-  const expected = [...requiredCases].sort();
+  const expected = requiredCases.map((entry) => entry.id).sort();
   if (canonicalJson(actual) !== canonicalJson(expected))
     throw new Error(`${label} case conservation failed`);
   for (const execution of executions) {
     assertObject(execution, `${label} execution`);
+    const requiredCase = requiredCases.find((entry) => entry.id === execution.caseId);
+    if (!requiredCase || execution.adapter !== requiredCase.adapter) {
+      throw new Error(`${label} adapter does not match fixed catalog: ${execution.caseId}`);
+    }
     assertExactKeys(
       execution,
       label === 'raw report'
-        ? ['caseId', 'command', 'startedAt', 'finishedAt', 'exitCode', 'counters', 'output']
-        : ['caseId', 'counters', 'outputSha256'],
+        ? ['caseId', 'adapter', 'startedAt', 'finishedAt', 'exitCode', 'counters', 'output']
+        : ['caseId', 'adapter', 'counters', 'outputSha256'],
       `${label} execution`,
     );
     assertObject(execution.counters, `${label} counters`);
@@ -313,7 +376,6 @@ function validateExecutions(executions, requiredCases, label) {
         throw new Error(`${label} execution failed: ${execution.caseId}`);
       assertArtifact(execution.output, `${execution.caseId} output`);
       if (
-        !nonEmpty(execution.command) ||
         !ISO_TIME.test(String(execution.startedAt)) ||
         !ISO_TIME.test(String(execution.finishedAt))
       )
@@ -324,10 +386,12 @@ function validateExecutions(executions, requiredCases, label) {
   }
 }
 
-function verifyExecutionAttachments(raw, attachments, root, base) {
+function verifyExecutionAttachments(raw, attachments, root, base, required) {
   const declared = new Map(attachments.map((entry) => [entry.path, entry]));
   const referenced = new Set();
   for (const execution of raw.executions) {
+    const requiredCase = required.cases.find((entry) => entry.id === execution.caseId);
+    if (!requiredCase) throw new Error(`case is not in the fixed catalog: ${execution.caseId}`);
     const attached = declared.get(execution.output.path);
     if (
       !attached ||
@@ -343,7 +407,7 @@ function verifyExecutionAttachments(raw, attachments, root, base) {
     referenced.add(execution.output.path);
 
     const caseResult = readJson(root, execution.output.path);
-    validateCaseResult(caseResult, execution);
+    validateCaseResult(caseResult, execution, raw.runner, requiredCase, root);
     rejectSelfAttestedConclusion(caseResult, `case result ${execution.caseId}`);
     for (const artifact of caseResult.artifacts) {
       const bound = declared.get(artifact.path);
@@ -365,17 +429,28 @@ function verifyExecutionAttachments(raw, attachments, root, base) {
   }
 }
 
-function validateCaseResult(value, execution) {
+function validateCaseResult(value, execution, runner, requiredCase, root) {
   assertObject(value, `case result ${execution.caseId}`);
   assertExactKeys(
     value,
-    ['schema', 'caseId', 'command', 'startedAt', 'finishedAt', 'exitCode', 'counters', 'artifacts'],
+    [
+      'schema',
+      'caseId',
+      'adapter',
+      'producer',
+      'startedAt',
+      'finishedAt',
+      'exitCode',
+      'counters',
+      'artifacts',
+    ],
     `case result ${execution.caseId}`,
   );
   if (value.schema !== CASE_EXECUTION_SCHEMA || value.caseId !== execution.caseId)
     throw new Error(`case result identity is invalid: ${execution.caseId}`);
   if (
-    value.command !== execution.command ||
+    value.adapter !== execution.adapter ||
+    canonicalJson(value.producer) !== canonicalJson(runner) ||
     value.startedAt !== execution.startedAt ||
     value.finishedAt !== execution.finishedAt ||
     value.exitCode !== execution.exitCode ||
@@ -389,9 +464,187 @@ function validateCaseResult(value, execution) {
     ['executed', 'passed', 'failed', 'skipped'],
     `case result counters ${execution.caseId}`,
   );
-  if (!Array.isArray(value.artifacts))
+  if (!Array.isArray(value.artifacts) || value.artifacts.length === 0)
     throw new Error(`case result artifacts are invalid: ${execution.caseId}`);
-  value.artifacts.forEach((artifact) => assertArtifact(artifact, 'case artifact'));
+  const kinds = new Set();
+  const paths = new Set();
+  value.artifacts.forEach((artifact) => {
+    assertCaseArtifact(artifact, `case artifact ${execution.caseId}`);
+    if (kinds.has(artifact.kind) || paths.has(artifact.path)) {
+      throw new Error(`case result contains duplicate artifact evidence: ${execution.caseId}`);
+    }
+    kinds.add(artifact.kind);
+    paths.add(artifact.path);
+  });
+  for (const kind of requiredCase.requiredArtifactKinds) {
+    if (!kinds.has(kind)) {
+      throw new Error(`case result is missing required artifact ${kind}: ${execution.caseId}`);
+    }
+  }
+  if (kinds.size !== requiredCase.requiredArtifactKinds.length) {
+    throw new Error(`case result contains an undeclared artifact kind: ${execution.caseId}`);
+  }
+  validateExecutionLog(
+    value.artifacts.find((artifact) => artifact.kind === 'execution-log'),
+    value,
+    execution,
+    runner,
+    root,
+  );
+}
+
+function validateExecutionLog(artifact, caseResult, execution, runner, root) {
+  if (!artifact || !artifact.path.endsWith(`/${execution.caseId}/execution-log.ndjson`)) {
+    throw new Error(`case execution log path is not fixed: ${execution.caseId}`);
+  }
+  const lines = readFileSync(path.join(root, ...artifact.path.split('/')), 'utf8')
+    .split(/\r?\n/u)
+    .filter(Boolean);
+  const observedArtifacts = caseResult.artifacts.filter((entry) => entry.kind !== 'execution-log');
+  if (lines.length !== observedArtifacts.length + 2) {
+    throw new Error(`case execution log event conservation failed: ${execution.caseId}`);
+  }
+  let events;
+  try {
+    events = lines.map((line) => JSON.parse(line));
+  } catch {
+    throw new Error(`case execution log is not NDJSON: ${execution.caseId}`);
+  }
+  events.forEach((event, index) => {
+    assertObject(event, `execution log event ${execution.caseId}`);
+    if (
+      event.schema !== 'jotluck.installed-app.execution-event.v2' ||
+      event.sequence !== index + 1 ||
+      event.caseId !== execution.caseId ||
+      event.adapter !== execution.adapter ||
+      !ISO_TIME.test(String(event.timestamp))
+    ) {
+      throw new Error(`case execution log identity is invalid: ${execution.caseId}`);
+    }
+  });
+  const start = events[0];
+  assertExactKeys(
+    start,
+    ['schema', 'sequence', 'timestamp', 'caseId', 'adapter', 'event', 'producer'],
+    `execution log start ${execution.caseId}`,
+  );
+  if (
+    start.event !== 'adapter-start' ||
+    start.timestamp !== execution.startedAt ||
+    canonicalJson(start.producer) !== canonicalJson(runner)
+  ) {
+    throw new Error(`case execution log start is invalid: ${execution.caseId}`);
+  }
+  const observed = events.slice(1, -1);
+  for (const [index, expected] of observedArtifacts.entries()) {
+    const event = observed[index];
+    assertExactKeys(
+      event,
+      [
+        'schema',
+        'sequence',
+        'timestamp',
+        'caseId',
+        'adapter',
+        'event',
+        'artifactKind',
+        'path',
+        'bytes',
+        'sha256',
+      ],
+      `execution log observation ${execution.caseId}`,
+    );
+    if (
+      event.event !== 'artifact-observed' ||
+      event.artifactKind !== expected.kind ||
+      event.path !== expected.path ||
+      event.bytes !== expected.bytes ||
+      event.sha256 !== expected.sha256
+    ) {
+      throw new Error(`case execution log observation is invalid: ${execution.caseId}`);
+    }
+  }
+  const finish = events.at(-1);
+  assertExactKeys(
+    finish,
+    ['schema', 'sequence', 'timestamp', 'caseId', 'adapter', 'event', 'exitCode', 'counters'],
+    `execution log finish ${execution.caseId}`,
+  );
+  if (
+    finish.event !== 'adapter-finish' ||
+    finish.timestamp !== execution.finishedAt ||
+    finish.exitCode !== execution.exitCode ||
+    canonicalJson(finish.counters) !== canonicalJson(execution.counters)
+  ) {
+    throw new Error(`case execution log finish is invalid: ${execution.caseId}`);
+  }
+}
+
+function verifyRunnerBinding(runner, manifest) {
+  if (
+    runner.provider !== manifest.ci.provider ||
+    runner.repository.toLowerCase() !== manifest.ci.repository.toLowerCase() ||
+    runner.runId !== manifest.ci.runId ||
+    runner.runAttempt !== manifest.ci.runAttempt ||
+    runner.headSha !== manifest.candidate.commit
+  ) {
+    throw new Error('raw runner is not bound to the manifest candidate workflow run');
+  }
+}
+
+function verifyExecutionArtifactSnapshot(root, base, manifest, executionEvidencePath) {
+  if (!nonEmpty(executionEvidencePath)) {
+    throw new Error('downloaded trusted execution evidence path is required');
+  }
+  const snapshotRoot = realpathSync(path.resolve(executionEvidencePath));
+  const info = lstatSync(snapshotRoot);
+  if (info.isSymbolicLink() || !info.isDirectory()) {
+    throw new Error('downloaded trusted execution evidence must be a regular directory');
+  }
+  const expected = [manifest.rawReport, ...manifest.attachments]
+    .map((entry) => {
+      if (!entry.path.startsWith(`${base}/`)) {
+        throw new Error(`execution artifact path is outside the release directory: ${entry.path}`);
+      }
+      return {
+        path: entry.path.slice(base.length + 1),
+        bytes: entry.bytes,
+        sha256: entry.sha256,
+      };
+    })
+    .sort((left, right) => left.path.localeCompare(right.path));
+  const actual = collectSnapshotFiles(snapshotRoot).sort((left, right) =>
+    left.path.localeCompare(right.path),
+  );
+  if (canonicalJson(actual) !== canonicalJson(expected)) {
+    throw new Error(
+      'downloaded trusted execution evidence does not exactly match managed evidence',
+    );
+  }
+  for (const record of expected) {
+    const managed = fileMetadata(root, `${base}/${record.path}`);
+    if (managed.bytes !== record.bytes || managed.sha256 !== record.sha256) {
+      throw new Error(`managed execution evidence changed: ${record.path}`);
+    }
+  }
+}
+
+function collectSnapshotFiles(root, relative = '') {
+  const directory = path.join(root, relative);
+  const files = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const childRelative = relative ? `${relative}/${entry.name}` : entry.name;
+    const child = path.join(root, ...childRelative.split('/'));
+    const info = lstatSync(child);
+    if (info.isSymbolicLink()) throw new Error(`symbolic link is forbidden: ${childRelative}`);
+    if (info.isDirectory()) files.push(...collectSnapshotFiles(root, childRelative));
+    else if (info.isFile()) {
+      const bytes = readFileSync(child);
+      if (bytes.byteLength === 0) throw new Error(`execution artifact is empty: ${childRelative}`);
+      files.push({ path: childRelative, bytes: bytes.byteLength, sha256: sha256(bytes) });
+    } else throw new Error(`execution artifact contains a non-file entry: ${childRelative}`);
+  }
+  return files;
 }
 
 function verifyPerformance(raw, transcript, manifest, rule) {
@@ -462,14 +715,28 @@ function fileMetadata(root, relativePath) {
       throw new Error(`symbolic link is forbidden: ${relativePath}`);
   }
   if (!statSync(absolute).isFile()) throw new Error(`evidence path is not a file: ${relativePath}`);
-  if (git(root, ['ls-files', '--error-unmatch', '--', relativePath], true) !== 0)
+  if (!trackedFiles(root).has(relativePath))
     throw new Error(`evidence file is untracked: ${relativePath}`);
   const bytes = readFileSync(absolute);
   return { bytes: bytes.byteLength, sha256: sha256(bytes) };
 }
+function trackedFiles(root) {
+  let cached = trackedFilesByRoot.get(root);
+  if (!cached) {
+    cached = new Set(
+      git(root, ['ls-files', '-z'])
+        .split('\0')
+        .filter(Boolean)
+        .map((entry) => entry.replaceAll('\\', '/')),
+    );
+    trackedFilesByRoot.set(root, cached);
+  }
+  return cached;
+}
 
 export function verifyTrackedArtifact(root, expected, label = 'artifact') {
-  if ('caseId' in expected || 'kind' in expected) assertAttachment(expected);
+  if ('caseId' in expected) assertAttachment(expected);
+  else if ('kind' in expected) assertCaseArtifact(expected, label);
   else assertArtifact(expected, label);
   const metadata = fileMetadata(root, expected.path);
   if (metadata.bytes !== expected.bytes || metadata.sha256 !== expected.sha256)
@@ -483,6 +750,23 @@ function assertArtifact(value, label) {
   assertSafeEvidencePath(value.path);
   if (!Number.isInteger(value.bytes) || value.bytes <= 0 || !SHA256.test(String(value.sha256)))
     throw new Error(`${label} metadata is invalid`);
+}
+function assertCaseArtifact(value, label) {
+  assertObject(value, label);
+  assertExactKeys(value, ['kind', 'path', 'bytes', 'sha256'], label);
+  if (!nonEmpty(value.kind)) throw new Error(`${label} kind is invalid`);
+  assertArtifact({ path: value.path, bytes: value.bytes, sha256: value.sha256 }, label);
+}
+function assertGitHubArtifactBinding(value, label) {
+  assertObject(value, label);
+  assertExactKeys(value, ['id', 'name', 'digest'], label);
+  if (
+    !/^[1-9]\d*$/u.test(String(value.id)) ||
+    !nonEmpty(value.name) ||
+    !/^sha256:[a-f0-9]{64}$/u.test(String(value.digest))
+  ) {
+    throw new Error(`${label} is invalid`);
+  }
 }
 function assertInstaller(value) {
   assertObject(value, 'installer');
@@ -609,10 +893,14 @@ function rejectSelfAttestedConclusion(value, label) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const [releaseId, installerPath = process.env.JOTLUCK_INSTALLER_PATH] = process.argv.slice(2);
-  if (!releaseId || !installerPath) {
+  const [
+    releaseId,
+    installerPath = process.env.JOTLUCK_INSTALLER_PATH,
+    executionEvidencePath = process.env.JOTLUCK_EXECUTION_EVIDENCE_PATH,
+  ] = process.argv.slice(2);
+  if (!releaseId || !installerPath || !executionEvidencePath) {
     console.error(
-      'usage: node scripts/release/verify-installed-app-evidence-v2.mjs <release-id> <installer-path>',
+      'usage: node scripts/release/verify-installed-app-evidence-v2.mjs <release-id> <installer-path> <execution-evidence-path>',
     );
     process.exit(2);
   }
@@ -623,6 +911,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           rootDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'),
           releaseId,
           installerPath,
+          executionEvidencePath,
         }),
       ),
     );

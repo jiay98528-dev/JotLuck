@@ -30,6 +30,7 @@
     "audit:rust": "cargo audit --file packages/app/src-tauri/Cargo.lock",
     "release:rc-gate": "node scripts/release-rc-gate.mjs",
     "release:preview-gate": "node scripts/release/verify-preview-release-gate.mjs",
+    "release:capture-installed-evidence": "node scripts/release/capture-installed-app-evidence-v2.mjs",
     "typecheck": "pnpm --filter @jotluck/app typecheck",
     "prepare": "husky"
   },

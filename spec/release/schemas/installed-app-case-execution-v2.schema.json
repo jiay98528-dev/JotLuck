@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jotluck.installed-app.case-execution.v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "caseId",
+    "adapter",
+    "producer",
+    "startedAt",
+    "finishedAt",
+    "exitCode",
+    "counters",
+    "artifacts"
+  ],
+  "properties": {
+    "schema": { "const": "jotluck.installed-app.case-execution.v2" },
+    "caseId": { "type": "string", "minLength": 1 },
+    "adapter": { "type": "string", "minLength": 1 },
+    "producer": { "$ref": "installed-app-raw-report-v2.schema.json#/$defs/runner" },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "finishedAt": { "type": "string", "format": "date-time" },
+    "exitCode": { "const": 0 },
+    "counters": { "$ref": "installed-app-raw-report-v2.schema.json#/$defs/counters" },
+    "artifacts": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "path", "bytes", "sha256"],
+        "properties": {
+          "kind": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "minLength": 1 },
+          "bytes": { "type": "integer", "minimum": 1 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    }
+  }
+}
