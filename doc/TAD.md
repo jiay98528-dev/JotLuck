@@ -80,9 +80,13 @@ Vue 3 + Pinia + Vite
 - 主题不得直接替换 Markdown 清洗、文件 IO、搜索索引、导出服务或系统 API；这些能力通过宿主 action/API 间接触发。
 - 商业化当前只提供接口和 mock 状态，不做真实支付、远程下载、账号体系或社区审核。
 - 系统关联只注册为可选打开程序，不擅自覆盖系统默认应用；`.txt` 关联是本版本明确覆盖旧策略的产品决定。
+- NSIS 卸载按字母槽识别 `JotLuck.exe`，仅从 `MRUList` 删除对应字母并保持剩余顺序；不存在 JotLuck 槽时不得写 MRU，仍有其他槽时不得删除整个 `MRUList`。
+- installed-app evidence 的正式信任根为 GitHub Actions + REST provenance。候选和 execution evidence artifact 必须来自同一个 `main`/`workflow_dispatch` run，`head_sha` 等于候选提交且 required jobs/steps 全部成功；缺 token、REST 失败、artifact 过期或 digest 不一致一律 fail-closed。
+- required-case catalog 固定 adapter 与 artifact kinds；case result 必须包含可解析的 `execution-log.ndjson` 和指定观察产物。证据提交中的 raw report、case results 和附件必须与下载的 execution artifact 精确同构，transcript 只允许守恒转录。
 
 ## 变更记录
 
+- 2026-07-26：installed-app evidence v2 改用 GitHub REST run/artifact provenance，并加入固定 adapter、执行日志和 execution artifact 精确快照；NSIS 卸载改为 MRU 保序清理。
 - 2026-07-25：新增单进程多窗口窗口会话架构、窗口身份 IPC、规范路径去重、外部只读轻量入口以及窗口级 root/index/watcher/completion 隔离。
 - 2026-07-25：明确 P1 grant 升级与 `assert_workspace` 命令边界；增加 `0.1.0-preview` Public L3 stop / V2S 生产不可达 gate。
 - 2026-07-13：Public V2S 在有界 development 预检中未达到 Oracle 架构门槛，记录 architecture stop；不训练 Gate、不读取 final、不安装 v6 public 资产。

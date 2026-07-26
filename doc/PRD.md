@@ -54,6 +54,8 @@ JotLuck 是本地优先、离线可用的 Markdown 笔记工具。数据以普�
 - 多窗口的笔记本 root、索引、文件监听器和补全检索必须按窗口隔离；关闭一个窗口不得影响其他窗口。外部文件授权归属其创建窗口，窗口关闭后撤销该授权。
 - 关于页显示构建版本 `v0.1.0-preview`。
 - `0.1.0-preview` 的独立 preview gate 允许 Public L3 继续 architecture-stop / fail-closed；但生产依赖图、桌面 bundle 和安装包均不得包含或可达 V2S Worker、factory、候选资产或自动加载路径。
+- 文件关联安装只注册 `.md/.markdown/.mdx/.txt` 的可选打开程序；卸载只移除 JotLuck 自身槽位，并保持其他应用的 Open With 项和 `MRUList` 原有顺序，不修改当前默认 ProgID。
+- 正式 installed-app evidence 必须来自候选提交在 `main` 上触发的 GitHub Actions `workflow_dispatch`：固定 adapter 产生执行日志和可观察产物，GitHub REST 同时核验 workflow run、head SHA、attempt、job/step conclusion 及候选/证据 artifact 来源；本地结构校验不得单独产生正式 PASS。
 - 任何主题、Theme API、slot、Host API、manifest、runtime 或 `.mltheme` 示例变更都必须符合 `doc/standards-theme-development.md`，并同步更新类型和测试。
 - 启动后默认应用 `paper`；用户可启用 `super-workbench` 验证主题接管能力。
 - 主题中心显示本地市场、已安装、导入、商业状态和开发者信息。
@@ -61,6 +63,8 @@ JotLuck 是本地优先、离线可用的 Markdown 笔记工具。数据以普�
 - 切回 `paper` 后插件 DOM、CSS、事件监听和接管标记无残留。
 
 ## 变更记录
+
+- 2026-07-26：收紧 installed-app evidence v2 的真实执行与 GitHub Actions provenance 契约；补充卸载保持其他应用 Open With 顺序的产品约束。
 
 - 2026-07-25：新增关联文件多窗口产品合同：单进程一文件一窗口、路径去重、只读/单文件编辑/完整笔记本三态、四扩展名可选关联及窗口级服务隔离；构建版本指定为 `0.1.0-preview`。
 - 2026-07-25：补充 P1 最小授权边界与 `0.1.0-preview` 独立 gate：只读初始 grant、编辑仅提升单文件，以及 Public L3 停止态下生产依赖图必须排除 V2S。

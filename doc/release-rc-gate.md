@@ -4,7 +4,7 @@
 
 从 `0.1.0-preview` 起，Web 自动化全绿只能表述为“自动化候选通过”，不能表述为“最终发布通过”。最终发布通过必须额外满足真实安装包 L4。历史报告中的旧版本号保持历史事实，不作迁移。
 
-> **当前状态：fail-closed。** 旧 `jotluck-installed-l4-evidence` v1 只校验自报退出码，并要求证据文件绑定包含自身的新 HEAD，既可伪造又无法形成合法固定点，已永久禁用。独立证据协议 v2 已实现，但当前尚无同源正式证据；`pnpm release:rc-gate` 还会被 V2S architecture-stop 以 code 10 阻断，`--autocomplete-only` 仍保留独立质量闸门。
+> **当前状态：fail-closed。** 旧 `jotluck-installed-l4-evidence` v1 只校验自报退出码，并要求证据文件绑定包含自身的新 HEAD，既可伪造又无法形成合法固定点，已永久禁用。协议 v2 已收紧为 GitHub Actions 固定执行与 REST provenance，但当前尚无同源正式 capture/evidence commit；`pnpm release:rc-gate` 还会被 V2S architecture-stop 以 code 10 阻断，`--autocomplete-only` 仍保留独立质量闸门。
 
 ## 两层 GUI 验收
 
@@ -17,13 +17,14 @@
 2. 生成并定位 `JotLuck_0.1.0-preview_x64-setup.exe`。默认路径为 `packages/app/src-tauri/target/release/bundle/nsis/JotLuck_0.1.0-preview_x64-setup.exe`。
 3. 复制并填写 [release-installed-l4-template.md](./release-installed-l4-template.md)。
 4. 在 L4 记录中粘贴执行前后的 `git status --short`，并填写 `L4-APP-VERSION`、`L4-INSTALLER-PATH`、`L4-INSTALLER-SHA256`。任何未提交/未跟踪文件必须清理、提交或解释。
-5. 将候选 commit 冻结后，由只读执行者生成不可变原始报告，再由同一执行者生成结构化二次转录；证据 commit 只能增加 `release-evidence/installed-app/v2/<release-id>/` 下受版本管理的普通证据文件，并绑定候选 commit、安装包 SHA256、实际 case 结果和原始报告 SHA。协议 v2 校验器已经实现；当前没有同源安装器与正式证据目录，因此仍在此步 fail-closed。
+5. 将候选 commit 冻结并推送到 `main`，以 `workflow_dispatch + capture_installed_evidence` 运行完整 CI。capture job 只有在 L1、Vitest、Rust、三引擎 E2E、Windows 视觉、Tauri build/smoke 全部成功后，才从同一 run 的候选 artifact 安装并执行固定 adapter；任一 case 失败、skip、缺执行日志或观察产物时不上传 evidence artifact。
+6. 二次转录完成后，证据 commit 只能新增 `release-evidence/installed-app/v2/<release-id>/`。raw report、case results 与附件必须和可信 execution artifact 逐文件一致；manifest 绑定 repository、run/attempt、两个固定 artifact 的 ID/name/API digest、安装器和 required-case tree。
 
 `JotLuck_RELEASE_ALLOW_DIRTY=1` 仅作为诊断标记保留，正式 RC gate 仍无条件拒绝脏工作区，不能用它输出 PASS。
 
-协议 v2 的 required cases 必须来自独立固定目录；校验器必须读取每项原始 artifact、复算 SHA 并解析实际执行数、通过数、失败数和 skip 数。命令字符串、退出码或状态文件自报字段不能单独构成 PASS。候选 commit 与证据 commit 必须分离，禁止证据 manifest 自引用当前 HEAD。
+协议 v2 的 required cases 必须来自独立固定目录；catalog 为每项固定 `adapter` 与 `requiredArtifactKinds`。每个 case 必须包含可解析的 `execution-log.ndjson`，日志按序绑定 adapter 开始、每个观察产物的路径/字节数/SHA256 和结束 counters。命令字符串、退出码、非空占位 JSON 或状态文件自报字段不能单独构成 PASS。候选 commit 与证据 commit 必须分离，禁止证据 manifest 自引用当前 HEAD。
 
-固定目录为 `spec/release/required-cases/`，严格 raw/transcript/manifest Schema 位于 `spec/release/schemas/`。manifest 还必须绑定候选提交中的 required-case Git tree SHA、GitHub Actions run/artifact ID；CI 从该历史 run 下载安装器后复算文件名、大小与 SHA256，安装器本体不进入证据提交。
+固定目录为 `spec/release/required-cases/`，严格 case/raw/transcript/manifest Schema 位于 `spec/release/schemas/`。正式 gate 在下载前通过 GitHub REST 验证 repository、固定 workflow、`workflow_dispatch`、`main`、`head_sha`、run attempt、run/job/step conclusion，以及两个 artifact 的同 run 身份、固定名称、未过期、非空和 API digest；缺 token、网络/限流/非 200 或字段缺失不得降级。API 核验后才能把 artifact ID 交给下载动作。
 
 `0.1.0-preview` 还必须有独立 preview gate：Public L3 的 architecture-stop / fail-closed 可接受，但执行记录必须证明生产依赖图、Vite/Tauri bundle 与安装包均不存在 V2S Worker、factory、候选 manifest、候选二进制或自动加载路径。候选 workflow 必须把安装器、桌面 EXE 与真实 `dist` 一起作为同一不可变 artifact 上传；gate 会逐文件枚举下载后的 `dist`、复算字节数与 SHA256，并要求受管 inventory 精确覆盖，漏列文件也会失败。仅“未运行 V2S”或测试注入路径不能构成该证明。
 
@@ -56,4 +57,5 @@
 
 ## 变更记录
 
+- 2026-07-26：协议 v2 收紧为固定 adapter/非空观察产物/execution NDJSON，并以 GitHub Actions REST provenance 绑定同一候选 run 的安装器与 execution evidence；删除 preview gate 的手写 audit/test/build 成功 JSON。
 - 2026-07-25：升级为 `0.1.0-preview` gate，新增 Public L3 stop 但 V2S 生产不可达的独立证明，以及四扩展名/外部授权提升的安装版验证。

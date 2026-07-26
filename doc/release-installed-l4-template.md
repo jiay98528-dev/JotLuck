@@ -1,6 +1,6 @@
 # JotLuck 安装版 L4 人工验收记录模板
 
-版本：2026-07-25（installed-app evidence v2）
+版本：2026-07-26（installed-app evidence v2）
 
 > 复制本模板为单次发行记录，例如 `验收报告/2026-07-25-JotLuck-0.1.0-preview-installed-L4.md`。
 > 所有 `状态` 必须填写 `PASS`，否则 `pnpm release:rc-gate` 必须阻断 RC 放行。任何失败项标记为 P0/P1/P2，不允许用 Web 自动化通过覆盖人工失败。
@@ -9,7 +9,7 @@
 
 > **v2 证据要求**：每项 case 必须链接受版本管理的原始产物，并记录实际 passed/failed/skipped 计数、退出码、时间、产物 SHA256 与候选 commit；只读执行者的原始报告和同一执行者的结构化二次转录必须互相校验。命令文本、截图路径或自报 PASS 不能单独构成通过。
 >
-> required cases 和三份严格 JSON Schema 位于 `spec/release/`；证据目录固定为 `release-evidence/installed-app/v2/<release-id>/`。安装器本体来自 manifest 绑定的 GitHub Actions run/artifact，不提交进仓库，gate 下载后复算文件名、字节数和 SHA256。
+> required cases 和 case/raw/transcript/manifest 严格 JSON Schema 位于 `spec/release/`；证据目录固定为 `release-evidence/installed-app/v2/<release-id>/`。安装器与 execution evidence 必须来自同一个 GitHub Actions candidate run；gate 先通过 REST 核验 provenance，再下载并与受管证据逐文件对账。
 
 ## 发行对象
 
@@ -114,7 +114,7 @@
 
 ### L4-09-UNINSTALL-CLEANUP
 
-- 操作: 卸载 -> 验证安装目录、`.md/.markdown/.mdx/.txt` 可选文件关联、OpenWith 残留和图标残留；安装前后的系统默认应用必须一致。
+- 操作: 卸载 -> 验证安装目录、`.md/.markdown/.mdx/.txt` 可选文件关联、OpenWith 残留和图标残留；安装前后的系统默认应用必须一致，其他应用的 OpenWithList 槽位及 `MRUList` 相对顺序必须保持。
 - 可观测结果:
 - 证据路径/截图:
 - 状态: TODO
@@ -125,6 +125,11 @@
 - L4-EVIDENCE-MANIFEST: `TODO — 填写 release-evidence/installed-app/v2/<release-id>/manifest.json；缺失时闸门必须失败`
 
 协议 v2 落地后，机器清单必须绑定独立的候选 commit、受版本管理的原始执行产物、逐 case 结果、安装包 SHA、只读审计原始报告及其结构化二次转录。禁止复制旧 v1 JSON 或只填写命令退出码。
+
+- GitHub repository / workflow run ID / run attempt / candidate head SHA:
+- candidate artifact ID / fixed name / API digest:
+- execution evidence artifact ID / fixed name / API digest:
+- 每 case 固定 adapter / `execution-log.ndjson` / required artifact kinds:
 
 - 截图目录:
 - 验证用本地文件夹:
@@ -145,4 +150,5 @@
 
 ## 变更记录
 
+- 2026-07-26：增加 GitHub REST provenance、同 run 双 artifact、固定 adapter/execution log 和卸载 MRU 保序记录。
 - 2026-07-25：模板升级为 installed-app evidence v2，增加原始产物、二次转录、counter/hash/commit 链及 `0.1.0-preview` V2S 不可达证据字段。
