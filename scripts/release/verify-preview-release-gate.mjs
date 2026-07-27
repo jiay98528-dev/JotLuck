@@ -23,6 +23,7 @@ export function verifyPreviewReleaseGate({
   releaseId,
   evidencePath,
   installerPath,
+  candidateApplicationPath,
   bundlePath,
   executionEvidencePath,
 }) {
@@ -40,6 +41,7 @@ export function verifyPreviewReleaseGate({
     rootDir: root,
     releaseId,
     installerPath,
+    candidateApplicationPath,
     executionEvidencePath,
   });
   verifyProductionBuild(
@@ -233,12 +235,20 @@ async function main() {
     releaseId,
     evidencePath,
     installerPath = process.env.JOTLUCK_INSTALLER_PATH,
+    candidateApplicationPath = process.env.JOTLUCK_CANDIDATE_APPLICATION_PATH,
     bundlePath = process.env.JOTLUCK_PRODUCTION_BUNDLE_PATH,
     executionEvidencePath = process.env.JOTLUCK_EXECUTION_EVIDENCE_PATH,
   ] = process.argv.slice(2);
-  if (!releaseId || !evidencePath || !installerPath || !bundlePath || !executionEvidencePath) {
+  if (
+    !releaseId ||
+    !evidencePath ||
+    !installerPath ||
+    !candidateApplicationPath ||
+    !bundlePath ||
+    !executionEvidencePath
+  ) {
     console.error(
-      'usage: node scripts/release/verify-preview-release-gate.mjs <release-id> <preview-evidence.json> <installer-path> <bundle-path> <execution-evidence-path>',
+      'usage: node scripts/release/verify-preview-release-gate.mjs <release-id> <preview-evidence.json> <installer-path> <candidate-application-path> <bundle-path> <execution-evidence-path>',
     );
     process.exit(2);
   }
@@ -258,6 +268,7 @@ async function main() {
         releaseId,
         evidencePath,
         installerPath,
+        candidateApplicationPath,
         bundlePath,
         executionEvidencePath,
       }),

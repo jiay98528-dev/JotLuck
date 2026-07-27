@@ -275,7 +275,15 @@ jobs:
         run: pnpm --filter @jotluck/app tauri:build
 
       - name: Install tauri-driver
-        run: cargo install tauri-driver --locked
+        shell: pwsh
+        run: |
+          cargo install tauri-driver --version 2.0.6 --locked
+          $tauriDriver = (Resolve-Path "$env:USERPROFILE\.cargo\bin\tauri-driver.exe" -ErrorAction Stop).Path
+          $tauriDriverVersion = & $tauriDriver --version
+          if ($tauriDriverVersion -notmatch '(^|\s)2\.0\.6($|\s)') {
+            throw "unexpected tauri-driver version: $tauriDriverVersion"
+          }
+          "JOTLUCK_TAURI_DRIVER=$tauriDriver" >> $env:GITHUB_ENV
 
       - name: Install matching Microsoft Edge Driver
         shell: pwsh
@@ -336,7 +344,15 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install tauri-driver
-        run: cargo install tauri-driver --locked
+        shell: pwsh
+        run: |
+          cargo install tauri-driver --version 2.0.6 --locked
+          $tauriDriver = (Resolve-Path "$env:USERPROFILE\.cargo\bin\tauri-driver.exe" -ErrorAction Stop).Path
+          $tauriDriverVersion = & $tauriDriver --version
+          if ($tauriDriverVersion -notmatch '(^|\s)2\.0\.6($|\s)') {
+            throw "unexpected tauri-driver version: $tauriDriverVersion"
+          }
+          "JOTLUCK_TAURI_DRIVER=$tauriDriver" >> $env:GITHUB_ENV
 
       - name: Install matching Microsoft Edge Driver
         shell: pwsh
@@ -484,6 +500,14 @@ jobs:
             throw "expected exactly one candidate installer, found $($installers.Count)"
           }
           "JOTLUCK_INSTALLER_PATH=$($installers[0].FullName)" >> $env:GITHUB_ENV
+          $applications = @(Get-ChildItem -LiteralPath 'candidate-installer' -Recurse -File | Where-Object { $_.Name -ieq 'jotluck.exe' })
+          if ($applications.Count -ne 1) {
+            throw "expected exactly one candidate jotluck.exe, found $($applications.Count)"
+          }
+          if (($applications[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'candidate jotluck.exe must not be a reparse point'
+          }
+          "JOTLUCK_CANDIDATE_APPLICATION_PATH=$($applications[0].FullName)" >> $env:GITHUB_ENV
           $bundles = @(Get-ChildItem -LiteralPath 'candidate-installer' -Recurse -Directory -Filter 'dist' | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'index.html') -PathType Leaf })
           if ($bundles.Count -ne 1) {
             throw "expected exactly one production dist directory, found $($bundles.Count)"
@@ -505,4 +529,4 @@ jobs:
         if: ${{ inputs.run_preview_gate == true }}
         env:
           RELEASE_ID: ${{ inputs.release_id }}
-        run: node scripts/release/verify-preview-release-gate.mjs "$env:RELEASE_ID" "release-evidence/installed-app/v2/$env:RELEASE_ID/preview-gate.json" "$env:JOTLUCK_INSTALLER_PATH" "$env:JOTLUCK_PRODUCTION_BUNDLE_PATH" "$env:JOTLUCK_EXECUTION_EVIDENCE_PATH"
+        run: node scripts/release/verify-preview-release-gate.mjs "$env:RELEASE_ID" "release-evidence/installed-app/v2/$env:RELEASE_ID/preview-gate.json" "$env:JOTLUCK_INSTALLER_PATH" "$env:JOTLUCK_CANDIDATE_APPLICATION_PATH" "$env:JOTLUCK_PRODUCTION_BUNDLE_PATH" "$env:JOTLUCK_EXECUTION_EVIDENCE_PATH"

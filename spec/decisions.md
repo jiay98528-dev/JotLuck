@@ -81,14 +81,17 @@
 
 - **状态**：已接受（2026-07-27）。
 - **决策**：installed-app v2 的 24 个 required case 只允许由仓库内固定 adapter 执行；capture artifact 保存原始报告、逐 case 结果、执行日志和可观察产物。任何 manifest、命令行或环境变量都不能提供替代命令。
-- **来源边界**：GitHub REST 是正式来源信任根。同一 `main`/`workflow_dispatch` run 必须绑定精确 candidate SHA、attempt、成功前置 job/step，以及名称唯一、未过期、非空且 digest/size 可核验的 candidate 与 execution artifact。物化前按 API 已核验的 ID 下载，不能先下载再为任意文件补来源说明。
+- **来源边界**：GitHub REST 是正式来源信任根。同一 `main`/`workflow_dispatch` run 必须绑定精确 candidate SHA、attempt、成功前置 job/step，以及名称唯一、未过期、非空且 digest/size 可核验的 candidate 与 execution artifact。物化前按 API 已核验的 ID 下载；最终 gate 还必须从该下载目录独立重哈希唯一 `jotluck.exe`，不能只信任 materializer 写入的 metadata。
 - **物化边界**：materializer 只复制可信 execution artifact 中由 raw report 守恒列出的普通非空文件，并生成 transcript、manifest 和生产 inventory。它的本地自检只能输出 `structural-diagnostic`；正式 PASS 仍要求独立 evidence commit、在线 provenance、精确 candidate 二进制和完整 GUI/安装旅程。
-- **性能语义**：20 次冷启动与 30 次热开窗原始样本、正数、数量、P90 和 advisory 必须可复算且跨报告守恒。2 秒/1 秒是参考环境目标，不是能力或安全边界；超过时返回固定 advisory 与 `pass-with-warnings`，缺样本或伪造结果仍硬失败。
+- **观察边界**：adapter 意图必须写入独立 `adapter-action-log`；WebDriver v3 在 `remote()` 成功返回处记录 handshake，并以 `attemptId + sessionId` 绑定随后 hooks 真实观察到的 W3C 协议命令、结果、错误和删除终态。WebdriverIO wrapper 的重复 hook 必须在 session 内折叠，`$`/`click`/`setValue`/`emit` 等库包装器不得冒充驱动命令；`newSession` 发生在 hooks 建立前，不得作为可观察命令伪造。ASSOC-01～04 必须保存目标内容前后 readback、UIA 命中文字与同一 Shell PID 的 CIM `ExecutablePath`；RF-10 必须保存 packaged/installed EXE 身份并与最终 gate 的独立候选哈希闭合。
+- **性能语义**：20 次冷启动与 30 次热开窗原始样本、正数、数量、P90 和 advisory 必须可复算且跨报告守恒；每次冷启动前后必须为零进程，每次热窗口关闭后必须恢复原窗口数，热会话结束后必须再次为零进程。2 秒/1 秒是参考环境目标，不是能力或安全边界；超过时返回固定 advisory 与 `pass-with-warnings`，缺样本、生命周期不完整或伪造结果仍硬失败。
 - **后果**：测试机并行负载不会单独阻断 preview，但也不能用“环境抖动”豁免缺安装旅程、缺样本、缺 provenance、缺证据提交或产品功能失败。
 
 ## 变更记录
 
 - 2026-07-27：新增 ADR-018，确立固定 adapter、REST 同源解析、独立物化及性能参考警告语义。
+- 2026-07-27：ADR-018 补充 Shell/ProgID 关联启动、驱动事实与 adapter 旁白分离、verifier 语义解析及冷启动零进程边界。
+- 2026-07-27：ADR-018 补充 WebDriver v3 handshake 状态机、候选 EXE 最终重哈希、ASSOC/RF-10 版本化身份对象与仓库 LF 字节契约。
 - 2026-07-25：新增 ADR-017，确立单进程多窗口关联文件、规范路径去重、三态窗口会话及窗口级服务隔离。
 - 2026-07-25：ADR-017 补充只读初始 grant、单文件编辑提升、`assert_workspace` 与唯一目录提升命令，并定义 preview 的 V2S 不可达门槛。
 - 2026-07-13：ADR-016 完成有界矩阵与逐语言组合预检；固定矩阵最好前沿 Oracle 37.5%/40.5% 未达 40%/45% 架构门槛，记录 architecture stop，未训练 Gate 或消费 final。

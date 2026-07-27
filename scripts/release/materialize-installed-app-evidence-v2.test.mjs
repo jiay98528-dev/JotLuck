@@ -21,6 +21,7 @@ describe('installed-app evidence materializer', () => {
     expect(JSON.parse(readFileSync(path.join(base, 'manifest.json'), 'utf8'))).toMatchObject({
       candidate: { commit: fixture.commit },
       ci: { candidateArtifact: { sizeInBytes: 1024 } },
+      application: { fileName: 'jotluck.exe' },
     });
     expect(readFileSync(path.join(base, 'raw-report.json'))).toEqual(
       readFileSync(path.join(fixture.execution, 'raw-report.json')),
@@ -99,7 +100,7 @@ function makeFixture() {
   const commit = git(root, ['rev-parse', 'HEAD']).trim();
   mkdirSync(path.join(candidate, 'web', 'dist', 'assets'), { recursive: true });
   writeFileSync(path.join(candidate, 'JotLuck_0.1.0-preview_x64-setup.exe'), 'installer');
-  writeFileSync(path.join(candidate, 'JotLuck.exe'), 'application');
+  writeFileSync(path.join(candidate, 'jotluck.exe'), 'application');
   writeFileSync(path.join(candidate, 'web', 'dist', 'index.html'), '<main>JotLuck</main>');
   writeFileSync(path.join(candidate, 'web', 'dist', 'assets', 'index.js'), 'bundle');
   const now = '2026-07-27T00:00:00Z';

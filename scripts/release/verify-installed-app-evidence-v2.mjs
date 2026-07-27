@@ -5,6 +5,7 @@ import { lstatSync, readFileSync, readdirSync, realpathSync, statSync } from 'no
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validatePerformanceEvidence } from './installed-app-performance.mjs';
+import { WEBDRIVER_PROTOCOL_COMMANDS } from './installed-app-webdriver-protocol.mjs';
 
 export const RAW_SCHEMA = 'jotluck.installed-app.raw-report.v2';
 export const TRANSCRIPT_SCHEMA = 'jotluck.installed-app.transcript.v2';
@@ -18,11 +19,44 @@ const SHA256 = /^[a-f0-9]{64}$/u;
 const COMMIT = /^[a-f0-9]{40}$/u;
 const ISO_TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/u;
 const trackedFilesByRoot = new Map();
+const ASSOCIATION_EXTENSIONS = Object.freeze({
+  'ASSOC-01-MD': '.md',
+  'ASSOC-02-MARKDOWN': '.markdown',
+  'ASSOC-03-MDX': '.mdx',
+  'ASSOC-04-TXT': '.txt',
+});
+const WEBDRIVER_CASE_COMMANDS = Object.freeze({
+  'GUI-01-NOTE-LIFECYCLE': ['refresh', 'elementClear', 'elementSendKeys', 'performActions'],
+  'GUI-02-FILE-DRAWER': ['findElements', 'elementClick', 'elementSendKeys'],
+  'GUI-03-SEARCH-EDIT': ['getElementText', 'elementClick', 'elementSendKeys'],
+  'GUI-04-LIVE-PREVIEW': ['elementClick', 'performActions', 'takeScreenshot'],
+  'GUI-05-SETTINGS-PERSISTENCE': ['getElementAttribute', 'elementClick', 'refresh'],
+  'GUI-06-EXPORT-CONTENT': ['elementClick'],
+  'GUI-07-IMAGE-ASSET': ['executeAsyncScript', 'executeScript'],
+  'RF-01': ['getTitle', 'executeScript'],
+  'RF-02': ['getWindowHandles', 'switchToWindow', 'getTitle'],
+  'RF-03': ['getWindowHandles'],
+  'RF-04': ['elementClick', 'elementSendKeys'],
+  'RF-05': ['elementClick', 'refresh', 'getElementText'],
+  'RF-06': ['getWindowHandles', 'switchToWindow', 'elementSendKeys'],
+  'RF-07': ['getWindowHandles', 'closeWindow'],
+  'RF-08': ['executeScript'],
+  'RF-10': ['getWindowHandles', 'switchToWindow', 'closeWindow'],
+  'VER-01': ['elementClick', 'getElementText'],
+});
+
+export const __test = Object.freeze({
+  validateWebDriverEvents,
+  validateAssociationObjects,
+  validateColdStartLifecycleValue,
+  webdriverCaseCommands: WEBDRIVER_CASE_COMMANDS,
+});
 
 export function verifyInstalledAppEvidenceV2({
   rootDir,
   releaseId,
   installerPath,
+  candidateApplicationPath,
   executionEvidencePath,
 }) {
   const root = realpathSync(path.resolve(rootDir));
@@ -104,6 +138,10 @@ export function verifyInstalledAppEvidenceV2({
   rejectSelfAttestedConclusion(transcript, 'transcript');
   verifyRequiredCasesTree(root, manifest);
   verifyInstallerArtifact(installerPath, manifest.installer);
+  const candidateApplication = verifyApplicationArtifact(
+    candidateApplicationPath,
+    manifest.application,
+  );
   const evidenceCommit = verifyGitLineage(root, manifest.candidate.commit, base);
   if (git(root, ['status', '--porcelain']).trim())
     throw new Error('evidence working tree must be clean');
@@ -132,7 +170,7 @@ export function verifyInstalledAppEvidenceV2({
   ) {
     throw new Error('manifest report hash is not the canonical JSON hash');
   }
-  verifyExecutionAttachments(raw, manifest.attachments, root, base, required);
+  verifyExecutionAttachments(raw, manifest.attachments, root, base, required, candidateApplication);
   verifyExecutionArtifactSnapshot(root, base, manifest, executionEvidencePath);
   const warnings = verifyPerformance(
     raw.performance,
@@ -154,6 +192,7 @@ function validateManifest(value, releaseId, base) {
       'candidate',
       'ci',
       'installer',
+      'application',
       'catalog',
       'rawReport',
       'transcript',
@@ -210,6 +249,7 @@ function validateManifest(value, releaseId, base) {
     throw new Error('CI artifact identity is invalid');
   }
   assertInstaller(value.installer);
+  assertApplication(value.application);
   assertArtifact(value.catalog, 'catalog');
   assertArtifact(value.rawReport, 'raw report');
   assertArtifact(value.transcript, 'transcript');
@@ -245,16 +285,46 @@ function verifyCandidateVersion(root, candidate) {
 }
 
 function verifyInstallerArtifact(installerPath, expected) {
-  if (!nonEmpty(installerPath)) throw new Error('candidate installer path is required');
-  const absolute = realpathSync(path.resolve(installerPath));
-  const info = lstatSync(absolute);
-  if (info.isSymbolicLink() || !info.isFile())
-    throw new Error('candidate installer must be a regular file');
-  if (path.basename(absolute) !== expected.fileName)
-    throw new Error('candidate installer file name does not match manifest');
+  verifyCandidateFile(installerPath, expected, {
+    label: 'candidate installer',
+    matchesFileName: (actual, declared) => actual === declared,
+  });
+}
+
+function verifyApplicationArtifact(applicationPath, expected) {
+  return verifyCandidateFile(applicationPath, expected, {
+    label: 'candidate application',
+    matchesFileName: (actual, declared) =>
+      actual.toLowerCase() === declared.toLowerCase() && declared === 'jotluck.exe',
+  });
+}
+
+function verifyCandidateFile(filePath, expected, { label, matchesFileName }) {
+  if (!nonEmpty(filePath)) throw new Error(`${label} path is required`);
+  if (!path.isAbsolute(filePath)) throw new Error(`${label} path must be absolute`);
+  const requested = path.resolve(filePath);
+  let requestedInfo;
+  try {
+    requestedInfo = lstatSync(requested);
+  } catch {
+    throw new Error(`${label} path does not exist`);
+  }
+  if (requestedInfo.isSymbolicLink() || !requestedInfo.isFile() || requestedInfo.size <= 0) {
+    throw new Error(`${label} must be a non-empty regular file`);
+  }
+  const absolute = realpathSync(requested);
+  if (normalizeWindowsPath(absolute) !== normalizeWindowsPath(requested)) {
+    throw new Error(`${label} path must not traverse a symbolic link or reparse point`);
+  }
+  if (!matchesFileName(path.basename(absolute), expected.fileName)) {
+    throw new Error(`${label} file name does not match manifest`);
+  }
   const bytes = readFileSync(absolute);
-  if (bytes.byteLength !== expected.bytes || sha256(bytes) !== expected.sha256)
-    throw new Error('candidate installer hash or byte count does not match manifest');
+  const actual = { path: absolute, bytes: bytes.byteLength, sha256: sha256(bytes) };
+  if (actual.bytes !== expected.bytes || actual.sha256 !== expected.sha256) {
+    throw new Error(`${label} hash or byte count does not match manifest`);
+  }
+  return actual;
 }
 
 function verifyRequiredCasesTree(root, manifest) {
@@ -403,9 +473,15 @@ function validateExecutions(executions, requiredCases, label) {
   }
 }
 
-function verifyExecutionAttachments(raw, attachments, root, base, required) {
+function verifyExecutionAttachments(raw, attachments, root, base, required, candidateApplication) {
   const declared = new Map(attachments.map((entry) => [entry.path, entry]));
   const referenced = new Set();
+  const observationContext = {
+    driver: null,
+    nativeDriver: null,
+    applicationPaths: new Set(),
+    installedApplication: null,
+  };
   for (const execution of raw.executions) {
     const requiredCase = required.cases.find((entry) => entry.id === execution.caseId);
     if (!requiredCase) throw new Error(`case is not in the fixed catalog: ${execution.caseId}`);
@@ -424,7 +500,16 @@ function verifyExecutionAttachments(raw, attachments, root, base, required) {
     referenced.add(execution.output.path);
 
     const caseResult = readJson(root, execution.output.path);
-    validateCaseResult(caseResult, execution, raw.runner, requiredCase, root);
+    validateCaseResult(
+      caseResult,
+      execution,
+      raw.runner,
+      requiredCase,
+      required.performance,
+      candidateApplication,
+      observationContext,
+      root,
+    );
     rejectSelfAttestedConclusion(caseResult, `case result ${execution.caseId}`);
     for (const artifact of caseResult.artifacts) {
       const bound = declared.get(artifact.path);
@@ -441,12 +526,33 @@ function verifyExecutionAttachments(raw, attachments, root, base, required) {
       referenced.add(artifact.path);
     }
   }
+  if (!observationContext.installedApplication) {
+    throw new Error('installed application identity was not observed by ASSOC/RF-10');
+  }
+  const installedPath = normalizeWindowsPath(observationContext.installedApplication.path);
+  if (
+    observationContext.applicationPaths.size === 0 ||
+    [...observationContext.applicationPaths].some(
+      (applicationPath) => applicationPath !== installedPath,
+    )
+  ) {
+    throw new Error('WebDriver sessions are not bound to the observed installed application');
+  }
   if (referenced.size !== attachments.length) {
     throw new Error('manifest contains an orphan or duplicate case attachment');
   }
 }
 
-function validateCaseResult(value, execution, runner, requiredCase, root) {
+function validateCaseResult(
+  value,
+  execution,
+  runner,
+  requiredCase,
+  performanceRule,
+  candidateApplication,
+  observationContext,
+  root,
+) {
   assertObject(value, `case result ${execution.caseId}`);
   assertExactKeys(
     value,
@@ -508,6 +614,614 @@ function validateCaseResult(value, execution, runner, requiredCase, root) {
     runner,
     root,
   );
+  if (kinds.has('adapter-action-log')) {
+    validateAdapterActionLog(
+      value.artifacts.find((artifact) => artifact.kind === 'adapter-action-log'),
+      execution,
+      root,
+    );
+  }
+  let webdriverObservation = null;
+  if (kinds.has('webdriver-trace')) {
+    webdriverObservation = validateWebDriverTrace(
+      value.artifacts.find((artifact) => artifact.kind === 'webdriver-trace'),
+      execution,
+      root,
+    );
+    bindDriverObservation(observationContext, webdriverObservation, execution.caseId);
+  }
+  if (/^ASSOC-0[1-4]-/u.test(execution.caseId)) {
+    const installedApplication = validateAssociationEvidence(
+      value.artifacts,
+      execution,
+      candidateApplication,
+      root,
+    );
+    bindInstalledApplication(observationContext, installedApplication, execution.caseId);
+  }
+  if (execution.caseId === 'RF-10') {
+    const installedApplication = validateColdStartLifecycle(
+      value.artifacts,
+      execution,
+      performanceRule.coldStartSamples,
+      performanceRule.hotWindowSamples,
+      candidateApplication,
+      webdriverObservation,
+      root,
+    );
+    bindInstalledApplication(observationContext, installedApplication, execution.caseId);
+  }
+}
+
+function readNdjsonArtifact(artifact, execution, root, label) {
+  if (!artifact || !artifact.path.endsWith(`/${execution.caseId}/${artifact.kind}.ndjson`)) {
+    throw new Error(`${label} path is not fixed: ${execution.caseId}`);
+  }
+  const lines = readFileSync(path.join(root, ...artifact.path.split('/')), 'utf8')
+    .split(/\r?\n/u)
+    .filter(Boolean);
+  if (lines.length === 0) throw new Error(`${label} is empty: ${execution.caseId}`);
+  try {
+    return lines.map((line) => JSON.parse(line));
+  } catch {
+    throw new Error(`${label} is not NDJSON: ${execution.caseId}`);
+  }
+}
+
+function validateAdapterActionLog(artifact, execution, root) {
+  const events = readNdjsonArtifact(artifact, execution, root, 'adapter action log');
+  events.forEach((event, index) => {
+    assertObject(event, `adapter action event ${execution.caseId}`);
+    if (
+      event.schema !== 'jotluck.installed-app.adapter-action-event.v1' ||
+      event.sequence !== index + 1 ||
+      event.caseId !== execution.caseId ||
+      event.adapter !== execution.adapter ||
+      !ISO_TIME.test(String(event.timestamp)) ||
+      !nonEmpty(event.action) ||
+      !event.details ||
+      typeof event.details !== 'object' ||
+      Array.isArray(event.details)
+    ) {
+      throw new Error(`adapter action event is invalid: ${execution.caseId}`);
+    }
+  });
+}
+
+function validateWebDriverTrace(artifact, execution, root) {
+  const events = readNdjsonArtifact(artifact, execution, root, 'WebDriver trace');
+  return validateWebDriverEvents(events, execution);
+}
+
+function validateWebDriverEvents(events, execution) {
+  const attempts = new Map();
+  const sessionIds = new Set();
+  let expectedDriver = null;
+  let expectedNativeDriver = null;
+  events.forEach((event, index) => {
+    assertObject(event, `WebDriver event ${execution.caseId}`);
+    if (
+      event.schema !== 'jotluck.installed-app.webdriver-event.v3' ||
+      event.sequence !== index + 1 ||
+      event.caseId !== execution.caseId ||
+      event.adapter !== execution.adapter ||
+      !ISO_TIME.test(String(event.timestamp)) ||
+      !nonEmpty(event.event)
+    ) {
+      throw new Error(`WebDriver event identity is invalid: ${execution.caseId}`);
+    }
+    if (event.event === 'tauri-driver-ready') {
+      assertWebDriverEventKeys(
+        event,
+        ['attemptId', 'processId', 'driver', 'nativeDriver'],
+        execution.caseId,
+      );
+      if (
+        !nonEmpty(event.attemptId) ||
+        attempts.has(event.attemptId) ||
+        !Number.isInteger(event.processId) ||
+        event.processId <= 0 ||
+        !isExecutableIdentity(event.driver) ||
+        !isExecutableIdentity(event.nativeDriver) ||
+        path.win32.basename(event.driver.path).toLowerCase() !== 'tauri-driver.exe' ||
+        path.win32.basename(event.nativeDriver.path).toLowerCase() !== 'msedgedriver.exe'
+      ) {
+        throw new Error(`tauri-driver identity is invalid: ${execution.caseId}`);
+      }
+      assertExactKeys(event.driver, ['path', 'bytes', 'sha256'], 'tauri-driver file identity');
+      assertExactKeys(
+        event.nativeDriver,
+        ['path', 'bytes', 'sha256'],
+        'native WebDriver file identity',
+      );
+      if (
+        (expectedDriver && canonicalJson(expectedDriver) !== canonicalJson(event.driver)) ||
+        (expectedNativeDriver &&
+          canonicalJson(expectedNativeDriver) !== canonicalJson(event.nativeDriver))
+      ) {
+        throw new Error(`WebDriver executable identity changed within a case: ${execution.caseId}`);
+      }
+      expectedDriver ??= event.driver;
+      expectedNativeDriver ??= event.nativeDriver;
+      attempts.set(event.attemptId, {
+        sessionId: null,
+        starts: new Map(),
+        completed: new Set(),
+        commands: [],
+        deleteStarted: false,
+        deleteCompleted: false,
+        deleted: false,
+      });
+    } else if (event.event === 'webdriver-session-handshake-complete') {
+      assertWebDriverEventKeys(
+        event,
+        ['attemptId', 'sessionId', 'capabilities', 'requested'],
+        execution.caseId,
+      );
+      const attempt = attempts.get(event.attemptId);
+      assertObject(event.requested, `WebDriver handshake request ${execution.caseId}`);
+      assertExactKeys(
+        event.requested,
+        ['application', 'args'],
+        `WebDriver handshake request ${execution.caseId}`,
+      );
+      if (
+        !attempt ||
+        attempt.sessionId ||
+        !nonEmpty(event.sessionId) ||
+        sessionIds.has(event.sessionId) ||
+        !event.capabilities ||
+        typeof event.capabilities !== 'object' ||
+        Array.isArray(event.capabilities) ||
+        Object.keys(event.capabilities).length === 0 ||
+        !nonEmpty(event.requested.application) ||
+        !path.win32.isAbsolute(event.requested.application) ||
+        path.win32.basename(event.requested.application).toLowerCase() !== 'jotluck.exe' ||
+        !Array.isArray(event.requested.args) ||
+        event.requested.args.length === 0 ||
+        event.requested.args.some(
+          (entry) => typeof entry !== 'string' || !path.win32.isAbsolute(entry),
+        )
+      ) {
+        throw new Error(`WebDriver session handshake is invalid: ${execution.caseId}`);
+      }
+      attempt.sessionId = event.sessionId;
+      attempt.requestedApplication = normalizeWindowsPath(event.requested.application);
+      sessionIds.add(event.sessionId);
+    } else if (event.event === 'webdriver-command-start') {
+      assertWebDriverEventKeys(
+        event,
+        ['attemptId', 'sessionId', 'correlationId', 'commandName', 'args'],
+        execution.caseId,
+      );
+      const attempt = attempts.get(event.attemptId);
+      if (
+        !attempt ||
+        !attempt.sessionId ||
+        attempt.deleted ||
+        attempt.deleteStarted ||
+        event.sessionId !== attempt.sessionId ||
+        !nonEmpty(event.correlationId) ||
+        !nonEmpty(event.commandName) ||
+        !WEBDRIVER_PROTOCOL_COMMANDS.has(event.commandName) ||
+        !Array.isArray(event.args)
+      ) {
+        throw new Error(`WebDriver command start is invalid: ${execution.caseId}`);
+      }
+      if (attempt.starts.has(event.correlationId)) {
+        throw new Error(`WebDriver command correlation is duplicated: ${execution.caseId}`);
+      }
+      if (event.commandName === 'deleteSession' && attempt.completed.size !== attempt.starts.size) {
+        throw new Error(
+          `WebDriver deletion started with commands still pending: ${execution.caseId}`,
+        );
+      }
+      attempt.starts.set(event.correlationId, {
+        commandName: event.commandName,
+        args: canonicalJson(event.args),
+      });
+      if (event.commandName === 'deleteSession') attempt.deleteStarted = true;
+    } else if (event.event === 'webdriver-command-complete') {
+      assertWebDriverEventKeys(
+        event,
+        ['attemptId', 'sessionId', 'correlationId', 'commandName', 'args', 'result', 'error'],
+        execution.caseId,
+      );
+      const attempt = attempts.get(event.attemptId);
+      const started = attempt?.starts.get(event.correlationId);
+      if (
+        !attempt ||
+        !attempt.sessionId ||
+        attempt.deleted ||
+        event.sessionId !== attempt.sessionId ||
+        !nonEmpty(event.correlationId) ||
+        started?.commandName !== event.commandName ||
+        started.args !== canonicalJson(event.args) ||
+        event.error !== null ||
+        attempt.completed.has(event.correlationId)
+      ) {
+        throw new Error(
+          `WebDriver command completion is invalid: ${execution.caseId}/${event.commandName}/${event.correlationId}`,
+        );
+      }
+      attempt.completed.add(event.correlationId);
+      attempt.commands.push(event.commandName);
+      if (event.commandName === 'newSession') {
+        throw new Error(
+          `WebDriver newSession hook is not an observable handshake: ${execution.caseId}`,
+        );
+      }
+      if (event.commandName === 'deleteSession') attempt.deleteCompleted = true;
+    } else if (event.event === 'webdriver-session-deleted') {
+      assertWebDriverEventKeys(event, ['attemptId', 'sessionId'], execution.caseId);
+      const attempt = attempts.get(event.attemptId);
+      if (
+        !attempt ||
+        attempt.sessionId !== event.sessionId ||
+        attempt.deleted ||
+        !attempt.deleteStarted ||
+        !attempt.deleteCompleted ||
+        attempt.completed.size !== attempt.starts.size
+      ) {
+        throw new Error(`WebDriver session deletion is unbound: ${execution.caseId}`);
+      }
+      attempt.deleted = true;
+    } else if (event.event === 'webdriver-session-delete-failed') {
+      throw new Error(`WebDriver session cleanup failed: ${execution.caseId}`);
+    } else if (event.event === 'tauri-driver-output') {
+      assertWebDriverEventKeys(event, ['attemptId', 'stream', 'value'], execution.caseId);
+      if (
+        !attempts.has(event.attemptId) ||
+        attempts.get(event.attemptId).deleted ||
+        !['stdout', 'stderr'].includes(event.stream) ||
+        !isTraceText(event.value)
+      ) {
+        throw new Error(`tauri-driver output observation is invalid: ${execution.caseId}`);
+      }
+    } else {
+      throw new Error(`unknown WebDriver observation event: ${execution.caseId}`);
+    }
+  });
+  if (attempts.size === 0 || [...attempts.values()].some((attempt) => !attempt.deleted)) {
+    throw new Error(`WebDriver observation lifecycle is incomplete: ${execution.caseId}`);
+  }
+  const requiredCommands = WEBDRIVER_CASE_COMMANDS[execution.caseId];
+  if (!requiredCommands) {
+    throw new Error(`WebDriver case command contract is missing: ${execution.caseId}`);
+  }
+  const completeCaseAttempt = [...attempts.values()].find((attempt) =>
+    requiredCommands.every((command) => attempt.commands.includes(command)),
+  );
+  if (!completeCaseAttempt) {
+    throw new Error(`WebDriver case commands are not closed in one session: ${execution.caseId}`);
+  }
+  return {
+    driver: expectedDriver,
+    nativeDriver: expectedNativeDriver,
+    applicationPaths: [
+      ...new Set([...attempts.values()].map((entry) => entry.requestedApplication)),
+    ],
+  };
+}
+
+function assertWebDriverEventKeys(event, details, caseId) {
+  assertExactKeys(
+    event,
+    ['schema', 'sequence', 'timestamp', 'caseId', 'adapter', 'event', ...details],
+    `WebDriver ${event.event} event ${caseId}`,
+  );
+}
+
+function bindDriverObservation(context, observation, caseId) {
+  for (const key of ['driver', 'nativeDriver']) {
+    if (context[key] && canonicalJson(context[key]) !== canonicalJson(observation[key])) {
+      throw new Error(`WebDriver ${key} identity changed across cases: ${caseId}`);
+    }
+    context[key] ??= observation[key];
+  }
+  for (const applicationPath of observation.applicationPaths) {
+    context.applicationPaths.add(applicationPath);
+  }
+}
+
+function bindInstalledApplication(context, identity, caseId) {
+  if (
+    context.installedApplication &&
+    canonicalJson(context.installedApplication) !== canonicalJson(identity)
+  ) {
+    throw new Error(`installed application identity changed across cases: ${caseId}`);
+  }
+  context.installedApplication ??= identity;
+}
+
+function validateAssociationEvidence(artifacts, execution, candidateApplication, root) {
+  const registryArtifact = artifacts.find((entry) => entry.kind === 'registry-snapshot');
+  const launchArtifact = artifacts.find((entry) => entry.kind === 'launch-trace');
+  if (!registryArtifact || !launchArtifact) {
+    throw new Error(`association evidence is incomplete: ${execution.caseId}`);
+  }
+  const registry = readJson(root, registryArtifact.path);
+  const launch = readJson(root, launchArtifact.path);
+  return validateAssociationObjects(registry, launch, execution, candidateApplication);
+}
+
+function validateAssociationObjects(registry, launch, execution, candidateApplication) {
+  const expectedExtension = ASSOCIATION_EXTENSIONS[execution.caseId];
+  const commandMatch = String(registry.openCommand).match(/^"([^"\r\n]+)"\s+"%1"$/u);
+  const installed = launch.application?.installed;
+  const packaged = launch.application?.packaged;
+  const target = launch.target;
+  const processObserved = launch.processObserved;
+  const process = processObserved?.process;
+  assertObject(registry, `association registry ${execution.caseId}`);
+  assertExactKeys(
+    registry,
+    [
+      'extension',
+      'openWithListExists',
+      'defaultProgId',
+      'userChoiceProgId',
+      'mruList',
+      'openWithSlots',
+      'openWithExecutables',
+      'classOpenWithProgIds',
+      'explorerOpenWithProgIds',
+      'supportedType',
+      'openCommand',
+      'progIdOpenCommand',
+    ],
+    `association registry ${execution.caseId}`,
+  );
+  if (
+    !expectedExtension ||
+    registry.extension !== expectedExtension ||
+    !Array.isArray(registry.classOpenWithProgIds) ||
+    !registry.classOpenWithProgIds.includes('JotLuck.Note') ||
+    !Array.isArray(registry.explorerOpenWithProgIds) ||
+    !registry.explorerOpenWithProgIds.includes('JotLuck.Note') ||
+    registry.supportedType !== true ||
+    !/^"[^"\r\n]*[\\/]JotLuck\.exe"\s+"%1"$/iu.test(String(registry.openCommand)) ||
+    registry.progIdOpenCommand !== registry.openCommand ||
+    !commandMatch ||
+    normalizeWindowsPath(commandMatch[1]) !== normalizeWindowsPath(installed?.path)
+  ) {
+    throw new Error(`association registry command is not exact: ${execution.caseId}`);
+  }
+  assertObject(launch, `association launch ${execution.caseId}`);
+  assertExactKeys(
+    launch,
+    ['schema', 'launchedAt', 'target', 'shell', 'processObserved', 'application'],
+    `association launch ${execution.caseId}`,
+  );
+  assertObject(target, `association target ${execution.caseId}`);
+  assertExactKeys(
+    target,
+    ['path', 'extension', 'marker', 'markerSha256', 'before', 'after'],
+    `association target ${execution.caseId}`,
+  );
+  assertObject(target.before, `association target before ${execution.caseId}`);
+  assertExactKeys(
+    target.before,
+    ['bytes', 'sha256'],
+    `association target before ${execution.caseId}`,
+  );
+  assertObject(target.after, `association target after ${execution.caseId}`);
+  assertExactKeys(
+    target.after,
+    ['bytes', 'sha256', 'contentUtf8'],
+    `association target after ${execution.caseId}`,
+  );
+  assertObject(launch.shell, `association Shell result ${execution.caseId}`);
+  assertExactKeys(
+    launch.shell,
+    ['method', 'className', 'processId'],
+    `association Shell result ${execution.caseId}`,
+  );
+  assertObject(processObserved, `association UIA observation ${execution.caseId}`);
+  assertExactKeys(
+    processObserved,
+    ['target', 'process'],
+    `association UIA observation ${execution.caseId}`,
+  );
+  assertObject(process, `association UIA process ${execution.caseId}`);
+  assertExactKeys(
+    process,
+    ['Id', 'ProcessName', 'MainWindowTitle', 'ExecutablePath', 'matchedText', 'observationSource'],
+    `association UIA process ${execution.caseId}`,
+  );
+  assertObject(launch.application, `association application ${execution.caseId}`);
+  assertExactKeys(
+    launch.application,
+    ['installed', 'packaged'],
+    `association application ${execution.caseId}`,
+  );
+  if (isExecutableIdentity(installed)) {
+    assertExactKeys(installed, ['path', 'bytes', 'sha256'], 'installed application identity');
+  }
+  if (isExecutableIdentity(packaged)) {
+    assertExactKeys(packaged, ['path', 'bytes', 'sha256'], 'packaged application identity');
+  }
+  const afterBytes = Buffer.from(String(target?.after?.contentUtf8 ?? ''), 'utf8');
+  const targetStem = path.win32.parse(String(target?.path ?? '')).name.toLowerCase();
+  if (
+    launch.schema !== 'jotluck.installed-app.association-launch.v2' ||
+    !ISO_TIME.test(String(launch.launchedAt)) ||
+    target?.extension !== expectedExtension ||
+    path.win32.extname(String(target?.path)).toLowerCase() !== expectedExtension ||
+    !path.win32.basename(String(target?.path)).includes(' ') ||
+    !nonEmpty(target?.marker) ||
+    target.markerSha256 !== sha256(Buffer.from(target.marker, 'utf8')) ||
+    !Number.isInteger(target.before?.bytes) ||
+    target.before.bytes <= 0 ||
+    !SHA256.test(String(target.before?.sha256)) ||
+    target.after?.bytes !== afterBytes.byteLength ||
+    target.after?.sha256 !== sha256(afterBytes) ||
+    target.before.bytes !== target.after.bytes ||
+    target.before.sha256 !== target.after.sha256 ||
+    !String(target.after?.contentUtf8).includes(target.marker) ||
+    launch.shell?.method !== 'ShellExecuteExW' ||
+    launch.shell?.className !== 'JotLuck.Note' ||
+    !Number.isInteger(launch.shell?.processId) ||
+    launch.shell.processId <= 0 ||
+    processObserved?.target !== target.path ||
+    process?.Id !== launch.shell.processId ||
+    process?.observationSource !== 'Windows-UIAutomation' ||
+    !nonEmpty(process?.matchedText) ||
+    !process.matchedText.includes(target.marker) ||
+    !nonEmpty(process?.MainWindowTitle) ||
+    !process.MainWindowTitle.toLowerCase().includes(targetStem) ||
+    !isExecutableIdentity(installed) ||
+    !isExecutableIdentity(packaged) ||
+    normalizeWindowsPath(process?.ExecutablePath) !== normalizeWindowsPath(installed?.path) ||
+    installed.sha256 !== packaged.sha256 ||
+    installed.bytes !== packaged.bytes ||
+    !candidateApplication ||
+    packaged.sha256 !== candidateApplication.sha256 ||
+    packaged.bytes !== candidateApplication.bytes ||
+    path.win32.basename(String(packaged.path)).toLowerCase() !==
+      path.win32.basename(String(candidateApplication.path)).toLowerCase()
+  ) {
+    throw new Error(`association Shell observation is invalid: ${execution.caseId}`);
+  }
+  return installed;
+}
+
+function validateColdStartLifecycle(
+  artifacts,
+  execution,
+  expectedSamples,
+  expectedHotSamples,
+  candidateApplication,
+  webdriverObservation,
+  root,
+) {
+  const artifact = artifacts.find((entry) => entry.kind === 'process-lifecycle');
+  if (!artifact) throw new Error('RF-10 process lifecycle evidence is missing');
+  const lifecycle = readJson(root, artifact.path);
+  return validateColdStartLifecycleValue(
+    lifecycle,
+    expectedSamples,
+    expectedHotSamples,
+    candidateApplication,
+    webdriverObservation,
+  );
+}
+
+function validateColdStartLifecycleValue(
+  lifecycle,
+  expectedSamples = 20,
+  expectedHotSamples = 30,
+  candidateApplication,
+  webdriverObservation,
+) {
+  assertObject(lifecycle, 'RF-10 process lifecycle');
+  assertExactKeys(
+    lifecycle,
+    ['schema', 'application', 'samples', 'hotWindowSamples', 'finalProcesses'],
+    'RF-10 process lifecycle',
+  );
+  assertObject(lifecycle.application, 'RF-10 application identity');
+  assertExactKeys(lifecycle.application, ['installed', 'packaged'], 'RF-10 application identity');
+  const installed = lifecycle.application.installed;
+  const packaged = lifecycle.application.packaged;
+  if (isExecutableIdentity(installed)) {
+    assertExactKeys(installed, ['path', 'bytes', 'sha256'], 'RF-10 installed application');
+  }
+  if (isExecutableIdentity(packaged)) {
+    assertExactKeys(packaged, ['path', 'bytes', 'sha256'], 'RF-10 packaged application');
+  }
+  if (
+    lifecycle.schema !== 'jotluck.installed-app.process-lifecycle.v2' ||
+    !isExecutableIdentity(installed) ||
+    !isExecutableIdentity(packaged) ||
+    path.win32.basename(installed.path).toLowerCase() !== 'jotluck.exe' ||
+    path.win32.basename(packaged.path).toLowerCase() !== 'jotluck.exe' ||
+    installed.bytes !== packaged.bytes ||
+    installed.sha256 !== packaged.sha256 ||
+    (candidateApplication &&
+      (packaged.bytes !== candidateApplication.bytes ||
+        packaged.sha256 !== candidateApplication.sha256 ||
+        path.win32.basename(packaged.path).toLowerCase() !==
+          path.win32.basename(candidateApplication.path).toLowerCase())) ||
+    (webdriverObservation &&
+      (!Array.isArray(webdriverObservation.applicationPaths) ||
+        webdriverObservation.applicationPaths.length === 0 ||
+        webdriverObservation.applicationPaths.some(
+          (applicationPath) => applicationPath !== normalizeWindowsPath(installed.path),
+        ))) ||
+    !Array.isArray(lifecycle.samples) ||
+    lifecycle.samples.length !== expectedSamples ||
+    !Array.isArray(lifecycle.hotWindowSamples) ||
+    lifecycle.hotWindowSamples.length !== expectedHotSamples ||
+    !Array.isArray(lifecycle.finalProcesses) ||
+    lifecycle.finalProcesses.length !== 0
+  ) {
+    throw new Error('RF-10 cold-start process lifecycle is invalid');
+  }
+  lifecycle.samples.forEach((sample, index) => {
+    assertObject(sample, `RF-10 cold-start sample ${index + 1}`);
+    assertExactKeys(
+      sample,
+      ['sample', 'startedAt', 'finishedAt', 'before', 'after'],
+      `RF-10 cold-start sample ${index + 1}`,
+    );
+    if (
+      sample.sample !== index + 1 ||
+      !ISO_TIME.test(String(sample.startedAt)) ||
+      !ISO_TIME.test(String(sample.finishedAt)) ||
+      Date.parse(sample.finishedAt) < Date.parse(sample.startedAt) ||
+      !Array.isArray(sample.before) ||
+      sample.before.length !== 0 ||
+      !Array.isArray(sample.after) ||
+      sample.after.length !== 0
+    ) {
+      throw new Error(`RF-10 cold-start sample lacks a zero-process boundary: ${index + 1}`);
+    }
+  });
+  lifecycle.hotWindowSamples.forEach((sample, index) => {
+    assertObject(sample, `RF-10 hot-window sample ${index + 1}`);
+    assertExactKeys(
+      sample,
+      ['sample', 'before', 'opened', 'after'],
+      `RF-10 hot-window sample ${index + 1}`,
+    );
+    if (
+      sample.sample !== index + 1 ||
+      !Number.isInteger(sample.before) ||
+      sample.before < 1 ||
+      sample.opened !== sample.before + 1 ||
+      sample.after !== sample.before
+    ) {
+      throw new Error(`RF-10 hot-window sample lacks a restored boundary: ${index + 1}`);
+    }
+  });
+  return installed;
+}
+
+function normalizeWindowsPath(value) {
+  return String(value ?? '')
+    .replaceAll('/', '\\')
+    .replace(/^\\\\\?\\/u, '')
+    .toLowerCase();
+}
+
+function isExecutableIdentity(value) {
+  return (
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    nonEmpty(value.path) &&
+    Number.isInteger(value.bytes) &&
+    value.bytes > 0 &&
+    SHA256.test(String(value.sha256))
+  );
+}
+
+function isTraceText(value) {
+  if (typeof value === 'string') return true;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  assertExactKeys(value, ['bytes', 'sha256'], 'sanitized WebDriver text');
+  return Number.isInteger(value.bytes) && value.bytes > 0 && SHA256.test(String(value.sha256));
 }
 
 function validateExecutionLog(artifact, caseResult, execution, runner, root) {
@@ -779,6 +1493,12 @@ function assertInstaller(value) {
     throw new Error('installer metadata is invalid');
   }
 }
+function assertApplication(value) {
+  assertInstaller(value);
+  if (value.fileName !== 'jotluck.exe') {
+    throw new Error('candidate application metadata is invalid');
+  }
+}
 function assertAttachment(value) {
   assertObject(value, 'attachment');
   assertExactKeys(value, ['path', 'bytes', 'sha256', 'caseId', 'kind'], 'attachment');
@@ -891,11 +1611,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [
     releaseId,
     installerPath = process.env.JOTLUCK_INSTALLER_PATH,
+    candidateApplicationPath = process.env.JOTLUCK_CANDIDATE_APPLICATION_PATH,
     executionEvidencePath = process.env.JOTLUCK_EXECUTION_EVIDENCE_PATH,
   ] = process.argv.slice(2);
-  if (!releaseId || !installerPath || !executionEvidencePath) {
+  if (!releaseId || !installerPath || !candidateApplicationPath || !executionEvidencePath) {
     console.error(
-      'usage: node scripts/release/verify-installed-app-evidence-v2.mjs <release-id> <installer-path> <execution-evidence-path>',
+      'usage: node scripts/release/verify-installed-app-evidence-v2.mjs <release-id> <installer-path> <candidate-application-path> <execution-evidence-path>',
     );
     process.exit(2);
   }
@@ -906,6 +1627,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           rootDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'),
           releaseId,
           installerPath,
+          candidateApplicationPath,
           executionEvidencePath,
         }),
       ),

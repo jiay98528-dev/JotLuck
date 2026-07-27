@@ -56,4 +56,16 @@ describe('installed-app evidence capture entrypoint', () => {
     expect(workflow).toContain('Upload installed-app failure diagnostics');
     expect(workflow).toContain('installed-app-evidence-diagnostics/**');
   });
+
+  it('pins the capture driver and passes the independently resolved candidate application', () => {
+    const workflow = readFileSync(workflowPath, 'utf8');
+    expect(workflow.match(/cargo install tauri-driver --version 2\.0\.6 --locked/gu)).toHaveLength(
+      2,
+    );
+    expect(workflow).toContain('$env:USERPROFILE\\.cargo\\bin\\tauri-driver.exe');
+    expect(workflow).toContain('unexpected tauri-driver version');
+    expect(workflow).toContain('expected exactly one candidate jotluck.exe');
+    expect(workflow).toContain('JOTLUCK_CANDIDATE_APPLICATION_PATH');
+    expect(workflow).toContain('verify-preview-release-gate.mjs');
+  });
 });

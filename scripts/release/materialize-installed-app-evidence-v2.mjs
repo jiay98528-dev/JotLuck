@@ -11,7 +11,6 @@ import {
   readdirSync,
   renameSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from 'node:fs';
 import os from 'node:os';
@@ -120,6 +119,10 @@ export function materializeInstalledAppEvidenceV2({
         materialization: provenance.materialization,
       },
       installer: fileMetadata(candidateFiles.installer, true),
+      application: {
+        fileName: 'jotluck.exe',
+        ...fileMetadata(candidateFiles.executable),
+      },
       catalog: fileMetadata(path.join(root, REQUIRED_CASES_PATH), false, REQUIRED_CASES_PATH),
       rawReport: managedMetadata(evidenceDirectory, base, 'raw-report.json'),
       transcript: managedMetadata(evidenceDirectory, base, 'transcript.json'),

@@ -2,7 +2,7 @@ diff --git a/minimatch.js b/minimatch.js
 index b6afca4..a97727d 100644
 --- a/minimatch.js
 +++ b/minimatch.js
-@@ -18,3 +18,3 @@ minimatch.GLOBSTAR = GLOBSTAR
+@@ -18 +18 @@ minimatch.GLOBSTAR = GLOBSTAR
 -const expand = require('brace-expansion')
 +const { expand } = require('brace-expansion')
 diff --git a/package.json b/package.json

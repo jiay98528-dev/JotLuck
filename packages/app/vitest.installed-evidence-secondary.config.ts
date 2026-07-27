@@ -10,7 +10,7 @@ export default mergeConfig(
       maxWorkers: 1,
       minWorkers: 1,
       fileParallelism: false,
-      env: { JOTLUCK_INSTALLED_EVIDENCE_TEST_SHARD: '1' },
+      env: { JOTLUCK_INSTALLED_EVIDENCE_TEST_SHARD: '2' },
     },
   }),
 );

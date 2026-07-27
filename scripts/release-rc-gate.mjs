@@ -56,6 +56,7 @@ try {
     rootDir,
     releaseId,
     installerPath: process.env.JOTLUCK_INSTALLER_PATH,
+    candidateApplicationPath: process.env.JOTLUCK_CANDIDATE_APPLICATION_PATH,
     executionEvidencePath: process.env.JOTLUCK_EXECUTION_EVIDENCE_PATH,
   });
   console.log(
@@ -125,6 +126,9 @@ Usage:
 State:
   - Autocomplete quality remains an independently recomputed fail-closed gate.
   - Generic installed-app RC PASS requires independent installed-app evidence protocol v2.
+  - Installed-app verification requires JOTLUCK_INSTALLER_PATH,
+    JOTLUCK_CANDIDATE_APPLICATION_PATH, and JOTLUCK_EXECUTION_EVIDENCE_PATH.
+  - The candidate application must be the provenance-bound jotluck.exe downloaded by the gate.
   - Self-attested machine-evidence v1 and commit-self-referential manifests are rejected.
 
 Expected installer identity for the future v2 protocol:

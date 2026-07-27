@@ -38,6 +38,65 @@ describe('fixed installed-app evidence adapters', () => {
     writeFileSync(path.join(root, 'duplicate-setup.exe'), 'duplicate');
     expect(() => __test.discoverCandidate(root)).toThrow(/exactly one installer/u);
   });
+
+  it('requires an adapter action log beside every WebDriver observation', () => {
+    const webdriverCases = catalog.cases.filter((entry) =>
+      entry.requiredArtifactKinds.includes('webdriver-trace'),
+    );
+    expect(webdriverCases.length).toBeGreaterThan(0);
+    expect(
+      webdriverCases.every((entry) => entry.requiredArtifactKinds.includes('adapter-action-log')),
+    ).toBe(true);
+  });
+
+  it('accepts only a quoted JotLuck executable plus a quoted percent-one placeholder', () => {
+    expect(
+      __test.isQuotedJotLuckOpenCommand('"C:\\Program Files\\JotLuck\\JotLuck.exe" "%1"'),
+    ).toBe(true);
+    expect(__test.isQuotedJotLuckOpenCommand('"C:\\Program Files\\JotLuck\\JotLuck.exe"')).toBe(
+      false,
+    );
+    expect(
+      __test.isQuotedJotLuckOpenCommand(
+        'C:\\Program Files\\JotLuck\\JotLuck.exe "C:\\note with spaces.md"',
+      ),
+    ).toBe(false);
+  });
+
+  it('binds registry commands and installed bytes to the exact packaged application', () => {
+    expect(
+      __test.openCommandTargetsApplication(
+        '"C:\\Program Files\\JotLuck\\JotLuck.exe" "%1"',
+        'c:\\program files\\jotluck\\JotLuck.exe',
+      ),
+    ).toBe(true);
+    expect(
+      __test.openCommandTargetsApplication(
+        '"D:\\Other\\JotLuck.exe" "%1"',
+        'C:\\Program Files\\JotLuck\\JotLuck.exe',
+      ),
+    ).toBe(false);
+    expect(() =>
+      __test.assertMatchingExecutableIdentities(
+        { bytes: 10, sha256: 'a'.repeat(64) },
+        { bytes: 10, sha256: 'b'.repeat(64) },
+      ),
+    ).toThrow(/does not match/u);
+  });
+
+  it('falls back to the Shell PID when UI Automation fails before observing a process', () => {
+    expect(__test.resolveAssociationProcessId(undefined, { processId: 73 })).toBe(73);
+    expect(__test.resolveAssociationProcessId({ process: { Id: 91 } }, { processId: 73 })).toBe(91);
+  });
+
+  it('bounds and sanitizes circular WebDriver command results', () => {
+    const result = { sessionId: 'session-1' };
+    result.self = result;
+    expect(__test.sanitizeTraceValue(result)).toEqual({
+      sessionId: 'session-1',
+      self: { circularReference: true },
+    });
+  });
 });
 
 function makeCandidate() {

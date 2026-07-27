@@ -5,77 +5,152 @@
     {
       "id": "GUI-01-NOTE-LIFECYCLE",
       "adapter": "gui-note-lifecycle",
-      "requiredArtifactKinds": ["execution-log", "webdriver-trace", "filesystem-readback"]
+      "requiredArtifactKinds": [
+        "execution-log",
+        "adapter-action-log",
+        "webdriver-trace",
+        "filesystem-readback"
+      ]
     },
     {
       "id": "GUI-02-FILE-DRAWER",
       "adapter": "gui-file-drawer",
-      "requiredArtifactKinds": ["execution-log", "webdriver-trace", "filesystem-readback"]
+      "requiredArtifactKinds": [
+        "execution-log",
+        "adapter-action-log",
+        "webdriver-trace",
+        "filesystem-readback"
+      ]
     },
     {
       "id": "GUI-03-SEARCH-EDIT",
       "adapter": "gui-search-edit",
-      "requiredArtifactKinds": ["execution-log", "webdriver-trace", "filesystem-readback"]
+      "requiredArtifactKinds": [
+        "execution-log",
+        "adapter-action-log",
+        "webdriver-trace",
+        "filesystem-readback"
+      ]
     },
     {
       "id": "GUI-04-LIVE-PREVIEW",
       "adapter": "gui-live-preview",
-      "requiredArtifactKinds": ["execution-log", "webdriver-trace", "screenshot"]
+      "requiredArtifactKinds": [
+        "execution-log",
+        "adapter-action-log",
+        "webdriver-trace",
+        "screenshot"
+      ]
     },
     {
       "id": "GUI-05-SETTINGS-PERSISTENCE",
       "adapter": "gui-settings-persistence",
-      "requiredArtifactKinds": ["execution-log", "webdriver-trace", "settings-snapshot"]
+      "requiredArtifactKinds": [
+        "execution-log",
+        "adapter-action-log",
+        "webdriver-trace",
+        "settings-snapshot"
+      ]
     },
     {
       "id": "GUI-06-EXPORT-CONTENT",
       "adapter": "gui-export-content",
-      "requiredArtifactKinds": ["execution-log", "webdriver-trace", "export-readback"]
+      "requiredArtifactKinds": [
+        "execution-log",
+        "adapter-action-log",
+        "webdriver-trace",
+        "export-readback"
+      ]
     },
     {
       "id": "GUI-07-IMAGE-ASSET",
       "adapter": "gui-image-asset",
-      "requiredArtifactKinds": ["execution-log", "webdriver-trace", "filesystem-snapshot"]
+      "requiredArtifactKinds": [
+        "execution-log",
+        "adapter-action-log",
+        "webdriver-trace",
+        "filesystem-snapshot"
+      ]
     },
     {
       "id": "RF-01",
       "adapter": "rf-cold-open-supported-files",
-      "requiredArtifactKinds": ["execution-log", "webdriver-trace", "file-readback"]
+      "requiredArtifactKinds": [
+        "execution-log",
+        "adapter-action-log",
+        "webdriver-trace",
+        "file-readback"
+      ]
     },
     {
       "id": "RF-02",
       "adapter": "rf-runtime-new-window",
-      "requiredArtifactKinds": ["execution-log", "webdriver-trace", "window-snapshot"]
+      "requiredArtifactKinds": [
+        "execution-log",
+        "adapter-action-log",
+        "webdriver-trace",
+        "window-snapshot"
+      ]
     },
     {
       "id": "RF-03",
       "adapter": "rf-path-deduplication",
-      "requiredArtifactKinds": ["execution-log", "webdriver-trace", "window-snapshot"]
+      "requiredArtifactKinds": [
+        "execution-log",
+        "adapter-action-log",
+        "webdriver-trace",
+        "window-snapshot"
+      ]
     },
     {
       "id": "RF-04",
       "adapter": "rf-external-edit",
-      "requiredArtifactKinds": ["execution-log", "webdriver-trace", "file-readback"]
+      "requiredArtifactKinds": [
+        "execution-log",
+        "adapter-action-log",
+        "webdriver-trace",
+        "file-readback"
+      ]
     },
     {
       "id": "RF-05",
       "adapter": "rf-promote-notebook",
-      "requiredArtifactKinds": ["execution-log", "webdriver-trace", "filesystem-snapshot"]
+      "requiredArtifactKinds": [
+        "execution-log",
+        "adapter-action-log",
+        "webdriver-trace",
+        "filesystem-snapshot"
+      ]
     },
     {
       "id": "RF-06",
       "adapter": "rf-workspace-isolation",
-      "requiredArtifactKinds": ["execution-log", "webdriver-trace", "window-snapshot"]
+      "requiredArtifactKinds": [
+        "execution-log",
+        "adapter-action-log",
+        "webdriver-trace",
+        "window-snapshot"
+      ]
     },
     {
       "id": "RF-07",
       "adapter": "rf-window-close-isolation",
-      "requiredArtifactKinds": ["execution-log", "webdriver-trace", "window-snapshot"]
+      "requiredArtifactKinds": [
+        "execution-log",
+        "adapter-action-log",
+        "webdriver-trace",
+        "window-snapshot"
+      ]
     },
     {
       "id": "RF-08",
       "adapter": "rf-reader-security",
-      "requiredArtifactKinds": ["execution-log", "webdriver-trace", "security-snapshot"]
+      "requiredArtifactKinds": [
+        "execution-log",
+        "adapter-action-log",
+        "webdriver-trace",
+        "security-snapshot"
+      ]
     },
     {
       "id": "RF-09",
@@ -87,15 +162,22 @@
       "adapter": "rf-installed-windows-journey",
       "requiredArtifactKinds": [
         "execution-log",
+        "adapter-action-log",
         "webdriver-trace",
         "installer-log",
+        "process-lifecycle",
         "timing-samples"
       ]
     },
     {
       "id": "VER-01",
       "adapter": "version-consistency",
-      "requiredArtifactKinds": ["execution-log", "webdriver-trace", "version-snapshot"]
+      "requiredArtifactKinds": [
+        "execution-log",
+        "adapter-action-log",
+        "webdriver-trace",
+        "version-snapshot"
+      ]
     },
     {
       "id": "ASSOC-01-MD",

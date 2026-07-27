@@ -53,6 +53,7 @@ describe('release RC autocomplete quality gate', () => {
     expect(source).not.toContain('workingTreeSha256');
     expect(source).not.toContain('command.exitCode');
     expect(source).toContain('verifyGitHubActionsProvenance');
+    expect(source).toContain('JOTLUCK_CANDIDATE_APPLICATION_PATH');
     expect(source).toContain('JOTLUCK_EXECUTION_EVIDENCE_PATH');
     expect(source).toContain('verifyInstalledAppEvidenceV2');
     expect(source).toContain('installed-app evidence v2 verification failed');

@@ -82,14 +82,17 @@ Vue 3 + Pinia + Vite
 - 系统关联只注册为可选打开程序，不擅自覆盖系统默认应用；`.txt` 关联是本版本明确覆盖旧策略的产品决定。
 - NSIS 卸载按字母槽识别 `JotLuck.exe`，仅从 `MRUList` 删除对应字母并保持剩余顺序；不存在 JotLuck 槽时不得写 MRU，仍有其他槽时不得删除整个 `MRUList`。
 - installed-app evidence 的正式信任根为 GitHub Actions + REST provenance。候选和 execution evidence artifact 必须来自同一个 `main`/`workflow_dispatch` run，`head_sha` 等于候选提交且 required jobs/steps 全部成功；缺 token、REST 失败、artifact 过期或 digest 不一致一律 fail-closed。
-- required-case catalog 固定 adapter 与 artifact kinds；case result 必须包含可解析的 `execution-log.ndjson` 和指定观察产物。证据提交中的 raw report、case results 和附件必须与下载的 execution artifact 精确同构，transcript 只允许守恒转录。
-- capture 只调用仓库内固定的 24 个 adapter，不接受 manifest、参数或环境变量注入测试命令。Windows runner 从卸载注册表解析真实安装位置，复用 standalone WebDriver host；所有 case 完成或失败后统一回收 WebDriver、应用进程、安装状态、临时文件和测试注册表项。
+- required-case catalog 固定 adapter 与 artifact kinds；case result 必须包含可解析的 `execution-log.ndjson` 和指定观察产物。adapter 意图日志与真实 WebDriver 命令记录分离；WebDriver v3 以 `remote()` 返回后的 handshake 绑定 `attemptId + sessionId`，只保留锁定 `@wdio/protocols` 的 W3C 命令并折叠 browser/element wrapper 的重复 hook，只接受 handshake 后真实观察到的 case 命令与 `deleteSession`，不得伪造 hook 无法观察的 `newSession`。证据提交中的 raw report、case results 和附件必须与下载的 execution artifact 精确同构，transcript 只允许守恒转录。
+- capture 只调用仓库内固定的 24 个 adapter，不接受 manifest、参数或环境变量注入测试命令。Windows runner 从卸载注册表解析真实安装位置，并要求安装后 EXE 与候选 artifact 中 `jotluck.exe` 的字节数/SHA-256 完全一致；ASSOC-01～04 还必须绑定 case 对应扩展名、目标内容前后 readback、注册命令的规范安装路径，通过 `ShellExecuteExW` 指定 `JotLuck.Note`，并用 UI Automation 保存正文 matched text 与 CIM `ExecutablePath`。所有 case 完成或失败后统一回收 WebDriver、Shell PID、应用进程、安装状态、临时文件和测试注册表项。
 - materialization job 必须先通过同一 run 的 REST resolver 核验 repository/workflow/event/branch/SHA/attempt、前置 job、固定 artifact ID/name/digest/size/唯一性，再按 ID 下载。materializer 对 raw report、case results 和附件逐文件验证增删改，生成 transcript、manifest、构建 inventory 与 preview-gate；该输出在进入独立 evidence commit 并通过在线 provenance 前只能称为 `structural-diagnostic`。
-- 安装版性能使用 catalog 中的 `coldStartP90ReferenceMs` / `hotWindowP90ReferenceMs`。20/30 原始样本、正数约束、P90 复算和 advisory 守恒是硬门控；超过参考线只返回 `pass-with-warnings`，不改变退出码。
+- 安装版性能使用 catalog 中的 `coldStartP90ReferenceMs` / `hotWindowP90ReferenceMs`。20/30 原始样本、正数约束、P90 复算和 advisory 守恒是硬门控；20 次冷启动每轮前后必须为零进程，30 次热开窗每轮关闭后必须恢复原窗口数，热会话结束后必须再次为零进程。超过参考线只返回 `pass-with-warnings`，不改变退出码；生命周期边界不完整仍硬失败。
 
 ## 变更记录
 
 - 2026-07-27：增加固定 installed-app adapter、同 run REST resolver 和 evidence materializer；性能参考线改为可复算 advisory，证据完整性仍 fail-closed。
+- 2026-07-27：installed-app evidence 增加 Shell/ProgID 真实关联路径、adapter/driver 双日志、WebDriver 语义校验与冷启动零进程生命周期。
+- 2026-07-27：关联证据进一步绑定 case 扩展名、候选/安装 EXE 哈希和注册命令路径；WebDriver 改为逐 case 命令合同，RF-10 补齐热窗口与会话终态。
+- 2026-07-27：WebDriver 观察升级为真实 remote handshake + attempt/session 状态机；最终 gate 独立重哈希候选 EXE，ASSOC/RF-10 使用版本化 readback/identity，仓库文本固定为 LF。
 - 2026-07-26：installed-app evidence v2 改用 GitHub REST run/artifact provenance，并加入固定 adapter、执行日志和 execution artifact 精确快照；NSIS 卸载改为 MRU 保序清理。
 - 2026-07-25：新增单进程多窗口窗口会话架构、窗口身份 IPC、规范路径去重、外部只读轻量入口以及窗口级 root/index/watcher/completion 隔离。
 - 2026-07-25：明确 P1 grant 升级与 `assert_workspace` 命令边界；增加 `0.1.0-preview` Public L3 stop / V2S 生产不可达 gate。

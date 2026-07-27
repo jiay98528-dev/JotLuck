@@ -4,7 +4,7 @@
 
 从 `0.1.0-preview` 起，Web 自动化全绿只能表述为“自动化候选通过”，不能表述为“最终发布通过”。最终发布通过必须额外满足真实安装包 L4。历史报告中的旧版本号保持历史事实，不作迁移。
 
-> **当前状态：fail-closed。** 旧 `jotluck-installed-l4-evidence` v1 只校验自报退出码，并要求证据文件绑定包含自身的新 HEAD，既可伪造又无法形成合法固定点，已永久禁用。协议 v2 已收紧为 GitHub Actions 固定执行与 REST provenance，但当前尚无同源正式 capture/evidence commit；`pnpm release:rc-gate` 还会被 V2S architecture-stop 以 code 10 阻断，`--autocomplete-only` 仍保留独立质量闸门。
+> **当前状态：fail-closed。** 旧 `jotluck-installed-l4-evidence` v1 只校验自报退出码，并要求证据文件绑定包含自身的新 HEAD，既可伪造又无法形成合法固定点，已永久禁用。协议 v2 已收紧为 GitHub Actions 固定执行与 REST provenance；其嵌套 WebDriver v2、旧 ASSOC launch trace、旧 RF-10 lifecycle 产物也已永久失效，必须分别使用 WebDriver v3、ASSOC v2 和 RF-10 v2。当前尚无同源正式 capture/evidence commit；`pnpm release:rc-gate` 还会被 V2S architecture-stop 以 code 10 阻断，`--autocomplete-only` 仍保留独立质量闸门。
 
 ## 两层 GUI 验收
 
@@ -20,6 +20,7 @@
 5. 将候选 commit 冻结并推送到 `main`，以 `workflow_dispatch + capture_installed_evidence` 运行完整 CI。capture job 只有在 L1、Vitest、Rust、三引擎 E2E、Windows 视觉、Tauri build/smoke 全部成功后，才从同一 run 的候选 artifact 安装并执行固定 adapter；任一 case 失败、skip、缺执行日志或观察产物时不上传 evidence artifact。
 6. 同一 run 的 materialization job 先经 REST resolver 核验来源，再按已核验 ID 下载 candidate/execution artifact。materializer 逐文件对账并生成 transcript、manifest、构建 inventory 和 `preview-gate.json`，上传的 managed bundle 只供后续证据提交；本地输出仅是结构诊断。
 7. 证据 commit 只能新增 `release-evidence/installed-app/v2/<release-id>/`。raw report、case results 与附件必须和可信 execution artifact 逐文件一致；manifest 绑定 repository、run/attempt、两个固定 artifact 的 ID/name/API digest/size、materialization job/step、安装器和 required-case tree。
+8. 最终 gate 必须从 provenance 绑定的 candidate artifact 中精确解析唯一 `jotluck.exe`，通过 `JOTLUCK_CANDIDATE_APPLICATION_PATH` 传入并独立复算 bytes/SHA-256；manifest、ASSOC 和 RF-10 只能引用该结果，不能以 capture 自报 metadata 代替。
 
 `JotLuck_RELEASE_ALLOW_DIRTY=1` 仅作为诊断标记保留，正式 RC gate 仍无条件拒绝脏工作区，不能用它输出 PASS。
 
@@ -29,7 +30,7 @@
 
 `0.1.0-preview` 还必须有独立 preview gate：Public L3 的 architecture-stop / fail-closed 可接受，但执行记录必须证明生产依赖图、Vite/Tauri bundle 与安装包均不存在 V2S Worker、factory、候选 manifest、候选二进制或自动加载路径。候选 workflow 必须把安装器、桌面 EXE 与真实 `dist` 一起作为同一不可变 artifact 上传；gate 会逐文件枚举下载后的 `dist`、复算字节数与 SHA256，并要求受管 inventory 精确覆盖，漏列文件也会失败。仅“未运行 V2S”或测试注入路径不能构成该证明。
 
-性能参考线不再单独阻断 preview：RF-10 必须真实保存 20 次冷启动和 30 次运行中新窗口的全部原始时长，capture 与 verifier 共同复算 P90。冷启动超过 2 秒或热开窗超过 1 秒时返回 `pass-with-warnings` 和固定 advisory code；缺样本、数量错误、非正数、P90/advisory 不可复算、证据不守恒仍是硬失败。
+性能参考线不再单独阻断 preview：RF-10 必须以版本化 lifecycle 保存 packaged/installed EXE 身份、20 次冷启动和 30 次运行中新窗口的全部原始时长，并记录每次进程/窗口边界；capture 与 verifier 共同复算 P90。冷启动超过 2 秒或热开窗超过 1 秒时返回 `pass-with-warnings` 和固定 advisory code；缺样本、数量错误、非正数、P90/advisory 不可复算、身份或证据不守恒仍是硬失败。
 
 ## 安装版 L4 必测路径
 
@@ -60,6 +61,7 @@
 
 ## 变更记录
 
+- 2026-07-27：WebDriver 子协议升级为 v3 handshake 状态机；ASSOC/RF-10 升级为严格版本化观察对象；最终 gate 独立重哈希 provenance-bound `jotluck.exe`。旧嵌套产物全部失效。
 - 2026-07-27：补齐 REST resolver → 固定 ID 下载 → materializer → managed bundle 链；2 秒/1 秒性能参考线改为非阻断 advisory，样本与证据完整性不降级。
 - 2026-07-26：协议 v2 收紧为固定 adapter/非空观察产物/execution NDJSON，并以 GitHub Actions REST provenance 绑定同一候选 run 的安装器与 execution evidence；删除 preview gate 的手写 audit/test/build 成功 JSON。
 - 2026-07-25：升级为 `0.1.0-preview` gate，新增 Public L3 stop 但 V2S 生产不可达的独立证明，以及四扩展名/外部授权提升的安装版验证。

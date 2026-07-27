@@ -9,7 +9,7 @@
 
 > **v2 证据要求**：每项 case 必须链接受版本管理的原始产物，并记录实际 passed/failed/skipped 计数、退出码、时间、产物 SHA256 与候选 commit；只读执行者的原始报告和同一执行者的结构化二次转录必须互相校验。命令文本、截图路径或自报 PASS 不能单独构成通过。
 >
-> required cases 和 case/raw/transcript/manifest 严格 JSON Schema 位于 `spec/release/`；证据目录固定为 `release-evidence/installed-app/v2/<release-id>/`。安装器与 execution evidence 必须来自同一个 GitHub Actions candidate run；gate 先通过 REST 核验 provenance，再下载并与受管证据逐文件对账。
+> required cases 和 case/raw/transcript/manifest 严格 JSON Schema 位于 `spec/release/`；证据目录固定为 `release-evidence/installed-app/v2/<release-id>/`。安装器与 execution evidence 必须来自同一个 GitHub Actions candidate run；gate 先通过 REST 核验 provenance，再下载并与受管证据逐文件对账。WebDriver v2、未版本化/旧版 ASSOC launch trace 与 RF-10 lifecycle 产物全部失效，不得迁移或复用。
 
 ## 发行对象
 
@@ -128,10 +128,13 @@
 
 - GitHub repository / workflow run ID / run attempt / candidate head SHA:
 - candidate artifact ID / fixed name / API digest:
+- 最终 gate 独立下载并重哈希的 `jotluck.exe` path / bytes / SHA-256:
 - execution evidence artifact ID / fixed name / API digest:
 - candidate / execution artifact API size、materialization job/step:
-- 每 case 固定 adapter / `execution-log.ndjson` / required artifact kinds:
-- RF-10 20 次冷启动 / 30 次热开窗原始样本、复算 P90、advisory（超过参考线为非阻断警告；缺样本仍失败）:
+- 每 case 固定 adapter / `execution-log.ndjson` / `adapter-action-log` / WebDriver 命令记录 / required artifact kinds:
+- ASSOC-01～04 case→扩展名→目标前后 readback / 候选与安装 EXE 字节数+SHA-256 / 注册命令精确安装路径 / `ShellExecuteExW` + `JotLuck.Note` / UIA matched text + CIM ExecutablePath:
+- WebDriver v3 每 case 固定命令合同 / remote handshake / `attemptId + sessionId` / 真实 `deleteSession` / driver 与 native-driver 身份:
+- RF-10 packaged+installed EXE 身份 / 20 次冷启动前后零进程 / 30 次热窗口关闭后计数恢复 / 热会话结束零进程 / 复算 P90 与 advisory:
 
 - 截图目录:
 - 验证用本地文件夹:
@@ -153,5 +156,6 @@
 ## 变更记录
 
 - 2026-07-27：增加 materialization 来源绑定和 RF-10 原始性能样本/advisory 记录；参考线超标不再单独阻断。
+- 2026-07-27：增加 Shell/ProgID 文件关联观察、adapter/driver 双日志和冷启动前后零进程记录。
 - 2026-07-26：增加 GitHub REST provenance、同 run 双 artifact、固定 adapter/execution log 和卸载 MRU 保序记录。
 - 2026-07-25：模板升级为 installed-app evidence v2，增加原始产物、二次转录、counter/hash/commit 链及 `0.1.0-preview` V2S 不可达证据字段。

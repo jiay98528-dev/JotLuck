@@ -24,8 +24,15 @@ const state = {
   installed: null,
   host: null,
   childProcesses: new Set(),
+  shellProcessIds: new Set(),
   installEvents: [],
-  performance: { coldStartMs: [], hotWindowMs: [] },
+  performance: {
+    coldStartMs: [],
+    hotWindowMs: [],
+    processLifecycle: [],
+    hotWindowLifecycle: [],
+    finalProcesses: [],
+  },
   preInstallRegistry: null,
   seededOpenWithBackup: null,
 };
@@ -68,6 +75,9 @@ export async function runInstalledAppCase({ definition, candidateRoot, workRoot 
   try {
     const artifacts = await adapter({ definition, workRoot, trace });
     const expected = definition.requiredArtifactKinds.filter((kind) => kind !== 'execution-log');
+    if (expected.includes('adapter-action-log')) {
+      artifacts.push(artifact(workRoot, 'adapter-action-log', 'ndjson'));
+    }
     const actual = artifacts.map((artifact) => artifact.kind);
     assert.deepEqual(
       actual.sort(),
@@ -77,7 +87,11 @@ export async function runInstalledAppCase({ definition, candidateRoot, workRoot 
     trace.record('adapter-observations-complete', { artifactKinds: actual.sort() });
     if (expected.includes('webdriver-trace')) {
       const webdriverTrace = artifacts.find((artifact) => artifact.kind === 'webdriver-trace');
-      trace.flush(webdriverTrace.path);
+      trace.flushWebDriver(webdriverTrace.path);
+    }
+    if (expected.includes('adapter-action-log')) {
+      const adapterLog = artifacts.find((artifact) => artifact.kind === 'adapter-action-log');
+      trace.flushAdapter(adapterLog.path);
     }
     for (const artifact of artifacts) assertNonEmptyRegularFile(artifact.path, artifact.kind);
     return {
@@ -92,7 +106,8 @@ export async function runInstalledAppCase({ definition, candidateRoot, workRoot 
       name: error instanceof Error ? error.name : 'Error',
       message: error instanceof Error ? error.message : String(error),
     });
-    trace.flush(path.join(workRoot, 'failure-webdriver-trace.ndjson'));
+    trace.flushFailure(path.join(workRoot, 'failure-adapter-action-log.ndjson'));
+    trace.flushWebDriverFailure(path.join(workRoot, 'failure-webdriver-trace.ndjson'));
     throw error;
   }
 }
@@ -105,14 +120,32 @@ export async function readPerformanceSummary() {
 }
 
 export async function disposeInstalledAppEvidence() {
-  await state.host?.dispose().catch(() => undefined);
+  const cleanupErrors = [];
+  try {
+    await state.host?.dispose();
+  } catch (error) {
+    cleanupErrors.push(error);
+  }
   state.host = null;
   for (const child of state.childProcesses) {
     if (child.exitCode === null) child.kill();
   }
   state.childProcesses.clear();
-  await uninstallCandidate().catch(() => undefined);
-  clearSeededOpenWithOrder();
+  for (const processId of state.shellProcessIds) stopObservedProcess(processId);
+  state.shellProcessIds.clear();
+  try {
+    await uninstallCandidate();
+  } catch (error) {
+    cleanupErrors.push(error);
+  }
+  try {
+    clearSeededOpenWithOrder();
+  } catch (error) {
+    cleanupErrors.push(error);
+  }
+  if (cleanupErrors.length > 0) {
+    throw new AggregateError(cleanupErrors, 'installed-app evidence cleanup failed');
+  }
 }
 
 export const __test = Object.freeze({
@@ -121,6 +154,11 @@ export const __test = Object.freeze({
   assertDefinition,
   parseInstalledEntry,
   inspectReaderBundle,
+  isQuotedJotLuckOpenCommand,
+  openCommandTargetsApplication,
+  assertMatchingExecutableIdentities,
+  resolveAssociationProcessId,
+  sanitizeTraceValue,
 });
 
 class EvidenceTrace {
@@ -128,14 +166,16 @@ class EvidenceTrace {
     this.caseId = caseId;
     this.adapter = adapter;
     this.workRoot = workRoot;
-    this.events = [];
-    this.sequence = 0;
+    this.adapterEvents = [];
+    this.webdriverEvents = [];
+    this.adapterSequence = 0;
+    this.webdriverSequence = 0;
   }
 
   record(action, details = {}) {
-    this.events.push({
-      schema: 'jotluck.installed-app.webdriver-event.v1',
-      sequence: ++this.sequence,
+    this.adapterEvents.push({
+      schema: 'jotluck.installed-app.adapter-action-event.v1',
+      sequence: ++this.adapterSequence,
       timestamp: new Date().toISOString(),
       caseId: this.caseId,
       adapter: this.adapter,
@@ -144,12 +184,43 @@ class EvidenceTrace {
     });
   }
 
-  flush(targetPath) {
-    if (this.events.length === 0)
-      throw new Error(`${this.caseId} produced an empty WebDriver trace`);
+  recordWebDriver(observation) {
+    this.webdriverEvents.push({
+      schema: 'jotluck.installed-app.webdriver-event.v3',
+      sequence: ++this.webdriverSequence,
+      timestamp: new Date().toISOString(),
+      caseId: this.caseId,
+      adapter: this.adapter,
+      ...sanitizeTraceValue(observation),
+    });
+  }
+
+  flushWebDriver(targetPath) {
+    if (!this.webdriverEvents.some((event) => event.event === 'webdriver-command-complete')) {
+      throw new Error(`${this.caseId} produced no completed WebDriver command observations`);
+    }
+    this.writeEvents(targetPath, this.webdriverEvents);
+  }
+
+  flushAdapter(targetPath) {
+    if (this.adapterEvents.length === 0)
+      throw new Error(`${this.caseId} produced an empty adapter action log`);
+    this.writeEvents(targetPath, this.adapterEvents);
+  }
+
+  flushFailure(targetPath) {
+    this.writeEvents(targetPath, this.adapterEvents);
+  }
+
+  flushWebDriverFailure(targetPath) {
+    this.writeEvents(targetPath, this.webdriverEvents);
+  }
+
+  writeEvents(targetPath, events) {
+    if (events.length === 0) return;
     writeFileSync(
       targetPath,
-      `${this.events.map((event) => JSON.stringify(event)).join('\n')}\n`,
+      `${events.map((event) => JSON.stringify(event)).join('\n')}\n`,
       'utf8',
     );
   }
@@ -172,6 +243,11 @@ async function ensureInstalledCandidate(candidateRoot) {
   const entry = queryInstalledEntry();
   state.installed = parseInstalledEntry(entry);
   assertNonEmptyRegularFile(state.installed.application, 'installed application');
+  const packagedApplication = executableIdentity(state.candidate.packagedApplication);
+  const installedApplication = executableIdentity(state.installed.application);
+  assertMatchingExecutableIdentities(packagedApplication, installedApplication);
+  state.installed.applicationIdentity = installedApplication;
+  state.installed.packagedApplicationIdentity = packagedApplication;
   state.host = createTauriDriverHost({ logLevel: 'error' });
   return state.installed;
 }
@@ -353,20 +429,37 @@ function assertDefinition(definition) {
   }
 }
 
-function sanitizeTraceValue(value) {
-  if (Array.isArray(value)) return value.map(sanitizeTraceValue);
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, child]) => [key, sanitizeTraceValue(child)]),
-    );
-  }
+function sanitizeTraceValue(value, seen = new WeakSet(), depth = 0) {
   if (typeof value === 'string' && value.length > 500) {
     return {
       bytes: Buffer.byteLength(value, 'utf8'),
       sha256: sha256(Buffer.from(value, 'utf8')),
     };
   }
-  return value;
+  if (!value || typeof value !== 'object') return value;
+  if (seen.has(value)) return { circularReference: true };
+  if (depth >= 5) return { truncatedType: traceObjectType(value) };
+  seen.add(value);
+  if (Array.isArray(value)) {
+    return value.slice(0, 50).map((child) => sanitizeTraceValue(child, seen, depth + 1));
+  }
+  try {
+    return Object.fromEntries(
+      Object.entries(value)
+        .slice(0, 50)
+        .map(([key, child]) => [key, sanitizeTraceValue(child, seen, depth + 1)]),
+    );
+  } catch {
+    return { unreadableType: traceObjectType(value) };
+  }
+}
+
+function traceObjectType(value) {
+  try {
+    return value.constructor?.name ?? 'Object';
+  } catch {
+    return 'Object';
+  }
 }
 
 function assertNonEmptyRegularFile(filePath, label) {
@@ -383,12 +476,6 @@ function artifact(workRoot, kind, extension = 'json') {
 function writeJsonArtifact(workRoot, kind, value) {
   const result = artifact(workRoot, kind, 'json');
   writeFileSync(result.path, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
-  return result;
-}
-
-function writeTextArtifact(workRoot, kind, value, extension = 'txt') {
-  const result = artifact(workRoot, kind, extension);
-  writeFileSync(result.path, value.endsWith('\n') ? value : `${value}\n`, 'utf8');
   return result;
 }
 
@@ -410,13 +497,17 @@ function createNotebook(workRoot, files) {
 async function withSession(trace, args, callback) {
   const installed = state.installed;
   if (!installed || !state.host) throw new Error('installed candidate session is unavailable');
-  trace.record('webdriver-session-create', { application: installed.application, args });
-  const browser = await state.host.createSession({ application: installed.application, args });
+  trace.record('webdriver-session-create-requested', { application: installed.application, args });
+  const browser = await state.host.createSession({
+    application: installed.application,
+    args,
+    onEvent: (event) => trace.recordWebDriver(event),
+  });
   try {
     await waitForSelector(browser, '#jotluck-app', trace, 20_000);
     return await callback(browser);
   } finally {
-    trace.record('webdriver-session-delete', { sessionId: browser.sessionId });
+    trace.record('webdriver-session-delete-requested', { sessionId: browser.sessionId });
     await state.host.deleteSession(browser);
   }
 }
@@ -525,6 +616,72 @@ async function spawnAssociatedFile(filePath, trace) {
   return child;
 }
 
+function shellExecuteAssociatedFile(filePath, trace) {
+  trace.record('shell-execute-associated-file-requested', {
+    filePath,
+    className: 'JotLuck.Note',
+  });
+  const script = String.raw`
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class JotLuckShellEvidence {
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+  public struct SHELLEXECUTEINFO {
+    public int cbSize;
+    public uint fMask;
+    public IntPtr hwnd;
+    [MarshalAs(UnmanagedType.LPWStr)] public string lpVerb;
+    [MarshalAs(UnmanagedType.LPWStr)] public string lpFile;
+    [MarshalAs(UnmanagedType.LPWStr)] public string lpParameters;
+    [MarshalAs(UnmanagedType.LPWStr)] public string lpDirectory;
+    public int nShow;
+    public IntPtr hInstApp;
+    public IntPtr lpIDList;
+    [MarshalAs(UnmanagedType.LPWStr)] public string lpClass;
+    public IntPtr hkeyClass;
+    public uint dwHotKey;
+    public IntPtr hIconOrMonitor;
+    public IntPtr hProcess;
+  }
+  [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  [return: MarshalAs(UnmanagedType.Bool)]
+  public static extern bool ShellExecuteExW(ref SHELLEXECUTEINFO info);
+  [DllImport("kernel32.dll")]
+  public static extern uint GetProcessId(IntPtr process);
+  [DllImport("kernel32.dll")]
+  [return: MarshalAs(UnmanagedType.Bool)]
+  public static extern bool CloseHandle(IntPtr handle);
+}
+'@
+$info = New-Object JotLuckShellEvidence+SHELLEXECUTEINFO
+$info.cbSize = [Runtime.InteropServices.Marshal]::SizeOf($info)
+$info.fMask = 0x00000001 -bor 0x00000040 -bor 0x00000100
+$info.lpVerb = 'open'
+$info.lpFile = $env:JOTLUCK_ASSOCIATED_FILE
+$info.lpClass = 'JotLuck.Note'
+$info.nShow = 1
+if (-not [JotLuckShellEvidence]::ShellExecuteExW([ref]$info)) {
+  throw "ShellExecuteExW failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
+}
+$processId = [JotLuckShellEvidence]::GetProcessId($info.hProcess)
+[void][JotLuckShellEvidence]::CloseHandle($info.hProcess)
+[pscustomobject]@{
+  method = 'ShellExecuteExW'
+  className = 'JotLuck.Note'
+  processId = [int]$processId
+} | ConvertTo-Json -Compress
+`;
+  const result = JSON.parse(
+    runPowerShell(script, { JOTLUCK_ASSOCIATED_FILE: path.resolve(filePath) }),
+  );
+  if (result.method !== 'ShellExecuteExW' || result.className !== 'JotLuck.Note') {
+    throw new Error('Windows Shell launch observation is invalid');
+  }
+  trace.record('shell-execute-associated-file-complete', result);
+  return result;
+}
+
 async function waitForHandleCount(browser, count, trace, timeout = 15_000) {
   await browser.waitUntil(async () => (await browser.getWindowHandles()).length === count, {
     timeout,
@@ -552,6 +709,39 @@ async function waitForPathAbsent(filePath, timeout = 10_000) {
   throw new Error(`path remained after cleanup: ${filePath}`);
 }
 
+function readInstalledApplicationProcesses() {
+  const application = state.installed?.application;
+  if (!application) throw new Error('installed application is unavailable');
+  const script = String.raw`
+$target = [IO.Path]::GetFullPath($env:JOTLUCK_APPLICATION)
+@(
+  Get-CimInstance Win32_Process -Filter "Name = 'JotLuck.exe'" -ErrorAction Stop |
+    Where-Object {
+      $_.ExecutablePath -and
+      [IO.Path]::GetFullPath([string]$_.ExecutablePath).Equals(
+        $target,
+        [StringComparison]::OrdinalIgnoreCase
+      )
+    } |
+    ForEach-Object { [pscustomobject]@{ processId = [int]$_.ProcessId; executablePath = $_.ExecutablePath } }
+) | ConvertTo-Json -Compress
+`;
+  const output = runPowerShell(script, { JOTLUCK_APPLICATION: application });
+  if (!output) return [];
+  const parsed = JSON.parse(output);
+  return Array.isArray(parsed) ? parsed : [parsed];
+}
+
+async function waitForInstalledApplicationExit(timeout = 15_000) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    const processes = readInstalledApplicationProcesses();
+    if (processes.length === 0) return processes;
+    await delay(100);
+  }
+  throw new Error('installed JotLuck process remained after WebDriver session cleanup');
+}
+
 function snapshotTree(root) {
   return collectFiles(root)
     .map((file) => ({
@@ -564,6 +754,22 @@ function snapshotTree(root) {
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
+}
+
+function executableIdentity(filePath) {
+  const resolvedPath = path.resolve(filePath);
+  assertNonEmptyRegularFile(resolvedPath, 'candidate executable');
+  return {
+    path: resolvedPath,
+    bytes: statSync(resolvedPath).size,
+    sha256: sha256(readFileSync(resolvedPath)),
+  };
+}
+
+function assertMatchingExecutableIdentities(packaged, installed) {
+  if (packaged.sha256 !== installed.sha256 || packaged.bytes !== installed.bytes) {
+    throw new Error('installed application does not match the packaged candidate executable');
+  }
 }
 
 function readAssociationSnapshot() {
@@ -1214,14 +1420,28 @@ async function rfInstalledWindowsJourney({ workRoot, trace }) {
     await waitForFileContent(journey, 'roundtrip');
   });
   state.performance.coldStartMs = [];
+  state.performance.processLifecycle = [];
   for (let index = 0; index < PERFORMANCE_SAMPLE_COUNTS.coldStart; index += 1) {
+    const before = await waitForInstalledApplicationExit();
+    trace.record('cold-start-process-baseline', { sample: index + 1, processCount: 0 });
+    const startedAt = new Date().toISOString();
     const started = performance.now();
     await withSession(trace, [journey], (browser) =>
       waitForReader(browser, 'Installed journey', trace),
     );
     state.performance.coldStartMs.push(Math.max(1, Math.round(performance.now() - started)));
+    const after = await waitForInstalledApplicationExit();
+    trace.record('cold-start-process-cleanup', { sample: index + 1, processCount: 0 });
+    state.performance.processLifecycle.push({
+      sample: index + 1,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      before,
+      after,
+    });
   }
   state.performance.hotWindowMs = [];
+  state.performance.hotWindowLifecycle = [];
   await withSession(trace, [journey], async (browser) => {
     await waitForReader(browser, 'Installed journey', trace);
     const primaryHandle = await browser.getWindowHandle();
@@ -1237,11 +1457,33 @@ async function rfInstalledWindowsJourney({ workRoot, trace }) {
       await browser.switchToWindow(handles.at(-1));
       await browser.closeWindow();
       await browser.switchToWindow(primaryHandle);
+      await waitForHandleCount(browser, before, trace);
+      const after = (await browser.getWindowHandles()).length;
+      state.performance.hotWindowLifecycle.push({
+        sample: index + 1,
+        before,
+        opened: handles.length,
+        after,
+      });
     }
+  });
+  state.performance.finalProcesses = await waitForInstalledApplicationExit();
+  trace.record('hot-session-process-cleanup', {
+    processCount: state.performance.finalProcesses.length,
   });
   return [
     webdriverArtifact(workRoot),
     writeInstallerLog(workRoot),
+    writeJsonArtifact(workRoot, 'process-lifecycle', {
+      schema: 'jotluck.installed-app.process-lifecycle.v2',
+      application: {
+        installed: state.installed?.applicationIdentity,
+        packaged: state.installed?.packagedApplicationIdentity,
+      },
+      samples: state.performance.processLifecycle,
+      hotWindowSamples: state.performance.hotWindowLifecycle,
+      finalProcesses: state.performance.finalProcesses,
+    }),
     writeJsonArtifact(workRoot, 'timing-samples', await readPerformanceSummary()),
   ];
 }
@@ -1301,35 +1543,55 @@ async function associationTxt(context) {
 }
 
 async function associationCase({ workRoot, trace }, extension) {
-  const target = path.join(workRoot, `association${extension}`);
   const marker = `association-${extension.slice(1)}-${randomUUID()}`;
+  const target = path.join(workRoot, `association evidence ${randomUUID()}${extension}`);
   writeFileSync(target, extension === '.txt' ? marker : `# ${marker}\n`, 'utf8');
+  const before = textFileReadback(target, false);
   const launchedAt = new Date().toISOString();
-  await spawnAssociatedFile(target, trace);
+  await waitForInstalledApplicationExit();
+  const shell = shellExecuteAssociatedFile(target, trace);
+  state.shellProcessIds.add(shell.processId);
   let processObserved;
   try {
-    processObserved = await waitForProcessWindow(marker, target);
+    processObserved = await waitForProcessWindow(marker, target, shell.processId);
+    const after = textFileReadback(target, true);
     const launchTrace = writeJsonArtifact(workRoot, 'launch-trace', {
-      extension,
-      target,
+      schema: 'jotluck.installed-app.association-launch.v2',
       launchedAt,
+      target: {
+        path: target,
+        extension,
+        marker,
+        markerSha256: sha256(Buffer.from(marker, 'utf8')),
+        before,
+        after,
+      },
+      shell,
       processObserved,
+      application: {
+        installed: state.installed?.applicationIdentity,
+        packaged: state.installed?.packagedApplicationIdentity,
+      },
     });
     const registry = readDetailedAssociationSnapshot(extension);
     if (
       !registry.classOpenWithProgIds.includes('JotLuck.Note') ||
       !registry.explorerOpenWithProgIds.includes('JotLuck.Note') ||
       registry.supportedType !== true ||
-      !registry.openCommand.toLowerCase().includes('jotluck.exe')
+      !isQuotedJotLuckOpenCommand(registry.openCommand) ||
+      !isQuotedJotLuckOpenCommand(registry.progIdOpenCommand) ||
+      registry.openCommand !== registry.progIdOpenCommand ||
+      !openCommandTargetsApplication(registry.openCommand, state.installed?.application)
     ) {
       throw new Error(`${extension} is not registered as an Open With application`);
     }
     return [writeJsonArtifact(workRoot, 'registry-snapshot', registry), launchTrace];
   } finally {
-    if (processObserved?.process?.Id) {
-      stopObservedProcess(processObserved.process.Id);
-      trace.record('association-process-stopped', { processId: processObserved.process.Id });
-    }
+    const processId = resolveAssociationProcessId(processObserved, shell);
+    stopObservedProcess(processId);
+    state.shellProcessIds.delete(processId);
+    await waitForInstalledApplicationExit();
+    trace.record('association-process-stopped', { processId, processCount: 0 });
   }
 }
 
@@ -1421,6 +1683,7 @@ $explorerOpenWithProgIdsPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\
 $applicationPath = 'HKCU:\Software\Classes\Applications\JotLuck.exe'
 $supportedTypesPath = "$applicationPath\SupportedTypes"
 $openCommandPath = "$applicationPath\shell\open\command"
+$progIdOpenCommandPath = 'HKCU:\Software\Classes\JotLuck.Note\shell\open\command'
 $class = Get-ItemProperty $classPath -ErrorAction SilentlyContinue
 $choice = Get-ItemProperty $userChoicePath -ErrorAction SilentlyContinue
 $openWith = Get-ItemProperty $openWithPath -ErrorAction SilentlyContinue
@@ -1428,6 +1691,7 @@ $classOpenWithProgIds = Get-ItemProperty $classOpenWithProgIdsPath -ErrorAction 
 $explorerOpenWithProgIds = Get-ItemProperty $explorerOpenWithProgIdsPath -ErrorAction SilentlyContinue
 $supportedTypes = Get-ItemProperty $supportedTypesPath -ErrorAction SilentlyContinue
 $openCommand = Get-ItemProperty $openCommandPath -ErrorAction SilentlyContinue
+$progIdOpenCommand = Get-ItemProperty $progIdOpenCommandPath -ErrorAction SilentlyContinue
 $slots = @{}
 if ($openWith) {
   foreach ($property in $openWith.PSObject.Properties) {
@@ -1446,28 +1710,95 @@ if ($openWith) {
   explorerOpenWithProgIds = @($explorerOpenWithProgIds.PSObject.Properties | Where-Object { $_.Name -notmatch '^PS' } | ForEach-Object { $_.Name })
   supportedType = [bool]($supportedTypes.PSObject.Properties.Name -contains $extension)
   openCommand = if ($openCommand) { [string]$openCommand.'(default)' } else { '' }
+  progIdOpenCommand = if ($progIdOpenCommand) { [string]$progIdOpenCommand.'(default)' } else { '' }
 } | ConvertTo-Json -Compress -Depth 4
 `;
   return JSON.parse(runPowerShell(script, { JOTLUCK_EXTENSION: extension }));
 }
 
-async function waitForProcessWindow(marker, target) {
+function isQuotedJotLuckOpenCommand(command) {
+  return /^"[^"\r\n]*[\\/]JotLuck\.exe"\s+"%1"$/iu.test(String(command));
+}
+
+function openCommandTargetsApplication(command, application) {
+  if (!application) return false;
+  const match = String(command).match(/^"([^"\r\n]+)"\s+"%1"$/u);
+  return Boolean(
+    match &&
+    path.resolve(match[1]).localeCompare(path.resolve(application), undefined, {
+      sensitivity: 'accent',
+    }) === 0,
+  );
+}
+
+function resolveAssociationProcessId(processObserved, shell) {
+  const processId = processObserved?.process?.Id ?? shell?.processId;
+  if (!Number.isInteger(processId) || processId <= 0) {
+    throw new Error('association launch did not provide a cleanup process identity');
+  }
+  return processId;
+}
+
+async function waitForProcessWindow(marker, target, expectedProcessId) {
   const started = Date.now();
-  while (Date.now() - started < 15_000) {
+  while (Date.now() - started < 20_000) {
     const result = runPowerShell(
       String.raw`
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName UIAutomationClient
 $expected = [IO.Path]::GetFileNameWithoutExtension($env:JOTLUCK_ASSOCIATED_FILE)
-$process = Get-Process JotLuck -ErrorAction SilentlyContinue |
+$expectedProcessId = [int]$env:JOTLUCK_ASSOCIATED_PROCESS_ID
+$process = Get-Process -Id $expectedProcessId -ErrorAction SilentlyContinue |
   Where-Object { $_.MainWindowTitle -like "*$expected*" } |
-  Select-Object -First 1 Id,ProcessName,MainWindowTitle
-if ($process) { $process | ConvertTo-Json -Compress }
+  Select-Object -First 1
+if ($process -and $process.MainWindowHandle -ne 0) {
+  $window = [System.Windows.Automation.AutomationElement]::FromHandle($process.MainWindowHandle)
+  $elements = $window.FindAll(
+    [System.Windows.Automation.TreeScope]::Descendants,
+    [System.Windows.Automation.Condition]::TrueCondition
+  )
+  $matchedText = $null
+  foreach ($element in $elements) {
+    try {
+      if ([string]$element.Current.Name -like "*$env:JOTLUCK_ASSOCIATION_MARKER*") {
+        $matchedText = [string]$element.Current.Name
+        break
+      }
+    } catch {}
+  }
+  $processRecord = Get-CimInstance Win32_Process -Filter "ProcessId = $expectedProcessId" -ErrorAction SilentlyContinue
+  if ($matchedText -and $processRecord -and $processRecord.ExecutablePath) {
+    [pscustomobject]@{
+      Id = $process.Id
+      ProcessName = $process.ProcessName
+      MainWindowTitle = $process.MainWindowTitle
+      ExecutablePath = [string]$processRecord.ExecutablePath
+      matchedText = $matchedText
+      observationSource = 'Windows-UIAutomation'
+    } | ConvertTo-Json -Compress
+  }
+}
 `,
-      { JOTLUCK_ASSOCIATED_FILE: target },
+      {
+        JOTLUCK_ASSOCIATED_FILE: target,
+        JOTLUCK_ASSOCIATED_PROCESS_ID: String(expectedProcessId),
+        JOTLUCK_ASSOCIATION_MARKER: marker,
+      },
     );
-    if (result) return { marker, target, process: JSON.parse(result) };
+    if (result) return { target, process: JSON.parse(result) };
     await delay(100);
   }
-  throw new Error(`association launch did not create a JotLuck process for ${target}`);
+  throw new Error(`association launch did not expose the target body marker for ${target}`);
+}
+
+function textFileReadback(filePath, includeContent) {
+  const content = readFileSync(path.resolve(filePath));
+  const result = {
+    bytes: content.byteLength,
+    sha256: sha256(content),
+  };
+  if (includeContent) result.contentUtf8 = content.toString('utf8');
+  return result;
 }
 
 function stopObservedProcess(processId) {
