@@ -1,0 +1,79 @@
+name: 缺陷报告 / Bug report
+description: 报告可复现的安装、文件、编辑或界面问题
+title: '[Bug] '
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。请勿上传真实笔记、私人目录或其他敏感数据。安全问题请使用私密安全报告。
+
+  - type: input
+    id: version
+    attributes:
+      label: JotLuck 版本
+      description: 可在“关于”页面或安装包名称中找到。
+      placeholder: 例如 v0.1.0-preview
+    validations:
+      required: true
+
+  - type: dropdown
+    id: source
+    attributes:
+      label: 安装来源
+      options:
+        - GitHub Releases 官方安装包
+        - 本地源码构建
+        - 其他来源
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: 系统环境
+      description: 请填写 Windows 版本、系统架构和必要的显示设置。
+      placeholder: 例如 Windows 11 24H2，x64，缩放 150%
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题描述
+      description: 实际发生了什么？它是否影响文件安全、启动或核心写作？
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开……
+        2. 点击……
+        3. 观察到……
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 脱敏截图或日志
+      description: 可选。请删除用户名、真实文件内容、路径和其他私人信息。
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交确认
+      options:
+        - label: 我已查看已知限制和现有 Issues。
+          required: true
+        - label: 我没有在公开内容中附上私人笔记或敏感数据。
+          required: true

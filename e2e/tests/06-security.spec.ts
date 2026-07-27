@@ -284,7 +284,7 @@ test.describe('网络隐私', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           tag_name: 'v0.1.0',
-          html_url: 'https://github.com/jiay98528-dev/MarkLuck/releases/tag/v0.1.0',
+          html_url: 'https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.1.0',
           body: '',
         }),
       });
