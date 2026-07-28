@@ -4,23 +4,22 @@ This document describes limitations for JotLuck `v0.1.0-preview`. These are not
 marketing claims; they are the remaining release constraints and expected
 behavior boundaries.
 
-## Internal Preview Status
+## Internal Preview Candidate Status
 
-- `v0.1.0-preview` is an internal preview candidate, not a formal RC or stable release.
-- L1/L2, coverage, production build, Rust fmt/check/test/audit, Chromium and
-  Firefox E2E, and a standalone Tauri WebView2 smoke have passed locally.
-  The latest full WebKit run did not produce final counters before the outer
-  timeout, so it is not recorded as PASS.
-- Preview publication still requires exact-candidate installed-app evidence v2,
-  including the Windows installer artifact, four file associations, uninstall
-  cleanup, multi-window journeys, and performance samples.
+- `v0.1.0-preview` is an unpublished, unsigned internal candidate. It is not a
+  formal RC or stable release, and no official public installer is currently available.
+- This candidate does not claim complete installed-app release evidence, final
+  Rust audit evidence, signing, notarization, or host-specific validation for
+  every supported platform.
+- Any future public preview, RC, or stable release must bind its own exact
+  installer, verification evidence, and release notes.
 
 ## Environment-Dependent Gates
 
 - Rust dependency audit requires the `cargo-audit` subcommand locally, or a
   green CI Rust audit job with commit, URL, time, and status recorded.
-- Tauri release signing/notarization is not covered by the current unsigned
-  Windows NSIS release package.
+- Tauri release signing/notarization is not covered by the current local,
+  unsigned Windows NSIS candidate.
 - WebView2 installation uses Tauri's embedded bootstrapper. If a Windows device
   lacks WebView2 and has no network, the installer shows localized guidance but
   cannot complete dependency installation without an offline WebView2 package.
@@ -34,18 +33,25 @@ behavior boundaries.
 
 ## Desktop App Limits
 
-- The local preview installer path is
-  `packages/app/src-tauri/target/release/bundle/nsis/JotLuck_0.1.0-preview_x64-setup.exe`.
+- The current locally built Windows candidate is unsigned and is not a public
+  download. A future public asset must be identified by its accompanying
+  official release information; this document does not publish a placeholder checksum.
 - Tauri shell access is limited to the scoped `shell:default` capability.
   Unscoped `shell:allow-open`, `process:*`, and `fs:*` capabilities are not
   granted in the default desktop capability file.
 - Notebook root, native watcher, search index, and completion retrieval state
   are isolated by window. Closing one window removes only that window's state.
-- Each published installer must have its exact SHA256 recorded in the
-  installed-app L4 report.
-- Windows release packaging and installed desktop GUI risk validation have been
-  verified for Windows x64; macOS and Linux packages still need host-specific
+- macOS and Linux packages still need host-specific packaging, signing, and
   release validation.
+
+## Rust Dependency Audit Warnings
+
+- `cargo audit` currently reports allowed unsoundness warnings for `lru 0.12.5`
+  (`RUSTSEC-2026-0002`) and `memmap2 0.9.10` (`RUSTSEC-2026-0186`). Both enter
+  the desktop dependency graph transitively through `tantivy 0.22.1`.
+- This preview records that upstream risk instead of attempting a high-risk
+  Tantivy upgrade during release hardening. A successful audit process exit
+  must therefore not be described as a zero-warning dependency result.
 - Opening `.md/.markdown/.mdx/.txt` from Windows starts a single-file read-only
   session. It intentionally does not scan the parent directory as a notebook.
   Editing must be explicitly enabled and saves only the current file.
@@ -55,14 +61,14 @@ behavior boundaries.
 - Local `.mltheme` and `.zip` imports are a developer experimental feature.
 - `trusted-code` themes may execute theme author code and may take over exposed
   UX slots. Import only themes from trusted sources.
-- Current public RC behavior requires explicit user confirmation before opening
+- Current candidate behavior requires explicit user confirmation before opening
   the theme-package picker. This is disclosure and confirmation, not a sandbox
   or community-market review.
 
 ## Data And Asset Behavior
 
 - Notes are plain text note files. The app opens `.md`, `.markdown`, `.mdx`,
-  and `.txt`; the Windows installer registers JotLuck as an optional handler
+  and `.txt`; the Windows installer registers JotLuck as an optional Open With handler
   for all four extensions and does not replace the user's current default app.
 - Images are written into `assets/` and referenced by relative Markdown paths.
 - Deleting a note does not automatically delete assets because assets may be

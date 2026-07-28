@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { ensureEditorReady, waitForAppReady } from '../helpers/test-utils';
 
 interface ProbeCase {
@@ -459,7 +459,10 @@ test.describe('autocomplete quality score', () => {
     await stabilizeNotebookEditor(page);
   });
 
-  test('reports legacy fixed probes and enforces only safety regressions', async ({ page }) => {
+  test('reports legacy fixed probes and enforces only safety regressions', async ({
+    page,
+    browserName,
+  }, testInfo) => {
     const zhResults = await runProbeSet(page, ZH_PROBES);
     const enResults = await runProbeSet(page, EN_PROBES);
     const structuredResults = await runStructuredProbes(page);
@@ -523,10 +526,21 @@ test.describe('autocomplete quality score', () => {
     expect(manual.score).toBeGreaterThanOrEqual(95);
     expect(negativeFalseTriggerRate).toBeLessThanOrEqual(0.05);
     expect(zhSummary.mixedLanguage + enSummary.mixedLanguage).toBe(0);
-    expect(Math.max(zhSummary.p90, enSummary.p90)).toBeLessThanOrEqual(140);
+    const legacyP90 = Math.max(zhSummary.p90, enSummary.p90);
+    if (browserName === 'chromium') {
+      expect(legacyP90).toBeLessThanOrEqual(140);
+    } else {
+      await attachReferenceLatencyAdvisory(testInfo, browserName, {
+        suite: 'legacy-fixed-probes',
+        p90: legacyP90,
+      });
+    }
   });
 
-  test('reports seeded notebook scenarios and enforces interaction safety', async ({ page }) => {
+  test('reports seeded notebook scenarios and enforces interaction safety', async ({
+    page,
+    browserName,
+  }, testInfo) => {
     await seedCompletionCorpus(page, DOMAIN_SEED_EXCERPTS);
     await warmUpAutocomplete(page);
 
@@ -563,7 +577,7 @@ test.describe('autocomplete quality score', () => {
       });
     }
 
-    const interactionResults = await runScenarioInteractionProbes(page, SCENARIO_GROUPS);
+    const interactionResults = await runScenarioInteractionProbes(page, SCENARIO_GROUPS, testInfo);
     const overallScore = Math.round(
       reports.reduce((sum, report) => sum + report.summary.sceneScore, 0) / reports.length,
     );
@@ -588,7 +602,19 @@ test.describe('autocomplete quality score', () => {
         .map((sample) => sample.latencyMs)
         .filter((value): value is number => value !== null),
     );
-    expect(percentile(scenarioLatencies, 0.9)).toBeLessThanOrEqual(140);
+    const scenarioP90 = percentile(scenarioLatencies, 0.9);
+    if (browserName === 'chromium') {
+      expect(scenarioP90).toBeLessThanOrEqual(140);
+    } else {
+      await attachReferenceLatencyAdvisory(testInfo, browserName, {
+        suite: 'seeded-notebook-scenarios',
+        p90: scenarioP90,
+        sceneP50: reports.map((report) => ({
+          category: report.summary.category,
+          p50: report.summary.p50,
+        })),
+      });
+    }
     for (const [index, group] of SCENARIO_GROUPS.entries()) {
       const report = reports[index];
       expect(report).toBeDefined();
@@ -600,7 +626,7 @@ test.describe('autocomplete quality score', () => {
       expect(summary.crossLine).toBe(0);
       expect(summary.tooLong).toBe(0);
       expect(summary.lowValue).toBe(0);
-      expect(summary.p50).toBeLessThanOrEqual(140);
+      if (browserName === 'chromium') expect(summary.p50).toBeLessThanOrEqual(140);
     }
   });
 
@@ -637,6 +663,28 @@ test.describe('autocomplete quality score', () => {
     expect(reports.every((report) => report.suggestion === '' || report.sourceLayer)).toBe(true);
   });
 });
+
+async function attachReferenceLatencyAdvisory(
+  testInfo: TestInfo,
+  browserName: string,
+  details: Record<string, unknown>,
+): Promise<void> {
+  await testInfo.attach('autocomplete-latency-advisory.json', {
+    contentType: 'application/json',
+    body: Buffer.from(
+      JSON.stringify(
+        {
+          classification: 'non-blocking-reference-environment-advisory',
+          browserName,
+          chromiumReferenceMs: 140,
+          ...details,
+        },
+        null,
+        2,
+      ),
+    ),
+  });
+}
 
 async function runProbeSet(page: Page, probes: ProbeCase[]): Promise<ProbeResult[]> {
   const results: ProbeResult[] = [];
@@ -718,6 +766,7 @@ async function runScenarioNegativeProbes(
 async function runScenarioInteractionProbes(
   page: Page,
   groups: ScenarioGroup[],
+  testInfo: TestInfo,
 ): Promise<
   Array<{
     category: ScenarioCategory;
@@ -751,29 +800,73 @@ async function runScenarioInteractionProbes(
     await page.reload();
     await waitForAppReady(page);
     await ensureEditorReady(page);
+    await stabilizeNotebookEditor(page);
     await seedCompletionCorpus(page, DOMAIN_SEED_EXCERPTS);
 
+    const acceptStartedAt = Date.now();
     await replaceEditorText(page, acceptProbe.input);
     const acceptedSuggestion = await waitForGhostText(page);
+    const beforeAccept = await captureInteractionState(page, acceptProbe.input, acceptStartedAt);
     await page.keyboard.press('Tab');
     const acceptOk = await waitForContentToInclude(
       page,
       `${acceptProbe.input}${acceptedSuggestion}`,
     );
+    const afterAccept = await captureInteractionState(page, acceptProbe.input, acceptStartedAt);
 
     await resetAutocompleteModelCache(page);
     await page.reload();
     await waitForAppReady(page);
     await ensureEditorReady(page);
+    await stabilizeNotebookEditor(page);
     await seedCompletionCorpus(page, DOMAIN_SEED_EXCERPTS);
 
+    const escapeStartedAt = Date.now();
     await replaceEditorText(page, escapeProbe.input);
     const escapeSuggestion = await waitForGhostText(page);
+    const beforeEscape = await captureInteractionState(page, escapeProbe.input, escapeStartedAt);
     await page.keyboard.press('Escape');
     const clearedAfterEscape = await waitForGhostToClear(page);
     await page.waitForTimeout(250);
     const afterEscape = await readVisibleGhostText(page);
     const contentAfterEscape = await getEditorContentFromBridge(page);
+    const afterEscapeState = await captureInteractionState(
+      page,
+      escapeProbe.input,
+      escapeStartedAt,
+    );
+
+    await testInfo.attach(`autocomplete-interaction-${group.category}.json`, {
+      contentType: 'application/json',
+      body: Buffer.from(
+        JSON.stringify(
+          {
+            browser: testInfo.project.name,
+            category: group.category,
+            accept: {
+              probeId: acceptProbe.id,
+              input: acceptProbe.input,
+              suggestion: acceptedSuggestion,
+              accepted: acceptOk,
+              before: beforeAccept,
+              after: afterAccept,
+            },
+            escape: {
+              probeId: escapeProbe.id,
+              input: escapeProbe.input,
+              suggestion: escapeSuggestion,
+              clearedAfterEscape,
+              afterEscape,
+              contentAfterEscape,
+              before: beforeEscape,
+              after: afterEscapeState,
+            },
+          },
+          null,
+          2,
+        ),
+      ),
+    });
 
     results.push({
       category: group.category,
@@ -793,6 +886,43 @@ async function runScenarioInteractionProbes(
   }
 
   return results;
+}
+
+async function captureInteractionState(
+  page: Page,
+  input: string,
+  startedAt: number,
+): Promise<Record<string, unknown>> {
+  return page.evaluate(
+    ({ expectedInput, started }) => {
+      const editor = document.querySelector('.cm-content');
+      const ghost = document.querySelector('.cm-ghost-text');
+      const activeElement = document.activeElement;
+      const prediction = window.__jotluck_e2e?.editor?.getPrediction?.() ?? null;
+      const visiblePrediction =
+        window.__jotluck_e2e?.editor?.getVisiblePredictionDiagnostics?.() ?? null;
+      return {
+        elapsedMs: Date.now() - started,
+        expectedInput,
+        activeElement:
+          activeElement instanceof HTMLElement ? activeElement.outerHTML.slice(0, 500) : null,
+        editorFocused:
+          activeElement instanceof Element && activeElement.closest('.cm-content') === editor,
+        documentContent: window.__jotluck_e2e?.editor?.getContent?.() ?? null,
+        ghost: {
+          exists: Boolean(ghost),
+          visible:
+            ghost instanceof HTMLElement &&
+            ghost.getBoundingClientRect().width > 0 &&
+            ghost.getBoundingClientRect().height > 0,
+          text: ghost?.textContent ?? '',
+        },
+        prediction,
+        visiblePrediction,
+      };
+    },
+    { expectedInput: input, started: startedAt },
+  );
 }
 
 async function runStructuredProbes(

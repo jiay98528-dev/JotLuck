@@ -9,7 +9,7 @@ use crate::window_session::WindowSessionRegistry;
 use notify::event::{CreateKind, ModifyKind, RenameMode};
 use notify::{Event, EventKind, RecursiveMode, Watcher};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -144,7 +144,7 @@ fn start_watching(
             };
 
             // Watch notes and supported image assets.
-            let is_supported = event.paths.iter().any(is_supported_path);
+            let is_supported = event.paths.iter().any(|path| is_supported_path(path));
             if !is_supported {
                 continue;
             }
@@ -164,12 +164,8 @@ fn start_watching(
 }
 
 /// Convert a notify Event to our simplified FileChangeEvent.
-fn event_to_change_event(
-    event: &Event,
-    root: &PathBuf,
-    generation: u64,
-) -> Option<FileChangeEvent> {
-    let path_for = |path: &PathBuf| -> Option<String> {
+fn event_to_change_event(event: &Event, root: &Path, generation: u64) -> Option<FileChangeEvent> {
+    let path_for = |path: &Path| -> Option<String> {
         path.strip_prefix(root)
             .ok()
             .map(|p| p.to_string_lossy().replace('\\', "/"))
@@ -178,14 +174,14 @@ fn event_to_change_event(
     if let EventKind::Modify(ModifyKind::Name(ref mode)) = event.kind {
         let (old_path, new_path) = match mode {
             RenameMode::Both => (
-                event.paths.first().and_then(path_for),
-                event.paths.get(1).and_then(path_for),
+                event.paths.first().and_then(|path| path_for(path)),
+                event.paths.get(1).and_then(|path| path_for(path)),
             ),
-            RenameMode::To => (None, event.paths.first().and_then(path_for)),
+            RenameMode::To => (None, event.paths.first().and_then(|path| path_for(path))),
             RenameMode::From => return None,
             _ => (
-                event.paths.first().and_then(path_for),
-                event.paths.last().and_then(path_for),
+                event.paths.first().and_then(|path| path_for(path)),
+                event.paths.last().and_then(|path| path_for(path)),
             ),
         };
 
@@ -197,7 +193,7 @@ fn event_to_change_event(
         });
     }
 
-    let path = event.paths.first().and_then(path_for)?;
+    let path = event.paths.first().and_then(|path| path_for(path))?;
 
     let kind = match event.kind {
         EventKind::Create(ref c) => match c {
@@ -205,10 +201,7 @@ fn event_to_change_event(
             CreateKind::Folder => return None, // skip folders
             _ => return None,
         },
-        EventKind::Modify(ref m) => match m {
-            ModifyKind::Data(_) | ModifyKind::Metadata(_) => "modify",
-            _ => return None,
-        },
+        EventKind::Modify(ModifyKind::Data(_) | ModifyKind::Metadata(_)) => "modify",
         EventKind::Remove(_) => "remove",
         _ => return None,
     };
@@ -221,7 +214,7 @@ fn event_to_change_event(
     })
 }
 
-fn is_supported_path(path: &PathBuf) -> bool {
+fn is_supported_path(path: &Path) -> bool {
     matches!(
         path.extension()
             .and_then(|ext| ext.to_str())
@@ -236,6 +229,8 @@ fn is_supported_path(path: &PathBuf) -> bool {
 }
 
 #[tauri::command]
+// Tauri injects managed state as individual command parameters; grouping them would change the IPC ABI.
+#[allow(clippy::too_many_arguments)]
 pub fn start_file_watcher(
     window: WebviewWindow,
     app_handle: AppHandle,

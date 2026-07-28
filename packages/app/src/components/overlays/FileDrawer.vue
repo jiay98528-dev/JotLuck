@@ -46,7 +46,7 @@
               </button>
             </div>
 
-            <!-- Action Row: Search + New -->
+            <!-- Action Row: Search + Switch Notebook + New -->
             <div class="drawer-actions">
               <div class="search-box">
                 <svg
@@ -91,6 +91,30 @@
                   </svg>
                 </button>
               </div>
+
+              <button
+                class="switch-notebook-btn"
+                :disabled="switchingNotebook"
+                title="切换笔记本"
+                @click="requestOpenNotebook"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
+                  />
+                  <path d="M12 11v5" stroke-linecap="round" />
+                  <path d="m10 14 2 2 2-2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <span>{{ switchingNotebook ? '切换中…' : '切换笔记本' }}</span>
+              </button>
 
               <button class="new-note-btn" title="新建笔记" @click="$emit('create-file')">
                 <svg
@@ -494,12 +518,14 @@ const props = withDefaults(
     activePath?: string;
     loading?: boolean;
     error?: string;
+    switchingNotebook?: boolean;
   }>(),
   {
     rootDir: '',
     activePath: '',
     loading: false,
     error: '',
+    switchingNotebook: false,
   },
 );
 
@@ -507,6 +533,7 @@ const emit = defineEmits<{
   'update:visible': [value: boolean];
   'select-file': [path: string];
   'navigate-dir': [path: string];
+  'open-notebook': [];
   'create-file': [];
   'delete-file': [path: string];
   'rename-file': [oldPath: string, newName: string];
@@ -697,6 +724,11 @@ function preserveSupportedExtension(oldName: string, requestedName: string): str
 // ============================================================
 // Methods — Drawer
 // ============================================================
+
+function requestOpenNotebook(): void {
+  if (props.switchingNotebook) return;
+  emit('open-notebook');
+}
 
 function close(): void {
   emit('update:visible', false);
@@ -1070,13 +1102,15 @@ watch(
 
 /* --- Action Row --- */
 .drawer-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-8);
 }
 
 .search-box {
-  flex: 1;
+  grid-column: 1 / -1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: var(--space-4);
@@ -1134,8 +1168,9 @@ watch(
   color: var(--ink-secondary);
 }
 
-/* --- New Note Button --- */
-.new-note-btn {
+/* --- Drawer Action Buttons --- */
+.new-note-btn,
+.switch-notebook-btn {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -1156,15 +1191,38 @@ watch(
     background var(--dur-micro) var(--ease-fade);
 }
 
-.new-note-btn:hover {
+.switch-notebook-btn {
+  justify-self: start;
+}
+
+.new-note-btn {
+  justify-self: end;
+}
+
+.new-note-btn:hover,
+.switch-notebook-btn:hover {
   color: var(--accent);
   border-color: var(--accent);
 }
 
-.new-note-btn:active {
+.new-note-btn:active,
+.switch-notebook-btn:active {
   background: var(--accent-soft);
   transform: scale(0.96);
   transition: transform var(--dur-press) var(--ease-press);
+}
+
+.switch-notebook-btn:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.switch-notebook-btn:disabled:hover,
+.switch-notebook-btn:disabled:active {
+  color: var(--ink-muted);
+  border-color: var(--rule-wing);
+  background: none;
+  transform: none;
 }
 
 /* ============================================================

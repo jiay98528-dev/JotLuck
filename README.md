@@ -21,13 +21,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/jiay98528-dev/JotLuck/releases"><strong>获取 Windows 版</strong></a>
+  <a href="https://github.com/jiay98528-dev/JotLuck/releases"><strong>查看发行状态</strong></a>
   · <a href="#三步开始使用">开始使用</a>
   · <a href="./SUPPORT.md">获得帮助</a>
   · <a href="https://github.com/jiay98528-dev/JotLuck/issues/new/choose">反馈问题</a>
 </p>
 
-> **下载提示：** GitHub Releases 是官方公开安装包的唯一下载入口。若发布页尚无安装包，代表当前没有对外可下载的正式候选。
+> **下载提示：** GitHub Releases 是未来官方公开安装包的唯一下载入口。当前页面没有公开安装包；`v0.1.0-preview` 仍是未发布、未签名的内部候选，请勿从第三方来源下载。
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck 工作区，左侧是最近笔记，中间是 Markdown 编辑器，右侧是大纲与反向链接">
@@ -39,21 +39,21 @@
 
 JotLuck 不创建专有笔记数据库。每条笔记都是普通的 `.md`、`.markdown`、`.mdx` 或 `.txt` 文件，任何文本编辑器都能打开。你可以用 OneDrive、Git、Syncthing 或自己的备份工具管理它们，离开 JotLuck 时也不需要导出数据。
 
-| 你关心的事 | JotLuck 的做法                                                        |
-| ---------- | --------------------------------------------------------------------- |
-| 文件所有权 | 直接读写你选择的本地文件夹，不把笔记锁进数据库                        |
-| 隐私       | 核心编辑与搜索离线运行，不上传笔记本内容                              |
-| 长期可用   | 使用开放的纯文本格式，随时可由其他工具接管                            |
-| 写作效率   | 提供实时预览、双链、反向链接、全文搜索和本地补全                      |
-| 交付可信度 | Windows 公开包通过 Releases 发布，并明确标注签名状态与 SHA-256 校验值 |
+| 你关心的事 | JotLuck 的做法                                       |
+| ---------- | ---------------------------------------------------- |
+| 文件所有权 | 直接读写你选择的本地文件夹，不把笔记锁进数据库       |
+| 隐私       | 核心编辑与搜索离线运行，不上传笔记本内容             |
+| 长期可用   | 使用开放的纯文本格式，随时可由其他工具接管           |
+| 写作效率   | 提供实时预览、双链、反向链接、全文搜索和本地补全     |
+| 交付可信度 | 正式公开包只会通过 Releases 发布；当前没有公开安装包 |
 
 ## 三步开始使用
 
-1. 从 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases) 获取官方 Windows x64 安装包。
-2. 安装并打开 JotLuck，选择一个已有文件夹，或创建新的笔记本文件夹。
+1. 当前尚无公开安装包。开发者可按下方说明从源码运行；普通用户请等待 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases) 出现明确的官方资产。
+2. 第一次启动会显示“打开笔记本”门页；选择已有文件夹，或在系统选择器中创建新的笔记本文件夹。之后可随时按 `Ctrl/Cmd+O` 切换文件夹。
 3. 开始写作。笔记会直接保存在该文件夹中，不需要注册账号。
 
-JotLuck 不会强制替换系统默认的 Markdown 或文本编辑器。你也可以在 Windows 的“打开方式”中按需选择它。
+Windows 安装器将 `.md`、`.markdown`、`.mdx` 和 `.txt` 注册为可选“打开方式”，不会替换任何扩展名的系统默认应用。
 
 ## 为本地写作准备的功能
 
@@ -79,13 +79,15 @@ JotLuck 不会强制替换系统默认的 Markdown 或文本编辑器。你也�
 
 ## 当前发行范围
 
-| 项目       | 当前范围                                           |
-| ---------- | -------------------------------------------------- |
-| 发行阶段   | 公开预览版，稳定版放行以 Releases 中的实际说明为准 |
-| 已验证平台 | Windows x64                                        |
-| 桌面运行时 | Tauri 2 与 Microsoft Edge WebView2                 |
-| 数据格式   | `.md`、`.markdown`、`.mdx`、`.txt`                 |
-| 许可证     | MIT                                                |
+| 项目       | 当前范围                                              |
+| ---------- | ----------------------------------------------------- |
+| 当前版本   | `v0.1.0-preview`                                      |
+| 发行阶段   | 未发布、未签名的内部预览候选；不是稳定版或 RC         |
+| 已验证平台 | Windows x64                                           |
+| 桌面运行时 | Tauri 2 与 Microsoft Edge WebView2                    |
+| 数据格式   | `.md`、`.markdown`、`.mdx`、`.txt`                    |
+| 文件关联   | 四种扩展名均为可选“打开方式”，不改写 Windows 默认应用 |
+| 许可证     | MIT                                                   |
 
 macOS 和 Linux 版本尚未完成对应主机的打包、签名与发行验证。完整边界请阅读 [已知限制](./KNOWN_LIMITATIONS.md) 和每次发布附带的说明。
 

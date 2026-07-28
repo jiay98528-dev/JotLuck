@@ -6,7 +6,7 @@
 set -euo pipefail
 
 # ---------- 配置 ----------
-APP_URL="http://localhost:5173"
+APP_URL="${JOTLUCK_E2E_BASE_URL:-http://127.0.0.1:5173}"
 SCREENSHOT_DIR="e2e/cuc-tests/screenshots"
 LOG_FILE="e2e/cuc-tests/test-log.jsonl"
 RESULTS_FILE="e2e/cuc-tests/results.md"

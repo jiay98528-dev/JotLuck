@@ -2,8 +2,10 @@
 
 ## Supported Versions
 
-JotLuck is currently distributed as `v0.15.0-rc.1`. Security fixes target the
-current release-candidate line unless a later supported version is published.
+JotLuck is not currently distributed as a public installer. The unsigned
+`v0.1.0-preview` remains an internal candidate; it is not a stable release or
+an RC support line. Security reports for the source tree are handled on a
+best-effort basis.
 
 ## Reporting A Vulnerability
 
@@ -29,7 +31,7 @@ In scope:
 - Leaks of note content, editor state, or completion-training data outside the
   local application boundary.
 
-Out of scope for this RC:
+Out of scope for this preview:
 
 - Unsigned installer reputation warnings.
 - Missing macOS/Linux notarization or signing.
@@ -38,5 +40,5 @@ Out of scope for this RC:
 
 ## Response Target
 
-For the RC line, the project targets an initial acknowledgement within 7 days
+For the preview line, the project targets an initial acknowledgement within 7 days
 and a remediation plan or risk classification within 14 days.

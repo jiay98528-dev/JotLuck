@@ -68,7 +68,8 @@ export interface IFileSystemService {
   unwatchAll(): Promise<void>;
   resolvePath(root: string, ...segments: string[]): string;
   isPathInNotebook(root: string, path: string): Promise<boolean>;
-  openNotebook(): Promise<NotebookHandle>;
+  /** Show a notebook picker. A user cancellation is not an error and returns null. */
+  openNotebook(): Promise<NotebookHandle | null>;
   /** Open a known notebook directory without showing a picker. Used by desktop file association. */
   openNotebookAt(path: string): Promise<NotebookHandle>;
   /** Promote a backend-issued external file grant to its parent notebook. */

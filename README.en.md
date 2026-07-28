@@ -21,13 +21,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/jiay98528-dev/JotLuck/releases"><strong>Get JotLuck for Windows</strong></a>
+  <a href="https://github.com/jiay98528-dev/JotLuck/releases"><strong>View release status</strong></a>
   · <a href="#get-started-in-three-steps">Get started</a>
   · <a href="./SUPPORT.md">Support</a>
   · <a href="https://github.com/jiay98528-dev/JotLuck/issues/new/choose">Send feedback</a>
 </p>
 
-> **Download notice:** GitHub Releases is the only source for official public installers. If the page contains no installer asset, no official public candidate is currently available.
+> **Download notice:** GitHub Releases is the only future source for official public installers. There is no public installer there today; `v0.1.0-preview` remains an unpublished, unsigned internal candidate. Do not download it from third-party sources.
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck workspace with recent notes, a Markdown editor, outline, and backlinks">
@@ -39,21 +39,21 @@
 
 JotLuck does not put your notes in a proprietary database. Every note is a regular `.md`, `.markdown`, `.mdx`, or `.txt` file that any text editor can open. Use OneDrive, Git, Syncthing, or your own backup tools. Leaving JotLuck never requires a data export.
 
-| What matters     | How JotLuck handles it                                                                    |
-| ---------------- | ----------------------------------------------------------------------------------------- |
-| File ownership   | Reads and writes the local folder you choose, without a note database                     |
-| Privacy          | Core editing and search work offline; notebook content is not uploaded                    |
-| Longevity        | Uses open plain-text formats that other tools can take over at any time                   |
-| Writing workflow | Adds Live Preview, links, backlinks, local search, and offline completion                 |
-| Release trust    | Public Windows builds use Releases and clearly state signing status and SHA-256 checksums |
+| What matters     | How JotLuck handles it                                                          |
+| ---------------- | ------------------------------------------------------------------------------- |
+| File ownership   | Reads and writes the local folder you choose, without a note database           |
+| Privacy          | Core editing and search work offline; notebook content is not uploaded          |
+| Longevity        | Uses open plain-text formats that other tools can take over at any time         |
+| Writing workflow | Adds Live Preview, links, backlinks, local search, and offline completion       |
+| Release trust    | Official public builds will only use Releases; no public installer exists today |
 
 ## Get started in three steps
 
-1. Get the official Windows x64 installer from [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases).
-2. Open JotLuck and choose an existing folder, or create a new notebook folder.
+1. No public installer is available today. Developers can run the project from source using the instructions below; other users should wait for an explicit official asset on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases).
+2. The first launch opens the Open Notebook gate. Choose an existing folder, or create a notebook folder in the system picker. Later, press `Ctrl/Cmd+O` to switch folders.
 3. Start writing. Notes are saved directly into that folder, with no account required.
 
-JotLuck does not force itself to become your default Markdown or text editor. You can select it from Windows Open With whenever you need it.
+The Windows installer registers `.md`, `.markdown`, `.mdx`, and `.txt` as optional Open With choices. It never replaces the Windows default application for any of them.
 
 ## Built for local writing
 
@@ -81,10 +81,12 @@ Report vulnerabilities through a [private GitHub security report](https://github
 
 | Item              | Current scope                                                                      |
 | ----------------- | ---------------------------------------------------------------------------------- |
-| Release stage     | Public preview; the actual Release notes are the source of truth for stable status |
+| Current version   | `v0.1.0-preview`                                                                   |
+| Release stage     | Unpublished, unsigned internal preview candidate; not a stable release or RC       |
 | Verified platform | Windows x64                                                                        |
 | Desktop runtime   | Tauri 2 and Microsoft Edge WebView2                                                |
 | Note formats      | `.md`, `.markdown`, `.mdx`, `.txt`                                                 |
+| File associations | All four extensions are optional Open With choices; no Windows default is replaced |
 | License           | MIT                                                                                |
 
 macOS and Linux packages have not completed host-specific packaging, signing, and release validation. Read [Known Limitations](./KNOWN_LIMITATIONS.md) and the notes attached to each release before installing.

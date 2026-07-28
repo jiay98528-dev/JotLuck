@@ -1,6 +1,6 @@
 # Frontend Components
 
-版本：2026-07-25
+版本：2026-07-28
 
 ## 布局主链
 
@@ -11,6 +11,7 @@
 - `StatusBar`
 - `RightWing`
 - `ThemeSlotBoundary`
+- `NotebookOpenGate`
 
 ## 主题插槽约束
 
@@ -18,6 +19,19 @@
 - `ThemeSlotBoundary` 渲染优先级为插件组件 > `UxComponentRecipe` DSL > 宿主默认组件。
 - 所有 slot 都必须传入明确 `slotProps`，并保留默认 slot，使主题可以选择完全替换或包裹宿主 UI。
 - `ThemeHostContext` 向主题插件提供 action、slot、editor、dialog、toast、storage、commerce 和只读 appState API。
+
+## 笔记本打开门页
+
+- `NotebookOpenGate` 位于既有 `workflow-canvas` 与 `editor-surface` 内，不新增 Theme slot、Theme action 或 Host API。
+- Props 固定为 `status: 'idle' | 'opening' | 'error'`、`errorMessage: string | null`、`formatsLabel: string`；只发出 `open-notebook` 事件。
+- idle 显示单一主操作“选择笔记本文件夹”；opening 禁用重复触发并设置 `aria-busy`；error 使用 `role="alert"` 展示可理解原因，并保留同一按钮重试。
+- 主操作首次显示、取消或失败后都获得焦点；Enter/Space 可触发。360px、200% 缩放和减弱动效下不得溢出或丢失焦点环。
+- 门页只说明“文件夹即笔记本”和四种支持格式，不展示教程步骤、插画、示例数据或可写临时草稿。
+
+## 文件抽屉
+
+- `FileDrawer` 在正常 workspace 中显示“切换笔记本”，发出 `open-notebook`；父级与 `Ctrl/Cmd+O` 必须调用同一安全切换函数。
+- 切换按钮在 opening 时禁用；外部单文件会话和 workspace-unbound 不通过 FileDrawer 扩大目录权限。
 
 ## 外部文件阅读器
 
@@ -38,6 +52,7 @@
 
 ## 变更记录
 
+- 2026-07-28：定义 NotebookOpenGate 三态、可访问性契约及 FileDrawer 的安全切换事件，不扩展 Theme API v2。
 - 2026-07-25：外部阅读器改为复用成熟阅读工作台视觉与参考面板，补充滚动、目录和链接交互约束，并明确未提升父目录时的反链边界。
 - 2026-07-25：补充 ExternalReader 的三态会话职责及 `external-reader` Theme API v2 props 兼容约束。
 - 2026-07-25：明确 ExternalReader 的初始只读 grant 与单文件编辑提升不能授予 workspace UI。

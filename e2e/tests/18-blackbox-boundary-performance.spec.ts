@@ -30,6 +30,7 @@ const STARTUP_READY_BUDGET_MS = 3000;
 const LARGE_WORKSPACE_DRAWER_BUDGET_MS = 5000;
 const LARGE_WORKSPACE_SEARCH_BUDGET_MS = 800;
 const LARGE_DOCUMENT_VIEW_SWITCH_BUDGET_MS = 1000;
+const E2E_ORIGIN = new URL(process.env.JOTLUCK_E2E_BASE_URL ?? 'http://127.0.0.1:5173').origin;
 
 const ALLOWED_WARNINGS = [
   /Download the Vue Devtools extension/i,
@@ -75,7 +76,7 @@ function installRuntimeObservationGate(page: Page, browserName = '') {
         if (
           event.type === 'requestfailed' &&
           /(net::ERR_ABORTED|NS_BINDING_ABORTED)/i.test(event.text) &&
-          /localhost:5173\/(src|@vite|node_modules|@fs|assets)\//.test(event.url ?? '')
+          isExpectedAssetUrl(event.url, /^\/(?:src|@vite|node_modules|@fs|assets)\//u)
         ) {
           return false;
         }
@@ -83,7 +84,7 @@ function installRuntimeObservationGate(page: Page, browserName = '') {
           event.type === 'console-error' &&
           browserName === 'firefox' &&
           event.text === 'Error' &&
-          /localhost:5173\/assets\/vendor-vue-.*\.js$/.test(event.url ?? '')
+          isExpectedAssetUrl(event.url, /^\/assets\/vendor-vue-.*\.js$/u)
         ) {
           return false;
         }
@@ -94,6 +95,16 @@ function installRuntimeObservationGate(page: Page, browserName = '') {
     },
     events,
   };
+}
+
+function isExpectedAssetUrl(value: string | undefined, pathPattern: RegExp): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.origin === E2E_ORIGIN && pathPattern.test(url.pathname);
+  } catch {
+    return false;
+  }
 }
 
 function storedFile(content: string, mtime: number): StoredFile {

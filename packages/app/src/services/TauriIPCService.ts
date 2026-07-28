@@ -78,20 +78,25 @@ export class TauriIPCService implements IFileSystemService {
   // Notebook Management
   // ====================================================================
 
-  async openNotebook(): Promise<NotebookHandle> {
+  async openNotebook(): Promise<NotebookHandle | null> {
     const selected = await open({
       directory: true,
       multiple: false,
       title: '选择笔记本文件夹',
     });
-    if (!selected) throw new Error('用户取消了文件夹选择');
+    if (!selected) return null;
     return this.openNotebookAt(selected);
   }
 
   async openNotebookAt(path: string): Promise<NotebookHandle> {
-    const root = await invoke<string>('open_notebook', { path });
-    this.saveRecent(root);
-    return { rootPath: root, name: this.displayNameFromPath(root) };
+    try {
+      const root = await invoke<string>('open_notebook', { path });
+      this.saveRecent(root);
+      return { rootPath: root, name: this.displayNameFromPath(root) };
+    } catch (error) {
+      this.removeRecent(path);
+      throw error;
+    }
   }
 
   async openNotebookFromExternalGrant(accessToken: string): Promise<NotebookHandle> {
@@ -134,6 +139,23 @@ export class TauriIPCService implements IFileSystemService {
     } catch (e) {
       // eslint-disable-next-line no-console
       console.warn('[TauriIPCService] saveRecent 失败', e);
+    }
+  }
+
+  private removeRecent(root: string): void {
+    try {
+      const raw = localStorage.getItem(RECENT_KEY);
+      const list: string[] = raw ? JSON.parse(raw) : [];
+      const normalizedRoot = root.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+      const filtered = sanitizeRecentNotebookPaths(list).filter(
+        (path) => path.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase() !== normalizedRoot,
+      );
+      if (filtered.length !== list.length) {
+        localStorage.setItem(RECENT_KEY, JSON.stringify(filtered));
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn('[TauriIPCService] removeRecent 失败', error);
     }
   }
 

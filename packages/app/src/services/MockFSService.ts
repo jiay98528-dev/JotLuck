@@ -33,6 +33,14 @@ interface MockFSData {
 
 export interface MockFSServiceOptions {
   persist?: boolean;
+  /** Test-only recent notebook roots. Defaults to the sample notebook. */
+  recentNotebooks?: readonly string[];
+  /** Test-only picker result. Null models an explicit user cancellation. */
+  pickerResult?: NotebookHandle | null;
+  /** Test-only picker/open failure message. */
+  pickerError?: string;
+  /** Test-only roots that fail when opened from the recent list. */
+  unavailableNotebookPaths?: readonly string[];
 }
 
 function delay(ms: number): Promise<void> {
@@ -222,10 +230,21 @@ export class MockFSService implements IFileSystemService {
   private data: MockFSData;
   private readonly latency: number;
   private readonly persistToLocalStorage: boolean;
+  private readonly recentNotebooks: readonly string[];
+  private readonly pickerResult: NotebookHandle | null;
+  private readonly pickerError: string | null;
+  private readonly unavailableNotebookPaths: ReadonlySet<string>;
 
   constructor(latencyMs = DEFAULT_DELAY, options: MockFSServiceOptions = {}) {
     this.latency = latencyMs;
     this.persistToLocalStorage = options.persist ?? false;
+    this.recentNotebooks = options.recentNotebooks ?? ['示例笔记本'];
+    this.pickerResult =
+      options.pickerResult === undefined
+        ? { rootPath: '/', name: '示例笔记本' }
+        : options.pickerResult;
+    this.pickerError = options.pickerError ?? null;
+    this.unavailableNotebookPaths = new Set(options.unavailableNotebookPaths ?? []);
     this.data = this.load();
   }
 
@@ -436,15 +455,22 @@ export class MockFSService implements IFileSystemService {
     return candidate === notebookRoot || candidate.startsWith(`${notebookRoot}/`);
   }
 
-  async openNotebook(): Promise<NotebookHandle> {
+  async openNotebook(): Promise<NotebookHandle | null> {
+    await delay(this.latency);
+    if (this.pickerError) throw new Error(this.pickerError);
+    return this.pickerResult ? { ...this.pickerResult } : null;
+  }
+
+  async openNotebookAt(path: string): Promise<NotebookHandle> {
+    await delay(this.latency);
+    if (this.unavailableNotebookPaths.has(path)) {
+      throw new Error(`笔记本不可用: ${path}`);
+    }
     return { rootPath: '/', name: '示例笔记本' };
   }
 
-  async openNotebookAt(_path: string): Promise<NotebookHandle> {
-    return this.openNotebook();
-  }
-
   async getRecentNotebooks(): Promise<string[]> {
-    return ['示例笔记本'];
+    await delay(this.latency);
+    return [...this.recentNotebooks];
   }
 }

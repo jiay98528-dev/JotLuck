@@ -32,6 +32,23 @@ describe('MockFSService sample notebook', () => {
     });
   });
 
+  it('models no recent notebook, picker cancellation, and picker failure independently', async () => {
+    const cancelled = new MockFSService(0, {
+      recentNotebooks: [],
+      pickerResult: null,
+    });
+    const failed = new MockFSService(0, {
+      recentNotebooks: ['missing'],
+      pickerError: '没有权限',
+      unavailableNotebookPaths: ['missing'],
+    });
+
+    await expect(cancelled.getRecentNotebooks()).resolves.toEqual([]);
+    await expect(cancelled.openNotebook()).resolves.toBeNull();
+    await expect(failed.openNotebookAt('missing')).rejects.toThrow('笔记本不可用');
+    await expect(failed.openNotebook()).rejects.toThrow('没有权限');
+  });
+
   it('lists only directories and supported editable note files', async () => {
     const fs = new MockFSService(0);
 

@@ -25,6 +25,16 @@ export const useIndexStore = defineStore('index', () => {
   const recentNotes = ref<Array<{ path: string; title: string; lastOpenedAt: number }>>([]);
   const isReady = computed(() => status.value === 'ready');
 
+  function reset(): void {
+    initializeGeneration++;
+    indexService = null;
+    status.value = 'idle';
+    error.value = null;
+    documentCount.value = 0;
+    tags.value = [];
+    recentNotes.value = [];
+  }
+
   async function initialize(
     fs: IFileSystemService,
     force = false,
@@ -105,6 +115,7 @@ export const useIndexStore = defineStore('index', () => {
     tags,
     recentNotes,
     isReady,
+    reset,
     initialize,
     refreshDocument,
     removeDocument,

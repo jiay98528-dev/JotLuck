@@ -1,6 +1,8 @@
 import { spawn, execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
+import { once } from 'node:events';
 import { lstatSync, readFileSync, realpathSync } from 'node:fs';
+import { createServer } from 'node:net';
 import path, { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { remote } from 'webdriverio';
@@ -16,6 +18,9 @@ export class TauriWebDriverHost {
     spawnProcess = spawn,
     resolveCommandPath = resolveExecutableCommand,
     executableIdentityFactory = executableIdentity,
+    port = process.env.JOTLUCK_TAURI_DRIVER_PORT,
+    nativePort = process.env.JOTLUCK_EDGE_DRIVER_PORT,
+    availablePortFactory = findAvailableLoopbackPort,
   } = {}) {
     this.driverCommand =
       driverCommand ??
@@ -28,6 +33,19 @@ export class TauriWebDriverHost {
     this.spawnProcess = spawnProcess;
     this.resolveCommandPath = resolveCommandPath;
     this.executableIdentityFactory = executableIdentityFactory;
+    this.requestedPort = optionalPort(port);
+    this.requestedNativePort = optionalPort(nativePort);
+    if (
+      this.requestedPort !== null &&
+      this.requestedNativePort !== null &&
+      this.requestedPort === this.requestedNativePort
+    ) {
+      throw new Error('Tauri intermediary and native WebDriver ports must be distinct');
+    }
+    this.availablePortFactory = availablePortFactory;
+    this.port = this.requestedPort;
+    this.nativePort = this.requestedNativePort;
+    this.portTask = null;
     this.driverProcess = null;
     this.driverIdentity = null;
     this.nativeDriverIdentity = null;
@@ -39,10 +57,35 @@ export class TauriWebDriverHost {
     this.commandSequence = 0;
   }
 
+  preparePorts() {
+    if (this.port !== null && this.nativePort !== null) return null;
+    if (this.portTask) return this.portTask;
+    const task = (async () => {
+      this.port ??= await this.availablePortFactory();
+      this.nativePort ??= await this.availablePortFactory();
+      while (this.nativePort === this.port) {
+        this.nativePort = await this.availablePortFactory();
+      }
+    })();
+    this.portTask = task;
+    void task.then(
+      () => {
+        if (this.portTask === task) this.portTask = null;
+      },
+      () => {
+        if (this.portTask === task) this.portTask = null;
+      },
+    );
+    return task;
+  }
+
   start() {
     if (this.driverProcess && this.driverProcess.exitCode === null) return;
     if (this.platform !== 'win32') {
       throw new Error('Tauri WebDriver execution requires Windows/WebView2');
+    }
+    if (this.port === null || this.nativePort === null) {
+      throw new Error('Tauri WebDriver ports must be prepared before starting the driver');
     }
     const driverPath = this.resolveCommandPath(this.driverCommand, this.platform);
     const nativeDriverPath = this.nativeDriverPath
@@ -52,7 +95,13 @@ export class TauriWebDriverHost {
     this.nativeDriverIdentity = nativeDriverPath
       ? this.executableIdentityFactory(nativeDriverPath)
       : null;
-    const args = nativeDriverPath ? ['--native-driver', nativeDriverPath] : [];
+    const args = [
+      '--port',
+      String(this.port),
+      '--native-port',
+      String(this.nativePort),
+      ...(nativeDriverPath ? ['--native-driver', nativeDriverPath] : []),
+    ];
     this.stopping = false;
     this.driverProcess = this.spawnProcess(driverPath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -81,6 +130,8 @@ export class TauriWebDriverHost {
     const registration = { attemptId, onEvent };
     let observedSessionId = null;
     try {
+      const portTask = this.preparePorts();
+      if (portTask) await portTask;
       this.start();
       const driverProcess = this.driverProcess;
       onEvent({
@@ -114,7 +165,7 @@ export class TauriWebDriverHost {
       try {
         const connection = this.remoteFactory({
           hostname: '127.0.0.1',
-          port: 4444,
+          port: this.port,
           logLevel: this.logLevel,
           connectionRetryTimeout: 120_000,
           connectionRetryCount: 20,
@@ -259,6 +310,9 @@ export class TauriWebDriverHost {
     this.driverProcess = null;
     this.driverIdentity = null;
     this.nativeDriverIdentity = null;
+    this.port = this.requestedPort;
+    this.nativePort = this.requestedNativePort;
+    this.portTask = null;
     this.observers.clear();
     this.pendingDriverOutput = [];
     if (errors.length > 0) {
@@ -279,6 +333,31 @@ export class TauriWebDriverHost {
     }
     this.emitToObservers('tauri-driver-output', details);
   }
+}
+
+function optionalPort(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`Invalid WebDriver port: ${value}`);
+  }
+  return port;
+}
+
+async function findAvailableLoopbackPort() {
+  const server = createServer();
+  server.unref();
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    server.close();
+    throw new Error('Unable to reserve a loopback port for Tauri WebDriver');
+  }
+  const { port } = address;
+  server.close();
+  await once(server, 'close');
+  return port;
 }
 
 function resolveExecutableCommand(command, platform = process.platform) {

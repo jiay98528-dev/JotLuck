@@ -7,11 +7,12 @@ import { chromium } from 'playwright';
 async function main() {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
+  const appURL = process.env.JOTLUCK_E2E_BASE_URL ?? 'http://127.0.0.1:5175';
 
   // Skip welcome
-  await page.goto('http://localhost:5175');
+  await page.goto(appURL);
   await page.evaluate(() => localStorage.setItem('JotLuck_welcome_completed', 'true'));
-  await page.goto('http://localhost:5175');
+  await page.goto(appURL);
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(2000);
 

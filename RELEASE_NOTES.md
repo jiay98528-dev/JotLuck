@@ -1,66 +1,30 @@
-# JotLuck v0.15.0-rc.1 Release Notes
+# JotLuck v0.1.0-preview Candidate Release Notes
 
-Date: 2026-06-30
-
-This release candidate focuses on release hardening, not new product scope. It
-collects the Web application, Tauri desktop path fixes, security/dependency
-cleanup, user-journey test coverage, and final M-R7 release-candidate gate
-evidence into one reviewable candidate.
+This document describes the current unpublished Windows x64 preview candidate.
+It is unsigned and is not a stable release or an RC. No official public
+installer is currently available on GitHub Releases.
 
 ## Highlights
 
-- Core Markdown notebook workflows are covered by release E2E tests.
-- Recent-note/bookmark state is cleaned when notes are deleted.
-- Tauri desktop startup and notebook-root path resolution have been fixed.
-- Desktop file-open now supports Markdown-family launch arguments as a
-  single-file session: external `.md/.markdown/.mdx` opens in a full-window
-  read-only preview first, does not scan the parent folder, and only enables
-  editing after explicit confirmation.
-- The file drawer, index, watcher, training, launch arguments, and installer now
-  share the supported note-format contract: `.md`, `.markdown`, `.mdx`, and
-  `.txt` inside the app; `.md/.markdown/.mdx` for Windows registration.
-- Default desktop sample documents are restored for first-run onboarding.
-- Chinese IME + Live Preview, immediate-mode table rendering, and Tab focus
-  navigation regressions have been closed.
-- Startup update checks no longer contact GitHub when automatic checks are
-  disabled.
-- App identity and release links now come from a single `app-meta` source so
-  repository URLs, Issues links, license links, and update checks do not drift.
-- Tauri permissions have been narrowed by removing unscoped `shell:allow-open`;
-  `withGlobalTauri=false` and non-empty CSP are covered by static tests.
-- The native file watcher now has an explicit stop/replace lifecycle instead of
-  leaking the watcher for the process lifetime.
-- Markdown rendering boundaries now have regression coverage for Setext
-  headings, table/list semantics, fenced code, and bare JSON-like blocks.
-- High-severity npm audit findings have been removed from the current pnpm
-  dependency graph.
-- XLSX export no longer depends on SheetJS `xlsx`; it uses
-  `write-excel-file`.
-
-## Validation Matrix
-
-| Gate                | Status           | Evidence                                                      |
-| ------------------- | ---------------- | ------------------------------------------------------------- |
-| TypeScript          | Passed           | `pnpm.cmd --filter @jotluck/app typecheck`                    |
-| ESLint              | Passed           | `pnpm.cmd exec eslint packages/app/src packages/renderer/src` |
-| Stylelint           | Passed           | `pnpm.cmd --filter @jotluck/app lint:style`                   |
-| Unit tests          | Passed           | `vitest` suite                                                |
-| Web build           | Passed           | Vite build completed                                          |
-| High npm audit      | Passed           | Remaining advisories are low/moderate                         |
-| Chromium E2E        | Passed           | 140 passed                                                    |
-| Firefox E2E         | Passed           | 137 passed / 3 skipped                                        |
-| WebKit E2E          | Passed           | 137 passed / 3 skipped; rapid note switching repeat=5 passed  |
-| GUI smoke           | Passed           | Create, switch, append, save, delete, no residual entry       |
-| Tauri release build | Passed           | NSIS release installer generated                              |
-| Rust audit          | Pending evidence | CI green or local `cargo-audit` output required for L4        |
+- JotLuck manages local plain-text notebooks in `.md`, `.markdown`, `.mdx`,
+  and `.txt` formats.
+- The first launch shows the Open Notebook gate instead of a writable temporary
+  draft. Use `Ctrl/Cmd+O` later to switch folders.
+- External supported text files open as single-file sessions and never scan the
+  parent folder as a notebook without an explicit folder-open action.
+- The Windows installer registers all four supported extensions as optional
+  Open With choices and does not replace the current default application.
+- Markdown rendering, local search, exports, live preview, templates, and
+  offline completion remain local-first features of the preview.
 
 ## Upgrade And Data Notes
 
 - Notes remain plain text files. The app opens and manages `.md`, `.markdown`,
   `.mdx`, and `.txt` files as notes.
-- Windows installer registration covers `.md`, `.markdown`, and `.mdx`.
-  JotLuck intentionally does not hijack the default `.txt` association.
-- External Markdown-family files opened from Windows use a single-file
+- Windows installer registration covers `.md`, `.markdown`, `.mdx`, and
+  `.txt` as optional Open With choices. JotLuck does not replace the default
+  application for any extension.
+- External supported text files opened from Windows use a single-file
   read-only session by default. Enabling edit mode saves only that file and
   does not add the parent directory as a notebook.
 - Existing notebooks do not require migration.
@@ -70,25 +34,9 @@ evidence into one reviewable candidate.
 - Note deletion does not automatically remove image assets, to avoid deleting
   shared files.
 
-## Final RC Result
+## Preview Boundaries
 
-M-R7 reached the final stop point and the final independent audit closed the
-WebKit rapid-switching blocker on 2026-06-30. The current RC can proceed to
-real-installer L4 review. Final public release must include Rust audit evidence
-from CI or a local `cargo-audit` run.
-
-Final evidence is recorded in
-`memory/release-candidate-final-report.md`.
-
-## Desktop External File Hotfix Addendum
-
-After the initial RC report, an installed-desktop regression was found where
-opening a Markdown file from the OS could scan Desktop/Downloads as a notebook
-and pollute tags/recent state. This has been fixed by replacing external
-file-open with the single-file read-only/edit session described above.
-
-Current package hash supersedes earlier RC hashes:
-
-- Installer:
-  `packages/app/src-tauri/target/release/bundle/nsis/JotLuck_0.15.0_x64-setup.exe`
-- SHA256: record in the installed-app L4 report for the exact published build.
+This unpublished candidate is unsigned. It does not represent a completed
+public preview, RC, or stable-release validation package. Read
+[Known Limitations](./KNOWN_LIMITATIONS.md) before local testing. Any future
+download must be identified by its own accompanying GitHub Release information.

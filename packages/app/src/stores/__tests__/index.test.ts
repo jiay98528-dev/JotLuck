@@ -24,4 +24,26 @@ describe('useIndexStore initialization races', () => {
     expect(store.getIndexService()?.getAllNoteTitles()).toContain('Fast');
     expect(store.getIndexService()?.getAllNoteTitles()).not.toContain('Slow');
   });
+
+  it('clears derived workspace state and invalidates an in-flight initialization', async () => {
+    const ready = new MockFSService(0);
+    const slow = new MockFSService(40);
+    await ready.writeFile('/ready.md', '# Ready #tag');
+    await slow.writeFile('/late.md', '# Late #other');
+
+    const store = useIndexStore();
+    await store.initialize(ready, true);
+    expect(store.status).toBe('ready');
+    expect(store.documentCount).toBeGreaterThan(0);
+
+    const lateBuild = store.initialize(slow, true);
+    store.reset();
+    await lateBuild;
+
+    expect(store.status).toBe('idle');
+    expect(store.documentCount).toBe(0);
+    expect(store.tags).toEqual([]);
+    expect(store.recentNotes).toEqual([]);
+    expect(store.getIndexService()).toBeNull();
+  });
 });

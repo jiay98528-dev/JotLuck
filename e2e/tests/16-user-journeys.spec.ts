@@ -522,7 +522,7 @@ test.describe('外部文件父目录笔记本会话', () => {
       };
     }, externalPath);
 
-    await page.goto('http://localhost:5173/');
+    await page.goto('/');
     await page.waitForLoadState('networkidle');
     const visibleEditorText = async (): Promise<string> =>
       (await page.locator('.editor-shell-frame .cm-content').last().textContent()) ?? '';

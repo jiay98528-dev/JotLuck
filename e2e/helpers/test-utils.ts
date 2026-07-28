@@ -4,8 +4,8 @@
  * 共享辅助函数，用于 Playwright E2E 测试。
  * 提供编辑器操作、等待策略等常用封装。
  */
-import type { Page } from '@playwright/test';
-import { expect } from '@playwright/test';
+import type { ConsoleMessage, Page, Request } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 // ============================================================
 // Editor Helpers
@@ -176,16 +176,87 @@ export async function openExportDialog(page: Page): Promise<void> {
 
 /** 等待应用初始化完成 (跳过欢迎页) */
 export async function waitForAppReady(page: Page): Promise<void> {
-  const APP_URL = process.env.JOTLUCK_E2E_BASE_URL ?? 'http://localhost:5173';
+  const appURL = process.env.JOTLUCK_E2E_BASE_URL ?? 'http://127.0.0.1:5173';
+  const consoleMessages: Array<Record<string, unknown>> = [];
+  const pageErrors: Array<Record<string, unknown>> = [];
+  const failedRequests: Array<Record<string, unknown>> = [];
+  const onConsole = (message: ConsoleMessage) => {
+    consoleMessages.push({
+      type: message.type(),
+      text: message.text(),
+      location: message.location(),
+    });
+  };
+  const onPageError = (error: Error) =>
+    pageErrors.push({ name: error.name, message: error.message });
+  const onRequestFailed = (request: Request) => {
+    failedRequests.push({
+      url: request.url(),
+      method: request.method(),
+      failure: request.failure(),
+    });
+  };
+
+  page.on('console', onConsole);
+  page.on('pageerror', onPageError);
+  page.on('requestfailed', onRequestFailed);
   // CRITICAL: addInitScript runs BEFORE any page JavaScript (including Vue's onMounted).
   // This ensures App.vue reads the flag before deciding to show the welcome overlay.
   // Without this, the welcome overlay intercepts all pointer events in tests.
   await page.addInitScript(() => {
     localStorage.setItem('jotluck:welcome:completed', '1');
   });
-  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
-  await waitForShellReady(page);
-  await page.waitForTimeout(100);
+  try {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await waitForShellReady(page);
+    await page.waitForTimeout(100);
+  } catch (error) {
+    const snapshot = await collectAppReadyFailureSnapshot(page);
+    await test
+      .info()
+      .attach('app-ready-diagnostics.json', {
+        contentType: 'application/json',
+        body: Buffer.from(
+          JSON.stringify(
+            {
+              targetURL: appURL,
+              console: consoleMessages,
+              pageErrors,
+              failedRequests,
+              snapshot,
+            },
+            null,
+            2,
+          ),
+        ),
+      })
+      .catch(() => undefined);
+    throw error;
+  } finally {
+    page.off('console', onConsole);
+    page.off('pageerror', onPageError);
+    page.off('requestfailed', onRequestFailed);
+  }
+}
+
+async function collectAppReadyFailureSnapshot(page: Page): Promise<Record<string, unknown>> {
+  try {
+    return await page.evaluate(() => ({
+      url: location.href,
+      readyState: document.readyState,
+      e2eState: window.__jotluck_e2e?.debugState?.() ?? null,
+      shellReadyMarks: performance
+        .getEntriesByName('jotluck:shell-ready')
+        .map((entry) => entry.toJSON()),
+      appRoot: document.querySelector('#jotluck-app')?.outerHTML.slice(0, 20_000) ?? null,
+      document: document.documentElement.outerHTML.slice(0, 20_000),
+    }));
+  } catch (error) {
+    return {
+      url: page.url(),
+      snapshotError: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 /**
@@ -223,9 +294,15 @@ async function waitForShellReady(page: Page): Promise<void> {
       () =>
         page.evaluate(() =>
           Boolean(
-            document.querySelector(
-              '.home-theme-showcase, .cm-content, [data-testid="external-file-session"]',
-            ),
+            (() => {
+              const startupReady = performance.getEntriesByName('jotluck:shell-ready').length > 0;
+              if (!startupReady) return false;
+              return Boolean(
+                document.querySelector(
+                  '.home-theme-showcase, [data-testid="notebook-open-gate"], [data-testid="external-file-session"]',
+                ) ?? document.querySelector('.cm-content'),
+              );
+            })(),
           ),
         ),
       { timeout: 10000 },

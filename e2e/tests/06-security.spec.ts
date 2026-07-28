@@ -294,7 +294,7 @@ test.describe('网络隐私', () => {
       localStorage.setItem('jotluck:welcome:completed', '1');
       localStorage.setItem('jotluck:version:autoCheck', 'false');
     });
-    await page.goto('http://localhost:5173', { waitUntil: 'domcontentloaded' });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.app-shell')).toBeVisible({ timeout: 10000 });
 
     await page.waitForTimeout(16000);

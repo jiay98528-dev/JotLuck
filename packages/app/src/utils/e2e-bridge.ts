@@ -36,8 +36,19 @@ export interface JotLuckE2EEditorBridge {
   setCompletionAblationMode: (mode: CompletionAblationMode) => void;
 }
 
+export interface JotLuckE2EMockNotebookConfig {
+  forceGate?: boolean;
+  recentRoots?: string[];
+  pickerOutcome?: 'success' | 'cancel' | 'error';
+  pickerRoot?: string;
+  pickerName?: string;
+  pickerError?: string;
+  unavailableRoots?: string[];
+}
+
 export interface JotLuckE2EBridge {
   editor?: JotLuckE2EEditorBridge;
+  mockNotebook?: JotLuckE2EMockNotebookConfig;
   mockOpenedFile?: JotLuckE2EOpenedFile;
   externalFiles?: Record<string, string>;
   externalWrites?: Array<{ absolutePath: string; content: string; time: number }>;
@@ -47,6 +58,9 @@ export interface JotLuckE2EBridge {
     externalSessionMode: string;
     isDirty: boolean;
     isExternalEditing: boolean;
+    activeNotebookRoot: string;
+    isWorkspaceUnbound: boolean;
+    isNotebookOpening: boolean;
   };
   listNotePaths?: () => string[];
   selectNote?: (path: string) => Promise<void>;

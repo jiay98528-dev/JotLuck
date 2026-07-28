@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const invokeMock = vi.hoisted(() => vi.fn());
 const listenMock = vi.hoisted(() => vi.fn());
+const openMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: invokeMock,
@@ -12,7 +13,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({
-  open: vi.fn(),
+  open: openMock,
 }));
 
 import {
@@ -22,13 +23,45 @@ import {
 } from '../TauriIPCService';
 
 beforeEach(() => {
+  localStorage.clear();
   invokeMock.mockReset();
   invokeMock.mockResolvedValue(1);
   listenMock.mockReset();
   listenMock.mockResolvedValue(vi.fn());
+  openMock.mockReset();
+  openMock.mockResolvedValue(null);
 });
 
 describe('TauriIPCService recent notebook sanitizer', () => {
+  it('returns null when the native directory picker is cancelled', async () => {
+    const service = new TauriIPCService();
+
+    await expect(service.openNotebook()).resolves.toBeNull();
+    expect(invokeMock).not.toHaveBeenCalledWith('open_notebook', expect.anything());
+  });
+
+  it('opens a selected directory and removes a failed recent root', async () => {
+    const service = new TauriIPCService();
+    localStorage.setItem(
+      'jotluck-recent-notebooks',
+      JSON.stringify(['D:/Notes/Missing', 'D:/Notes/Keep']),
+    );
+    openMock.mockResolvedValueOnce('D:/Notes/Selected');
+    invokeMock.mockResolvedValueOnce('D:/Notes/Selected');
+
+    await expect(service.openNotebook()).resolves.toMatchObject({
+      rootPath: 'D:/Notes/Selected',
+      name: 'Selected',
+    });
+
+    invokeMock.mockRejectedValueOnce(new Error('文件夹不存在'));
+    await expect(service.openNotebookAt('D:/Notes/Missing')).rejects.toThrow('文件夹不存在');
+    expect(JSON.parse(localStorage.getItem('jotluck-recent-notebooks') ?? '[]')).toEqual([
+      'D:/Notes/Selected',
+      'D:/Notes/Keep',
+    ]);
+  });
+
   it('filters system-wide folders that should not auto-open as notebooks', () => {
     expect(isLikelySystemNotebookScope('C:/Users/alice')).toBe(true);
     expect(isLikelySystemNotebookScope('C:/Users/alice/Desktop')).toBe(true);

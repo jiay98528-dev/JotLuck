@@ -115,7 +115,7 @@ function rate(value: number, total: number): number {
 }
 
 async function openApp(page: Page): Promise<void> {
-  await page.goto(process.env.JOTLUCK_E2E_BASE_URL ?? 'http://localhost:5173', {
+  await page.goto('/', {
     waitUntil: 'domcontentloaded',
   });
 

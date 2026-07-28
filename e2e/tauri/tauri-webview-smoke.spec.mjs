@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { createTauriDriverHost } from './tauri-webdriver-host.mjs';
+import {
+  UNICODE_NOTE_MARKER,
+  UNICODE_NOTEBOOK_NAME,
+  createUnicodeAuditFixture,
+} from '../../scripts/audit/create-unicode-notebook-fixture.mjs';
 
 const binaryPath = resolve(
   process.env.JOTLUCK_TAURI_BINARY ?? 'packages/app/src-tauri/target/release/jotluck.exe',
@@ -27,28 +33,129 @@ if (isAutocompleteRc && isV2RAutocompleteRc) {
 
 let browser;
 const driverHost = createTauriDriverHost({ logLevel: 'info' });
+const webdriverEvents = [];
+const webdriverTracePath = evidencePath.endsWith('.json')
+  ? `${evidencePath.slice(0, -'.json'.length)}.webdriver.ndjson`
+  : `${evidencePath}.webdriver.ndjson`;
+
+function recordWebDriverEvent(event) {
+  webdriverEvents.push({
+    schema: 'jotluck.tauri-webview-smoke.webdriver-event.v1',
+    sequence: webdriverEvents.length + 1,
+    timestamp: new Date().toISOString(),
+    ...event,
+  });
+}
 
 async function main() {
   if (process.platform !== 'win32') {
     throw new Error('Tauri WebView release smoke must run on Windows/WebView2');
   }
+  await assertFreshEvidenceTargets();
 
-  await stat(binaryPath);
+  let temporaryRoot = null;
+  let fixture = null;
+  let binaryBinding = null;
+  let isolatedAppData = null;
+  let previousAppData = null;
+  let unicodeGui = null;
+  let executionError = null;
+  let cleanupError = null;
+  let result = null;
   try {
-    browser = await driverHost.createSession({ application: binaryPath });
-
-    const appRoot = await browser.$('#jotluck-app');
-    await appRoot.waitForExist();
-    const result = isV2RAutocompleteRc ? await runV2RWebviewSmoke() : await runLegacyWebviewSmoke();
-
+    temporaryRoot = await mkdtemp(resolve(os.tmpdir(), 'jotluck-tauri-webview-smoke-'));
+    fixture = await createUnicodeAuditFixture(temporaryRoot);
+    isolatedAppData = await createIsolatedAppData(temporaryRoot);
+    previousAppData = isolateAppDataEnvironment(isolatedAppData);
     const binary = await readFile(binaryPath);
     const binaryStats = await stat(binaryPath);
-    const binaryBinding = {
+    binaryBinding = {
       path: binaryPath,
       bytes: binaryStats.size,
       sha256: createHash('sha256').update(binary).digest('hex'),
     };
-    const evidence = isV2RAutocompleteRc
+    browser = await driverHost.createSession({
+      application: binaryPath,
+      onEvent: recordWebDriverEvent,
+    });
+
+    await waitForNotebookGate();
+    await browser.execute((root) => {
+      localStorage.setItem('jotluck-recent-notebooks', JSON.stringify([root]));
+    }, fixture.notebookRoot);
+    await browser.refresh();
+    await waitForTauriAppReady({ expectedNotebookName: fixture.notebookName });
+    unicodeGui = await openUnicodeNoteThroughGui(fixture);
+    result = isV2RAutocompleteRc ? await runV2RWebviewSmoke() : await runLegacyWebviewSmoke();
+  } catch (error) {
+    executionError = error;
+  } finally {
+    try {
+      await driverHost.deleteSession(browser);
+      await driverHost.dispose();
+    } catch (error) {
+      cleanupError = error;
+      if (!executionError) executionError = error;
+    }
+    try {
+      restoreAppDataEnvironment(previousAppData);
+      previousAppData = null;
+      await cleanupTemporaryRoot(temporaryRoot);
+      temporaryRoot = null;
+    } catch (error) {
+      cleanupError = cleanupError
+        ? new AggregateError([cleanupError, error], 'Tauri WebView smoke cleanup failed')
+        : error;
+      if (!executionError) executionError = cleanupError;
+    }
+  }
+
+  if (!executionError) {
+    try {
+      assertWebDriverEvidenceObserved();
+    } catch (error) {
+      executionError = error;
+    }
+  }
+
+  let webdriverTrace = null;
+  try {
+    webdriverTrace = await writeWebDriverTrace({
+      status: executionError ? 'failed' : 'passed',
+      executionError,
+      cleanupError,
+    });
+  } catch (error) {
+    executionError = executionError
+      ? new AggregateError(
+          [executionError, error],
+          'Smoke execution and evidence trace both failed',
+        )
+      : error;
+    webdriverTrace = {
+      path: webdriverTracePath,
+      status: 'write-failed',
+      failure: serializeError(error),
+    };
+  }
+  const evidence = executionError
+    ? {
+        schema: 'jotluck.tauri-webview-smoke.v2',
+        schemaVersion: 2,
+        classification: 'tauri-webview-offline-smoke',
+        status: 'failed',
+        completedAt: new Date().toISOString(),
+        platform: process.platform,
+        arch: process.arch,
+        webview: 'WebView2',
+        binary: binaryBinding,
+        unicodeFixture: summarizeUnicodeFixture(fixture),
+        unicodeGui,
+        webdriverTrace,
+        failure: serializeError(executionError),
+        cleanupFailure: cleanupError ? serializeError(cleanupError) : null,
+      }
+    : isV2RAutocompleteRc
       ? {
           schema: 'jotluck.autocomplete.v2r-webview-smoke.v1',
           schemaVersion: 1,
@@ -68,6 +175,9 @@ async function main() {
           workerInferencePassed: true,
           webBuildSubstitute: false,
           binary: binaryBinding,
+          unicodeFixture: summarizeUnicodeFixture(fixture),
+          unicodeGui,
+          webdriverTrace,
           ...result,
         }
       : {
@@ -80,17 +190,223 @@ async function main() {
           arch: process.arch,
           webview: 'WebView2',
           binary: binaryBinding,
+          unicodeFixture: summarizeUnicodeFixture(fixture),
+          unicodeGui,
+          webdriverTrace,
           ...result,
         };
-    await mkdir(dirname(evidencePath), { recursive: true });
-    await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, {
-      encoding: 'utf8',
-      flag: 'wx',
-    });
-  } finally {
-    await driverHost.deleteSession(browser);
-    await driverHost.dispose();
+  await mkdir(dirname(evidencePath), { recursive: true });
+  await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, {
+    encoding: 'utf8',
+    flag: 'wx',
+  });
+  if (executionError) throw executionError;
+}
+
+async function assertFreshEvidenceTargets() {
+  for (const target of [evidencePath, webdriverTracePath]) {
+    try {
+      await stat(target);
+    } catch (error) {
+      if (error?.code === 'ENOENT') continue;
+      throw error;
+    }
+    throw new Error(
+      `Refusing to overwrite immutable Tauri smoke evidence at ${target}. ` +
+        'Set JOTLUCK_TAURI_WEBVIEW_EVIDENCE to a fresh path for this run.',
+    );
   }
+}
+
+async function writeWebDriverTrace({ status, executionError, cleanupError }) {
+  const events = [
+    ...webdriverEvents,
+    {
+      schema: 'jotluck.tauri-webview-smoke.webdriver-event.v1',
+      sequence: webdriverEvents.length + 1,
+      timestamp: new Date().toISOString(),
+      event: 'smoke-complete',
+      status,
+      executionError: executionError ? serializeError(executionError) : null,
+      cleanupError: cleanupError ? serializeError(cleanupError) : null,
+    },
+  ];
+  const traceBytes = Buffer.from(
+    `${events.map((event) => JSON.stringify(event)).join('\n')}\n`,
+    'utf8',
+  );
+  await mkdir(dirname(webdriverTracePath), { recursive: true });
+  await writeFile(webdriverTracePath, traceBytes, { flag: 'wx' });
+  const actualTraceBytes = await readFile(webdriverTracePath);
+  const actualTraceEvents = actualTraceBytes
+    .toString('utf8')
+    .trimEnd()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  assert.equal(
+    actualTraceEvents.length,
+    events.length,
+    'WebDriver NDJSON event count drifted on disk',
+  );
+  return {
+    path: webdriverTracePath,
+    bytes: actualTraceBytes.byteLength,
+    sha256: createHash('sha256').update(actualTraceBytes).digest('hex'),
+    eventCount: actualTraceEvents.length,
+    completedCommandCount: actualTraceEvents.filter(
+      (event) => event.event === 'webdriver-command-complete',
+    ).length,
+  };
+}
+
+function summarizeUnicodeFixture(fixture) {
+  if (!fixture) return null;
+  return {
+    schema: fixture.schema,
+    notebookName: fixture.notebookName,
+    marker: fixture.marker,
+    manifestSha256: fixture.manifestSha256,
+    note: fixture.note,
+  };
+}
+
+async function createIsolatedAppData(temporaryRoot) {
+  const appData = resolve(temporaryRoot, 'appdata');
+  const localAppData = resolve(temporaryRoot, 'localappdata');
+  await Promise.all([
+    mkdir(appData, { recursive: true }),
+    mkdir(localAppData, { recursive: true }),
+  ]);
+  return { appData, localAppData };
+}
+
+function isolateAppDataEnvironment({ appData, localAppData }) {
+  const previous = {
+    APPDATA: process.env.APPDATA,
+    LOCALAPPDATA: process.env.LOCALAPPDATA,
+  };
+  process.env.APPDATA = appData;
+  process.env.LOCALAPPDATA = localAppData;
+  recordWebDriverEvent({ event: 'appdata-isolated', appData, localAppData });
+  return previous;
+}
+
+function restoreAppDataEnvironment(previous) {
+  if (!previous) return;
+  for (const [key, value] of Object.entries(previous)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+}
+
+async function cleanupTemporaryRoot(temporaryRoot) {
+  if (!temporaryRoot) return;
+  await rm(temporaryRoot, { recursive: true, force: false, maxRetries: 3, retryDelay: 100 });
+  await assert.rejects(stat(temporaryRoot), { code: 'ENOENT' });
+  recordWebDriverEvent({ event: 'temporary-root-cleaned', temporaryRoot });
+}
+
+async function waitForNotebookGate() {
+  const gate = await browser.$('[data-testid="notebook-open-gate"]');
+  await gate.waitForExist({ timeout: 20_000 });
+  await gate.waitForDisplayed({ timeout: 20_000 });
+}
+
+async function openUnicodeNoteThroughGui(fixture) {
+  const menu = await browser.$('.topbar-btn--menu');
+  await menu.waitForDisplayed({ timeout: 20_000 });
+  await menu.click();
+  const drawer = await browser.$('.file-drawer');
+  await drawer.waitForDisplayed({ timeout: 20_000 });
+  const item = await browser.$(
+    `//*[contains(concat(' ', normalize-space(@class), ' '), ' tree-item ') and contains(., "${fixture.note.fileName}")]`,
+  );
+  await item.waitForDisplayed({ timeout: 20_000 });
+  await item.click();
+  await (await browser.$('.cm-content')).waitForDisplayed({ timeout: 20_000 });
+  await browser.waitUntil(
+    () =>
+      browser.execute(
+        (marker) => document.querySelector('.cm-content')?.textContent?.includes(marker) ?? false,
+        UNICODE_NOTE_MARKER,
+      ),
+    {
+      timeout: 20_000,
+      interval: 100,
+      timeoutMsg: 'Unicode notebook note did not display its UTF-8 marker after GUI open',
+    },
+  );
+  const visibleText = await browser.execute(
+    () => document.querySelector('.cm-content')?.textContent ?? '',
+  );
+  assert.equal(visibleText.includes(UNICODE_NOTE_MARKER), true);
+  return {
+    openedThrough: 'file-drawer',
+    fileName: fixture.note.fileName,
+    marker: UNICODE_NOTE_MARKER,
+    markerSha256: createHash('sha256').update(UNICODE_NOTE_MARKER, 'utf8').digest('hex'),
+  };
+}
+
+function serializeError(error) {
+  return {
+    name: error instanceof Error ? error.name : 'Error',
+    message: error instanceof Error ? error.message : String(error),
+  };
+}
+
+function assertWebDriverEvidenceObserved() {
+  assert.equal(
+    webdriverEvents.some((event) => event.event === 'webdriver-session-handshake-complete'),
+    true,
+    'WebDriver smoke did not record a completed session handshake',
+  );
+  assert.equal(
+    webdriverEvents.some((event) => event.event === 'webdriver-command-complete'),
+    true,
+    'WebDriver smoke did not record any completed protocol command',
+  );
+  assert.equal(
+    webdriverEvents.some((event) => event.event === 'webdriver-session-deleted'),
+    true,
+    'WebDriver smoke did not record session cleanup',
+  );
+}
+
+async function waitForTauriAppReady({
+  requireEvaluationBridge = false,
+  expectedNotebookName,
+} = {}) {
+  await browser.waitUntil(
+    async () =>
+      browser.execute(
+        ({ needsEvaluationBridge, notebookName }) => {
+          const shell = document.querySelector('.app-shell, .single-page-drawer-shell');
+          const shellVisible =
+            shell instanceof HTMLElement &&
+            shell.getBoundingClientRect().width > 0 &&
+            shell.getBoundingClientRect().height > 0;
+          return Boolean(
+            document.querySelector('#jotluck-app') &&
+            shellVisible &&
+            '__TAURI_INTERNALS__' in window &&
+            (!notebookName || document.body.textContent?.includes(notebookName)) &&
+            (!needsEvaluationBridge ||
+              typeof window.__jotluck_e2e?.editor?.requestCompletionDiagnostics === 'function'),
+          );
+        },
+        {
+          needsEvaluationBridge: requireEvaluationBridge,
+          notebookName: expectedNotebookName ?? null,
+        },
+      ),
+    {
+      timeout: 20_000,
+      interval: 100,
+      timeoutMsg: 'Tauri WebView did not reach a visible, initialized application shell.',
+    },
+  );
 }
 
 async function runLegacyWebviewSmoke() {
@@ -146,18 +462,10 @@ async function runV2RWebviewSmoke() {
 }
 
 async function waitForV2REvaluationBridge() {
-  await (await browser.$('#jotluck-app')).waitForExist();
-  await browser.waitUntil(
-    () =>
-      browser.execute(
-        () => typeof window.__jotluck_e2e?.editor?.requestCompletionDiagnostics === 'function',
-      ),
-    {
-      timeout: 20_000,
-      interval: 100,
-      timeoutMsg: 'V2R evaluation bridge did not attach to the Tauri WebView.',
-    },
-  );
+  await waitForTauriAppReady({
+    requireEvaluationBridge: true,
+    expectedNotebookName: UNICODE_NOTEBOOK_NAME,
+  });
 }
 
 async function collectLegacyPackagedRuntimeFacts() {

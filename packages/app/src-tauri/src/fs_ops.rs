@@ -33,10 +33,12 @@ impl NotebookRoot {
         self.0.lock().ok()?.get(window_label).cloned()
     }
 
-    pub fn set_for(&self, window_label: &str, path: PathBuf) {
-        if let Ok(mut roots) = self.0.lock() {
-            roots.insert(window_label.to_string(), path);
-        }
+    pub fn set_for(&self, window_label: &str, path: PathBuf) -> Result<(), String> {
+        self.0
+            .lock()
+            .map_err(|_| "notebook root state lock poisoned".to_string())?
+            .insert(window_label.to_string(), path);
+        Ok(())
     }
 
     pub fn remove_for(&self, window_label: &str) {
@@ -351,7 +353,11 @@ impl ExternalAccessGrants {
         Ok(canonical_target)
     }
 
-    pub fn promote_to_notebook(&self, access_token: &str) -> Result<PathBuf, String> {
+    pub fn promote_to_notebook_after_validation(
+        &self,
+        access_token: &str,
+        commit_root: impl FnOnce(&Path) -> Result<(), String>,
+    ) -> Result<PathBuf, String> {
         let mut grants = self
             .0
             .lock()
@@ -363,11 +369,14 @@ impl ExternalAccessGrants {
             grants.remove(access_token);
             return Err("external access grant is invalid or expired".to_string());
         }
+        let canonical_root = canonical_readable_notebook_root(&grant.root)?;
+        commit_root(&canonical_root)?;
+        grant.root = canonical_root.clone();
         grant.directory_access = true;
         grant.capabilities.list = true;
         grant.capabilities.watch = true;
         grant.expires_at = Instant::now() + EXTERNAL_GRANT_IDLE_TIMEOUT;
-        Ok(grant.root.clone())
+        Ok(canonical_root)
     }
 }
 
@@ -558,6 +567,32 @@ fn assert_external_edit(
     sessions.assert_external_edit(window.label(), access_token)
 }
 
+/// Resolve a notebook directory only after proving it can be read. Keeping this
+/// separate from the Tauri command makes the bind-before-validate invariant testable.
+pub(crate) fn canonical_readable_notebook_root(path: &Path) -> Result<PathBuf, String> {
+    if !path.exists() {
+        return Err(format!("文件夹不存在: {}", path.display()));
+    }
+    if !path.is_dir() {
+        return Err(format!("路径不是文件夹: {}", path.display()));
+    }
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| format!("无法解析路径: {e}"))?;
+    fs::read_dir(canonical.as_path()).map_err(|e| format!("无法读取笔记本文件夹: {e}"))?;
+    Ok(canonical)
+}
+
+fn bind_notebook_root(
+    root: &NotebookRoot,
+    window_label: &str,
+    path: &Path,
+) -> Result<PathBuf, String> {
+    let canonical = canonical_readable_notebook_root(path)?;
+    root.set_for(window_label, canonical.clone())?;
+    Ok(canonical)
+}
+
 /// Open a notebook folder — all subsequent operations are relative to this root.
 #[tauri::command]
 pub fn open_notebook(
@@ -567,17 +602,7 @@ pub fn open_notebook(
     sessions: State<WindowSessionRegistry>,
 ) -> Result<String, String> {
     assert_workspace(&window, &sessions)?;
-    let p = PathBuf::from(&path);
-    if !p.exists() {
-        return Err(format!("文件夹不存在: {}", path));
-    }
-    if !p.is_dir() {
-        return Err(format!("路径不是文件夹: {}", path));
-    }
-    let canonical = p
-        .canonicalize()
-        .map_err(|e| format!("无法解析路径: {}", e))?;
-    root.set_for(window.label(), canonical.clone());
+    let canonical = bind_notebook_root(&root, window.label(), Path::new(&path))?;
     Ok(canonical.to_string_lossy().to_string())
 }
 
@@ -597,8 +622,9 @@ pub fn open_external_notebook(
     // which updates the bootstrap session and notebook root atomically.
     sessions.assert_workspace(window.label())?;
     assert_external_owner(&window, &access, &access_token)?;
-    let canonical = access.promote_to_notebook(&access_token)?;
-    root.set_for(window.label(), canonical.clone());
+    let canonical = access.promote_to_notebook_after_validation(&access_token, |canonical| {
+        root.set_for(window.label(), canonical.to_path_buf())
+    })?;
     Ok(canonical.to_string_lossy().to_string())
 }
 
@@ -724,7 +750,7 @@ created: 2026-06-02
     let canonical = sample_root
         .canonicalize()
         .map_err(|e| format!("无法解析示例笔记本路径: {}", e))?;
-    root.set_for(window.label(), canonical.clone());
+    root.set_for(window.label(), canonical.clone())?;
     Ok(canonical.to_string_lossy().to_string())
 }
 
@@ -754,14 +780,14 @@ pub fn list_directory(
     list_directory_at(&root_path, &relative_path)
 }
 
-fn list_directory_at(root_path: &PathBuf, relative_path: &str) -> Result<Vec<DirEntry>, String> {
-    let target = resolve_safe_path(&root_path, &relative_path).map_err(|e| e.to_string())?;
+fn list_directory_at(root_path: &Path, relative_path: &str) -> Result<Vec<DirEntry>, String> {
+    let target = resolve_safe_path(root_path, relative_path).map_err(|e| e.to_string())?;
     list_directory_entries(root_path, &target)
 }
 
 fn list_directory_entries(root_path: &Path, target: &Path) -> Result<Vec<DirEntry>, String> {
     let mut entries = Vec::new();
-    let dir_iter = fs::read_dir(&target).map_err(|e| format!("读取目录失败: {}", e))?;
+    let dir_iter = fs::read_dir(target).map_err(|e| format!("读取目录失败: {}", e))?;
 
     for entry in dir_iter {
         let entry = entry.map_err(|e| format!("读取条目失败: {}", e))?;
@@ -782,7 +808,7 @@ fn list_directory_entries(root_path: &Path, target: &Path) -> Result<Vec<DirEntr
             continue;
         }
 
-        let rel = crate::path::display_path(&root_path, &entry.path());
+        let rel = crate::path::display_path(root_path, &entry.path());
 
         entries.push(DirEntry {
             name,
@@ -820,7 +846,7 @@ pub fn read_file(
     read_file_at(&root_path, &relative_path)
 }
 
-fn read_file_at(root_path: &PathBuf, relative_path: &str) -> Result<String, String> {
+fn read_file_at(root_path: &Path, relative_path: &str) -> Result<String, String> {
     let target = resolve_safe_path(root_path, relative_path).map_err(|e| e.to_string())?;
 
     if !target.exists() {
@@ -894,7 +920,7 @@ pub fn write_file(
     write_file_at(&root_path, &relative_path, &content)
 }
 
-fn write_file_at(root_path: &PathBuf, relative_path: &str, content: &str) -> Result<(), String> {
+fn write_file_at(root_path: &Path, relative_path: &str, content: &str) -> Result<(), String> {
     let target = resolve_safe_path(root_path, relative_path).map_err(|e| e.to_string())?;
 
     // Ensure parent directory exists
@@ -1004,11 +1030,7 @@ pub fn write_binary_file(
     write_binary_file_at(&root_path, &relative_path, &base64)
 }
 
-fn write_binary_file_at(
-    root_path: &PathBuf,
-    relative_path: &str,
-    base64: &str,
-) -> Result<(), String> {
+fn write_binary_file_at(root_path: &Path, relative_path: &str, base64: &str) -> Result<(), String> {
     let target = resolve_safe_path(root_path, relative_path).map_err(|e| e.to_string())?;
     let bytes = general_purpose::STANDARD
         .decode(base64.as_bytes())
@@ -1034,7 +1056,7 @@ pub fn read_binary_file(
     read_binary_file_at(&root_path, &relative_path)
 }
 
-fn read_binary_file_at(root_path: &PathBuf, relative_path: &str) -> Result<String, String> {
+fn read_binary_file_at(root_path: &Path, relative_path: &str) -> Result<String, String> {
     let target = resolve_safe_path(root_path, relative_path).map_err(|e| e.to_string())?;
 
     if !target.exists() {
@@ -1058,7 +1080,7 @@ pub fn delete_file(
     delete_file_at(&root_path, &relative_path)
 }
 
-fn delete_file_at(root_path: &PathBuf, relative_path: &str) -> Result<(), String> {
+fn delete_file_at(root_path: &Path, relative_path: &str) -> Result<(), String> {
     let target = resolve_safe_path(root_path, relative_path).map_err(|e| e.to_string())?;
 
     if !target.exists() {
@@ -1081,7 +1103,7 @@ pub fn create_directory(
     create_directory_at(&root_path, &relative_path)
 }
 
-fn create_directory_at(root_path: &PathBuf, relative_path: &str) -> Result<(), String> {
+fn create_directory_at(root_path: &Path, relative_path: &str) -> Result<(), String> {
     let target = resolve_safe_path(root_path, relative_path).map_err(|e| e.to_string())?;
     fs::create_dir_all(&target).map_err(|e| format!("创建文件夹失败: {}", e))
 }
@@ -1101,7 +1123,7 @@ pub fn rename_file(
 }
 
 fn rename_file_at(
-    root_path: &PathBuf,
+    root_path: &Path,
     old_relative_path: &str,
     new_relative_path: &str,
 ) -> Result<(), String> {
@@ -1170,6 +1192,104 @@ mod tests {
         let root = std::env::temp_dir().join(format!("JotLuck-{name}-{suffix}"));
         std::fs::create_dir_all(&root).unwrap();
         root
+    }
+
+    #[test]
+    fn failed_notebook_root_binding_preserves_existing_root() {
+        let root = temp_notebook("root-bind");
+        let old_root = root.join("old");
+        std::fs::create_dir_all(&old_root).unwrap();
+        let not_a_directory = root.join("not-a-directory.md");
+        std::fs::write(&not_a_directory, "# Not a directory").unwrap();
+
+        let notebook_roots = NotebookRoot::new();
+        notebook_roots
+            .set_for("main", old_root.canonicalize().unwrap())
+            .unwrap();
+
+        assert!(bind_notebook_root(&notebook_roots, "main", &not_a_directory).is_err());
+        assert_eq!(
+            notebook_roots.get_for("main"),
+            Some(old_root.canonicalize().unwrap())
+        );
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn notebook_root_binding_canonicalizes_and_checks_readability_before_replacing_root() {
+        let root = temp_notebook("root-bind-valid");
+        let target = root.join("target");
+        std::fs::create_dir_all(&target).unwrap();
+        std::fs::write(target.join("note.md"), "# Note").unwrap();
+
+        let notebook_roots = NotebookRoot::new();
+        let bound = bind_notebook_root(&notebook_roots, "main", &target).unwrap();
+
+        assert_eq!(bound, target.canonicalize().unwrap());
+        assert_eq!(notebook_roots.get_for("main"), Some(bound));
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn poisoned_notebook_root_lock_fails_closed() {
+        let roots = NotebookRoot::new();
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = roots.0.lock().unwrap();
+            panic!("poison notebook root lock");
+        }));
+
+        assert!(roots.set_for("main", PathBuf::from("notes")).is_err());
+        assert!(roots.get_for("main").is_none());
+    }
+
+    #[test]
+    fn failed_external_promotion_does_not_expand_grant_capabilities() {
+        let root = temp_notebook("failed-external-promotion");
+        let target = root.join("external.md");
+        std::fs::write(&target, "# External").unwrap();
+        let access = ExternalAccessGrants::new();
+        let handle = access
+            .grant_for_existing_file(&target.to_string_lossy(), "window-a")
+            .unwrap();
+
+        std::fs::remove_dir_all(&root).unwrap();
+
+        assert!(access
+            .promote_to_notebook_after_validation(&handle.access_token, |_| Ok(()))
+            .is_err());
+        let grants = access.0.lock().unwrap();
+        let grant = grants.get(&handle.access_token).unwrap();
+        assert!(!grant.directory_access);
+        assert!(!grant.capabilities.list);
+        assert!(!grant.capabilities.watch);
+    }
+
+    #[test]
+    fn failed_root_commit_does_not_expand_external_grant_capabilities() {
+        let root = temp_notebook("failed-external-root-commit");
+        let target = root.join("external.md");
+        std::fs::write(&target, "# External").unwrap();
+        let access = ExternalAccessGrants::new();
+        let handle = access
+            .grant_for_existing_file(&target.to_string_lossy(), "window-a")
+            .unwrap();
+
+        assert!(access
+            .promote_to_notebook_after_validation(&handle.access_token, |_| {
+                Err("root commit failed".to_string())
+            })
+            .is_err());
+        {
+            let grants = access.0.lock().unwrap();
+            let grant = grants.get(&handle.access_token).unwrap();
+            assert!(!grant.directory_access);
+            assert!(!grant.capabilities.list);
+            assert!(!grant.capabilities.watch);
+        }
+
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -1363,7 +1483,9 @@ mod tests {
         assert!(access
             .resolve_file(&handle.access_token, "/saved.md", true, false)
             .is_err());
-        access.promote_to_notebook(&handle.access_token).unwrap();
+        access
+            .promote_to_notebook_after_validation(&handle.access_token, |_| Ok(()))
+            .unwrap();
         assert!(access
             .resolve_file(&handle.access_token, "/saved.md", true, false)
             .is_ok());
@@ -1414,8 +1536,8 @@ mod tests {
             .is_ok());
 
         let roots = NotebookRoot::new();
-        roots.set_for("window-a", root.join("a"));
-        roots.set_for("window-b", root.join("b"));
+        roots.set_for("window-a", root.join("a")).unwrap();
+        roots.set_for("window-b", root.join("b")).unwrap();
         roots.remove_for("window-a");
         assert!(roots.get_for("window-a").is_none());
         assert_eq!(roots.get_for("window-b"), Some(root.join("b")));
@@ -1481,7 +1603,9 @@ mod tests {
         assert!(handle.capabilities.write);
         assert!(!handle.capabilities.list);
         assert!(!handle.capabilities.watch);
-        assert!(access.promote_to_notebook(&handle.access_token).is_ok());
+        assert!(access
+            .promote_to_notebook_after_validation(&handle.access_token, |_| Ok(()))
+            .is_ok());
 
         std::fs::remove_dir_all(root).unwrap();
     }

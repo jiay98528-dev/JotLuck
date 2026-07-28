@@ -298,9 +298,10 @@ pub fn promote_external_file_to_notebook(
 ) -> Result<PromotedNotebookPayload, String> {
     let (opened_file, root) = sessions.promote_external(window.label(), |opened_file| {
         access.assert_owner(&opened_file.access_token, window.label())?;
-        access.promote_to_notebook(&opened_file.access_token)
+        access.promote_to_notebook_after_validation(&opened_file.access_token, |root| {
+            notebook_root.set_for(window.label(), root.to_path_buf())
+        })
     })?;
-    notebook_root.set_for(window.label(), root.clone());
     let name = root
         .file_name()
         .and_then(|value| value.to_str())
@@ -452,5 +453,33 @@ mod tests {
             Some("second-window")
         );
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn failed_external_promotion_keeps_the_external_session() {
+        let root = std::env::temp_dir().join(format!("JotLuck-session-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let target = root.join("external.md");
+        std::fs::write(&target, "# External").unwrap();
+
+        let access = ExternalAccessGrants::new();
+        let file_handle = access
+            .grant_for_existing_file(&target.to_string_lossy(), "window-a")
+            .unwrap();
+        let registry = WindowSessionRegistry::new();
+        registry.register_external("window-a", file_handle).unwrap();
+
+        std::fs::remove_dir_all(&root).unwrap();
+
+        assert!(registry
+            .promote_external("window-a", |opened_file| {
+                access.assert_owner(&opened_file.access_token, "window-a")?;
+                access.promote_to_notebook_after_validation(&opened_file.access_token, |_| Ok(()))
+            })
+            .is_err());
+        assert!(matches!(
+            registry.payload_for("window-a"),
+            WindowBootstrapPayload::ExternalReadonly { .. }
+        ));
     }
 }

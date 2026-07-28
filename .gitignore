@@ -49,6 +49,10 @@ src-tauri/target/
 e2e/report/
 e2e/report/data/
 
+# Local audit runs and disposable Git worktrees
+.audit-runs/
+.worktrees/
+
 # App assets (auto-generated)
 assets/
 !packages/app/src/assets/

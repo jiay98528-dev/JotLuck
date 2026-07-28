@@ -6,6 +6,103 @@ import { TauriWebDriverHost } from '../../e2e/tauri/tauri-webdriver-host.mjs';
 import { __test as verifierTest } from './verify-installed-app-evidence-v2.mjs';
 
 describe('Tauri WebDriver host evidence lifecycle', () => {
+  it('binds the intermediary and native drivers to the selected isolated ports', async () => {
+    const process = fakeDriverProcess();
+    let spawnedArgs = null;
+    let remoteOptions = null;
+    const host = new TauriWebDriverHost({
+      platform: 'win32',
+      port: 45444,
+      nativePort: 49515,
+      spawnProcess: (_command, args) => {
+        spawnedArgs = args;
+        return process;
+      },
+      remoteFactory: async (options) => {
+        remoteOptions = options;
+        return fakeSession(options, 'isolated-session');
+      },
+      resolveCommandPath: (value) => value,
+      executableIdentityFactory: (value) => ({
+        path: value,
+        bytes: 128,
+        sha256: value.includes('edge') ? 'b'.repeat(64) : 'a'.repeat(64),
+      }),
+      driverCommand: 'C:\\tools\\tauri-driver.exe',
+      nativeDriverPath: 'C:\\tools\\msedgedriver.exe',
+    });
+
+    const session = await host.createSession({
+      application: 'C:\\JotLuck.exe',
+      onEvent: () => {},
+    });
+
+    expect(spawnedArgs).toEqual([
+      '--port',
+      '45444',
+      '--native-port',
+      '49515',
+      '--native-driver',
+      'C:\\tools\\msedgedriver.exe',
+    ]);
+    expect(remoteOptions.port).toBe(45444);
+    await host.deleteSession(session);
+    await host.dispose();
+  });
+
+  it('rejects explicitly configured duplicate intermediary and native ports', () => {
+    expect(() =>
+      createHost(fakeDriverProcess(), async (options) => fakeSession(options, 'unused'), {
+        port: 45444,
+        nativePort: 45444,
+      }),
+    ).toThrow(/must be distinct/u);
+  });
+
+  it('deduplicates automatic ports and selects fresh ports after dispose', async () => {
+    const availablePorts = [45445, 45445, 49516, 45446, 49517];
+    const spawnedArgs = [];
+    const remotePorts = [];
+    let sessionSequence = 0;
+    const host = createHost(
+      fakeDriverProcess(),
+      async (options) => {
+        remotePorts.push(options.port);
+        return fakeSession(options, `dynamic-session-${++sessionSequence}`);
+      },
+      {
+        port: null,
+        nativePort: null,
+        availablePortFactory: async () => availablePorts.shift(),
+        spawnProcess: (_command, args) => {
+          spawnedArgs.push(args);
+          return fakeDriverProcess();
+        },
+      },
+    );
+
+    const firstSession = await host.createSession({
+      application: 'C:\\JotLuck.exe',
+      onEvent: () => {},
+    });
+    await host.deleteSession(firstSession);
+    await host.dispose();
+
+    const secondSession = await host.createSession({
+      application: 'C:\\JotLuck.exe',
+      onEvent: () => {},
+    });
+    await host.deleteSession(secondSession);
+    await host.dispose();
+
+    expect(spawnedArgs.map((args) => args.slice(0, 4))).toEqual([
+      ['--port', '45445', '--native-port', '49516'],
+      ['--port', '45446', '--native-port', '49517'],
+    ]);
+    expect(remotePorts).toEqual([45445, 45446]);
+    expect(availablePorts).toEqual([]);
+  });
+
   it('records the remote handshake and only commands bound to the returned session', async () => {
     const events = [];
     const process = fakeDriverProcess();
@@ -313,7 +410,7 @@ describe('Tauri WebDriver host evidence lifecycle', () => {
   });
 });
 
-function createHost(process, remoteFactory) {
+function createHost(process, remoteFactory, overrides = {}) {
   return new TauriWebDriverHost({
     platform: 'win32',
     spawnProcess: () => process,
@@ -326,6 +423,9 @@ function createHost(process, remoteFactory) {
     }),
     driverCommand: 'C:\\tools\\tauri-driver.exe',
     nativeDriverPath: 'C:\\tools\\msedgedriver.exe',
+    port: 4444,
+    nativePort: 9515,
+    ...overrides,
   });
 }
 

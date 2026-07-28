@@ -88,7 +88,11 @@
         v-if="startupRouteResolved && !isExternalReadonly"
         key="editor-shell"
         class="editor-shell-frame"
-        :class="{ 'editor-shell-frame--external': isExternalEditing }"
+        :class="{
+          'editor-shell-frame--external': isExternalEditing,
+          'editor-shell-frame--opening': isNotebookOpening,
+        }"
+        :aria-busy="isNotebookOpening"
       >
         <div v-if="isExternalEditing" class="external-edit-banner" role="status">
           <span>单文件编辑 · 未扫描所在目录</span>
@@ -102,7 +106,7 @@
           :note-title="shellNoteTitle"
           :notebook-name="shellNotebookName"
           :show-top-bar="true"
-          :show-right-wing="showRightWing"
+          :show-right-wing="showRightWing && !isWorkspaceUnbound"
           :headings="headings"
           :backlinks="shellBacklinks"
           :tags="shellTags"
@@ -125,7 +129,7 @@
           @select-tag="onTagSelect"
           @toggle-right-wing="showRightWing = !showRightWing"
         >
-          <template #drawer-bottom>
+          <template v-if="!isWorkspaceUnbound" #drawer-bottom>
             <ThemeSlotBoundary
               slot-id="editor-control"
               :theme-id="theme.renderedTheme.manifest.id"
@@ -154,7 +158,11 @@
             >
               <div class="workflow-canvas" :data-workspace-intent="chrome.workspaceIntent">
                 <StudioRail
-                  v-if="chrome.editorControlLayout === 'studio-rail' && !isSinglePageLayout"
+                  v-if="
+                    !isWorkspaceUnbound &&
+                    chrome.editorControlLayout === 'studio-rail' &&
+                    !isSinglePageLayout
+                  "
                   :actions="actionsForRegion('studio-rail')"
                   :preset="activeParagraphPreset"
                   :active-action="pendingFormatAction"
@@ -163,7 +171,11 @@
 
                 <div class="workflow-canvas__main">
                   <ThemeSlotBoundary
-                    v-if="chrome.editorControlLayout !== 'studio-rail' && !isSinglePageLayout"
+                    v-if="
+                      !isWorkspaceUnbound &&
+                      chrome.editorControlLayout !== 'studio-rail' &&
+                      !isSinglePageLayout
+                    "
                     slot-id="editor-control"
                     :theme-id="theme.renderedTheme.manifest.id"
                     :recipe="theme.activeUxRecipes['editor-control']"
@@ -190,7 +202,20 @@
                     :actions="shellActions"
                     :slot-props="editorSurfaceSlotProps"
                   >
-                    <div v-if="viewMode === 'read'" class="reader-workbench" data-view-mode="read">
+                    <NotebookOpenGate
+                      v-if="isWorkspaceUnbound"
+                      ref="notebookOpenGateRef"
+                      :status="workspaceGateStatus ?? 'idle'"
+                      :error-message="workspaceGateError"
+                      :formats-label="supportedNoteExtensionsText"
+                      @open-notebook="requestOpenNotebook"
+                    />
+
+                    <div
+                      v-else-if="viewMode === 'read'"
+                      class="reader-workbench"
+                      data-view-mode="read"
+                    >
                       <div class="reader-workbench__bar">
                         <span class="reader-workbench__label">只读渲染</span>
                         <div class="reader-workbench__actions">
@@ -232,12 +257,20 @@
                             :completion-settings="completionSettings"
                             :predictor="completionPredictor"
                             :enable-autocomplete="!isExternalEditing && !isLargeDocument"
-                            :on-editor-drop="isExternalEditing ? undefined : imageUpload.handleDrop"
+                            :on-editor-drop="
+                              isExternalEditing || isNotebookOpening
+                                ? undefined
+                                : imageUpload.handleDrop
+                            "
                             :on-editor-drag-over="
-                              isExternalEditing ? undefined : imageUpload.handleDragOver
+                              isExternalEditing || isNotebookOpening
+                                ? undefined
+                                : imageUpload.handleDragOver
                             "
                             :on-editor-paste="
-                              isExternalEditing ? undefined : imageUpload.handlePaste
+                              isExternalEditing || isNotebookOpening
+                                ? undefined
+                                : imageUpload.handlePaste
                             "
                             @update:model-value="onEditorContentUpdate"
                             @selection-change="onSelectionChange"
@@ -275,11 +308,21 @@
                         :completion-settings="completionSettings"
                         :predictor="completionPredictor"
                         :enable-autocomplete="!isExternalEditing && !isLargeDocument"
-                        :on-editor-drop="isExternalEditing ? undefined : imageUpload.handleDrop"
-                        :on-editor-drag-over="
-                          isExternalEditing ? undefined : imageUpload.handleDragOver
+                        :on-editor-drop="
+                          isExternalEditing || isNotebookOpening
+                            ? undefined
+                            : imageUpload.handleDrop
                         "
-                        :on-editor-paste="isExternalEditing ? undefined : imageUpload.handlePaste"
+                        :on-editor-drag-over="
+                          isExternalEditing || isNotebookOpening
+                            ? undefined
+                            : imageUpload.handleDragOver
+                        "
+                        :on-editor-paste="
+                          isExternalEditing || isNotebookOpening
+                            ? undefined
+                            : imageUpload.handlePaste
+                        "
                         @update:model-value="onEditorContentUpdate"
                         @selection-change="onSelectionChange"
                         @pending-format-ended="pendingFormatAction = null"
@@ -291,6 +334,14 @@
             </ThemeSlotBoundary>
           </template>
         </AppShell>
+        <div
+          v-if="isNotebookOpening && !isWorkspaceUnbound"
+          class="workspace-opening-overlay"
+          role="status"
+          aria-live="polite"
+        >
+          正在打开笔记本…
+        </div>
       </div>
     </Transition>
   </div>
@@ -326,12 +377,14 @@
       :active-path="shellActivePath"
       :loading="loading"
       :error="errorMessage"
+      :switching-notebook="isNotebookOpening"
       @update:visible="showLeftDrawer = $event"
       @select-file="onShellSelectNote"
       @navigate-dir="onShellDrawerNavigateDir"
       @create-file="onShellCreateFile"
       @delete-file="requestShellDeleteFile"
       @rename-file="onShellRenameFile"
+      @open-notebook="requestOpenNotebook"
       @retry="onShellDrawerRetry"
     />
   </ThemeSlotBoundary>
@@ -640,6 +693,9 @@ import ShellActionButton from '@/components/layout/ShellActionButton.vue';
 import FormatBubble from '@/components/editor/FormatBubble.vue';
 import EditorControlStrip from '@/components/editor/EditorControlStrip.vue';
 import StudioRail from '@/components/editor/StudioRail.vue';
+import NotebookOpenGate, {
+  type NotebookOpenGateStatus,
+} from '@/components/workspace/NotebookOpenGate.vue';
 import ThemeSlotBoundary from '@/components/theme/ThemeSlotBoundary.vue';
 import ToastContainer, { useToast } from '@/components/common/Toast.vue';
 import { MockFSService } from '@/services/MockFSService';
@@ -659,6 +715,7 @@ import type {
   TemplateItem,
   FileChangeEvent,
   UnwatchFn,
+  NotebookHandle,
   WindowBootstrapPayload,
   PromotedNotebookPayload,
 } from '@/types';
@@ -731,7 +788,25 @@ const ShareDialog = defineAsyncComponent(() => import('@/components/modals/Share
 // Tauri 桌面端使用真实文件系统，Web/E2E 使用虚拟 MockFS
 function createFileSystem(): IFileSystemService {
   if (isDesktopRuntime()) return new TauriIPCService();
-  return new MockFSService(50, { persist: shouldPersistMockFs() });
+  const mockNotebook = peekJotLuckE2EBridge()?.mockNotebook;
+  return new MockFSService(50, {
+    persist: shouldPersistMockFs(),
+    recentNotebooks: mockNotebook?.recentRoots,
+    pickerResult:
+      mockNotebook?.pickerOutcome === 'cancel'
+        ? null
+        : mockNotebook?.pickerOutcome === 'success'
+          ? {
+              rootPath: mockNotebook.pickerRoot ?? '/e2e-notebook',
+              name: mockNotebook.pickerName ?? 'E2E Notebook',
+            }
+          : undefined,
+    pickerError:
+      mockNotebook?.pickerOutcome === 'error'
+        ? (mockNotebook.pickerError ?? '测试文件夹选择失败')
+        : undefined,
+    unavailableNotebookPaths: mockNotebook?.unavailableRoots,
+  });
 }
 const fs: IFileSystemService = createFileSystem();
 const supportedNoteExtensionsText = supportedNoteExtensionsLabel();
@@ -766,6 +841,9 @@ interface OpenedFilePayload {
 }
 
 type ExternalSessionMode = 'none' | 'readonly' | 'edit-shell';
+interface NotebookOpenGateExposed {
+  focusPrimary(): Promise<void>;
+}
 
 const files = ref<DirEntry[]>([]);
 const currentContent = ref('');
@@ -814,6 +892,11 @@ const showSettings = ref(false);
 const showThemeDialog = ref(false);
 const showShare = ref(false);
 const isScratchSession = ref(false);
+const workspaceGateStatus = ref<NotebookOpenGateStatus | null>(null);
+const workspaceGateError = ref('');
+const isNotebookOpening = ref(false);
+const notebookOpenGateRef = ref<NotebookOpenGateExposed | null>(null);
+const isWorkspaceUnbound = computed(() => workspaceGateStatus.value !== null);
 const customTemplates = ref<TemplateItem[]>([]);
 const showScratchExitDialog = ref(false);
 const pendingDeletePath = ref<string | null>(null);
@@ -835,6 +918,7 @@ let notebookWatchGeneration = 0;
 let notebookDataGeneration = 0;
 let watcherRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 const pendingWatcherEvents: FileChangeEvent[] = [];
+let watcherFlushPromise: Promise<void> | null = null;
 let backgroundTrainingTimer: ReturnType<typeof setTimeout> | null = null;
 const MAX_FILE_TREE_ENTRIES = 5000;
 
@@ -867,6 +951,8 @@ const isExternalEditing = computed(() => externalSessionMode.value === 'edit-she
 const canSaveCurrentAsTemplate = computed(
   () =>
     Boolean(activeNotebookRoot.value) &&
+    !isWorkspaceUnbound.value &&
+    !isNotebookOpening.value &&
     !isScratchSession.value &&
     !isExternalSession.value &&
     currentContent.value.trim().length > 0,
@@ -886,6 +972,9 @@ if (e2eBridge) {
     externalSessionMode: externalSessionMode.value,
     isDirty: isDirty.value,
     isExternalEditing: isExternalEditing.value,
+    activeNotebookRoot: activeNotebookRoot.value,
+    isWorkspaceUnbound: isWorkspaceUnbound.value,
+    isNotebookOpening: isNotebookOpening.value,
   });
   e2eBridge.listNotePaths = () =>
     files.value
@@ -924,16 +1013,18 @@ const shellActions = computed<ShellAction[]>(() => [
     title: '新建笔记',
     icon: 'new-note',
     run: onShellCreateNote,
+    disabled: isWorkspaceUnbound.value || isNotebookOpening.value,
   },
   {
     id: 'file-drawer',
     region: actionRegion('file-drawer'),
-    label: '切换左侧书签栏',
-    shortLabel: '文件',
-    title: '打开文件抽屉',
+    label: isWorkspaceUnbound.value ? '打开笔记本文件夹' : '切换左侧书签栏',
+    shortLabel: isWorkspaceUnbound.value ? '打开' : '文件',
+    title: isWorkspaceUnbound.value ? '选择笔记本文件夹 (Ctrl/Cmd+O)' : '打开文件抽屉',
     icon: 'file-drawer',
-    run: onToggleLeftDrawer,
-    active: showLeftDrawer.value,
+    run: isWorkspaceUnbound.value ? requestOpenNotebook : onToggleLeftDrawer,
+    active: !isWorkspaceUnbound.value && showLeftDrawer.value,
+    disabled: isNotebookOpening.value,
   },
   {
     id: 'search',
@@ -944,6 +1035,7 @@ const shellActions = computed<ShellAction[]>(() => [
     icon: 'search',
     run: onOpenPalette,
     active: searchVisible.value,
+    disabled: isWorkspaceUnbound.value || isNotebookOpening.value,
   },
   {
     id: 'template',
@@ -954,6 +1046,7 @@ const shellActions = computed<ShellAction[]>(() => [
     icon: 'template',
     run: onShellCreateNote,
     active: showTemplate.value,
+    disabled: isWorkspaceUnbound.value || isNotebookOpening.value,
   },
   {
     id: 'export',
@@ -963,9 +1056,11 @@ const shellActions = computed<ShellAction[]>(() => [
     title: '导出笔记',
     icon: 'export',
     run: () => {
+      if (!requireBoundWorkspace('导出')) return;
       showExport.value = true;
     },
     active: showExport.value,
+    disabled: isWorkspaceUnbound.value || isNotebookOpening.value,
   },
   {
     id: 'share',
@@ -975,9 +1070,11 @@ const shellActions = computed<ShellAction[]>(() => [
     title: '分享笔记',
     icon: 'share',
     run: () => {
+      if (!requireBoundWorkspace('分享')) return;
       showShare.value = true;
     },
     active: showShare.value,
+    disabled: isWorkspaceUnbound.value || isNotebookOpening.value,
   },
   {
     id: 'theme',
@@ -1011,6 +1108,7 @@ const shellActions = computed<ShellAction[]>(() => [
     title: `${viewModeActionCopy.value.label}，当前为${resolvedViewModeLabel.value}`,
     icon: 'view-toggle',
     run: cycleViewMode,
+    disabled: isWorkspaceUnbound.value || isNotebookOpening.value,
   },
 ]);
 
@@ -1176,14 +1274,16 @@ const scratchExitDialogSlotProps = computed(() => ({
 }));
 
 function openThemeDialogSlot(slot: ThemeSlotId): void {
-  if (slot === 'command-palette') searchVisible.value = true;
-  else if (slot === 'file-drawer') showLeftDrawer.value = true;
-  else if (slot === 'export-dialog') showExport.value = true;
-  else if (slot === 'template-dialog') showTemplate.value = true;
+  if (slot === 'command-palette' && requireBoundWorkspace('搜索笔记')) searchVisible.value = true;
+  else if (slot === 'file-drawer' && requireFileBrowseSession()) showLeftDrawer.value = true;
+  else if (slot === 'export-dialog' && requireBoundWorkspace('导出')) showExport.value = true;
+  else if (slot === 'template-dialog' && requireBoundWorkspace('使用模板'))
+    showTemplate.value = true;
   else if (slot === 'settings-dialog') showSettings.value = true;
   else if (slot === 'share-dialog') showShare.value = true;
   else if (slot === 'dialogs.theme') showThemeDialog.value = true;
-  else if (slot === 'new-file-dialog') showNewFileDialog.value = true;
+  else if (slot === 'new-file-dialog' && requireBoundWorkspace('新建文件'))
+    showNewFileDialog.value = true;
 }
 
 function closeThemeDialogSlot(slot: ThemeSlotId): void {
@@ -1203,7 +1303,11 @@ function closeThemeDialogSlot(slot: ThemeSlotId): void {
 const themeHostUi = computed(() => ({
   editor: {
     getContent: () => currentContent.value,
-    setContent: (content: string) => onEditorContentUpdate(content),
+    setContent: (content: string) => {
+      if (isExternalSession.value || requireBoundWorkspace('编辑笔记')) {
+        onEditorContentUpdate(content);
+      }
+    },
     focus: () => void nextTick(() => editorRef.value?.focus()),
   },
   dialogs: {
@@ -1301,6 +1405,13 @@ function scheduleSplitEditorMountForCurrentMode(): void {
 
 // --- Split Pane ---
 function onSplitContentUpdate(content: string): void {
+  if (
+    !isScratchSession.value &&
+    (!activeNotebookRoot.value || isWorkspaceUnbound.value || isNotebookOpening.value)
+  ) {
+    requireBoundWorkspace('编辑笔记');
+    return;
+  }
   const revision = ++contentRevision;
   currentContent.value = content;
   updateHeadings(content);
@@ -1314,7 +1425,12 @@ function onSplitContentUpdate(content: string): void {
     rememberPendingMockFileWrite(activePath.value, content);
     if (saveTimer) clearTimeout(saveTimer);
     const savingPath = activePath.value;
-    saveTimer = setTimeout(() => void debouncedSave(savingPath, content, revision), 600);
+    const savingRoot = activeNotebookRoot.value;
+    const savingGeneration = notebookDataGeneration;
+    saveTimer = setTimeout(
+      () => void debouncedSave(savingPath, content, revision, savingRoot, savingGeneration),
+      600,
+    );
   }
   // Debounce preview update for split mode
   if (splitDebounceTimer) clearTimeout(splitDebounceTimer);
@@ -1467,6 +1583,15 @@ function normalizeOsPath(path: string): string {
   return normalized.replace(/\/+$/, '');
 }
 
+function notebookRootsEqual(left: string, right: string): boolean {
+  const normalizedLeft = normalizeOsPath(left);
+  const normalizedRight = normalizeOsPath(right);
+  const isWindowsPath = /^[A-Za-z]:\//.test(normalizedLeft) || /^[A-Za-z]:\//.test(normalizedRight);
+  return isWindowsPath
+    ? normalizedLeft.toLocaleLowerCase() === normalizedRight.toLocaleLowerCase()
+    : normalizedLeft === normalizedRight;
+}
+
 function normalizeOpenedFilePayload(payload: unknown): OpenedFilePayload | null {
   if (!payload) return null;
 
@@ -1525,18 +1650,106 @@ function openedFileFromBootstrap(
   };
 }
 
+async function commitWorkspaceHandle(
+  handle: NotebookHandle,
+  stagedFiles: DirEntry[] | null = null,
+  watcherAlreadyStopped = false,
+): Promise<void> {
+  if (!watcherAlreadyStopped) await stopNotebookWatcher();
+  completionTrainer?.cancelCurrentRun();
+  completionTrainer = null;
+  indexStore.reset();
+  noteSelectionVersion++;
+  saveGeneration++;
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  pendingMockFileWrites.clear();
+
+  isScratchSession.value = false;
+  workspaceGateStatus.value = null;
+  workspaceGateError.value = '';
+  activeNotebookRoot.value = normalizeOsPath(handle.rootPath);
+  notebookDataGeneration++;
+  notebookName.value = handle.name || displayNameFromPath(handle.rootPath);
+  activePath.value = '';
+  contentRevision++;
+  currentContent.value = '';
+  files.value = stagedFiles ?? [];
+  currentDir.value = '/';
+  customTemplates.value = [];
+  errorMessage.value = '';
+  isDirty.value = false;
+  isSaving.value = false;
+  saveError.value = null;
+  lastSavedAt.value = null;
+  showLeftDrawer.value = false;
+  showTemplate.value = false;
+  showExport.value = false;
+  showShare.value = false;
+  showNewFileDialog.value = false;
+  pendingDeletePath.value = null;
+  searchVisible.value = false;
+  updateHeadings('');
+  updateEditorStats('');
+  refreshSplitPreviewIfVisible();
+  void restartNotebookWatcher(activeNotebookRoot.value);
+}
+
+async function enterWorkspaceGate(error = ''): Promise<void> {
+  await stopNotebookWatcher();
+  completionTrainer?.cancelCurrentRun();
+  completionTrainer = null;
+  indexStore.reset();
+  noteSelectionVersion++;
+  saveGeneration++;
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  pendingMockFileWrites.clear();
+
+  isScratchSession.value = false;
+  externalSessionMode.value = 'none';
+  void revokeExternalGrant(externalFile.value);
+  externalFile.value = null;
+  externalError.value = '';
+  activeNotebookRoot.value = '';
+  notebookDataGeneration++;
+  activePath.value = '';
+  contentRevision++;
+  currentContent.value = '';
+  files.value = [];
+  currentDir.value = '/';
+  customTemplates.value = [];
+  notebookName.value = '打开笔记本';
+  errorMessage.value = '';
+  isDirty.value = false;
+  isSaving.value = false;
+  saveError.value = null;
+  lastSavedAt.value = null;
+  showLeftDrawer.value = false;
+  showRightWing.value = true;
+  showTemplate.value = false;
+  showExport.value = false;
+  showShare.value = false;
+  showNewFileDialog.value = false;
+  pendingDeletePath.value = null;
+  searchVisible.value = false;
+  workspaceGateError.value = error;
+  workspaceGateStatus.value = error ? 'error' : 'idle';
+  updateHeadings('');
+  updateEditorStats('');
+  refreshSplitPreviewIfVisible();
+  await nextTick();
+  await notebookOpenGateRef.value?.focusPrimary();
+}
+
 async function openNotebookRoot(rootPath: string): Promise<void> {
   isScratchSession.value = false;
   const handle = await fs.openNotebookAt(rootPath);
-  const nextRoot = normalizeOsPath(handle.rootPath);
-  if (nextRoot !== activeNotebookRoot.value) {
-    completionTrainer?.cancelCurrentRun();
-    completionTrainer = null;
-  }
-  activeNotebookRoot.value = nextRoot;
-  notebookDataGeneration++;
-  notebookName.value = handle.name || displayNameFromPath(handle.rootPath);
-  void restartNotebookWatcher(nextRoot);
+  await commitWorkspaceHandle(handle);
 }
 
 async function openNotebookFromExternalGrant(accessToken: string): Promise<void> {
@@ -1544,18 +1757,10 @@ async function openNotebookFromExternalGrant(accessToken: string): Promise<void>
   if (!openFromGrant) throw new Error('当前桌面文件会话不支持外部目录授权');
   isScratchSession.value = false;
   const handle = await openFromGrant.call(fs, accessToken);
-  const nextRoot = normalizeOsPath(handle.rootPath);
-  if (nextRoot !== activeNotebookRoot.value) {
-    completionTrainer?.cancelCurrentRun();
-    completionTrainer = null;
-  }
-  activeNotebookRoot.value = nextRoot;
-  notebookDataGeneration++;
-  notebookName.value = handle.name || displayNameFromPath(handle.rootPath);
-  void restartNotebookWatcher(nextRoot);
+  await commitWorkspaceHandle(handle);
 }
 
-function markStartupReady(mode: 'workspace' | 'external' | 'scratch'): void {
+function markStartupReady(mode: 'workspace' | 'external' | 'gate'): void {
   if (performance.getEntriesByName('jotluck:shell-ready').length > 0) return;
   performance.mark('jotluck:shell-ready', { detail: { mode } });
   if (performance.getEntriesByName('jotluck:bootstrap-start').length === 0) return;
@@ -1568,23 +1773,56 @@ function markStartupReady(mode: 'workspace' | 'external' | 'scratch'): void {
 
 async function stopNotebookWatcher(): Promise<void> {
   notebookWatchGeneration++;
+  if (watcherRefreshTimer) {
+    clearTimeout(watcherRefreshTimer);
+    watcherRefreshTimer = null;
+  }
+  pendingWatcherEvents.splice(0);
   unwatchNotebook?.();
   unwatchNotebook = null;
   await fs.unwatchAll();
+  if (watcherFlushPromise) await watcherFlushPromise.catch(() => undefined);
 }
 
-function queueWatcherRefresh(event: FileChangeEvent | FileChangeEvent[]): void {
+function queueWatcherRefresh(
+  event: FileChangeEvent | FileChangeEvent[],
+  expectedRoot: string,
+  expectedWatcherGeneration: number,
+): void {
+  if (
+    expectedWatcherGeneration !== notebookWatchGeneration ||
+    !notebookRootsEqual(expectedRoot, activeNotebookRoot.value)
+  ) {
+    return;
+  }
   pendingWatcherEvents.push(...(Array.isArray(event) ? event : [event]));
   if (watcherRefreshTimer) clearTimeout(watcherRefreshTimer);
   watcherRefreshTimer = setTimeout(() => {
     watcherRefreshTimer = null;
-    void flushWatcherEvents();
+    const task = flushWatcherEvents(expectedRoot, expectedWatcherGeneration);
+    watcherFlushPromise = task;
+    const clearWatcherFlush = () => {
+      if (watcherFlushPromise === task) watcherFlushPromise = null;
+    };
+    void task.then(clearWatcherFlush, clearWatcherFlush);
   }, 120);
 }
 
-async function flushWatcherEvents(): Promise<void> {
+async function flushWatcherEvents(
+  expectedRoot: string,
+  expectedWatcherGeneration: number,
+): Promise<void> {
   const events = pendingWatcherEvents.splice(0);
-  if (events.length === 0 || isScratchSession.value || isExternalReadonly.value) return;
+  const isCurrentWatcher = () =>
+    expectedWatcherGeneration === notebookWatchGeneration &&
+    notebookRootsEqual(expectedRoot, activeNotebookRoot.value);
+  if (
+    events.length === 0 ||
+    isScratchSession.value ||
+    isExternalReadonly.value ||
+    !isCurrentWatcher()
+  )
+    return;
   const active = normalizePath(activePath.value);
   const activeEvents = events.filter(
     (event) =>
@@ -1599,6 +1837,7 @@ async function flushWatcherEvents(): Promise<void> {
 
   try {
     await refreshFileTree();
+    if (!isCurrentWatcher()) return;
     for (const event of events) {
       const path = normalizePath(event.path);
       const fileName = path.split('/').pop() ?? '';
@@ -1607,6 +1846,7 @@ async function flushWatcherEvents(): Promise<void> {
         isSupportedNoteFile(fileName)
       ) {
         await indexStore.refreshDocument(fs, path);
+        if (!isCurrentWatcher()) return;
       }
     }
   } catch (error) {
@@ -1625,7 +1865,8 @@ async function flushWatcherEvents(): Promise<void> {
   if (active && activeEvents.some((event) => event.type === 'modified') && !isDirty.value) {
     try {
       const content = await fs.readFile(active);
-      if (normalizePath(activePath.value) !== active || isDirty.value) return;
+      if (!isCurrentWatcher() || normalizePath(activePath.value) !== active || isDirty.value)
+        return;
       contentRevision++;
       currentContent.value = content;
       updateHeadings(content);
@@ -1642,7 +1883,9 @@ async function restartNotebookWatcher(rootPath: string): Promise<void> {
   unwatchNotebook?.();
   unwatchNotebook = null;
   try {
-    const unwatch = await fs.watch(rootPath, queueWatcherRefresh);
+    const unwatch = await fs.watch(rootPath, (event) =>
+      queueWatcherRefresh(event, rootPath, generation),
+    );
     if (generation !== notebookWatchGeneration) {
       unwatch();
       return;
@@ -1654,11 +1897,17 @@ async function restartNotebookWatcher(rootPath: string): Promise<void> {
   }
 }
 
+let initialNotebookGateError = '';
+
 async function openInitialNotebook(): Promise<boolean> {
+  initialNotebookGateError = '';
+  const forceGate = !isDesktopRuntime() && peekJotLuckE2EBridge()?.mockNotebook?.forceGate;
+
   let recent: string[] = [];
   try {
     recent = await fs.getRecentNotebooks();
   } catch (e) {
+    initialNotebookGateError = '无法读取最近使用的笔记本，请重新选择文件夹。';
     // eslint-disable-next-line no-console
     console.warn('[NotebookHome] 获取最近笔记本失败:', e);
   }
@@ -1672,8 +1921,11 @@ async function openInitialNotebook(): Promise<boolean> {
       console.warn('[NotebookHome] 最近笔记本不可用，尝试下一个:', root, e);
     }
   }
+  if (recent.length > 0) {
+    initialNotebookGateError = '最近使用的笔记本不可用，请重新选择文件夹。';
+  }
 
-  if (!isDesktopRuntime()) {
+  if (!isDesktopRuntime() && !forceGate) {
     try {
       await openNotebookRoot('/');
       return true;
@@ -1702,33 +1954,6 @@ function enterNotebookFileState(path: string, content: string): void {
   updateHeadings(content);
   updateEditorStats(content);
   scheduleSplitEditorMountForCurrentMode();
-  refreshSplitPreviewIfVisible();
-}
-
-function enterScratchSession(): void {
-  void stopNotebookWatcher();
-  isScratchSession.value = true;
-  externalSessionMode.value = 'none';
-  void revokeExternalGrant(externalFile.value);
-  externalFile.value = null;
-  externalError.value = '';
-  activeNotebookRoot.value = '';
-  customTemplates.value = [];
-  activePath.value = '';
-  contentRevision++;
-  currentContent.value = '';
-  files.value = [];
-  currentDir.value = '/';
-  notebookName.value = '临时草稿';
-  errorMessage.value = '';
-  isDirty.value = false;
-  isSaving.value = false;
-  saveError.value = null;
-  lastSavedAt.value = null;
-  showLeftDrawer.value = false;
-  showRightWing.value = true;
-  updateHeadings('');
-  updateEditorStats('');
   refreshSplitPreviewIfVisible();
 }
 
@@ -1987,7 +2212,14 @@ function rememberPendingMockFileWrite(path: string, content: string): void {
 }
 
 function flushPendingMockFileWritesSync(): void {
-  if (isDesktopRuntime() || !shouldPersistMockFs()) return;
+  if (
+    isDesktopRuntime() ||
+    !shouldPersistMockFs() ||
+    !activeNotebookRoot.value ||
+    isWorkspaceUnbound.value ||
+    isNotebookOpening.value
+  )
+    return;
   syncCurrentContentFromEditor();
   if (!isExternalEditing.value && !isScratchSession.value && activePath.value) {
     pendingMockFileWrites.set(normalizePath(activePath.value), currentContent.value);
@@ -2034,13 +2266,152 @@ async function flushPendingCurrentSave(): Promise<boolean> {
 }
 
 async function flushCurrentSaveOrBlock(reason: string): Promise<boolean> {
+  if (imageUpload.isUploading.value) {
+    toast.show(`${reason}失败：图片仍在写入当前笔记本，请稍后重试。`, 'error', 4000);
+    return false;
+  }
   await flushPendingCurrentSave();
+  if (imageUpload.isUploading.value) {
+    toast.show(`${reason}失败：图片仍在写入当前笔记本，请稍后重试。`, 'error', 4000);
+    return false;
+  }
   if (!isDirty.value && !saveError.value) return true;
   const message = saveError.value
     ? `${reason}失败：${saveError.value}`
     : `${reason}失败：当前内容尚未保存`;
   toast.show(message, 'error', 4000);
   return false;
+}
+
+function requireBoundWorkspace(action: string): boolean {
+  if (
+    activeNotebookRoot.value &&
+    !isWorkspaceUnbound.value &&
+    !isNotebookOpening.value &&
+    !isExternalSession.value
+  ) {
+    return true;
+  }
+
+  const message = isNotebookOpening.value
+    ? `正在切换笔记本，暂时不能${action}。`
+    : `请先选择笔记本文件夹，再${action}。`;
+  toast.show(message, 'warning', 3500);
+  if (isWorkspaceUnbound.value) void notebookOpenGateRef.value?.focusPrimary();
+  return false;
+}
+
+function requireFileBrowseSession(): boolean {
+  if (isExternalEditing.value && !isNotebookOpening.value) return true;
+  return requireBoundWorkspace('浏览文件');
+}
+
+let notebookOpenTask: Promise<void> | null = null;
+
+function requestOpenNotebook(): Promise<void> {
+  if (notebookOpenTask) return notebookOpenTask;
+  const task = performOpenNotebook();
+  void task.then(
+    () => {
+      if (notebookOpenTask === task) notebookOpenTask = null;
+    },
+    () => {
+      if (notebookOpenTask === task) notebookOpenTask = null;
+    },
+  );
+  notebookOpenTask = task;
+  return task;
+}
+
+async function performOpenNotebook(): Promise<void> {
+  if (isExternalSession.value) {
+    toast.show('外部单文件会话请使用“添加到笔记”，不会自动扩大目录授权。', 'info', 4000);
+    return;
+  }
+
+  const previousRoot = activeNotebookRoot.value;
+  const startedFromGate = isWorkspaceUnbound.value;
+  let shouldResumePreviousWatcher = false;
+  if (previousRoot && !(await flushCurrentSaveOrBlock('切换笔记本'))) return;
+
+  isNotebookOpening.value = true;
+  if (startedFromGate) {
+    workspaceGateStatus.value = 'opening';
+    workspaceGateError.value = '';
+  }
+
+  try {
+    const handle = await fs.openNotebook();
+    if (!handle) {
+      if (startedFromGate) workspaceGateStatus.value = 'idle';
+      return;
+    }
+
+    const nextRoot = normalizeOsPath(handle.rootPath);
+    if (previousRoot && notebookRootsEqual(previousRoot, nextRoot)) {
+      toast.show('当前已经是这个笔记本。', 'info', 2500);
+      return;
+    }
+
+    if (previousRoot) {
+      shouldResumePreviousWatcher = true;
+      await stopNotebookWatcher();
+    }
+
+    let stagedFiles: DirEntry[];
+    try {
+      stagedFiles = await listDirectoryRecursive('/');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (previousRoot) {
+        try {
+          const rollback = await fs.openNotebookAt(previousRoot);
+          if (!notebookRootsEqual(rollback.rootPath, previousRoot)) {
+            throw new Error('恢复后的笔记本根目录与原目录不一致');
+          }
+          toast.show(`无法打开所选文件夹，已保留原笔记本：${message}`, 'error', 5000);
+        } catch (rollbackError) {
+          const rollbackMessage =
+            rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          await enterWorkspaceGate(`切换失败，且无法恢复原笔记本：${rollbackMessage}`);
+        }
+      } else {
+        await enterWorkspaceGate(`无法打开所选文件夹：${message}`);
+      }
+      return;
+    }
+
+    await commitWorkspaceHandle(handle, stagedFiles, true);
+    shouldResumePreviousWatcher = false;
+    toast.show(previousRoot ? '已切换笔记本。' : '笔记本已打开。', 'success', 2500);
+    void completeNotebookInitializationInBackground(
+      activeNotebookRoot.value,
+      notebookDataGeneration,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (startedFromGate) {
+      workspaceGateStatus.value = 'error';
+      workspaceGateError.value = `无法打开笔记本：${message}`;
+    } else {
+      toast.show(`无法切换笔记本：${message}`, 'error', 5000);
+    }
+  } finally {
+    isNotebookOpening.value = false;
+    if (
+      shouldResumePreviousWatcher &&
+      previousRoot &&
+      notebookRootsEqual(activeNotebookRoot.value, previousRoot) &&
+      !isWorkspaceUnbound.value
+    ) {
+      await restartNotebookWatcher(previousRoot);
+    }
+    if (workspaceGateStatus.value === 'opening') workspaceGateStatus.value = 'idle';
+    if (isWorkspaceUnbound.value) {
+      await nextTick();
+      await notebookOpenGateRef.value?.focusPrimary();
+    }
+  }
 }
 
 function clearPendingSaveForPath(path: string): void {
@@ -2179,7 +2550,7 @@ async function initNotebook(): Promise<void> {
     startupRouteResolved.value = true;
     if (!notebookReady) notebookReady = await openInitialNotebook();
     if (!notebookReady) {
-      enterScratchSession();
+      await enterWorkspaceGate(initialNotebookGateError);
       return;
     }
     if (initialRelativePath) {
@@ -2194,12 +2565,11 @@ async function initNotebook(): Promise<void> {
     }
   } catch (e) {
     startupRouteResolved.value = true;
-    errorMessage.value = String(e);
-    notebookName.value = '未打开笔记本';
-    enterScratchSession();
+    const message = e instanceof Error ? e.message : String(e);
+    await enterWorkspaceGate(`启动初始化失败：${message}`);
   } finally {
     loading.value = false;
-    markStartupReady(notebookReady ? 'workspace' : 'scratch');
+    markStartupReady(notebookReady ? 'workspace' : 'gate');
   }
   if (!notebookReady) return;
   try {
@@ -2328,6 +2698,7 @@ async function completeNotebookInitializationInBackground(
       return;
     }
     await refreshCustomTemplates(true);
+    connectPredictor();
   } catch (error) {
     if (
       expectedGeneration !== notebookDataGeneration ||
@@ -2499,6 +2870,7 @@ async function onShellSelectNote(path: string): Promise<void> {
 }
 
 async function onToggleLeftDrawer(): Promise<void> {
+  if (!requireFileBrowseSession()) return;
   showLeftDrawer.value = !showLeftDrawer.value;
 }
 
@@ -2507,6 +2879,7 @@ function onOpenPalette(): void {
     toast.show('单文件编辑未扫描所在文件夹，搜索和标签不会读取其他文件。', 'info', 3500);
     return;
   }
+  if (!requireBoundWorkspace('搜索笔记')) return;
   searchVisible.value = true;
 }
 
@@ -2519,6 +2892,7 @@ function onShellCreateNote(): void {
     );
     return;
   }
+  if (!requireBoundWorkspace('新建笔记')) return;
   showTemplate.value = true;
 }
 
@@ -2539,6 +2913,7 @@ async function onShellCreateFile(): Promise<void> {
     );
     return;
   }
+  if (!requireBoundWorkspace('新建文件')) return;
   await onCreateFile();
 }
 
@@ -2554,6 +2929,7 @@ function requestShellDeleteFile(path: string): void {
     toast.show('外部单文件编辑不删除文件。', 'warning', 3000);
     return;
   }
+  if (!requireBoundWorkspace('删除文件')) return;
   requestDeleteFile(path);
 }
 
@@ -2562,10 +2938,20 @@ async function onShellRenameFile(oldPath: string, newName: string): Promise<void
     toast.show('外部单文件编辑不重命名文件。', 'warning', 3000);
     return;
   }
-  await onRenameFile(oldPath, newName);
+  if (!requireBoundWorkspace('重命名文件')) return;
+  try {
+    await onRenameFile(oldPath, newName);
+  } catch (error) {
+    toast.show(
+      `重命名失败：${error instanceof Error ? error.message : String(error)}`,
+      'error',
+      4000,
+    );
+  }
 }
 
 async function onDeleteFile(path: string): Promise<void> {
+  if (!requireBoundWorkspace('删除文件')) return;
   const normalizedPath = normalizePath(path);
   if (normalizePath(activePath.value) === normalizedPath) {
     if (!(await flushPendingCurrentSave())) return;
@@ -2590,6 +2976,7 @@ function cancelDeleteFile(): void {
 }
 
 async function confirmDeleteFile(): Promise<void> {
+  if (!requireBoundWorkspace('删除文件')) return;
   const path = pendingDeletePath.value;
   if (!path) return;
   pendingDeletePath.value = null;
@@ -2601,6 +2988,7 @@ async function confirmDeleteFile(): Promise<void> {
 }
 
 async function onRenameFile(oldPath: string, newName: string): Promise<void> {
+  if (!requireBoundWorkspace('重命名文件')) return;
   if (!isSupportedNoteFile(newName)) {
     toast.show(`仅支持 ${supportedNoteExtensionsText} 文件`, 'warning', 3000);
     return;
@@ -2621,11 +3009,13 @@ async function onRenameFile(oldPath: string, newName: string): Promise<void> {
 }
 
 async function onCreateFile(): Promise<void> {
+  if (!requireBoundWorkspace('新建文件')) return;
   newFileName.value = '新笔记.md';
   showNewFileDialog.value = true;
 }
 
 async function confirmNewFile(): Promise<void> {
+  if (!requireBoundWorkspace('新建文件')) return;
   const name = newFileName.value.trim();
   if (!name) return;
   if (!isSupportedNoteFile(name)) {
@@ -2635,11 +3025,19 @@ async function confirmNewFile(): Promise<void> {
   showNewFileDialog.value = false;
   const path = joinPath(currentDir.value, name);
   const content = isMarkdownLikeFile(name) ? `# ${stripSupportedNoteExtension(name)}\n\n` : '';
-  await fs.writeFile(path, content);
-  await refreshFileTree();
-  await indexStore.refreshDocument(fs, path);
-  void trainCurrentFile(path, content);
-  enterNotebookFileState(path, content);
+  try {
+    await fs.writeFile(path, content);
+    await refreshFileTree();
+    await indexStore.refreshDocument(fs, path);
+    void trainCurrentFile(path, content);
+    enterNotebookFileState(path, content);
+  } catch (error) {
+    toast.show(
+      `新建文件失败：${error instanceof Error ? error.message : String(error)}`,
+      'error',
+      4000,
+    );
+  }
 }
 
 function cancelNewFile(): void {
@@ -2741,16 +3139,18 @@ async function openExternalParentAsNotebook(): Promise<void> {
   loading.value = true;
   externalError.value = '';
   try {
+    let initialRelativePath = target.relativePath;
     if (!isDesktopRuntime()) {
       await openNotebookRoot('/');
       await hydrateMockNotebookFromExternalFiles(target.notebookRoot);
     } else {
       const promoted = await invoke<PromotedNotebookPayload>('promote_external_file_to_notebook');
-      await openNotebookRoot(promoted.rootPath);
+      await commitWorkspaceHandle({ rootPath: promoted.rootPath, name: promoted.name });
+      initialRelativePath = normalizePath(promoted.initialRelativePath);
     }
     await loadDirectoryShallow('/');
     wikiLinkRevision.value++;
-    await onSelectNote(target.relativePath);
+    await onSelectNote(initialRelativePath);
     await revokeExternalGrant(target);
     externalSessionMode.value = 'none';
     externalFile.value = null;
@@ -2804,6 +3204,13 @@ async function hydrateMockNotebookFromExternalFiles(rootPath: string): Promise<v
 
 // --- Content Updates ---
 function onContentUpdate(content: string): void {
+  if (
+    !isScratchSession.value &&
+    (!activeNotebookRoot.value || isWorkspaceUnbound.value || isNotebookOpening.value)
+  ) {
+    requireBoundWorkspace('编辑笔记');
+    return;
+  }
   const revision = ++contentRevision;
   currentContent.value = content;
   updateHeadings(content);
@@ -2820,7 +3227,12 @@ function onContentUpdate(content: string): void {
     rememberPendingMockFileWrite(activePath.value, content);
     if (saveTimer) clearTimeout(saveTimer);
     const savingPath = activePath.value;
-    saveTimer = setTimeout(() => void debouncedSave(savingPath, content, revision), 600);
+    const savingRoot = activeNotebookRoot.value;
+    const savingGeneration = notebookDataGeneration;
+    saveTimer = setTimeout(
+      () => void debouncedSave(savingPath, content, revision, savingRoot, savingGeneration),
+      600,
+    );
   }
 }
 
@@ -2866,6 +3278,8 @@ async function debouncedSave(
   path: string,
   content: string,
   revision = contentRevision,
+  expectedRoot = activeNotebookRoot.value,
+  expectedWorkspaceGeneration = notebookDataGeneration,
 ): Promise<boolean> {
   const previousSave = currentSavePromise;
   const saveTask = (async () => {
@@ -2874,6 +3288,16 @@ async function debouncedSave(
     isSaving.value = true;
     const start = Date.now();
     try {
+      if (
+        !expectedRoot ||
+        !activeNotebookRoot.value ||
+        isWorkspaceUnbound.value ||
+        isNotebookOpening.value ||
+        expectedWorkspaceGeneration !== notebookDataGeneration ||
+        !notebookRootsEqual(expectedRoot, activeNotebookRoot.value)
+      ) {
+        throw new Error('笔记本已取消绑定或正在切换，已拒绝过期写入');
+      }
       await fs.writeFile(path, content);
       if (gen !== saveGeneration) return true;
       await indexStore.refreshDocument(fs, path);
@@ -2888,7 +3312,7 @@ async function debouncedSave(
       if (activePath.value === path && contentRevision === revision) isDirty.value = false;
       return true;
     } catch (e) {
-      saveError.value = String(e);
+      if (gen === saveGeneration) saveError.value = String(e);
       return false;
     } finally {
       if (gen === saveGeneration) isSaving.value = false;
@@ -3037,7 +3461,7 @@ function onSearchSelectResult(result: SearchResult): void {
 function onQuickAction(action: 'new-note' | 'export' | 'settings'): void {
   searchVisible.value = false;
   if (action === 'new-note') onShellCreateNote();
-  else if (action === 'export') showExport.value = true;
+  else if (action === 'export' && requireBoundWorkspace('导出')) showExport.value = true;
   else if (action === 'settings') showSettings.value = true;
 }
 
@@ -3098,6 +3522,7 @@ async function onLivePreviewWikiLinkClick(noteTitle: string, anchor: null | stri
 
 // --- Templates ---
 async function onSaveCustomTemplate(name: string, description: string): Promise<void> {
+  if (!requireBoundWorkspace('保存自定义模板')) return;
   if (!canSaveCurrentAsTemplate.value) {
     toast.show(
       customTemplateDisabledReason.value || '当前状态不能保存自定义模板。',
@@ -3116,6 +3541,7 @@ async function onSaveCustomTemplate(name: string, description: string): Promise<
 }
 
 async function onDeleteCustomTemplate(id: string): Promise<void> {
+  if (!requireBoundWorkspace('删除模板')) return;
   try {
     await deleteCustomTemplateFile(fs, id);
     await refreshCustomTemplates();
@@ -3126,27 +3552,45 @@ async function onDeleteCustomTemplate(id: string): Promise<void> {
 }
 
 async function onTemplateSelect(_tpl: unknown, content: string): Promise<void> {
+  if (!requireBoundWorkspace('从模板新建笔记')) return;
   const titleMatch = content.match(/^#\s+(.+)$/m);
   const name = titleMatch?.[1]?.trim() || '新笔记';
   const path = `/${name}.md`;
-  await fs.writeFile(path, content);
-  await refreshFileTree();
-  await indexStore.refreshDocument(fs, path);
-  void trainCurrentFile(path, content);
-  enterNotebookFileState(path, content);
-  showTemplate.value = false;
+  try {
+    await fs.writeFile(path, content);
+    await refreshFileTree();
+    await indexStore.refreshDocument(fs, path);
+    void trainCurrentFile(path, content);
+    enterNotebookFileState(path, content);
+    showTemplate.value = false;
+  } catch (error) {
+    toast.show(
+      `从模板新建失败：${error instanceof Error ? error.message : String(error)}`,
+      'error',
+      4000,
+    );
+  }
 }
 
 async function onCreateBlank(): Promise<void> {
+  if (!requireBoundWorkspace('新建笔记')) return;
   const today = new Date().toISOString().slice(0, 10);
   const path = `/笔记-${today}.md`;
   const content = '# 新笔记\n\n';
-  await fs.writeFile(path, content);
-  await refreshFileTree();
-  await indexStore.refreshDocument(fs, path);
-  void trainCurrentFile(path, content);
-  enterNotebookFileState(path, content);
-  showTemplate.value = false;
+  try {
+    await fs.writeFile(path, content);
+    await refreshFileTree();
+    await indexStore.refreshDocument(fs, path);
+    void trainCurrentFile(path, content);
+    enterNotebookFileState(path, content);
+    showTemplate.value = false;
+  } catch (error) {
+    toast.show(
+      `新建笔记失败：${error instanceof Error ? error.message : String(error)}`,
+      'error',
+      4000,
+    );
+  }
 }
 
 // --- Keyboard ---
@@ -3157,12 +3601,21 @@ function onGlobalKeydown(e: KeyboardEvent): void {
     e.stopPropagation();
     if (isScratchSession.value) {
       void saveScratchAs();
+    } else if (isWorkspaceUnbound.value) {
+      requireBoundWorkspace('保存笔记');
     } else {
       void flushPendingCurrentSave();
     }
     return;
   }
   if (isExternalSession.value) return;
+  if ((e.ctrlKey || e.metaKey) && key === 'o') {
+    e.preventDefault();
+    e.stopPropagation();
+    void requestOpenNotebook();
+    return;
+  }
+  if (isWorkspaceUnbound.value || isNotebookOpening.value) return;
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'p') {
     e.preventDefault();
     e.stopPropagation();
@@ -3440,10 +3893,24 @@ function onDismissVersion(version: string) {
 }
 
 .editor-shell-frame {
+  position: relative;
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   height: 100vh;
   min-height: 0;
+}
+
+.workspace-opening-overlay {
+  position: absolute;
+  z-index: var(--z-overlay);
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklch, var(--paper-bg) 82%, transparent);
+  color: var(--ink-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--lh-ui);
+  cursor: wait;
 }
 
 .editor-shell-frame--external {

@@ -504,7 +504,12 @@ async function withSession(trace, args, callback) {
     onEvent: (event) => trace.recordWebDriver(event),
   });
   try {
-    await waitForSelector(browser, '#jotluck-app', trace, 20_000);
+    await waitForSelector(
+      browser,
+      '#jotluck-app, [data-testid="notebook-open-gate"]',
+      trace,
+      20_000,
+    );
     return await callback(browser);
   } finally {
     trace.record('webdriver-session-delete-requested', { sessionId: browser.sessionId });
