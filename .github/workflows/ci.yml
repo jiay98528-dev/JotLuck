@@ -37,6 +37,46 @@ permissions:
   actions: read
 
 jobs:
+  tool-validate:
+    name: Vibe Control Structure
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pinned tool dependencies
+        run: |
+          python -m pip install --disable-pip-version-check \
+            attrs==26.1.0 \
+            cffi==2.0.0 \
+            cryptography==48.0.0 \
+            jsonschema==4.26.0 \
+            jsonschema-specifications==2025.9.1 \
+            pycparser==3.0 \
+            referencing==0.37.0 \
+            rpds-py==0.30.0
+
+      - name: Validate pinned control-plane closure
+        run: python scripts/tool-ci-validate.py --project . --output-dir tool-ci
+
+      - name: Upload complete Schema 3.2 envelopes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tool-schema-3.2
+          path: |
+            tool-ci/inspect.json
+            tool-ci/validate.json
+            tool-ci/draft-closure.json
+          if-no-files-found: error
+
   lint-and-typecheck:
     name: Lint & Type Check
     runs-on: ubuntu-latest
