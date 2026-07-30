@@ -106,7 +106,7 @@
               <circle cx="12" cy="12" r="10" />
               <path d="M8 12l3 3 5-5" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
-            <span class="status-text success-text">已导出</span>
+            <span class="status-text success-text">{{ exportSuccessLabel }}</span>
             <span class="file-info">{{ exportMessage }}</span>
           </div>
 
@@ -189,6 +189,9 @@ const exportError = ref<string>('');
 const hasContent = computed(() => {
   return !!(props.markdownContent && props.markdownContent.trim().length > 0);
 });
+const exportSuccessLabel = computed(() =>
+  selectedFormat.value === ExportFormat.PDF ? '打印流程已结束' : '已导出',
+);
 
 // ── Format definitions ─────────────────────────────────
 interface FormatEntry {
@@ -280,7 +283,8 @@ async function doExport(): Promise<void> {
 
     if (result.success) {
       exportState.value = 'success';
-      exportMessage.value = result.fileName ? `文件已保存：${result.fileName}` : '文件已导出';
+      exportMessage.value =
+        result.message || (result.fileName ? `文件已保存：${result.fileName}` : '文件已导出');
       return;
     }
     exportState.value = 'error';
@@ -402,17 +406,31 @@ watch(
 .toggle-track {
   display: inline-flex;
   align-items: center;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+  border-radius: var(--radius-full);
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.toggle-track::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
   width: 38px;
   height: 20px;
   border-radius: var(--radius-full);
   background: var(--rule);
-  cursor: pointer;
-  position: relative;
+  content: '';
+  transform: translate(-50%, -50%);
   transition: background var(--dur-micro) var(--ease-fade);
-  flex-shrink: 0;
 }
 
-.toggle-track.active {
+.toggle-track.active::before {
   background: var(--accent);
 }
 
@@ -428,8 +446,8 @@ watch(
   background: var(--paper-raised);
   box-shadow: var(--shadow-sheet);
   position: absolute;
-  top: 2px;
-  left: 2px;
+  top: 14px;
+  left: 5px;
   transition: transform var(--dur-micro) var(--ease-press);
 }
 

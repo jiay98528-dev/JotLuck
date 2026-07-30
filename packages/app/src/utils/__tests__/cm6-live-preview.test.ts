@@ -5,6 +5,7 @@ import {
   __parseLiveBlocksForTest,
   exitLivePreviewOnEscape,
   livePreviewExtension,
+  revealLivePreviewSourceAt,
   toggleBlockRender,
   unpinFocusedBlock,
 } from '../cm6-live-preview';
@@ -149,6 +150,23 @@ describe('cm6 live preview markdown block boundaries', () => {
 });
 
 describe('cm6 live preview Escape focus contract', () => {
+  it('reveals an exact programmatic target before editor focus settles', async () => {
+    const doc = ['# 欢迎使用 JotLuck', '', 'Rendered sibling'].join('\n');
+    const view = mountLiveEditor(doc, doc.indexOf('Rendered sibling'));
+    view.contentDOM.blur();
+
+    await vi.waitFor(() => {
+      expect(findRenderedBlock(view, '欢迎使用 JotLuck')).toBeDefined();
+    });
+
+    const target = doc.indexOf('欢迎使用');
+    revealLivePreviewSourceAt(view, target);
+
+    expect(view.hasFocus).toBe(false);
+    expect(view.state.selection.main.head).toBe(target);
+    expect(findRenderedBlock(view, '欢迎使用 JotLuck')).toBeUndefined();
+  });
+
   it('restores the exact edited block and lets Enter return to source editing', async () => {
     const doc = ['# First', '', 'Unique edited paragraph'].join('\n');
     const anchor = doc.indexOf('Unique') + 3;
@@ -178,6 +196,59 @@ describe('cm6 live preview Escape focus contract', () => {
     });
     expect(view.state.selection.main.head).toBe(doc.indexOf('Unique'));
     expect(view.state.doc.toString()).toBe(doc);
+  });
+
+  it('retries focus transfer when a restored widget declines the first focus calls', async () => {
+    const doc = ['Rendered sibling', '', 'WebKit focus target'].join('\n');
+    const view = mountLiveEditor(doc, doc.indexOf('WebKit') + 2);
+    const nativeFocus = HTMLElement.prototype.focus;
+    let declinedCalls = 0;
+    const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus').mockImplementation(function (
+      this: HTMLElement,
+      options?: FocusOptions,
+    ) {
+      if (this.classList.contains('cm-live-block') && declinedCalls < 2) {
+        declinedCalls++;
+        return;
+      }
+      nativeFocus.call(this, options);
+    });
+
+    try {
+      expect(unpinFocusedBlock(view)).toBe(true);
+      await vi.waitFor(() => {
+        const restored = findRenderedBlock(view, 'WebKit focus target');
+        expect(restored).toBeDefined();
+        expect(document.activeElement).toBe(restored);
+      });
+      expect(declinedCalls).toBe(2);
+    } finally {
+      focusSpy.mockRestore();
+    }
+  });
+
+  it('cleans a pending focus transfer synchronously when the editor is destroyed', () => {
+    const doc = ['Rendered sibling', '', 'Disposable focus target'].join('\n');
+    const view = mountLiveEditor(doc, doc.indexOf('Disposable') + 2);
+    const addSpy = vi.spyOn(document, 'addEventListener');
+    const removeSpy = vi.spyOn(document, 'removeEventListener');
+    const lifecycleEvents = new Set(['pointerdown', 'keydown', 'beforeinput', 'compositionstart']);
+
+    try {
+      expect(unpinFocusedBlock(view)).toBe(true);
+      const registrations = addSpy.mock.calls.filter(([type]) => lifecycleEvents.has(type));
+      expect(registrations).toHaveLength(4);
+
+      view.destroy();
+      mountedViews.splice(mountedViews.indexOf(view), 1);
+
+      for (const [type, listener] of registrations) {
+        expect(removeSpy).toHaveBeenCalledWith(type, listener, true);
+      }
+    } finally {
+      addSpy.mockRestore();
+      removeSpy.mockRestore();
+    }
   });
 
   it('unpins a pinned block before restoring and focusing that same rendered block', async () => {

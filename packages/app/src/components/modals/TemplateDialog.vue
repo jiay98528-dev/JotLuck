@@ -73,7 +73,12 @@
             >
               <span class="tpl-card-title">{{ tpl.name }}</span>
               <span class="tpl-card-desc">{{ tpl.description }}</span>
-              <button class="template-delete" title="删除模板" @click.stop="deleteTemplate(tpl.id)">
+              <button
+                class="template-delete"
+                title="删除模板"
+                aria-label="删除模板"
+                @click.stop="deleteTemplate(tpl.id)"
+              >
                 &times;
               </button>
             </div>
@@ -531,15 +536,18 @@ watch(customTemplates, (templatesValue) => {
 /* Custom template delete button */
 .custom-tpl {
   position: relative;
+  padding-inline-end: calc(var(--touch-target-min) + var(--space-8));
 }
 
 .template-delete {
   position: absolute;
   top: 50%;
-  right: var(--space-8);
+  inset-inline-end: 0;
   transform: translateY(-50%);
-  width: 20px;
-  height: 20px;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
   border: none;
   border-radius: var(--radius);
   background: transparent;
@@ -555,5 +563,10 @@ watch(customTemplates, (templatesValue) => {
 .template-delete:hover {
   color: var(--signal-error);
   background: var(--signal-error-soft);
+}
+
+.template-delete:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: calc(var(--focus-ring-offset) * -1);
 }
 </style>

@@ -921,6 +921,9 @@ class UnclosedBlockWidget extends WidgetType {
 
 const pinSourceEffect = StateEffect.define<{ key: string }>();
 const unpinSourceEffect = StateEffect.define<{ key: string }>();
+const revealSourceAtPositionEffect = StateEffect.define<number>();
+
+const pendingRestoredBlockFocusCleanup = new WeakMap<EditorView, () => void>();
 
 const pinnedSourceField = StateField.define<Set<string>>({
   create() {
@@ -1181,6 +1184,12 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
       }
 
       update(update: ViewUpdate) {
+        let revealedPosition: number | null = null;
+        for (const transaction of update.transactions) {
+          for (const effect of transaction.effects) {
+            if (effect.is(revealSourceAtPositionEffect)) revealedPosition = effect.value;
+          }
+        }
         const hasComposeTransaction = update.transactions.some((tr) =>
           tr.isUserEvent('input.type.compose'),
         );
@@ -1228,9 +1237,10 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           update.selectionSet ||
           update.focusChanged ||
           update.viewportChanged ||
+          revealedPosition !== null ||
           !this.decorationsBuilt
         ) {
-          this.decorations = this.build(update.view);
+          this.decorations = this.build(update.view, revealedPosition);
           this.decorationsBuilt = true;
         }
       }
@@ -1283,7 +1293,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         }, 0);
       }
 
-      build(view: EditorView): DecorationSet {
+      build(view: EditorView, revealedPosition: number | null = null): DecorationSet {
         const text = view.state.doc.toString();
         const blocks = parseLiveBlocks(text, options);
         const cursor = view.state.selection.main.head;
@@ -1303,7 +1313,12 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
 
           if (!block.html) continue; // skip blocks with no visible HTML
 
-          const isFocused = view.hasFocus && cursor >= block.from && cursor <= block.to;
+          const containsCursor = cursor >= block.from && cursor <= block.to;
+          const isProgrammaticallyRevealed =
+            revealedPosition !== null &&
+            revealedPosition >= block.from &&
+            revealedPosition <= block.to;
+          const isFocused = (view.hasFocus && containsCursor) || isProgrammaticallyRevealed;
           const isPinned = pinned.has(block.key);
           // Keep the block immediately above a new empty cursor line as source.
           // Replacing that line before Windows IME establishes composition on
@@ -1411,6 +1426,8 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
       destroy() {
         this.destroyed = true;
         if (this.editorView) {
+          pendingRestoredBlockFocusCleanup.get(this.editorView)?.();
+          pendingRestoredBlockFocusCleanup.delete(this.editorView);
           // Cancel pending rAF callback
           if (this.__initRAF) cancelAnimationFrame(this.__initRAF);
           this.clearPendingCompositionRebuild();
@@ -1445,6 +1462,22 @@ export function livePreviewExtension(options: LivePreviewOptions = {}) {
   return [pinnedSourceField, createLivePreviewPlugin(options)];
 }
 
+/**
+ * Temporarily expose the source block that contains a programmatic navigation
+ * target. The effect is consumed by one decoration rebuild; normal focus rules
+ * own subsequent renders, so this does not pin the block permanently.
+ */
+export function revealLivePreviewSourceAt(view: EditorView, position: number): void {
+  const offset = Math.max(0, Math.min(position, view.state.doc.length));
+  view.dispatch({
+    selection: { anchor: offset },
+    effects: [
+      revealSourceAtPositionEffect.of(offset),
+      EditorView.scrollIntoView(offset, { y: 'center' }),
+    ],
+  });
+}
+
 /** TAB 切换当前聚焦 block 的 pin 状态 */
 export function toggleBlockRender(view: EditorView): boolean {
   const text = view.state.doc.toString();
@@ -1465,8 +1498,42 @@ export function toggleBlockRender(view: EditorView): boolean {
   return true;
 }
 
+function focusRenderedBlock(block: HTMLElement): boolean {
+  const ownerDocument = block.ownerDocument;
+  try {
+    block.focus({ preventScroll: true });
+  } catch {
+    block.focus();
+  }
+  if (ownerDocument.activeElement === block) return true;
+
+  // WebKit can decline programmatic focus for a tabindex=-1 replacement
+  // widget nested inside contenteditable. Make only the restored block a
+  // temporary tab stop, then return it to the normal roving-focus contract.
+  block.tabIndex = 0;
+  try {
+    block.focus({ preventScroll: true });
+  } catch {
+    block.focus();
+  }
+  if (ownerDocument.activeElement !== block) {
+    block.tabIndex = -1;
+    return false;
+  }
+
+  block.addEventListener(
+    'blur',
+    () => {
+      block.tabIndex = -1;
+    },
+    { once: true },
+  );
+  return true;
+}
+
 /** ESC 取消当前聚焦 block 的 pin 状态 */
 export function unpinFocusedBlock(view: EditorView): boolean {
+  pendingRestoredBlockFocusCleanup.get(view)?.();
   const text = view.state.doc.toString();
   const blocks = parseLiveBlocks(text);
   const cursor = view.state.selection.main.head;
@@ -1485,7 +1552,33 @@ export function unpinFocusedBlock(view: EditorView): boolean {
   // that was restored. This keeps keyboard position without leaving a hidden
   // source cursor active behind the preview.
   view.contentDOM.blur();
+  const ownerDocument = view.dom.ownerDocument;
+  let focusFrame: number | null = null;
+  let focusedBlock: HTMLElement | null = null;
+  let cancelled = false;
+  const cleanupFocusTransfer = (): void => {
+    if (focusFrame !== null) {
+      cancelAnimationFrame(focusFrame);
+      focusFrame = null;
+    }
+    ownerDocument.removeEventListener('pointerdown', cancelFocusTransfer, true);
+    ownerDocument.removeEventListener('keydown', cancelFocusTransfer, true);
+    ownerDocument.removeEventListener('beforeinput', cancelFocusTransfer, true);
+    ownerDocument.removeEventListener('compositionstart', cancelFocusTransfer, true);
+    if (pendingRestoredBlockFocusCleanup.get(view) === cleanupFocusTransfer) {
+      pendingRestoredBlockFocusCleanup.delete(view);
+    }
+  };
+  const cancelFocusTransfer = (): void => {
+    cancelled = true;
+    cleanupFocusTransfer();
+  };
   const focusRestoredBlock = (attempt: number): void => {
+    focusFrame = null;
+    if (cancelled || !view.dom.isConnected) {
+      cleanupFocusTransfer();
+      return;
+    }
     const renderedBlocks = [...view.dom.querySelectorAll<HTMLElement>('.cm-live-block')];
     const rendered =
       renderedBlocks.find((element) => element.getAttribute('data-block-key') === target.key) ??
@@ -1493,20 +1586,28 @@ export function unpinFocusedBlock(view: EditorView): boolean {
         (element) => Number(element.getAttribute('data-block-from')) === target.from,
       );
     if (rendered) {
-      rendered.focus({ preventScroll: true });
+      if (ownerDocument.activeElement === rendered && focusedBlock === rendered) {
+        cleanupFocusTransfer();
+        return;
+      }
+      focusedBlock = focusRenderedBlock(rendered) ? rendered : null;
+    } else {
+      focusedBlock = null;
+    }
+    // WebKit may attach or replace the widget after the first focus attempt.
+    // Verify ownership across a frame and retry for a bounded settling window.
+    if (attempt < 30) {
+      focusFrame = requestAnimationFrame(() => focusRestoredBlock(attempt + 1));
       return;
     }
-    // A marker edit can change the block key/type while focusChanged is still
-    // rebuilding decorations. Give CM6 a bounded settling window, then fall
-    // back to the editor shell only if the corresponding position vanished.
-    if (attempt < 2) {
-      requestAnimationFrame(() => focusRestoredBlock(attempt + 1));
-      return;
-    }
-    view.dom.tabIndex = -1;
-    view.dom.focus({ preventScroll: true });
+    cleanupFocusTransfer();
   };
-  requestAnimationFrame(() => focusRestoredBlock(0));
+  ownerDocument.addEventListener('pointerdown', cancelFocusTransfer, true);
+  ownerDocument.addEventListener('keydown', cancelFocusTransfer, true);
+  ownerDocument.addEventListener('beforeinput', cancelFocusTransfer, true);
+  ownerDocument.addEventListener('compositionstart', cancelFocusTransfer, true);
+  pendingRestoredBlockFocusCleanup.set(view, cleanupFocusTransfer);
+  focusFrame = requestAnimationFrame(() => focusRestoredBlock(0));
   return true;
 }
 

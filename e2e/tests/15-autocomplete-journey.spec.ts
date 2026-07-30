@@ -110,8 +110,13 @@ test.describe('offline autocomplete user journeys', () => {
     browserName,
   }) => {
     const pageErrors: string[] = [];
+    const consoleErrors: string[] = [];
     const onPageError = (error: Error) => pageErrors.push(error.message);
+    const onConsole = (message: import('@playwright/test').ConsoleMessage) => {
+      if (message.type() === 'error') consoleErrors.push(message.text());
+    };
     page.on('pageerror', onPageError);
+    page.on('console', onConsole);
     const probe = probeText(browserName);
     await replaceEditorText(page, probe);
     await expect(page.locator('.cm-ghost-text')).toBeVisible({ timeout: 3000 });
@@ -128,13 +133,14 @@ test.describe('offline autocomplete user journeys', () => {
     await expect(completionSwitch).toHaveAttribute('aria-checked', 'false');
     await expect(page.locator('.cm-ghost-text')).toHaveCount(0);
     expect(await getEditorContentFromBridge(page)).toBe(contentBeforeDisable);
-    expect(pageErrors).toEqual([]);
+    expect({ pageErrors, consoleErrors }).toEqual({ pageErrors: [], consoleErrors: [] });
     await page.keyboard.press('Escape');
 
     await replaceEditorText(page, probe);
     await expect(page.locator('.cm-ghost-text')).not.toBeVisible({ timeout: 1000 });
-    expect(pageErrors).toEqual([]);
+    expect({ pageErrors, consoleErrors }).toEqual({ pageErrors: [], consoleErrors: [] });
     page.off('pageerror', onPageError);
+    page.off('console', onConsole);
   });
 
   test('settings clears local autocomplete learning data', async ({ page }) => {

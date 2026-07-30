@@ -19,6 +19,10 @@ interface DialogFocusOptions {
   fallbackFocus?: () => HTMLElement | null;
 }
 
+export interface DialogFocusController {
+  suppressNextRestore: () => void;
+}
+
 interface DialogFocusEntry {
   id: symbol;
   containerRef: Ref<HTMLElement | null>;
@@ -92,12 +96,13 @@ function focusableElements(container: HTMLElement): HTMLElement[] {
   return [...container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter(isUsable);
 }
 
-export function useDialogFocus(options: DialogFocusOptions): void {
+export function useDialogFocus(options: DialogFocusOptions): DialogFocusController {
   if (typeof document !== 'undefined') observePointerOpeners(document);
   const id = Symbol('dialog-focus');
   let active = false;
   let opener: HTMLElement | null = null;
   let ownerDocument: Document | null = null;
+  let restoreOnNextDeactivate = true;
   const entry: DialogFocusEntry = {
     id,
     containerRef: options.containerRef,
@@ -251,6 +256,25 @@ export function useDialogFocus(options: DialogFocusOptions): void {
     ownerDocument = null;
   }
 
-  watch(options.visible, (visible) => (visible ? activate() : deactivate()), { immediate: true });
+  watch(
+    options.visible,
+    (visible) => {
+      if (visible) {
+        restoreOnNextDeactivate = true;
+        activate();
+        return;
+      }
+      const restoreFocus = restoreOnNextDeactivate;
+      restoreOnNextDeactivate = true;
+      deactivate(restoreFocus);
+    },
+    { immediate: true },
+  );
   onBeforeUnmount(() => deactivate());
+
+  return {
+    suppressNextRestore: () => {
+      restoreOnNextDeactivate = false;
+    },
+  };
 }

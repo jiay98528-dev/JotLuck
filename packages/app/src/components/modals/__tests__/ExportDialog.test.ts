@@ -44,13 +44,17 @@ describe('ExportDialog error recovery', () => {
     expect(findButton('取消').disabled).toBe(false);
     expect(findButton('导出').disabled).toBe(false);
 
-    exportNoteMock.mockResolvedValueOnce({ success: true, fileName: '测试笔记.pdf' });
+    exportNoteMock.mockResolvedValueOnce({
+      success: true,
+      fileName: '测试笔记.pdf',
+      message: '打印对话框已关闭，请确认 PDF 已保存到所选位置。',
+    });
     findButton('导出').click();
     await flushPromises();
 
     expect(exportNoteMock).toHaveBeenCalledTimes(2);
-    expect(document.body.textContent).toContain('已导出');
-    expect(document.body.textContent).toContain('测试笔记.pdf');
+    expect(document.body.textContent).toContain('打印流程已结束');
+    expect(document.body.textContent).toContain('请确认 PDF 已保存');
     wrapper.unmount();
   });
 

@@ -760,6 +760,7 @@ import { useImageUpload } from '@/composables/useImageUpload';
 import { usePreviewImageResolver } from '@/composables/usePreviewImageResolver';
 import { useDialogFocus } from '@/composables/useDialogFocus';
 import { normalizeUrl } from '@/utils/urlUtils';
+import { revealLivePreviewSourceAt } from '@/utils/cm6-live-preview';
 import {
   getCompletionSettings,
   saveCompletionSettings,
@@ -3567,21 +3568,82 @@ async function onSearchSelectResult(result: SearchResult): Promise<void> {
   }
   if (offset < 0) return;
 
-  // Focus first and let the browser's selectionchange from that focus settle.
-  // Firefox otherwise publishes the old DOM position after our transaction
-  // and moves a valid in-block match back to the live block boundary.
-  view.focus();
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  if (
-    editorRef.value?.getEditorView() !== view ||
-    normalizePath(activePath.value) !== normalizePath(result.notePath)
-  ) {
-    return;
+  let selectionChangeVersion = 0;
+  let navigationInterrupted = false;
+  const navigationDoc = view.state.doc;
+  const onProgrammaticSelectionChange = (): void => {
+    const activeElement = document.activeElement;
+    if (activeElement instanceof Node && view.dom.contains(activeElement)) {
+      selectionChangeVersion += 1;
+    }
+  };
+  const onNavigationInterrupt = (): void => {
+    navigationInterrupted = true;
+  };
+  document.addEventListener('selectionchange', onProgrammaticSelectionChange, true);
+  view.dom.addEventListener('pointerdown', onNavigationInterrupt, true);
+  view.dom.addEventListener('keydown', onNavigationInterrupt, true);
+  view.dom.addEventListener('beforeinput', onNavigationInterrupt, true);
+  view.dom.addEventListener('compositionstart', onNavigationInterrupt, true);
+
+  try {
+    // Reveal the source before focus can map a selection inside a replacement
+    // widget back to the Markdown block boundary (notably in Firefox).
+    revealLivePreviewSourceAt(view, offset);
+    view.focus();
+
+    let lastSelectionChangeVersion = selectionChangeVersion;
+    let observedEditorSelectionChange = false;
+    let quietFrames = 0;
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      if (
+        editorRef.value?.getEditorView() !== view ||
+        normalizePath(activePath.value) !== normalizePath(result.notePath) ||
+        view.state.doc !== navigationDoc ||
+        navigationInterrupted
+      ) {
+        return;
+      }
+
+      const selectionChanged = selectionChangeVersion !== lastSelectionChangeVersion;
+      if (selectionChanged) {
+        observedEditorSelectionChange = true;
+        lastSelectionChangeVersion = selectionChangeVersion;
+        quietFrames = 0;
+      }
+
+      if (!view.hasFocus) {
+        revealLivePreviewSourceAt(view, offset);
+        view.focus();
+        quietFrames = 0;
+        continue;
+      }
+      if (view.state.selection.main.head !== offset) {
+        revealLivePreviewSourceAt(view, offset);
+        quietFrames = 0;
+        continue;
+      }
+
+      if (!selectionChanged) quietFrames += 1;
+      if (
+        (observedEditorSelectionChange && quietFrames >= 6) ||
+        (!observedEditorSelectionChange && quietFrames >= 12)
+      ) {
+        break;
+      }
+    }
+
+    // Reassert once after the quiet window so the handler has one exact,
+    // observable terminal state even if Firefox published an old DOM selection.
+    revealLivePreviewSourceAt(view, offset);
+  } finally {
+    document.removeEventListener('selectionchange', onProgrammaticSelectionChange, true);
+    view.dom.removeEventListener('pointerdown', onNavigationInterrupt, true);
+    view.dom.removeEventListener('keydown', onNavigationInterrupt, true);
+    view.dom.removeEventListener('beforeinput', onNavigationInterrupt, true);
+    view.dom.removeEventListener('compositionstart', onNavigationInterrupt, true);
   }
-  view.dispatch({
-    selection: { anchor: offset },
-    effects: EditorView.scrollIntoView(offset, { y: 'center' }),
-  });
 }
 function onQuickAction(action: 'new-note' | 'export' | 'settings'): void {
   searchVisible.value = false;

@@ -203,7 +203,7 @@ const overlayRef = ref<HTMLDivElement | null>(null);
 const searchInputRef = ref<HTMLInputElement | null>(null);
 const resultsListRef = ref<HTMLElement | null>(null);
 
-useDialogFocus({
+const dialogFocus = useDialogFocus({
   visible: () => props.visible,
   containerRef: overlayRef,
   initialFocus: () => searchInputRef.value,
@@ -243,6 +243,9 @@ function onQueryChange(): void {
 }
 
 function selectResult(result: SearchResult): void {
+  // The search navigation transfers focus to the exact editor match. Restoring
+  // the palette opener would steal that focus and fold the Live Preview block.
+  dialogFocus.suppressNextRestore();
   emit('select-result', result);
   close();
 }

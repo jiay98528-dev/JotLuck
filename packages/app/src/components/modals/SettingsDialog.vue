@@ -546,24 +546,44 @@ function close(): void {
 
 .toggle-track {
   position: relative;
-  width: 44px;
-  height: 24px;
-  border-radius: 999px;
-  background: var(--rule-strong);
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+  border-radius: var(--radius-full);
+  background: transparent;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
-.toggle-track.active {
+.toggle-track::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  background: var(--rule-strong);
+  content: '';
+  transform: translate(-50%, -50%);
+}
+
+.toggle-track.active::before {
   background: var(--accent);
+}
+
+.toggle-track:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: var(--focus-ring-offset);
 }
 
 .toggle-thumb {
   position: absolute;
-  top: 2px;
+  top: 12px;
   left: 2px;
   width: 20px;
   height: 20px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--paper-raised);
   transition: transform var(--dur-micro) var(--ease-fade);
 }

@@ -239,6 +239,27 @@ export async function waitForAppReady(page: Page): Promise<void> {
   }
 }
 
+/** 在首次导航前清空 JotLuck 状态，避免为了隔离而重复启动整套应用。 */
+export async function waitForCleanAppReady(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const cleanBootMarker = 'jotluck:e2e:clean-boot-applied';
+    if (sessionStorage.getItem(cleanBootMarker) === '1') return;
+
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith('JotLuck') || key.startsWith('jotluck'))) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((key) => localStorage.removeItem(key));
+    sessionStorage.clear();
+    sessionStorage.setItem(cleanBootMarker, '1');
+    localStorage.setItem('jotluck:welcome:completed', '1');
+  });
+  await waitForAppReady(page);
+}
+
 async function collectAppReadyFailureSnapshot(page: Page): Promise<Record<string, unknown>> {
   try {
     return await page.evaluate(() => ({
@@ -287,8 +308,9 @@ export async function resetAppState(page: Page): Promise<void> {
 }
 
 async function waitForShellReady(page: Page): Promise<void> {
-  await expect(page.locator('.welcome-overlay')).toHaveCount(0);
-  await expect(page.locator('#jotluck-app')).toBeVisible({ timeout: 10000 });
+  const startupTimeout = 30000;
+  await expect(page.locator('.welcome-overlay')).toHaveCount(0, { timeout: startupTimeout });
+  await expect(page.locator('#jotluck-app')).toBeVisible({ timeout: startupTimeout });
   await expect
     .poll(
       () =>
@@ -299,7 +321,7 @@ async function waitForShellReady(page: Page): Promise<void> {
               const terminalRoute = document.querySelector(
                 '[data-testid="notebook-open-gate"], [data-testid="external-file-session"]',
               );
-              if (terminalRoute) return true;
+              if (terminalRoute) return startupReady;
               const editorSurface = document.querySelector('.cm-content');
               const shellFrame = document.querySelector('.editor-shell-frame');
               const shellSettled =
@@ -307,11 +329,11 @@ async function waitForShellReady(page: Page): Promise<void> {
                 shellFrame &&
                 !shellFrame.classList.contains('editor-shell-frame--opening') &&
                 shellFrame.getAttribute('aria-busy') !== 'true';
-              return startupReady || Boolean(shellSettled);
+              return startupReady && Boolean(shellSettled);
             })(),
           ),
         ),
-      { timeout: 10000 },
+      { timeout: startupTimeout },
     )
     .toBe(true);
 }

@@ -132,18 +132,7 @@ function exportPDF(
 ): Promise<ExportResult> {
   const opts = buildInternalOpts(options);
   const bodyHtml = renderToStyledHtml(md, opts);
-
-  return new Promise((resolve) => {
-    const iframe = document.createElement('iframe');
-    iframe.style.cssText =
-      'position:fixed;top:0;left:0;width:100%;height:100%;border:none;z-index:99999;';
-    // Hidden until print dialog appears — use opacity to keep printing working
-    iframe.style.opacity = '0';
-    document.body.appendChild(iframe);
-
-    iframe.onload = () => {
-      const doc = iframe.contentDocument!;
-      doc.write(`<!DOCTYPE html>
+  const printableHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -164,31 +153,75 @@ function exportPDF(
     ${bodyHtml}
   </article>
 </body>
-</html>`);
-      doc.close();
+</html>`;
 
-      // Let browser render before printing
-      setTimeout(() => {
-        iframe.contentWindow!.focus();
-        iframe.contentWindow!.print();
+  return new Promise((resolve) => {
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText =
+      'position:fixed;top:0;left:0;width:100%;height:100%;border:none;z-index:99999;';
+    // Hidden until print dialog appears — use opacity to keep printing working
+    iframe.style.opacity = '0';
+    iframe.title = 'PDF 打印预览';
 
-        // Clean up after print dialog (give user time to interact)
-        // print() is synchronous-blocking in most browsers, so the following
-        // runs after the dialog closes.
-        setTimeout(() => {
-          document.body.removeChild(iframe);
-          resolve({ success: true, format: ExportFormat.PDF, fileName: `${fileName}.pdf` });
-        }, 500);
-      }, 400);
+    let settled = false;
+    let preparationTimer: number | undefined;
+
+    const settle = (result: ExportResult): void => {
+      if (settled) return;
+      settled = true;
+      if (preparationTimer !== undefined) window.clearTimeout(preparationTimer);
+      iframe.onload = null;
+      iframe.onerror = null;
+      iframe.remove();
+      resolve(result);
     };
 
-    // Handle load errors (rare)
-    setTimeout(() => {
-      if (iframe.parentNode) {
-        // Iframe still attached = may have failed silently
-        // Don't remove; the load event should still fire
+    const fail = (error: string): void => {
+      settle({ success: false, format: ExportFormat.PDF, error });
+    };
+
+    iframe.onload = () => {
+      if (settled) return;
+      const printWindow = iframe.contentWindow;
+      if (!printWindow) {
+        fail('PDF 打印页面不可用，请重试');
+        return;
       }
-    }, 5000);
+
+      try {
+        printWindow.focus();
+      } catch {
+        // Some WebViews deny programmatic focus; printing can still proceed.
+      }
+
+      try {
+        // print() blocks while the native dialog is open. Guard preparation,
+        // not the time the user spends interacting with that dialog.
+        printWindow.print();
+      } catch (error) {
+        const detail = error instanceof Error && error.message ? `：${error.message}` : '';
+        fail(`无法打开 PDF 打印对话框${detail}`);
+        return;
+      }
+
+      settle({
+        success: true,
+        format: ExportFormat.PDF,
+        fileName: `${fileName}.pdf`,
+        message: '打印对话框已关闭，请确认 PDF 已保存到所选位置。',
+      });
+    };
+
+    iframe.onerror = () => fail('PDF 打印页面加载失败，请重试');
+
+    try {
+      iframe.srcdoc = printableHtml;
+      preparationTimer = window.setTimeout(() => fail('PDF 打印页面准备超时，请重试'), 5000);
+      document.body.appendChild(iframe);
+    } catch (error) {
+      const detail = error instanceof Error && error.message ? `：${error.message}` : '';
+      fail(`无法创建 PDF 打印页面${detail}`);
+    }
   });
 }
 

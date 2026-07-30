@@ -16,12 +16,12 @@ const webServerCommand = useFrozenV2REvaluationBundle
 
 export default defineConfig({
   testDir: '../../e2e/tests',
-  timeout: 30000,
+  timeout: 60000,
   expect: { timeout: 10000 },
-  fullyParallel: true,
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  retries: 0,
+  workers: 1,
   ...(autocompleteRcEnabled
     ? {}
     : {
@@ -32,7 +32,7 @@ export default defineConfig({
 
   use: {
     baseURL,
-    trace: 'on-first-retry',
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },

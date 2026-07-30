@@ -13,6 +13,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import {
   waitForAppReady,
+  waitForCleanAppReady,
   getEditorContent,
   getEditorContentFromBridge,
   typeInEditor,
@@ -21,7 +22,6 @@ import {
   waitForAutoSave,
   waitForMockFileContent,
   expectEditorContains,
-  resetAppState,
   waitForSearchReady,
 } from '../helpers/test-utils';
 
@@ -32,9 +32,10 @@ async function ensureViewMode(page: Page, target: 'live' | 'split'): Promise<voi
     return 'live';
   };
   for (let attempt = 0; attempt < 3; attempt++) {
-    if ((await current()) === target) return;
+    const previous = await current();
+    if (previous === target) return;
     await page.locator('.view-mode-toggle').click();
-    await page.waitForTimeout(250);
+    await expect.poll(current).not.toBe(previous);
   }
   expect(await current()).toBe(target);
 }
@@ -44,8 +45,7 @@ async function ensureViewMode(page: Page, target: 'live' | 'split'): Promise<voi
 // ============================================================
 test.describe('V6 用户旅程', () => {
   test.beforeEach(async ({ page }) => {
-    await waitForAppReady(page);
-    await resetAppState(page);
+    await waitForCleanAppReady(page);
   });
 
   test('J1: 文件抽屉 → 展开子目录 → 打开文件 → 编辑 → 保存', async ({ page }) => {
@@ -373,9 +373,13 @@ test.describe('V6 用户旅程', () => {
     // Step 1: 通过顶栏搜索入口打开命令面板
     await waitForSearchReady(page);
     await page.locator('.wing-bookmark-dot[aria-label="快速入门"]').click();
-    await page.waitForTimeout(500);
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().activePath ?? ''))
+      .toBe('/快速入门.md');
     await page.locator('.wing-bookmark-dot[aria-label="设计笔记"]').click();
-    await page.waitForTimeout(500);
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().activePath ?? ''))
+      .toBe('/设计笔记.md');
     await page.locator('.topbar-search-hint').click();
     await expect(page.locator('.palette')).toBeVisible({ timeout: 3000 });
 
@@ -383,7 +387,6 @@ test.describe('V6 用户旅程', () => {
     const searchInput = page.locator('.search-input');
     await expect(searchInput).toBeVisible();
     await searchInput.fill('/欢迎使用/ tag:入门 tag:markdown');
-    await page.waitForTimeout(800); // 等待防抖搜索完成
 
     // Step 3: AND 标签过滤后只剩目标笔记
     const results = page.locator('.result-item');
@@ -406,6 +409,8 @@ test.describe('V6 用户旅程', () => {
     await expect
       .poll(() => page.evaluate(() => window.__jotluck_e2e?.editor?.getCursor() ?? -1))
       .toBe(expectedCursor);
+    await expect(page.locator('.cm-editor.cm-focused')).toBeVisible();
+    await expect(page.locator('.cm-live-block', { hasText: '欢迎使用 JotLuck' })).toHaveCount(0);
 
     // Step 6: 编辑命中笔记
     await appendInEditor(page, '\n\n搜索后编辑的内容。');
@@ -415,9 +420,13 @@ test.describe('V6 用户旅程', () => {
 
     // Step 8: 切换到其他笔记再切回，验证编辑持久化
     await page.locator('.wing-bookmark-dot[aria-label="设计笔记"]').click();
-    await page.waitForTimeout(300);
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().activePath ?? ''))
+      .toBe('/设计笔记.md');
     await page.locator('.wing-bookmark-dot[aria-label="快速入门"]').click();
-    await page.waitForTimeout(500);
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().activePath ?? ''))
+      .toBe('/快速入门.md');
     await expectEditorContains(page, '搜索后编辑的内容');
   });
 
@@ -427,7 +436,9 @@ test.describe('V6 用户旅程', () => {
   test('J5: Live Preview → 点击块 → 编辑 → ESC 恢复预览', async ({ page }) => {
     // Step 1: 打开一篇有 Markdown 内容的笔记
     await page.locator('.wing-bookmark-dot[aria-label="快速入门"]').click();
-    await page.waitForTimeout(500);
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().activePath ?? ''))
+      .toBe('/快速入门.md');
 
     // Step 2: 使用唯一正文块建立可精确辨认的即时预览状态
     await ensureViewMode(page, 'live');

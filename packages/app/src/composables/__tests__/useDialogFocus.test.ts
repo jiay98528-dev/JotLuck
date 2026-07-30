@@ -6,14 +6,15 @@ import { useDialogFocus } from '../useDialogFocus';
 function createHarness(fallbackFocus?: () => HTMLElement | null) {
   return defineComponent({
     props: { visible: { type: Boolean, required: true } },
-    setup(props) {
+    setup(props, { expose }) {
       const containerRef = ref<HTMLElement | null>(null);
-      useDialogFocus({
+      const focusController = useDialogFocus({
         visible: () => props.visible,
         containerRef,
         initialFocus: '[data-dialog-initial-focus]',
         fallbackFocus,
       });
+      expose(focusController);
       return () =>
         props.visible
           ? h('div', { ref: containerRef, role: 'dialog', 'aria-modal': 'true' }, [
@@ -138,6 +139,29 @@ describe('useDialogFocus', () => {
     await nextTick();
 
     expect(document.activeElement).toBe(opener);
+  });
+
+  it('can transfer focus ownership without restoring the dialog opener', async () => {
+    const opener = document.createElement('button');
+    const editor = document.createElement('div');
+    editor.tabIndex = 0;
+    document.body.append(opener, editor);
+    const wrapper = mountHarness(false);
+    opener.focus();
+
+    await wrapper.setProps({ visible: true });
+    await nextTick();
+    (
+      wrapper.vm as unknown as {
+        suppressNextRestore: () => void;
+      }
+    ).suppressNextRestore();
+    const closeDialog = wrapper.setProps({ visible: false });
+    editor.focus();
+    await closeDialog;
+    await nextTick();
+
+    expect(document.activeElement).toBe(editor);
   });
 
   it('keeps focus in the topmost nested dialog and restores through the stack', async () => {

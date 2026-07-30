@@ -116,6 +116,20 @@ async function assertCloseTouchTarget(surface: Locator): Promise<void> {
     .toBeGreaterThanOrEqual(44);
 }
 
+async function assertMinimumTouchTargets(controls: Locator): Promise<void> {
+  await expect
+    .poll(async () => {
+      const boxes = await controls.evaluateAll((elements) =>
+        elements.map((element) => {
+          const rect = element.getBoundingClientRect();
+          return { width: rect.width, height: rect.height };
+        }),
+      );
+      return boxes.length > 0 && boxes.every((box) => box.width >= 44 && box.height >= 44);
+    })
+    .toBe(true);
+}
+
 test.describe('M-R3 responsive, accessibility, and visual release gates', () => {
   for (const viewport of VIEWPORTS) {
     test(`R1 shell and core overlays stay inside viewport at ${viewport.name}`, async ({
@@ -187,6 +201,7 @@ test.describe('M-R3 responsive, accessibility, and visual release gates', () => 
     const settingsDialog = page.locator('.modal-card[role="dialog"]');
     const settingsSwitches = settingsDialog.getByRole('switch');
     await expect(settingsSwitches.first()).toBeVisible();
+    await assertMinimumTouchTargets(settingsSwitches);
     const firstSettingsSwitch = settingsSwitches.first();
     await firstSettingsSwitch.focus();
     await expect(firstSettingsSwitch).toBeFocused();
@@ -200,6 +215,7 @@ test.describe('M-R3 responsive, accessibility, and visual release gates', () => 
     const exportDialog = page.locator('.modal-card[role="dialog"]');
     const exportSwitches = exportDialog.getByRole('switch');
     await expect(exportSwitches).toHaveCount(3);
+    await assertMinimumTouchTargets(exportSwitches);
     const firstExportSwitch = exportSwitches.first();
     await firstExportSwitch.focus();
     await expect(firstExportSwitch).toBeFocused();
@@ -208,6 +224,40 @@ test.describe('M-R3 responsive, accessibility, and visual release gates', () => 
     await expect(firstExportSwitch).not.toHaveAttribute('aria-checked', beforeExport ?? '');
     await page.keyboard.press('Escape');
     await expect(exportDialog).toHaveCount(0);
+
+    await page.setViewportSize({ width: VIEWPORTS[0].width, height: VIEWPORTS[0].height });
+    await page.locator('.wing-settings-btn').click();
+    const mobileSettingsDialog = page.locator('.modal-card[role="dialog"]');
+    await expect(mobileSettingsDialog).toBeVisible();
+    await assertMinimumTouchTargets(mobileSettingsDialog.getByRole('switch'));
+    await page.keyboard.press('Escape');
+    await expect(mobileSettingsDialog).toHaveCount(0);
+
+    await page.locator('.topbar-btn--export').click();
+    const mobileExportDialog = page.locator('.modal-card[role="dialog"]');
+    await expect(mobileExportDialog).toBeVisible();
+    await assertMinimumTouchTargets(mobileExportDialog.getByRole('switch'));
+    await page.keyboard.press('Escape');
+    await expect(mobileExportDialog).toHaveCount(0);
+
+    await page.locator('.wing-bookmark-dot[aria-label="快速入门"]').click();
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().activePath ?? ''))
+      .toBe('/快速入门.md');
+    await page.locator('.wing-new-btn').click();
+    const templateDialog = page.locator('.modal-card[role="dialog"]');
+    const saveToggle = templateDialog.locator('.save-toggle');
+    await expect(saveToggle).toBeEnabled();
+    await saveToggle.click();
+    await templateDialog.getByPlaceholder('模板名称').fill('触控目标模板');
+    await templateDialog.getByRole('button', { name: '保存', exact: true }).click();
+
+    const customTemplate = templateDialog.locator('.custom-tpl', { hasText: '触控目标模板' });
+    await expect(customTemplate).toBeVisible();
+    const deleteButton = customTemplate.getByRole('button', { name: '删除模板' });
+    await assertMinimumTouchTargets(deleteButton);
+    await deleteButton.click();
+    await expect(customTemplate).toHaveCount(0);
   });
 
   test('R3 editor and settings surfaces stay measurable', async ({ page }, testInfo) => {
