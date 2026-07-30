@@ -505,6 +505,7 @@ import {
   isSupportedNoteFile,
   stripSupportedNoteExtension,
 } from '@/utils/note-files';
+import { useDialogFocus } from '@/composables/useDialogFocus';
 
 // ============================================================
 // Props & Emits
@@ -561,6 +562,11 @@ const renamingPath = ref<string | null>(null);
 const renameValue = ref('');
 const renameInputEl = ref<HTMLInputElement | null>(null);
 const overlayRef = ref<HTMLDivElement | null>(null);
+useDialogFocus({
+  visible: () => props.visible,
+  containerRef: overlayRef,
+  initialFocus: '.search-input',
+});
 const treeContainerRef = ref<HTMLElement | null>(null);
 
 const contextMenu = ref<{
@@ -1003,9 +1009,6 @@ watch(
         }
         expandedDirs.value = next;
       }
-      // 聚焦 overlay 确保 Escape 键可靠关闭（tabindex="-1" 使 div 可编程聚焦但不进入 Tab 顺序）
-      // @see BUG-041, BUG-047 — 参考 SettingsDialog/ExportDialog 等 modals 模式
-      nextTick().then(() => overlayRef.value?.focus());
     }
   },
 );

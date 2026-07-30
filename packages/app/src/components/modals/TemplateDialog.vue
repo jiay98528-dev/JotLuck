@@ -17,7 +17,9 @@
         <!-- Header -->
         <div class="modal-header">
           <h2 id="template-dialog-title">新建笔记</h2>
-          <button class="modal-close" aria-label="关闭" @click="cancel">&times;</button>
+          <button class="modal-close" data-dialog-initial-focus aria-label="关闭" @click="cancel">
+            &times;
+          </button>
         </div>
 
         <!-- Body: Two-column layout -->
@@ -152,10 +154,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { getBuiltInTemplates, previewTemplate } from '@/services/TemplateEngine';
 import type { TemplateItem } from '@/types';
 import Button from '@/components/common/Button.vue';
+import { useDialogFocus } from '@/composables/useDialogFocus';
 
 // ── Internal: rich template shape as returned by the engine ─
 interface RichTemplateItem extends TemplateItem {
@@ -184,6 +187,11 @@ const emit = defineEmits<{
 }>();
 
 const overlayRef = ref<HTMLDivElement | null>(null);
+useDialogFocus({
+  visible: () => props.visible,
+  containerRef: overlayRef,
+  initialFocus: '[data-dialog-initial-focus]',
+});
 
 // ── State ──────────────────────────────────────────────
 const templates = getBuiltInTemplates() as RichTemplateItem[];
@@ -260,7 +268,6 @@ watch(
   (val) => {
     if (val) {
       resetState();
-      nextTick().then(() => overlayRef.value?.focus());
     }
   },
 );

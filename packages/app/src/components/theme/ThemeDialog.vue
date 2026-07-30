@@ -1,6 +1,13 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="modal-overlay" @click.self="close">
+    <div
+      v-if="visible"
+      ref="overlayRef"
+      tabindex="-1"
+      class="modal-overlay"
+      @click.self="close"
+      @keydown.escape="close"
+    >
       <div
         class="modal-card theme-center"
         role="dialog"
@@ -16,6 +23,7 @@
           <button
             class="theme-center__close"
             type="button"
+            data-dialog-initial-focus
             aria-label="关闭主题中心"
             @click="close"
           >
@@ -266,6 +274,7 @@
 import { computed, ref, watch } from 'vue';
 import { useThemeStore } from '@/stores/theme';
 import type { InstalledThemePack } from '@/types/theme-pack';
+import { useDialogFocus } from '@/composables/useDialogFocus';
 
 const props = defineProps<{
   visible: boolean;
@@ -274,6 +283,13 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:visible': [visible: boolean];
 }>();
+
+const overlayRef = ref<HTMLDivElement | null>(null);
+useDialogFocus({
+  visible: () => props.visible,
+  containerRef: overlayRef,
+  initialFocus: '[data-dialog-initial-focus]',
+});
 
 const theme = useThemeStore();
 const fileInput = ref<HTMLInputElement | null>(null);

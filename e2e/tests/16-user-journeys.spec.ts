@@ -10,10 +10,11 @@
  * V5: 按钮完整性 — 每个按钮点击并验证可观测结果
  * V6: 用户旅程完整性 — 多步骤端到端闭环
  */
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import {
   waitForAppReady,
   getEditorContent,
+  getEditorContentFromBridge,
   typeInEditor,
   appendInEditor,
   clearEditor,
@@ -23,6 +24,20 @@ import {
   resetAppState,
   waitForSearchReady,
 } from '../helpers/test-utils';
+
+async function ensureViewMode(page: Page, target: 'live' | 'split'): Promise<void> {
+  const current = async (): Promise<'live' | 'split' | 'read'> => {
+    if (await page.locator('.reader-workbench[data-view-mode="read"]').isVisible()) return 'read';
+    if (await page.locator('.split-pane').isVisible()) return 'split';
+    return 'live';
+  };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if ((await current()) === target) return;
+    await page.locator('.view-mode-toggle').click();
+    await page.waitForTimeout(250);
+  }
+  expect(await current()).toBe(target);
+}
 
 // ============================================================
 // Journey 1: 文件抽屉 — 展开子目录 → 打开文件 → 编辑 → 保存
@@ -364,32 +379,35 @@ test.describe('V6 用户旅程', () => {
     await page.locator('.topbar-search-hint').click();
     await expect(page.locator('.palette')).toBeVisible({ timeout: 3000 });
 
-    // Step 2: 输入搜索词
+    // Step 2: 从真实输入框输入正则和两个必须同时满足的标签
     const searchInput = page.locator('.search-input');
     await expect(searchInput).toBeVisible();
-    await searchInput.fill('欢迎');
+    await searchInput.fill('/欢迎使用/ tag:入门 tag:markdown');
     await page.waitForTimeout(800); // 等待防抖搜索完成
 
-    // Step 3: 验证搜索结果
+    // Step 3: AND 标签过滤后只剩目标笔记
     const results = page.locator('.result-item');
-    const resultCount = await results.count();
-    expect(resultCount).toBeGreaterThan(0);
-
-    // 验证第一个结果有标题
-    const firstTitle = results.first().locator('.result-title');
-    await expect(firstTitle).toBeVisible();
-    const titleText = await firstTitle.textContent();
-    expect(titleText).toBeTruthy();
+    await expect(results).toHaveCount(1);
+    await expect(results.first().locator('.result-title')).toHaveText('快速入门');
 
     // Step 4: 点击第一个结果
     await results.first().click();
-    await page.waitForTimeout(500);
+    await expect(page.locator('.palette')).not.toBeVisible({ timeout: 3000 });
 
-    // Step 5: 验证导航到正确的笔记（内容包含搜索词）
-    await expectEditorContains(page, '欢迎');
+    // Step 5: 验证导航到正确笔记，CM6 折叠光标落在真实正文命中开头
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().activePath ?? ''))
+      .toBe('/快速入门.md');
+    const expectedCursor = await page.evaluate(() => {
+      const content = window.__jotluck_e2e?.editor?.getContent() ?? '';
+      return content.indexOf('欢迎使用');
+    });
+    expect(expectedCursor).toBeGreaterThanOrEqual(0);
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.editor?.getCursor() ?? -1))
+      .toBe(expectedCursor);
 
     // Step 6: 编辑命中笔记
-    await clearEditor(page);
     await appendInEditor(page, '\n\n搜索后编辑的内容。');
 
     // Step 7: 等待自动保存
@@ -411,50 +429,64 @@ test.describe('V6 用户旅程', () => {
     await page.locator('.wing-bookmark-dot[aria-label="快速入门"]').click();
     await page.waitForTimeout(500);
 
-    // Step 2: 切换为即时 (Live) 模式
-    const viewBtns = page.locator('.view-mode-btn');
-    const liveBtn = viewBtns.filter({ hasText: /即时|Live/i });
-    if ((await liveBtn.count()) > 0) {
-      await liveBtn.click();
-      await page.waitForTimeout(500);
-    }
+    // Step 2: 使用唯一正文块建立可精确辨认的即时预览状态
+    await ensureViewMode(page, 'live');
+    const source = '# 参考块\n\n唯一即时预览段落\n\n尾部编辑块';
+    await page.evaluate((content) => window.__jotluck_e2e?.editor?.setContent(content), source);
 
-    // Step 3: 验证渲染块存在
-    const renderedBlocks = page.locator('.cm-live-block');
-    const blockCount = await renderedBlocks.count();
-    expect(blockCount).toBeGreaterThan(0);
+    // Step 3: 点击唯一渲染块进入源码编辑
+    const uniqueBlock = page.locator('.cm-live-block', { hasText: '唯一即时预览段落' });
+    await expect(uniqueBlock).toHaveCount(1);
+    await uniqueBlock.click();
+    await expect(uniqueBlock).toHaveCount(0);
 
-    // Step 4: 点击第一个渲染块进入编辑模式
-    await renderedBlocks.first().click();
-    await page.waitForTimeout(300);
+    // Step 4: 编辑该块且不改变其他源码
+    await page.keyboard.insertText('已编辑 ');
+    await expect
+      .poll(() => getEditorContentFromBridge(page))
+      .toBe('# 参考块\n\n已编辑 唯一即时预览段落\n\n尾部编辑块');
 
-    // Step 5: 编辑块内容
-    await page.keyboard.type(' 编辑后');
-    await page.waitForTimeout(300);
-
-    // Step 6: 按 Escape 退出编辑，恢复渲染
+    // Step 5: Escape 恢复的必须是刚编辑的唯一块，并把焦点交给它
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(500);
+    const restored = page.locator('.cm-live-block', {
+      hasText: '已编辑 唯一即时预览段落',
+    });
+    await expect(restored).toHaveCount(1);
+    await expect(restored).toBeFocused();
 
-    // Step 7: 验证渲染块已恢复
-    const restoredBlocks = page.locator('.cm-live-block');
-    const restoredCount = await restoredBlocks.count();
-    expect(restoredCount).toBeGreaterThan(0);
+    // Step 6: Enter 从恢复块重新进入源码编辑
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.cm-editor.cm-focused')).toBeVisible();
+    await expect(restored).toHaveCount(0);
 
-    // Step 8: 保存并验证内容持久化
+    // Step 7: 保存并验证内容持久化
     await waitForAutoSave(page);
   });
 
-  test('J6: 图片拖放上传 → assets 写入 → Markdown 路径正确', async ({ page }) => {
+  test('J6: 图片拖放上传 → 真实预览 → 刷新重开 → assets 隐藏', async ({ page }) => {
+    test.setTimeout(60_000);
+    await page.locator('.wing-bookmark-dot[aria-label="快速入门"]').click();
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().activePath ?? ''))
+      .toBe('/快速入门.md');
     await typeInEditor(page, '# 图片上传旅程\n\n');
     await waitForAutoSave(page);
 
-    await page.locator('.markdown-editor').evaluate((host) => {
-      const pngBytes = new Uint8Array([
-        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6,
-        0, 0, 0, 31, 21, 196, 137,
-      ]);
-      const file = new File([pngBytes], 'upload.png', { type: 'image/png' });
+    await page.locator('.markdown-editor').evaluate(async (host) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1;
+      canvas.height = 1;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('2D canvas unavailable');
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, 1, 1);
+      const png = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('PNG encoding failed'));
+        }, 'image/png');
+      });
+      const file = new File([png], 'upload.png', { type: 'image/png' });
       const dataTransfer = new DataTransfer();
       dataTransfer.items.add(file);
       host.dispatchEvent(
@@ -483,6 +515,37 @@ test.describe('V6 用户旅程', () => {
     expect(assetState.assetPath).toMatch(/^\/assets\/img_.*\.png$/);
     expect(assetState.content.length).toBeGreaterThan(0);
     expect(assetState.content).not.toContain('data:image');
+
+    await ensureViewMode(page, 'split');
+    const previewImage = page.locator('.split-preview img[alt="upload"]');
+    await expect(previewImage).toBeVisible({ timeout: 5000 });
+    await expect
+      .poll(() =>
+        previewImage.evaluate((image: HTMLImageElement) => ({
+          complete: image.complete,
+          naturalWidth: image.naturalWidth,
+          dataUrl: image.src.startsWith('data:image/png;base64,'),
+        })),
+      )
+      .toMatchObject({ complete: true, naturalWidth: 1, dataUrl: true });
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForAppReady(page);
+    await page.locator('.wing-bookmark-dot[aria-label="图片上传旅程"]').click();
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().activePath ?? ''))
+      .toBe('/快速入门.md');
+    await ensureViewMode(page, 'split');
+    const reopenedImage = page.locator('.split-preview img[alt="upload"]');
+    await expect(reopenedImage).toBeVisible({ timeout: 5000 });
+    await expect
+      .poll(() =>
+        reopenedImage.evaluate((image: HTMLImageElement) => ({
+          complete: image.complete,
+          naturalWidth: image.naturalWidth,
+        })),
+      )
+      .toEqual({ complete: true, naturalWidth: 1 });
 
     await page.locator('.topbar-btn--menu').click();
     await expect(page.locator('.file-drawer')).toBeVisible({ timeout: 3000 });

@@ -16,7 +16,9 @@
       >
         <div class="modal-header">
           <h2 id="settings-dialog-title">设置</h2>
-          <button class="modal-close" aria-label="关闭" @click="close">&times;</button>
+          <button class="modal-close" data-dialog-initial-focus aria-label="关闭" @click="close">
+            &times;
+          </button>
         </div>
 
         <div class="modal-body">
@@ -255,7 +257,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import {
   APP_ISSUES_URL,
   APP_LICENSE_URL,
@@ -269,6 +271,7 @@ import {
   type CompletionSettings,
 } from '@/services/CompletionSettings';
 import type { CompletionTrainingMeta } from '@/services/CompletionTrainingService';
+import { useDialogFocus } from '@/composables/useDialogFocus';
 
 const props = withDefaults(
   defineProps<{
@@ -302,6 +305,11 @@ const tabs: TabDef[] = [
 ];
 
 const overlayRef = ref<HTMLDivElement | null>(null);
+useDialogFocus({
+  visible: () => props.visible,
+  containerRef: overlayRef,
+  initialFocus: '[data-dialog-initial-focus]',
+});
 const activeTab = ref<TabDef['id']>('editor');
 
 const fontSize = ref(16);
@@ -362,16 +370,6 @@ watch(autoCheckUpdates, (value) => {
     localStorage.setItem(AUTO_INSTALL_KEY, 'false');
   }
 });
-
-watch(
-  () => props.visible,
-  async (isVisible) => {
-    if (isVisible) {
-      await nextTick();
-      overlayRef.value?.focus();
-    }
-  },
-);
 
 function formatDelay(ms: number): string {
   if (ms < 1000) return `${ms}ms`;

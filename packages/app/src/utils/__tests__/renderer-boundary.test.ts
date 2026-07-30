@@ -55,4 +55,33 @@ describe('@jotluck/renderer markdown boundaries', () => {
     expect(html).toContain('<th>Name</th>');
     expect(html).toContain('<td align="right">95</td>');
   });
+
+  it('rewrites local image sources through the host resolver before sanitizing', () => {
+    const html = renderMarkdown('![pixel](./assets/pixel.png)', {
+      resolveImageSrc: (source) =>
+        source === './assets/pixel.png' ? 'data:image/png;base64,aGVsbG8=' : null,
+    });
+
+    expect(html).toContain('src="data:image/png;base64,aGVsbG8="');
+    expect(html).not.toContain('./assets/pixel.png');
+  });
+
+  it('still sanitizes a malicious URL returned by the image resolver', () => {
+    const html = renderMarkdown('![unsafe](safe.png)', {
+      resolveImageSrc: () => 'javascript:alert(1)',
+    });
+
+    expect(html).toContain('alt="unsafe"');
+    expect(html).not.toContain('javascript:');
+  });
+
+  it('does not leak a rejected local image path into rendered HTML', () => {
+    const html = renderMarkdown('![blocked](../../outside.png)', {
+      resolveImageSrc: () => null,
+    });
+
+    expect(html).toContain('alt="blocked"');
+    expect(html).not.toContain('outside.png');
+    expect(html).not.toContain('src=');
+  });
 });

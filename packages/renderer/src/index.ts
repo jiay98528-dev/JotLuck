@@ -10,11 +10,20 @@
  * @see TAD.md §4
  */
 
-import { marked, type Tokens } from 'marked';
+import { marked, Renderer, type Tokens } from 'marked';
 import { jotluckExtensions, setWikiLinkExistsResolver } from './marked-extensions';
 import { sanitize } from './sanitize';
 import { highlightCodeBlocks } from './highlight';
 import type { RendererOptions } from './types';
+
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 /** 将中文输入法常见全角 Markdown 定界符规范化为等长半角字符。 */
 export function normalizeFullwidthMarkdownSyntax(source: string): string {
@@ -179,29 +188,49 @@ function protectBareJsonBlocks(source: string): string {
  * 渲染 Markdown 字符串为安全 HTML。
  *
  * 管线流程：
- *   1. marked.parse(source) — Markdown → HTML（含 Wiki-link + #tag 扩展）
- *   2. sanitize(html)       — DOMPurify 清洗 → 安全 HTML
- *   3. (DOM insert)         — 由调用方插入 DOM
- *   4. highlightCodeBlocks  — 对 <pre><code> 执行语法高亮
+ *   1. resolveImageSrc      — 宿主按需把本地图片地址改写为受控 URL
+ *   2. marked.parse(source) — Markdown → HTML（含 Wiki-link + #tag 扩展）
+ *   3. sanitize(html)       — DOMPurify 清洗解析器在内的全部输出
+ *   4. (DOM insert)         — 由调用方插入 DOM
+ *   5. highlightCodeBlocks  — 对 <pre><code> 执行语法高亮
  *
  * @param source - Raw Markdown source text
- * @param _options - Renderer options (reserved for future use)
+ * @param options - Renderer options, including host-provided image resolution
  * @returns Rendered safe HTML string
  */
 export function renderMarkdown(source: string, options?: RendererOptions): string {
-  // Step 1: Parse Markdown with custom extensions
+  // Steps 1-2: Resolve image tokens while parsing with the custom extensions.
   const normalizedSource = protectBareJsonBlocks(normalizeFullwidthMarkdownSyntax(source));
   setWikiLinkExistsResolver(options?.wikiLinkExists ?? null);
   let rawHtml: string;
   try {
+    let renderer: Renderer | undefined;
+    if (options?.resolveImageSrc) {
+      renderer = new Renderer();
+      const renderDefaultImage = renderer.image.bind(renderer);
+      renderer.image = (token) => {
+        let href: string | null = token.href;
+        try {
+          href = options.resolveImageSrc?.(token.href) ?? null;
+        } catch {
+          href = null;
+        }
+        if (href === null) {
+          const title = token.title ? ` title="${escapeHtmlAttribute(token.title)}"` : '';
+          return `<img alt="${escapeHtmlAttribute(token.text)}"${title}>`;
+        }
+        return renderDefaultImage({ ...token, href });
+      };
+    }
     rawHtml = marked.parse(normalizedSource, {
       async: false,
+      renderer,
     }) as string;
   } finally {
     setWikiLinkExistsResolver(null);
   }
 
-  // Step 2: Sanitize against XSS
+  // Step 3: Sanitize the complete output, including host resolver values.
   const cleanHtml = sanitize(addHeadingIds(rawHtml, normalizedSource));
 
   return cleanHtml;

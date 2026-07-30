@@ -15,7 +15,7 @@ import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { EditorView, lineNumbers, keymap } from '@codemirror/view';
 import { EditorState, Compartment } from '@codemirror/state';
 import { jotluckExtensions } from '@/utils/cm6-extensions';
-import { livePreviewExtension, unpinFocusedBlock } from '@/utils/cm6-live-preview';
+import { exitLivePreviewOnEscape, livePreviewExtension } from '@/utils/cm6-live-preview';
 import { ghostTextPlugin } from '@/utils/cm6-ghost-text';
 import { MarkdownPredictor } from '@/services/MarkdownPredictor';
 import { getCompletionSettings, type CompletionSettings } from '@/services/CompletionSettings';
@@ -27,6 +27,7 @@ import {
 } from '@/utils/markdown-formatting';
 import { getJotLuckE2EBridge } from '@/utils/e2e-bridge';
 import { flushCompletionStorageMutations } from '@/services/completion/learning-repository';
+import type { RendererOptions } from '@jotluck/renderer';
 
 const props = withDefaults(
   defineProps<{
@@ -47,6 +48,8 @@ const props = withDefaults(
     onLivePreviewWikiLinkClick?: (note: string, anchor: null | string) => void;
     wikiLinkExists?: (note: string) => boolean;
     wikiLinkRevision?: number;
+    resolveImageSrc?: RendererOptions['resolveImageSrc'];
+    imageRevision?: number;
     onEditorDrop?: (event: DragEvent) => void;
     onEditorDragOver?: (event: DragEvent) => void;
     onEditorPaste?: (event: ClipboardEvent) => boolean | void | Promise<boolean>;
@@ -67,6 +70,8 @@ const props = withDefaults(
     onLivePreviewWikiLinkClick: undefined,
     wikiLinkExists: undefined,
     wikiLinkRevision: 0,
+    resolveImageSrc: undefined,
+    imageRevision: 0,
     onEditorDrop: undefined,
     onEditorDragOver: undefined,
     onEditorPaste: undefined,
@@ -239,6 +244,7 @@ function createState(doc: string) {
               onTagClick: props.onLivePreviewTagClick,
               onWikiLinkClick: props.onLivePreviewWikiLinkClick,
               wikiLinkExists: props.wikiLinkExists,
+              resolveImageSrc: props.resolveImageSrc,
             })
           : [],
       ),
@@ -246,10 +252,7 @@ function createState(doc: string) {
         {
           key: 'Escape',
           run: (v) => {
-            // Don't unpin blocks during IME composition — let the IME
-            // consume Escape (e.g. cancel candidate window) first.
-            if (v.composing || v.compositionStarted) return false;
-            return props.livePreview ? unpinFocusedBlock(v) : false;
+            return props.livePreview ? exitLivePreviewOnEscape(v) : false;
           },
         },
       ]),
@@ -368,7 +371,7 @@ watch(
 
 // Dynamic live preview toggle
 watch(
-  () => [props.livePreview, props.wikiLinkRevision] as const,
+  () => [props.livePreview, props.wikiLinkRevision, props.imageRevision] as const,
   ([active]) => {
     if (!view) return;
     view.dispatch({
@@ -379,6 +382,7 @@ watch(
               onTagClick: props.onLivePreviewTagClick,
               onWikiLinkClick: props.onLivePreviewWikiLinkClick,
               wikiLinkExists: props.wikiLinkExists,
+              resolveImageSrc: props.resolveImageSrc,
             })
           : [],
       ),

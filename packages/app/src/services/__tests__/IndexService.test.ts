@@ -16,4 +16,18 @@ describe('IndexService notebook traversal', () => {
     expect(index.documents['/project-notes/decision.md']?.title).toBe('Project decision');
     expect(index.documents['/node_modules/README.md']).toBeUndefined();
   });
+
+  it('indexes block-list frontmatter tags for real regex + multi-tag search', async () => {
+    const fs = new MockFSService(0, { persist: false });
+    const service = new IndexService(fs);
+    const index = await service.buildFullIndex();
+
+    expect(index.documents['/快速入门.md']?.tags).toEqual(['入门', 'markdown']);
+    const results = service.getEngine().search({
+      text: '',
+      regex: '欢迎使用',
+      tags: ['入门', 'markdown'],
+    });
+    expect(results.map((result) => result.notePath)).toEqual(['/快速入门.md']);
+  });
 });

@@ -1,4 +1,4 @@
-import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { ensureEditorReady, waitForAppReady } from '../helpers/test-utils';
 
 const VIEWPORTS = [
@@ -88,58 +88,95 @@ async function waitForSurfaceInsideViewport(page: Page, selector: string): Promi
     .toMatchObject({ left: 0 });
 }
 
+async function assertFocusTrapAndEscapeRestore(
+  page: Page,
+  surface: Locator,
+  trigger: Locator,
+): Promise<void> {
+  await expect
+    .poll(() => surface.evaluate((dialog) => dialog.contains(document.activeElement)))
+    .toBe(true);
+  await trigger.focus();
+  await expect
+    .poll(() => surface.evaluate((dialog) => dialog.contains(document.activeElement)))
+    .toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(surface).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+}
+
+async function assertCloseTouchTarget(surface: Locator): Promise<void> {
+  const close = surface.locator('.modal-close').first();
+  await expect(close).toBeVisible();
+  await expect
+    .poll(() => close.evaluate((button) => button.getBoundingClientRect().width))
+    .toBeGreaterThanOrEqual(44);
+  await expect
+    .poll(() => close.evaluate((button) => button.getBoundingClientRect().height))
+    .toBeGreaterThanOrEqual(44);
+}
+
 test.describe('M-R3 responsive, accessibility, and visual release gates', () => {
   for (const viewport of VIEWPORTS) {
     test(`R1 shell and core overlays stay inside viewport at ${viewport.name}`, async ({
       page,
     }, testInfo) => {
+      testInfo.setTimeout(60_000);
       await bootAt(page, viewport);
       await expect(page.locator('.app-shell')).toBeVisible();
       await assertNoPageHorizontalOverflow(page);
       await assertVisibleSurfacesInsideViewport(page);
       await captureCheckpoint(page, testInfo, viewport.name, 'app-shell-initial');
 
-      await page.locator('.wing-settings-btn').click();
-      await expect(page.locator('.modal-card[role="dialog"]')).toBeVisible();
+      const settingsTrigger = page.locator('.wing-settings-btn');
+      await settingsTrigger.click();
+      const settingsDialog = page.locator('.modal-card[role="dialog"]');
+      await expect(settingsDialog).toBeVisible();
       await assertNoPageHorizontalOverflow(page);
       await assertVisibleSurfacesInsideViewport(page);
+      await assertCloseTouchTarget(settingsDialog);
       await captureCheckpoint(page, testInfo, viewport.name, 'settings-dialog');
-      await page.keyboard.press('Escape');
-      await expect(page.locator('.modal-card[role="dialog"]')).toHaveCount(0);
+      await assertFocusTrapAndEscapeRestore(page, settingsDialog, settingsTrigger);
 
-      await page.locator('.topbar-search-hint').click();
-      await expect(page.locator('.palette[role="dialog"]')).toBeVisible();
+      const searchTrigger = page.locator('.topbar-search-hint');
+      await searchTrigger.click();
+      const searchPalette = page.locator('.palette[role="dialog"]');
+      await expect(searchPalette).toBeVisible();
       await expect(page.locator('.palette .search-input')).toBeFocused();
       await assertNoPageHorizontalOverflow(page);
       await assertVisibleSurfacesInsideViewport(page);
       await captureCheckpoint(page, testInfo, viewport.name, 'search-palette');
-      await page.keyboard.press('Escape');
-      await expect(page.locator('.palette[role="dialog"]')).toHaveCount(0);
+      await assertFocusTrapAndEscapeRestore(page, searchPalette, searchTrigger);
 
-      await page.locator('.wing-new-btn').click();
-      await expect(page.locator('.modal-card[role="dialog"]')).toBeVisible();
+      const templateTrigger = page.locator('.wing-new-btn');
+      await templateTrigger.click();
+      const templateDialog = page.locator('.modal-card[role="dialog"]');
+      await expect(templateDialog).toBeVisible();
       await assertNoPageHorizontalOverflow(page);
       await assertVisibleSurfacesInsideViewport(page);
+      await assertCloseTouchTarget(templateDialog);
       await captureCheckpoint(page, testInfo, viewport.name, 'template-dialog');
-      await page.keyboard.press('Escape');
-      await expect(page.locator('.modal-card[role="dialog"]')).toHaveCount(0);
+      await assertFocusTrapAndEscapeRestore(page, templateDialog, templateTrigger);
 
-      await page.locator('.topbar-btn--export').click();
-      await expect(page.locator('.modal-card[role="dialog"]')).toBeVisible();
+      const exportTrigger = page.locator('.topbar-btn--export');
+      await exportTrigger.click();
+      const exportDialog = page.locator('.modal-card[role="dialog"]');
+      await expect(exportDialog).toBeVisible();
       await assertNoPageHorizontalOverflow(page);
       await assertVisibleSurfacesInsideViewport(page);
+      await assertCloseTouchTarget(exportDialog);
       await captureCheckpoint(page, testInfo, viewport.name, 'export-dialog');
-      await page.keyboard.press('Escape');
-      await expect(page.locator('.modal-card[role="dialog"]')).toHaveCount(0);
+      await assertFocusTrapAndEscapeRestore(page, exportDialog, exportTrigger);
 
-      await page.locator('.topbar-btn--menu').click();
-      await expect(page.locator('.file-drawer[role="dialog"]')).toBeVisible();
+      const drawerTrigger = page.locator('.topbar-btn--menu');
+      await drawerTrigger.click();
+      const fileDrawer = page.locator('.file-drawer[role="dialog"]');
+      await expect(fileDrawer).toBeVisible();
       await waitForSurfaceInsideViewport(page, '.file-drawer[role="dialog"]');
       await assertNoPageHorizontalOverflow(page);
       await assertVisibleSurfacesInsideViewport(page);
       await captureCheckpoint(page, testInfo, viewport.name, 'file-drawer');
-      await page.keyboard.press('Escape');
-      await expect(page.locator('.file-drawer[role="dialog"]')).toHaveCount(0);
+      await assertFocusTrapAndEscapeRestore(page, fileDrawer, drawerTrigger);
     });
   }
 

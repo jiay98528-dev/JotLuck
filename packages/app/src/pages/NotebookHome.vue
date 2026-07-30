@@ -254,6 +254,8 @@
                             :pending-format="pendingFormatAction"
                             :wiki-link-exists="wikiLinkExists"
                             :wiki-link-revision="wikiLinkRevision"
+                            :resolve-image-src="previewImages.resolveImageSrc"
+                            :image-revision="previewImages.imageRevision.value"
                             :completion-settings="completionSettings"
                             :predictor="completionPredictor"
                             :enable-autocomplete="!isExternalEditing && !isLargeDocument"
@@ -305,6 +307,8 @@
                         :on-live-preview-wiki-link-click="onLivePreviewWikiLinkClick"
                         :wiki-link-exists="wikiLinkExists"
                         :wiki-link-revision="wikiLinkRevision"
+                        :resolve-image-src="previewImages.resolveImageSrc"
+                        :image-revision="previewImages.imageRevision.value"
                         :completion-settings="completionSettings"
                         :predictor="completionPredictor"
                         :enable-autocomplete="!isExternalEditing && !isLargeDocument"
@@ -521,7 +525,14 @@
     :slot-props="newFileDialogSlotProps"
   >
     <Teleport to="body">
-      <div v-if="showNewFileDialog" class="modal-overlay" @click.self="cancelNewFile">
+      <div
+        v-if="showNewFileDialog"
+        ref="newFileDialogRef"
+        tabindex="-1"
+        class="modal-overlay"
+        @click.self="cancelNewFile"
+        @keydown.escape="cancelNewFile"
+      >
         <div
           class="modal-card"
           style="width: 360px"
@@ -536,9 +547,9 @@
             <input
               v-model="newFileName"
               class="file-name-input"
+              data-dialog-initial-focus
               :placeholder="`文件名（${supportedNoteExtensionsText}）`"
               autofocus
-              @keydown.escape="cancelNewFile"
               @keydown.enter="confirmNewFile"
             />
           </div>
@@ -566,7 +577,14 @@
     :slot-props="deleteConfirmSlotProps"
   >
     <Teleport to="body">
-      <div v-if="pendingDeletePath" class="modal-overlay" @click.self="cancelDeleteFile">
+      <div
+        v-if="pendingDeletePath"
+        ref="deleteDialogRef"
+        tabindex="-1"
+        class="modal-overlay"
+        @click.self="cancelDeleteFile"
+        @keydown.escape="cancelDeleteFile"
+      >
         <div
           class="modal-card"
           style="width: 380px"
@@ -583,7 +601,9 @@
             </p>
           </div>
           <div class="modal-footer">
-            <button class="btn btn--secondary" @click="cancelDeleteFile">取消</button>
+            <button class="btn btn--secondary" data-dialog-initial-focus @click="cancelDeleteFile">
+              取消
+            </button>
             <button class="btn btn--danger" @click="confirmDeleteFile">删除</button>
           </div>
         </div>
@@ -602,8 +622,11 @@
     <Teleport to="body">
       <div
         v-if="showExternalEditConfirm"
+        ref="externalEditDialogRef"
+        tabindex="-1"
         class="modal-overlay"
         @click.self="showExternalEditConfirm = false"
+        @keydown.escape="showExternalEditConfirm = false"
       >
         <div
           class="modal-card"
@@ -622,7 +645,11 @@
             </p>
           </div>
           <div class="modal-footer">
-            <button class="btn btn--secondary" @click="showExternalEditConfirm = false">
+            <button
+              class="btn btn--secondary"
+              data-dialog-initial-focus
+              @click="showExternalEditConfirm = false"
+            >
               取消
             </button>
             <button class="btn btn--primary" @click="confirmExternalEdit()">仅编辑当前文件</button>
@@ -641,7 +668,13 @@
     :slot-props="scratchExitDialogSlotProps"
   >
     <Teleport to="body">
-      <div v-if="showScratchExitDialog" class="modal-overlay">
+      <div
+        v-if="showScratchExitDialog"
+        ref="scratchExitDialogRef"
+        tabindex="-1"
+        class="modal-overlay"
+        @keydown.escape="cancelScratchExit"
+      >
         <div
           class="modal-card"
           style="width: 420px"
@@ -658,7 +691,9 @@
             </p>
           </div>
           <div class="modal-footer">
-            <button class="btn btn--secondary" @click="cancelScratchExit">取消</button>
+            <button class="btn btn--secondary" data-dialog-initial-focus @click="cancelScratchExit">
+              取消
+            </button>
             <button class="btn btn--secondary" @click="discardScratchAndClose">不保存</button>
             <button class="btn btn--primary" @click="saveScratchAndClose">保存</button>
           </div>
@@ -719,9 +754,11 @@ import type {
   WindowBootstrapPayload,
   PromotedNotebookPayload,
 } from '@/types';
-import type { EditorView } from '@codemirror/view';
+import { EditorView } from '@codemirror/view';
 import { useVersionCheck } from '@/composables/useVersionCheck';
 import { useImageUpload } from '@/composables/useImageUpload';
+import { usePreviewImageResolver } from '@/composables/usePreviewImageResolver';
+import { useDialogFocus } from '@/composables/useDialogFocus';
 import { normalizeUrl } from '@/utils/urlUtils';
 import {
   getCompletionSettings,
@@ -864,12 +901,6 @@ const isSinglePageLayout = computed(
 const indexStore = useIndexStore();
 const searchStore = useSearchStore();
 const { headings, update: updateHeadings, getActiveHeadingId } = useHeadings();
-const imageUpload = useImageUpload(
-  fs,
-  () => editorRef.value?.getEditorView() ?? null,
-  () => activePath.value,
-  () => refreshFileTree(),
-);
 
 // --- UI State ---
 type ViewMode = ThemeViewMode | string;
@@ -1339,6 +1370,54 @@ interface MarkdownEditorExposed {
 }
 
 const editorRef = ref<MarkdownEditorExposed | null>(null);
+const newFileDialogRef = ref<HTMLDivElement | null>(null);
+const deleteDialogRef = ref<HTMLDivElement | null>(null);
+const externalEditDialogRef = ref<HTMLDivElement | null>(null);
+const scratchExitDialogRef = ref<HTMLDivElement | null>(null);
+const editorFocusFallback = () => editorRef.value?.getEditorView()?.contentDOM ?? null;
+
+useDialogFocus({
+  visible: () => showNewFileDialog.value,
+  containerRef: newFileDialogRef,
+  initialFocus: '[data-dialog-initial-focus]',
+  fallbackFocus: editorFocusFallback,
+});
+useDialogFocus({
+  visible: () => Boolean(pendingDeletePath.value),
+  containerRef: deleteDialogRef,
+  initialFocus: '[data-dialog-initial-focus]',
+  fallbackFocus: editorFocusFallback,
+});
+useDialogFocus({
+  visible: () => showExternalEditConfirm.value,
+  containerRef: externalEditDialogRef,
+  initialFocus: '[data-dialog-initial-focus]',
+  fallbackFocus: editorFocusFallback,
+});
+useDialogFocus({
+  visible: () => showScratchExitDialog.value,
+  containerRef: scratchExitDialogRef,
+  initialFocus: '[data-dialog-initial-focus]',
+  fallbackFocus: editorFocusFallback,
+});
+
+const previewImages = usePreviewImageResolver(fs);
+const imageUpload = useImageUpload(
+  fs,
+  () => editorRef.value?.getEditorView() ?? null,
+  () => activePath.value,
+  async (path) => {
+    await previewImages.prime(path);
+    await refreshFileTree();
+  },
+);
+
+watch(
+  [activeNotebookRoot, activePath, isExternalSession],
+  ([root, path, external]) => previewImages.setNotePath(external ? '' : path, root),
+  { immediate: true },
+);
+watch(previewImages.imageRevision, () => refreshSplitPreviewIfVisible());
 
 // --- View Mode ---
 const viewModeLabels: Record<string, string> = {
@@ -3084,7 +3163,10 @@ function updateSplitPreview(): void {
   }
   previewRenderTimer = setTimeout(() => {
     try {
-      splitPreviewHtml.value = renderMarkdown(content, { wikiLinkExists });
+      splitPreviewHtml.value = renderMarkdown(content, {
+        wikiLinkExists,
+        resolveImageSrc: previewImages.resolveImageSrc,
+      });
       void nextTick(() => {
         const previewEl = document.querySelector<HTMLElement>(
           '.split-preview, .markdown-body--full',
@@ -3454,9 +3536,52 @@ function onBubbleFormat(action: FormatAction): void {
 }
 
 // --- Search ---
-function onSearchSelectResult(result: SearchResult): void {
+async function onSearchSelectResult(result: SearchResult): Promise<void> {
   searchVisible.value = false;
-  void onShellSelectNote(result.notePath);
+  await onShellSelectNote(result.notePath);
+  if (normalizePath(activePath.value) !== normalizePath(result.notePath)) return;
+
+  const match = result.matches[0];
+  if (!match) return;
+  await nextTick();
+  await nextTick();
+
+  const view = editorRef.value?.getEditorView();
+  if (!view) return;
+  const doc = view.state.doc;
+  let offset = -1;
+
+  if (match.line >= 1 && match.line <= doc.lines && match.column >= 1) {
+    const line = doc.line(match.line);
+    const candidate = line.from + match.column - 1;
+    if (
+      candidate <= line.to &&
+      (!match.text || doc.sliceString(candidate, candidate + match.text.length) === match.text)
+    ) {
+      offset = candidate;
+    }
+  }
+
+  if (offset < 0 && match.text) {
+    offset = doc.toString().indexOf(match.text);
+  }
+  if (offset < 0) return;
+
+  // Focus first and let the browser's selectionchange from that focus settle.
+  // Firefox otherwise publishes the old DOM position after our transaction
+  // and moves a valid in-block match back to the live block boundary.
+  view.focus();
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  if (
+    editorRef.value?.getEditorView() !== view ||
+    normalizePath(activePath.value) !== normalizePath(result.notePath)
+  ) {
+    return;
+  }
+  view.dispatch({
+    selection: { anchor: offset },
+    effects: EditorView.scrollIntoView(offset, { y: 'center' }),
+  });
 }
 function onQuickAction(action: 'new-note' | 'export' | 'settings'): void {
   searchVisible.value = false;
@@ -3845,6 +3970,7 @@ onUnmounted(() => {
   if (splitDebounceTimer) clearTimeout(splitDebounceTimer);
   if (splitEditorMountTimer) clearTimeout(splitEditorMountTimer);
   if (previewRenderTimer) clearTimeout(previewRenderTimer);
+  previewImages.reset();
   if (updateTimer) clearTimeout(updateTimer);
   if (backgroundTrainingTimer) clearTimeout(backgroundTrainingTimer);
   if (watcherRefreshTimer) clearTimeout(watcherRefreshTimer);

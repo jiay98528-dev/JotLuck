@@ -12,7 +12,9 @@
         <!-- Header -->
         <div class="modal-header">
           <h2 id="export-dialog-title">导出笔记</h2>
-          <button class="modal-close" aria-label="关闭" @click="cancel">&times;</button>
+          <button class="modal-close" data-dialog-initial-focus aria-label="关闭" @click="cancel">
+            &times;
+          </button>
         </div>
 
         <!-- Body -->
@@ -150,6 +152,7 @@ import { exportNote } from '@/services/Exporter';
 import { ExportFormat } from '@/types';
 import type { ExportResult } from '@/types';
 import Button from '@/components/common/Button.vue';
+import { useDialogFocus } from '@/composables/useDialogFocus';
 
 // ── Props ──────────────────────────────────────────────
 const props = defineProps<{
@@ -166,6 +169,11 @@ const emit = defineEmits<{
 }>();
 
 const overlayRef = ref<HTMLDivElement | null>(null);
+useDialogFocus({
+  visible: () => props.visible,
+  containerRef: overlayRef,
+  initialFocus: '[data-dialog-initial-focus]',
+});
 
 // ── State ──────────────────────────────────────────────
 const selectedFormat = ref<ExportFormat>(ExportFormat.PDF);
@@ -253,35 +261,43 @@ function resetState(): void {
 }
 
 async function doExport(): Promise<void> {
-  if (!hasContent.value) return;
+  if (!hasContent.value || exportState.value === 'exporting') return;
 
   exportState.value = 'exporting';
   exportError.value = '';
 
-  const result: ExportResult = await exportNote(props.markdownContent!, props.noteTitle || '笔记', {
-    format: selectedFormat.value,
-    includeFrontmatter: includeFrontmatter.value,
-    includeWikiLinks: includeWikiLinks.value,
-    codeLineNumbers: codeLineNumbers.value,
-  });
+  try {
+    const result: ExportResult = await exportNote(
+      props.markdownContent!,
+      props.noteTitle || '笔记',
+      {
+        format: selectedFormat.value,
+        includeFrontmatter: includeFrontmatter.value,
+        includeWikiLinks: includeWikiLinks.value,
+        codeLineNumbers: codeLineNumbers.value,
+      },
+    );
 
-  if (result.success) {
-    exportState.value = 'success';
-    exportMessage.value = result.fileName ? `文件已保存：${result.fileName}` : '文件已导出';
-  } else {
+    if (result.success) {
+      exportState.value = 'success';
+      exportMessage.value = result.fileName ? `文件已保存：${result.fileName}` : '文件已导出';
+      return;
+    }
     exportState.value = 'error';
     exportError.value = result.error || '导出过程中发生未知错误';
+  } catch (error) {
+    exportState.value = 'error';
+    exportError.value = error instanceof Error ? error.message : '导出过程中发生未知错误';
   }
 }
 
 // ── Watch visible to reset on open ─────────────────────
-import { watch, nextTick } from 'vue';
+import { watch } from 'vue';
 watch(
   () => props.visible,
   (val) => {
     if (val) {
       resetState();
-      nextTick().then(() => overlayRef.value?.focus());
     }
   },
 );

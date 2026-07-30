@@ -69,8 +69,9 @@
 }
 
 .modal-close {
-  width: 28px;
-  height: 28px;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
+  flex: 0 0 var(--touch-target-min);
   border: none;
   border-radius: var(--radius-md);
   background: none;

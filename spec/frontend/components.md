@@ -1,6 +1,6 @@
 # Frontend Components
 
-版本：2026-07-28
+版本：2026-07-30
 
 ## 布局主链
 
@@ -33,6 +33,28 @@
 - `FileDrawer` 在正常 workspace 中显示“切换笔记本”，发出 `open-notebook`；父级与 `Ctrl/Cmd+O` 必须调用同一安全切换函数。
 - 切换按钮在 opening 时禁用；外部单文件会话和 workspace-unbound 不通过 FileDrawer 扩大目录权限。
 
+## Markdown 编辑与预览
+
+- `MarkdownEditor` 的 Live Preview 通过可选同步 `resolveImageSrc` 解析图片地址，并以 `imageRevision` 重建异步加载完成后的渲染块；未提供时保持原始 renderer 行为。
+- 即时预览按 Escape 必须恢复刚编辑的精确块并将焦点交给该渲染块；Enter 或点击重新进入源码编辑，IME composition 期间不得消费 Escape。
+- 本地图片解析失败或越界时移除不可读取的 `src`、保留 alt 文本，不得把原始本地路径泄漏给 WebView，也不得阻断正文渲染或扩大文件权限；网络、data/blob 与锚点地址保持原有渲染语义。
+
+## 命令面板与搜索结果
+
+- 命令面板支持一个 `/pattern/flags` 正则字面量，可与 `tag:`、`date:`、`folder:` 共存；允许空格与 `\/`。无 flags 时默认大小写不敏感，执行前移除有状态的 `g/y`；未闭合字面量按普通文本处理，已识别但无法编译时返回空结果。
+- 多个 `tag:` 为 AND 语义。点击正文命中后必须等待笔记加载，定位首个真实命中并滚动；标题命中或陈旧命中无法重定位时只打开笔记。
+
+## 通用弹窗
+
+- 所有宿主 `aria-modal` 浮层必须记录触发者、设置明确首焦点、在最上层内循环 Tab/Shift+Tab、阻止程序化焦点逃到背景，并在关闭后恢复触发者；触发者失效时使用调用方提供的安全 fallback。
+- 嵌套浮层只允许最上层捕获焦点。Escape 由各浮层状态机处理；文件抽屉继续保持“菜单 → 重命名 → 抽屉”的优先级。
+- 新建文件首焦点是文件名输入框；删除、放弃和退出确认首焦点是取消按钮；其余弹窗使用显式首控件或第一个可用控件。
+- 通用关闭控件的可点击尺寸不得小于 `--touch-target-min`，视觉图标可保持原尺寸。
+
+## ExportDialog
+
+- exporting 期间禁止重复提交。服务返回失败或 Promise reject 均进入 error，显示可理解原因并恢复取消和重试；失败不得清空用户已选格式与选项。
+
 ## 外部文件阅读器
 
 - `ExternalReader` 是 `external-readonly` 的独立轻量入口，接收文件名、授权路径、加载状态、错误、统计和标题导航能力；Markdown 必须安全渲染，`.txt` 必须作为转义纯文本保留换行。
@@ -52,6 +74,7 @@
 
 ## 变更记录
 
+- 2026-07-30：定义图片地址解析与 Live Preview Escape 焦点语义；补充正则/多标签/命中跳转、导出异常恢复和统一模态焦点合同。
 - 2026-07-28：定义 NotebookOpenGate 三态、可访问性契约及 FileDrawer 的安全切换事件，不扩展 Theme API v2。
 - 2026-07-25：外部阅读器改为复用成熟阅读工作台视觉与参考面板，补充滚动、目录和链接交互约束，并明确未提升父目录时的反链边界。
 - 2026-07-25：补充 ExternalReader 的三态会话职责及 `external-reader` Theme API v2 props 兼容约束。

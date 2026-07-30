@@ -26,6 +26,7 @@ import {
   normalizeFullwidthMarkdownSyntax,
   renderMarkdown,
 } from '@jotluck/renderer';
+import type { RendererOptions } from '@jotluck/renderer';
 import DOMPurify from 'dompurify';
 import { normalizeUrl } from '@/utils/urlUtils';
 
@@ -61,7 +62,10 @@ function renderBlock(
   refDefs: Map<string, string>,
   options: LivePreviewOptions,
 ): string {
-  const renderOptions = { wikiLinkExists: options.wikiLinkExists };
+  const renderOptions = {
+    wikiLinkExists: options.wikiLinkExists,
+    resolveImageSrc: options.resolveImageSrc,
+  };
   if (refDefs.size === 0) return renderMarkdown(raw, renderOptions);
   const prefix = [...refDefs.values()].join('\n');
   return renderMarkdown(prefix + '\n\n' + raw, renderOptions);
@@ -117,6 +121,7 @@ interface LivePreviewOptions {
   onTagClick?: (tag: string) => void;
   onWikiLinkClick?: (note: string, anchor: null | string) => void;
   wikiLinkExists?: (note: string) => boolean;
+  resolveImageSrc?: RendererOptions['resolveImageSrc'];
 }
 
 const SOURCE_PRESERVING_BLOCK_TYPES = new Set<BlockType>([
@@ -817,12 +822,14 @@ class RenderedBlockWidget extends WidgetType {
     if (frag.childNodes.length === 1) {
       const child = frag.firstChild as HTMLElement;
       if (child.classList?.contains('cm-live-block')) {
+        child.tabIndex = -1;
         this.attachTaskToggleBridge(child);
         return child;
       }
     }
     const span = document.createElement('span');
     span.className = 'cm-live-block';
+    span.tabIndex = -1;
     span.setAttribute('data-block-key', this.key);
     // Get attributes from the HTML string (parse them)
     const m = /<span class="cm-live-block"([^>]*)>/.exec(this.html);
@@ -998,6 +1005,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
       onClick: ((e: MouseEvent) => void) | null = null;
       onPointerDownCapture: ((e: PointerEvent) => void) | null = null;
       onChangeCapture: ((e: Event) => void) | null = null;
+      onKeydown: ((e: KeyboardEvent) => void) | null = null;
       onCompStart: (() => void) | null = null;
       onCompEnd: (() => void) | null = null;
       compositionRebuildTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1095,6 +1103,25 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         };
         this.onClick = onClick;
         view.dom.addEventListener('click', onClick);
+
+        // A block restored by Escape owns focus without exposing the hidden
+        // source selection. Enter explicitly maps it back to its source range.
+        const onKeydown = (e: KeyboardEvent) => {
+          if (e.key !== 'Enter') return;
+          const target = e.target as HTMLElement;
+          if (target.closest('a, button, input, select, textarea')) return;
+          const widget = target.closest('.cm-live-block') as HTMLElement | null;
+          if (!widget) return;
+          const block = this.findBlockForWidget(view, widget);
+          if (!block) return;
+
+          e.preventDefault();
+          e.stopPropagation();
+          view.dispatch({ selection: { anchor: block.from } });
+          view.focus();
+        };
+        this.onKeydown = onKeydown;
+        view.dom.addEventListener('keydown', onKeydown, true);
 
         // ── Pointer-down capture: intercept checkbox/link clicks BEFORE CM6 ─
         // CM6's internal mousedown handler fires during the bubbling phase and
@@ -1199,6 +1226,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         if (
           update.docChanged ||
           update.selectionSet ||
+          update.focusChanged ||
           update.viewportChanged ||
           !this.decorationsBuilt
         ) {
@@ -1275,7 +1303,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
 
           if (!block.html) continue; // skip blocks with no visible HTML
 
-          const isFocused = cursor >= block.from && cursor <= block.to;
+          const isFocused = view.hasFocus && cursor >= block.from && cursor <= block.to;
           const isPinned = pinned.has(block.key);
           // Keep the block immediately above a new empty cursor line as source.
           // Replacing that line before Windows IME establishes composition on
@@ -1393,6 +1421,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           // Remove click/pointerdown listeners from dom
           const dom = this.editorView.dom;
           if (this.onClick) dom.removeEventListener('click', this.onClick);
+          if (this.onKeydown) dom.removeEventListener('keydown', this.onKeydown, true);
           if (this.onPointerDownCapture)
             dom.removeEventListener('pointerdown', this.onPointerDownCapture, true);
           if (this.onChangeCapture) dom.removeEventListener('change', this.onChangeCapture, true);
@@ -1401,6 +1430,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         this.onCompStart = null;
         this.onCompEnd = null;
         this.onClick = null;
+        this.onKeydown = null;
         this.onPointerDownCapture = null;
         this.onChangeCapture = null;
       }
@@ -1444,14 +1474,44 @@ export function unpinFocusedBlock(view: EditorView): boolean {
   if (!target) return false;
 
   const pinned = view.state.field(pinnedSourceField, false) ?? new Set<string>();
-  if (!pinned.has(target.key)) {
-    // Not pinned, just move cursor to trigger re-render
-    view.dispatch({ selection: { anchor: cursor } });
-    return true;
+  if (pinned.has(target.key)) {
+    view.dispatch({
+      effects: unpinSourceEffect.of({ key: target.key }),
+    });
   }
 
-  view.dispatch({
-    effects: unpinSourceEffect.of({ key: target.key }),
-  });
+  // Leaving contentDOM is the actual edit-state transition. focusChanged
+  // rebuilds the decorations, after which focus is handed to the exact block
+  // that was restored. This keeps keyboard position without leaving a hidden
+  // source cursor active behind the preview.
+  view.contentDOM.blur();
+  const focusRestoredBlock = (attempt: number): void => {
+    const renderedBlocks = [...view.dom.querySelectorAll<HTMLElement>('.cm-live-block')];
+    const rendered =
+      renderedBlocks.find((element) => element.getAttribute('data-block-key') === target.key) ??
+      renderedBlocks.find(
+        (element) => Number(element.getAttribute('data-block-from')) === target.from,
+      );
+    if (rendered) {
+      rendered.focus({ preventScroll: true });
+      return;
+    }
+    // A marker edit can change the block key/type while focusChanged is still
+    // rebuilding decorations. Give CM6 a bounded settling window, then fall
+    // back to the editor shell only if the corresponding position vanished.
+    if (attempt < 2) {
+      requestAnimationFrame(() => focusRestoredBlock(attempt + 1));
+      return;
+    }
+    view.dom.tabIndex = -1;
+    view.dom.focus({ preventScroll: true });
+  };
+  requestAnimationFrame(() => focusRestoredBlock(0));
   return true;
+}
+
+/** Escape exits live source editing unless an IME owns the key. */
+export function exitLivePreviewOnEscape(view: EditorView): boolean {
+  if (view.composing || view.compositionStarted) return false;
+  return unpinFocusedBlock(view);
 }

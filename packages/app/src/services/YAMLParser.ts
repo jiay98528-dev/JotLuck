@@ -21,7 +21,9 @@ export function parseFrontmatter(content: string): FrontmatterResult {
   const raw = match[1] ?? '';
   const data: FrontmatterData = {};
 
-  for (const line of raw.split('\n')) {
+  const lines = raw.split('\n');
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index] ?? '';
     const colonIdx = line.indexOf(':');
     if (colonIdx === -1) continue;
     const key = line.slice(0, colonIdx).trim();
@@ -33,6 +35,16 @@ export function parseFrontmatter(content: string): FrontmatterResult {
           .slice(1, -1)
           .split(',')
           .map((t) => t.trim().replace(/^["']|["']$/g, ''));
+      } else if (!value) {
+        const tags: string[] = [];
+        while (index + 1 < lines.length) {
+          const item = /^\s*-\s+(.+?)\s*$/.exec(lines[index + 1] ?? '');
+          if (!item) break;
+          const tag = item[1]?.trim().replace(/^["']|["']$/g, '');
+          if (tag) tags.push(tag);
+          index++;
+        }
+        value = tags;
       }
     }
     (data as Record<string, unknown>)[key] = value;

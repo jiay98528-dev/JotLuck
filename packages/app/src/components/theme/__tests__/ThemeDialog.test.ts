@@ -1,8 +1,10 @@
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import ThemeDialog from '../ThemeDialog.vue';
 import { THEME_CENTER_SHOW_DEV_THEMES_KEY, useThemeStore } from '@/stores/theme';
+
+const wrappers: ReturnType<typeof mount>[] = [];
 
 function mountDialog() {
   const theme = useThemeStore();
@@ -11,6 +13,7 @@ function mountDialog() {
     props: { visible: true },
     attachTo: document.body,
   });
+  wrappers.push(wrapper);
   return { theme, wrapper };
 }
 
@@ -19,6 +22,11 @@ describe('ThemeDialog', () => {
     document.body.innerHTML = '';
     localStorage.clear();
     setActivePinia(createPinia());
+  });
+
+  afterEach(() => {
+    while (wrappers.length > 0) wrappers.pop()?.unmount();
+    document.body.replaceChildren();
   });
 
   it('renders as a user-facing appearance selector without developer copy', () => {

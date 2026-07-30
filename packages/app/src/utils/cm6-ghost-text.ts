@@ -477,7 +477,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         this.decorationClearQueued = true;
         queueMicrotask(() => {
           this.decorationClearQueued = false;
-          if (this.editorView !== view) return;
+          if (this.destroyed || this.editorView !== view) return;
           view.dispatch({ effects: setGhostDecorations.of(Decoration.none) });
         });
       }
@@ -554,7 +554,12 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         this.destroyed = true;
         this.clearPendingTimers();
         if (this.editorView) {
-          this.clearGhost(this.editorView, true, true);
+          // destroy() runs inside the transaction that removes this plugin.
+          // Dispatching here re-enters CodeMirror while it is still updating.
+          // The compartment removal already removes ghostDecorationField, so
+          // only clear the plugin-owned state and let the outer transaction
+          // dispose the decorations.
+          this.clearGhost(this.editorView, false);
           delete (this.editorView.dom as GhostDebugHost).__jotluckClearGhostText;
           delete (this.editorView.dom as GhostDebugHost).__jotluckGetVisibleGhostPrediction;
           delete (this.editorView.dom as GhostDebugHost).__jotluckGetVisibleGhostDiagnostics;

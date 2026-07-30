@@ -1,4 +1,4 @@
-import { EditorState } from '@codemirror/state';
+import { Compartment, EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_COMPLETION_SETTINGS } from '@/services/CompletionSettings';
@@ -157,6 +157,94 @@ describe('cm6 ghost text focus and Tab contract', () => {
     vi.runAllTimers();
 
     expect(predictor.getGhostText).toHaveBeenCalledTimes(callsBeforeDestroy);
+  });
+
+  it('can be removed from a Compartment while ghost text is visible', async () => {
+    const compartment = new Compartment();
+    const doc = 'reason is';
+    const host = document.createElement('div');
+    document.body.append(host);
+    const predictor = {
+      getGhostText: vi.fn((cursor: number) => ({
+        text: ' because',
+        confidence: 0.9,
+        from: cursor,
+        source: 'ngram' as const,
+      })),
+      acceptCompletion: vi.fn(),
+      rejectCompletion: vi.fn(),
+    } as unknown as MarkdownPredictor;
+    const compartmentView = new EditorView({
+      state: EditorState.create({
+        doc,
+        selection: { anchor: doc.length },
+        extensions: [compartment.of(ghostTextPlugin(predictor, DEFAULT_COMPLETION_SETTINGS))],
+      }),
+      parent: host,
+    });
+    mountedViews.push(compartmentView);
+    compartmentView.focus();
+    await waitForGhost(compartmentView);
+
+    expect(() => compartmentView.dispatch({ effects: compartment.reconfigure([]) })).not.toThrow();
+    expect(compartmentView.dom.querySelector('.cm-ghost-text')).toBeNull();
+    expect(compartmentView.state.doc.toString()).toBe(doc);
+    expect(predictor.acceptCompletion).not.toHaveBeenCalled();
+  });
+
+  it('discards a late async result after its Compartment is removed', async () => {
+    const compartment = new Compartment();
+    let resolveRequest: ((value: ReturnType<MarkdownPredictor['getGhostText']>) => void) | null =
+      null;
+    const observedSignals: AbortSignal[] = [];
+    const predictor = {
+      getGhostText: vi.fn(() => null),
+      requestGhostText: vi.fn(
+        (
+          _cursor: number,
+          _doc: string,
+          options: { signal?: AbortSignal },
+        ): Promise<ReturnType<MarkdownPredictor['getGhostText']>> => {
+          if (options.signal) observedSignals.push(options.signal);
+          return new Promise((resolve) => {
+            resolveRequest = resolve;
+          });
+        },
+      ),
+      acceptCompletion: vi.fn(),
+      rejectCompletion: vi.fn(),
+    } as unknown as MarkdownPredictor;
+    const host = document.createElement('div');
+    document.body.append(host);
+    const doc = 'reason is';
+    const view = new EditorView({
+      state: EditorState.create({
+        doc,
+        selection: { anchor: doc.length },
+        extensions: [compartment.of(ghostTextPlugin(predictor, DEFAULT_COMPLETION_SETTINGS))],
+      }),
+      parent: host,
+    });
+    mountedViews.push(view);
+    view.focus();
+    await vi.waitFor(() => expect(predictor.requestGhostText).toHaveBeenCalledTimes(1));
+
+    view.dispatch({ effects: compartment.reconfigure([]) });
+    expect(observedSignals[0]?.aborted).toBe(true);
+    const resolve = resolveRequest as
+      | ((value: ReturnType<MarkdownPredictor['getGhostText']>) => void)
+      | null;
+    resolve?.({
+      text: ' stale',
+      confidence: 0.9,
+      from: doc.length,
+      source: 'ngram',
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(view.dom.querySelector('.cm-ghost-text')).toBeNull();
+    expect(view.state.doc.toString()).toBe(doc);
   });
 
   it('aborts and discards an in-flight async result after the document changes', async () => {

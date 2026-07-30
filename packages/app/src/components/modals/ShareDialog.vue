@@ -12,7 +12,9 @@
         <!-- Header -->
         <div class="modal-header">
           <h2 id="share-dialog-title">分享笔记</h2>
-          <button class="modal-close" aria-label="关闭" @click="cancel">&times;</button>
+          <button class="modal-close" data-dialog-initial-focus aria-label="关闭" @click="cancel">
+            &times;
+          </button>
         </div>
 
         <!-- Step Indicator Dots -->
@@ -87,10 +89,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { ExportFormat, ShareChannel } from '@/types';
 import Button from '@/components/common/Button.vue';
 import { exportNote } from '@/services/Exporter';
+import { useDialogFocus } from '@/composables/useDialogFocus';
 
 // ============================================================
 // Props & Emits
@@ -107,6 +110,11 @@ const emit = defineEmits<{
 }>();
 
 const overlayRef = ref<HTMLDivElement | null>(null);
+useDialogFocus({
+  visible: () => props.visible,
+  containerRef: overlayRef,
+  initialFocus: '[data-dialog-initial-focus]',
+});
 
 // ============================================================
 // State
@@ -395,7 +403,6 @@ watch(
   (val) => {
     if (val) {
       resetState();
-      nextTick().then(() => overlayRef.value?.focus());
     }
   },
 );

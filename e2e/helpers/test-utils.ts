@@ -296,12 +296,18 @@ async function waitForShellReady(page: Page): Promise<void> {
           Boolean(
             (() => {
               const startupReady = performance.getEntriesByName('jotluck:shell-ready').length > 0;
-              if (!startupReady) return false;
-              return Boolean(
-                document.querySelector(
-                  '.home-theme-showcase, [data-testid="notebook-open-gate"], [data-testid="external-file-session"]',
-                ) ?? document.querySelector('.cm-content'),
+              const terminalRoute = document.querySelector(
+                '[data-testid="notebook-open-gate"], [data-testid="external-file-session"]',
               );
+              if (terminalRoute) return true;
+              const editorSurface = document.querySelector('.cm-content');
+              const shellFrame = document.querySelector('.editor-shell-frame');
+              const shellSettled =
+                editorSurface &&
+                shellFrame &&
+                !shellFrame.classList.contains('editor-shell-frame--opening') &&
+                shellFrame.getAttribute('aria-busy') !== 'true';
+              return startupReady || Boolean(shellSettled);
             })(),
           ),
         ),

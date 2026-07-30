@@ -109,9 +109,13 @@ test.describe('offline autocomplete user journeys', () => {
     page,
     browserName,
   }) => {
+    const pageErrors: string[] = [];
+    const onPageError = (error: Error) => pageErrors.push(error.message);
+    page.on('pageerror', onPageError);
     const probe = probeText(browserName);
     await replaceEditorText(page, probe);
     await expect(page.locator('.cm-ghost-text')).toBeVisible({ timeout: 3000 });
+    const contentBeforeDisable = await getEditorContentFromBridge(page);
 
     await page.locator('.wing-settings-btn').click();
     await expect(page.locator('.modal-overlay')).toBeVisible({ timeout: 3000 });
@@ -122,14 +126,15 @@ test.describe('offline autocomplete user journeys', () => {
     await completionSwitch.focus();
     await page.keyboard.press('Space');
     await expect(completionSwitch).toHaveAttribute('aria-checked', 'false');
-    await page.keyboard.press('Enter');
-    await expect(completionSwitch).toHaveAttribute('aria-checked', 'true');
-    await page.keyboard.press('Space');
-    await expect(completionSwitch).toHaveAttribute('aria-checked', 'false');
+    await expect(page.locator('.cm-ghost-text')).toHaveCount(0);
+    expect(await getEditorContentFromBridge(page)).toBe(contentBeforeDisable);
+    expect(pageErrors).toEqual([]);
     await page.keyboard.press('Escape');
 
     await replaceEditorText(page, probe);
     await expect(page.locator('.cm-ghost-text')).not.toBeVisible({ timeout: 1000 });
+    expect(pageErrors).toEqual([]);
+    page.off('pageerror', onPageError);
   });
 
   test('settings clears local autocomplete learning data', async ({ page }) => {

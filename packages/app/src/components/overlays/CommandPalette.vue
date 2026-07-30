@@ -3,6 +3,8 @@
     <Transition name="palette">
       <div
         v-if="visible"
+        ref="overlayRef"
+        tabindex="-1"
         class="palette-overlay"
         role="presentation"
         @click.self="close"
@@ -168,6 +170,7 @@ import { useSearchStore } from '@/stores/search';
 import { useSearch } from '@/composables/useSearch';
 import type { SearchResult } from '@/types';
 import DOMPurify from 'dompurify';
+import { useDialogFocus } from '@/composables/useDialogFocus';
 
 // ============================================================
 // Props & Emits
@@ -196,8 +199,15 @@ const { searchWithDebounce } = useSearch();
 
 const query = ref('');
 const selectedIndex = ref(0);
+const overlayRef = ref<HTMLDivElement | null>(null);
 const searchInputRef = ref<HTMLInputElement | null>(null);
 const resultsListRef = ref<HTMLElement | null>(null);
+
+useDialogFocus({
+  visible: () => props.visible,
+  containerRef: overlayRef,
+  initialFocus: () => searchInputRef.value,
+});
 
 const MAX_RESULTS = 10;
 

@@ -35,7 +35,7 @@ export function useSearch() {
     if (!engine) return;
 
     searchStore.setQuery(queryText);
-    const query = parseQuery(queryText);
+    const query = parseSearchQuery(queryText);
     const results = engine.search(query);
     searchStore.setResults(results);
     if (queryText.trim()) {
@@ -78,16 +78,64 @@ export function useSearch() {
   };
 }
 
-function parseQuery(raw: string): SearchQuery {
+interface ParsedRegexLiteral {
+  pattern: string;
+  flags: string;
+  start: number;
+  end: number;
+}
+
+function findRegexLiteral(raw: string): ParsedRegexLiteral | null {
+  for (let start = 0; start < raw.length; start++) {
+    if (raw[start] !== '/' || (start > 0 && !/\s/.test(raw[start - 1]!))) continue;
+
+    let escaped = false;
+    for (let cursor = start + 1; cursor < raw.length; cursor++) {
+      const char = raw[cursor]!;
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (char !== '/') continue;
+
+      let end = cursor + 1;
+      while (end < raw.length && /[a-z]/i.test(raw[end]!)) end++;
+      if (end < raw.length && !/\s/.test(raw[end]!)) continue;
+
+      const pattern = raw.slice(start + 1, cursor);
+      if (!pattern) continue;
+      return {
+        pattern,
+        flags: raw.slice(cursor + 1, end),
+        start,
+        end,
+      };
+    }
+  }
+  return null;
+}
+
+export function parseSearchQuery(raw: string): SearchQuery {
   const tags: string[] = [];
   let folder: string | undefined;
   let dateRange: DateRange | undefined;
   const textParts: string[] = [];
 
-  const parts = raw.split(/\s+/);
+  const regexLiteral = findRegexLiteral(raw);
+  const filterSource = regexLiteral
+    ? `${raw.slice(0, regexLiteral.start)} ${raw.slice(regexLiteral.end)}`
+    : raw;
+
+  const parts = filterSource.split(/\s+/);
   for (const part of parts) {
+    if (!part) continue;
     if (part.startsWith('tag:')) {
-      tags.push(part.slice(4));
+      const tag = part.slice(4);
+      if (tag) tags.push(tag);
     } else if (part.startsWith('date:')) {
       const range = part.slice(5);
       const [from, to] = range.split('..');
@@ -106,6 +154,12 @@ function parseQuery(raw: string): SearchQuery {
 
   return {
     text: textParts.join(' '),
+    ...(regexLiteral
+      ? {
+          regex: regexLiteral.pattern,
+          regexFlags: regexLiteral.flags || 'i',
+        }
+      : {}),
     ...(tags.length > 0 ? { tags } : {}),
     ...(folder ? { folder } : {}),
     ...(dateRange ? { dateRange } : {}),

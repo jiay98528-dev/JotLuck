@@ -109,13 +109,13 @@ describe('SearchEngine', () => {
     expect(results).toHaveLength(0);
   });
 
-  it('无效正则表达式不会抛出异常', () => {
+  it('无效正则表达式不会抛出异常并安全返回空结果', () => {
     const engine = new SearchEngine();
     const docs = makeDocs([{ path: '/a.md', title: 'Test' }]);
     engine.buildIndex(docs);
     engine.updateDocument('/a.md', docs['/a.md']!, 'some content');
-    // Should not throw
     expect(() => engine.search({ text: '', regex: '[unclosed' })).not.toThrow();
+    expect(engine.search({ text: '', regex: '[unclosed' })).toEqual([]);
   });
 
   // -- tag filter --
@@ -134,16 +134,17 @@ describe('SearchEngine', () => {
     expect(titles).toEqual(['Mixed', 'React Guide']);
   });
 
-  it('多标签 OR 过滤', () => {
+  it('多标签使用大小写不敏感的 AND 过滤', () => {
     const engine = new SearchEngine();
     const docs = makeDocs([
       { path: '/a.md', title: 'React', tags: ['react'] },
       { path: '/b.md', title: 'Rust', tags: ['rust'] },
-      { path: '/c.md', title: 'Python', tags: ['python'] },
+      { path: '/c.md', title: 'Full stack', tags: ['React', 'RUST'] },
     ]);
     engine.buildIndex(docs);
     const results = engine.search({ text: '', tags: ['react', 'rust'] });
-    expect(results).toHaveLength(2);
+    expect(results).toHaveLength(1);
+    expect(results[0]?.notePath).toBe('/c.md');
   });
 
   it('无匹配标签返回空结果', () => {
@@ -360,6 +361,40 @@ describe('SearchEngine', () => {
     expect(results[0]!.matches.length).toBeGreaterThan(0);
     expect(results[0]!.matches[0]!.text).toBe('brown');
     expect(results[0]!.matches[0]!.context).toContain('brown');
+  });
+
+  it('正则命中返回真实原文以及 1-based 行列', () => {
+    const engine = new SearchEngine();
+    const docs = makeDocs([{ path: '/guide.md', title: 'Guide' }]);
+    engine.buildIndex(docs);
+    engine.updateDocument('/guide.md', docs['/guide.md']!, '第一行\n  欢迎 使用 JotLuck\n结尾');
+
+    const results = engine.search({ text: '', regex: '欢迎\\s+使用', regexFlags: 'i' });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.matches).toEqual([
+      expect.objectContaining({
+        line: 2,
+        column: 3,
+        text: '欢迎 使用',
+      }),
+    ]);
+    expect(results[0]?.matches[0]?.context).toContain('欢迎 使用 JotLuck');
+  });
+
+  it('正则之外的普通文本只影响相关性，不排除正则命中', () => {
+    const engine = new SearchEngine();
+    const docs = makeDocs([
+      { path: '/a.md', title: 'Primary' },
+      { path: '/b.md', title: 'Secondary' },
+    ]);
+    engine.buildIndex(docs);
+    engine.updateDocument('/a.md', docs['/a.md']!, '欢迎使用');
+    engine.updateDocument('/b.md', docs['/b.md']!, '欢迎使用 extra');
+
+    const results = engine.search({ text: 'extra', regex: '欢迎使用' });
+
+    expect(results.map((result) => result.notePath)).toEqual(['/b.md', '/a.md']);
   });
 
   // -- edge: tags only (no text query) returns all matching docs --

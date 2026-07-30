@@ -12,6 +12,11 @@ interface IndexedDoc {
   content: string;
 }
 
+interface LocatedMatch {
+  index: number;
+  text: string;
+}
+
 export class SearchEngine {
   private docs: Map<string, IndexedDoc> = new Map();
   private destroyed = false;
@@ -50,7 +55,7 @@ export class SearchEngine {
     // Tag filter
     if (query.tags && query.tags.length > 0) {
       candidates = candidates.filter((c) =>
-        query.tags!.some((t) =>
+        query.tags!.every((t) =>
           c.doc.entry.tags.some((dt) => dt.toLowerCase() === t.toLowerCase()),
         ),
       );
@@ -72,16 +77,48 @@ export class SearchEngine {
       candidates = candidates.filter((c) => c.doc.entry.folder?.startsWith(query.folder!));
     }
 
-    // Regex search
+    // Regex is the primary inclusion rule. Free text outside the literal is
+    // retained only as an auxiliary relevance signal.
     if (query.regex) {
+      let regex: RegExp;
       try {
         const flags = (query.regexFlags ?? 'i').replace(/[gy]/g, '');
-        const re = new RegExp(query.regex, flags);
-        candidates = candidates.filter((c) => re.test(c.doc.content) || re.test(c.doc.entry.title));
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn('[SearchEngine] 无效正则表达式', e);
+        regex = new RegExp(query.regex, flags);
+      } catch {
+        // Invalid regex is normal while the user is typing. Fail closed without
+        // leaking a noisy exception into the editor console.
+        return [];
       }
+
+      const ranked = candidates
+        .map((candidate) => {
+          const contentMatch = this.findRegexMatch(candidate.doc.content, regex);
+          const titleMatch = this.findRegexMatch(candidate.doc.entry.title, regex);
+          if (!contentMatch && !titleMatch) return null;
+          const auxiliaryScore = query.text.trim()
+            ? this.scoreText(candidate.doc, query.text.trim().toLowerCase().split(/\s+/))
+            : 0;
+          return {
+            ...candidate,
+            contentMatch,
+            score: (titleMatch ? 10 : 0) + (contentMatch ? 1 : 0) + auxiliaryScore,
+          };
+        })
+        .filter(
+          (
+            candidate,
+          ): candidate is {
+            path: string;
+            doc: IndexedDoc;
+            contentMatch: LocatedMatch | null;
+            score: number;
+          } => candidate !== null,
+        )
+        .sort((a, b) => b.score - a.score);
+
+      return ranked.map((candidate) =>
+        this.toResult(candidate.path, candidate.doc, candidate.contentMatch, candidate.score),
+      );
     }
 
     // Text search
@@ -89,50 +126,77 @@ export class SearchEngine {
       const terms = query.text.trim().toLowerCase().split(/\s+/);
       const scored = candidates
         .map((c) => {
-          let score = 0;
-          const titleLC = c.doc.entry.title.toLowerCase();
-          const contentLC = c.doc.content.toLowerCase();
-          for (const term of terms) {
-            if (titleLC.includes(term)) score += 10;
-            const contentMatches = (
-              contentLC.match(new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []
-            ).length;
-            score += contentMatches;
-          }
-          return { ...c, score };
+          const score = this.scoreText(c.doc, terms);
+          return { ...c, score, contentMatch: this.findFirstTextMatch(c.doc.content, terms) };
         })
         .filter((c) => c.score > 0)
         .sort((a, b) => b.score - a.score);
 
-      return scored.map((c) => this.toResult(c.path, c.doc, query.text!, c.score));
+      return scored.map((c) => this.toResult(c.path, c.doc, c.contentMatch, c.score));
     }
 
     // No text query — return all filtered candidates
-    return candidates.map((c) => this.toResult(c.path, c.doc, '', 0));
+    return candidates.map((c) => this.toResult(c.path, c.doc, null, 0));
   }
 
-  private toResult(path: string, doc: IndexedDoc, queryText: string, score: number): SearchResult {
+  private scoreText(doc: IndexedDoc, terms: string[]): number {
+    let score = 0;
+    const titleLC = doc.entry.title.toLowerCase();
+    const contentLC = doc.content.toLowerCase();
+    for (const term of terms) {
+      if (!term) continue;
+      if (titleLC.includes(term)) score += 10;
+      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      score += (contentLC.match(new RegExp(escaped, 'g')) || []).length;
+    }
+    return score;
+  }
+
+  private findRegexMatch(content: string, regex: RegExp): LocatedMatch | null {
+    if (!content) return null;
+    regex.lastIndex = 0;
+    const match = regex.exec(content);
+    if (!match || match.index < 0) return null;
+    return { index: match.index, text: match[0] ?? '' };
+  }
+
+  private findFirstTextMatch(content: string, terms: string[]): LocatedMatch | null {
+    if (!content) return null;
+    const contentLC = content.toLowerCase();
+    let best: LocatedMatch | null = null;
+    for (const term of terms) {
+      if (!term) continue;
+      const index = contentLC.indexOf(term);
+      if (index < 0 || (best && best.index <= index)) continue;
+      best = { index, text: content.slice(index, index + term.length) };
+    }
+    return best;
+  }
+
+  private toResult(
+    path: string,
+    doc: IndexedDoc,
+    located: LocatedMatch | null,
+    score: number,
+  ): SearchResult {
     const matches: SearchMatch[] = [];
 
-    if (queryText && doc.content) {
-      const queryLC = queryText.toLowerCase();
-      const contentLC = doc.content.toLowerCase();
-      const idx = contentLC.indexOf(queryLC);
-      if (idx >= 0) {
-        const start = Math.max(0, idx - 30);
-        const end = Math.min(doc.content.length, idx + queryText.length + 30);
-        const context =
-          (start > 0 ? '…' : '') +
-          doc.content.slice(start, end) +
-          (end < doc.content.length ? '…' : '');
+    if (located) {
+      const start = Math.max(0, located.index - 30);
+      const end = Math.min(doc.content.length, located.index + located.text.length + 30);
+      const context =
+        (start > 0 ? '…' : '') +
+        doc.content.slice(start, end) +
+        (end < doc.content.length ? '…' : '');
+      const before = doc.content.slice(0, located.index);
+      const lastNewline = before.lastIndexOf('\n');
 
-        matches.push({
-          line: 0,
-          column: idx,
-          text: queryText,
-          context,
-        });
-      }
+      matches.push({
+        line: before.split('\n').length,
+        column: located.index - lastNewline,
+        text: located.text,
+        context,
+      });
     }
 
     return {

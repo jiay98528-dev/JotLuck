@@ -1,6 +1,6 @@
 # Frontend Pages
 
-版本：2026-07-28
+版本：2026-07-30
 
 ## NotebookHome
 
@@ -8,6 +8,9 @@
 - 挂载时调用 `useThemeStore().init()`，应用持久化 active theme；无有效主题时回退 `paper`。
 - 通过 `ThemeSlotBoundary` 暴露 WorkflowCanvas、EditorControl、EditorSurface、文件抽屉、命令面板、导出/模板/设置/分享/新建/删除/外部编辑/草稿退出弹窗、外部只读阅读器、toast、更新提示和 Markdown 速查表。空白缓存草稿必须复用完整 WorkflowCanvas / EditorSurface，不允许主题将其替换为简化 Scratch 编辑器。
 - 桌面 `workspace` 窗口没有可用 notebook root 时，仍复用完整 `AppShell → workflow-canvas → editor-surface`，但 EditorSurface 必须渲染 `NotebookOpenGate`，不得挂载可写编辑器或执行目录级操作。
+- 分栏和即时预览只在 workspace 中解析当前笔记引用的本地图片；路径以当前笔记目录为基准且不得越过 notebook root，二进制加载完成后必须重建对应预览。
+- 搜索结果携带 1-based 命中行列。选择结果先完成笔记加载与编辑器重挂载，再定位并滚动到首个正文命中；位置陈旧时按命中文本重定位，无法重定位时不做任意跳转。
+- 页面内新建、删除、外部编辑和草稿退出确认框遵守统一模态焦点合同；取消或关闭后焦点回到原触发者，原触发者失效时回到编辑器或对应 Shell 操作。
 
 ## WindowBootstrap
 
@@ -41,6 +44,7 @@
 
 ## 变更记录
 
+- 2026-07-30：补充 workspace 本地图片预览、搜索命中跳转和 NotebookHome 内联弹窗焦点合同。
 - 2026-07-28：新增桌面 workspace-unbound 门页、目录选择取消/失败状态及已有工作区安全切换契约。
 - 2026-07-25：补充外部只读页的成熟预览复用、滚动、目录、链接与反链边界。
 - 2026-07-25：新增 WindowBootstrap 页面状态及外部只读、单文件编辑、完整 workspace 的转换与懒加载边界。

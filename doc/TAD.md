@@ -1,6 +1,6 @@
 # JotLuck TAD
 
-版本：2026-07-27
+版本：2026-07-30
 
 ## UX Theme Runtime v2
 
@@ -22,6 +22,13 @@ Vue 3 + Pinia + Vite
   ├─ useThemeStore / ThemeCommerceProvider
   └─ MockFS / Tauri FS adapters
 ```
+
+## Markdown 本地图片渲染边界
+
+- Markdown 仍按 `marked → 宿主图片地址解析 → DOMPurify → DOM` 顺序渲染；地址解析只能改写图片 `src`，不能绕过最终清洗。
+- renderer 只暴露同步 `resolveImageSrc` 回调，不直接读取文件系统。Notebook 宿主以当前笔记路径为基准规范化相对地址，拒绝越过 notebook root，再通过 `IFileSystemService.readBinary()` 读取受支持图片并生成 `data:image/*;base64` 地址。
+- 二进制读取是异步的，宿主按当前笔记缓存结果并用 generation 丢弃迟到回写；图片 revision 触发分栏预览和 Live Preview 重建。
+- `external-readonly` 与未提升的 `external-edit` 不解析同级本地图片，不因预览扩大初始单文件 grant；网络、data/blob 和锚点地址保持浏览器原有语义。
 
 ## 关联文件窗口会话
 
@@ -89,6 +96,7 @@ Vue 3 + Pinia + Vite
 
 ## 变更记录
 
+- 2026-07-30：补充本地图片的宿主解析、DOMPurify 顺序、异步 generation 与外部单文件授权边界。
 - 2026-07-27：增加固定 installed-app adapter、同 run REST resolver 和 evidence materializer；性能参考线改为可复算 advisory，证据完整性仍 fail-closed。
 - 2026-07-27：installed-app evidence 增加 Shell/ProgID 真实关联路径、adapter/driver 双日志、WebDriver 语义校验与冷启动零进程生命周期。
 - 2026-07-27：关联证据进一步绑定 case 扩展名、候选/安装 EXE 哈希和注册命令路径；WebDriver 改为逐 case 命令合同，RF-10 补齐热窗口与会话终态。

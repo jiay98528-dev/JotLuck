@@ -10,6 +10,8 @@ export interface RendererOptions {
   tags?: boolean;
   /** Enable code syntax highlighting */
   highlight?: boolean;
+  /** Resolve a Markdown image source to a host-readable URL before sanitization. */
+  resolveImageSrc?: (source: string) => string | null;
 }
 
 /** Result of rendering Markdown to HTML */

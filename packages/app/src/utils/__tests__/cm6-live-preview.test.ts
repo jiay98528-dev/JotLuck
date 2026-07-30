@@ -1,9 +1,49 @@
 import { EditorState } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { EditorView, keymap } from '@codemirror/view';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { __parseLiveBlocksForTest, livePreviewExtension } from '../cm6-live-preview';
+import {
+  __parseLiveBlocksForTest,
+  exitLivePreviewOnEscape,
+  livePreviewExtension,
+  toggleBlockRender,
+  unpinFocusedBlock,
+} from '../cm6-live-preview';
 
 const mountedViews: EditorView[] = [];
+
+function mountLiveEditor(doc: string, anchor: number): EditorView {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const view = new EditorView({
+    state: EditorState.create({
+      doc,
+      selection: { anchor },
+      extensions: [
+        keymap.of([
+          {
+            key: 'Enter',
+            run: (target) => {
+              const cursor = target.state.selection.main.head;
+              target.dispatch({ changes: { from: cursor, insert: '\n' } });
+              return true;
+            },
+          },
+        ]),
+        livePreviewExtension(),
+      ],
+    }),
+    parent: host,
+  });
+  mountedViews.push(view);
+  view.focus();
+  return view;
+}
+
+function findRenderedBlock(view: EditorView, text: string): HTMLElement | undefined {
+  return [...view.dom.querySelectorAll<HTMLElement>('.cm-live-block')].find((block) =>
+    block.textContent?.includes(text),
+  );
+}
 
 afterEach(() => {
   while (mountedViews.length > 0) mountedViews.pop()?.destroy();
@@ -105,6 +145,90 @@ describe('cm6 live preview markdown block boundaries', () => {
     expect(rows).toHaveLength(3);
     expect(rows[0]).toMatchObject({ tableHeader: true, tableColumnCount: 2 });
     expect(rows[2]?.html).toContain('ml-table-cell--align-right');
+  });
+});
+
+describe('cm6 live preview Escape focus contract', () => {
+  it('restores the exact edited block and lets Enter return to source editing', async () => {
+    const doc = ['# First', '', 'Unique edited paragraph'].join('\n');
+    const anchor = doc.indexOf('Unique') + 3;
+    const view = mountLiveEditor(doc, anchor);
+
+    await vi.waitFor(() => {
+      expect(findRenderedBlock(view, 'First')).toBeDefined();
+      expect(findRenderedBlock(view, 'Unique edited paragraph')).toBeUndefined();
+    });
+
+    expect(unpinFocusedBlock(view)).toBe(true);
+    await vi.waitFor(() => {
+      const restored = findRenderedBlock(view, 'Unique edited paragraph');
+      expect(restored).toBeDefined();
+      expect(document.activeElement).toBe(restored);
+    });
+    expect(view.state.doc.toString()).toBe(doc);
+
+    const restored = findRenderedBlock(view, 'Unique edited paragraph')!;
+    restored.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
+
+    await vi.waitFor(() => {
+      expect(view.hasFocus).toBe(true);
+      expect(findRenderedBlock(view, 'Unique edited paragraph')).toBeUndefined();
+    });
+    expect(view.state.selection.main.head).toBe(doc.indexOf('Unique'));
+    expect(view.state.doc.toString()).toBe(doc);
+  });
+
+  it('unpins a pinned block before restoring and focusing that same rendered block', async () => {
+    const doc = ['Rendered sibling', '', 'Pinned unique paragraph'].join('\n');
+    const anchor = doc.indexOf('Pinned') + 2;
+    const view = mountLiveEditor(doc, anchor);
+
+    expect(toggleBlockRender(view)).toBe(true);
+    expect(unpinFocusedBlock(view)).toBe(true);
+
+    await vi.waitFor(() => {
+      const restored = findRenderedBlock(view, 'Pinned unique paragraph');
+      expect(restored).toBeDefined();
+      expect(document.activeElement).toBe(restored);
+    });
+    expect(view.state.doc.toString()).toBe(doc);
+  });
+
+  it('restores by document position when editing changes the block type and key', async () => {
+    const doc = ['## Mutable heading', '', 'Rendered sibling'].join('\n');
+    const view = mountLiveEditor(doc, doc.indexOf('Mutable') + 2);
+
+    view.dispatch({
+      changes: { from: 0, to: 3, insert: 'GUI ' },
+      selection: { anchor: 4 },
+    });
+    expect(unpinFocusedBlock(view)).toBe(true);
+
+    await vi.waitFor(() => {
+      const restored = findRenderedBlock(view, 'GUI Mutable heading');
+      expect(restored).toBeDefined();
+      expect(document.activeElement).toBe(restored);
+    });
+    expect(view.state.doc.toString()).toBe(
+      ['GUI Mutable heading', '', 'Rendered sibling'].join('\n'),
+    );
+  });
+
+  it('does not consume Escape or restore the block while IME composition is active', async () => {
+    const doc = ['Rendered sibling', '', '正在输入的段落'].join('\n');
+    const anchor = doc.indexOf('正在输入') + 2;
+    const view = mountLiveEditor(doc, anchor);
+    view.contentDOM.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+
+    expect(view.composing || view.compositionStarted).toBe(true);
+    expect(exitLivePreviewOnEscape(view)).toBe(false);
+    expect(view.hasFocus).toBe(true);
+    expect(findRenderedBlock(view, '正在输入的段落')).toBeUndefined();
+    expect(view.state.doc.toString()).toBe(doc);
+
+    view.contentDOM.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
   });
 });
 
