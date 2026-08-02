@@ -29,7 +29,16 @@
   · <a href="https://github.com/jiay98528-dev/JotLuck/issues/new/choose">Send feedback</a>
 </p>
 
-> **Download notice:** GitHub Releases is the only future source for official public installers. There is no public installer there today; `v0.10.0-rc.1` is the current release candidate and is unsigned. Do not download it from third-party sources.
+JotLuck is a local-first Markdown notebook for Windows.
+Notes are plain files in a folder you own. No account. No database. Nothing uploaded.
+
+It opens and renders Markdown in seconds, beautifully. Read-only preview or full editing, a workspace arranged your way — your call.
+
+For everyone who works with text, and everyone who works with AI.
+
+Current status: `v0.10.0-rc.1`, a Windows release candidate. Tested, usable, unsigned.
+
+> **Download notice:** Official installers appear only on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases). Nothing is there yet, and `v0.10.0-rc.1` is unsigned. Please don't download JotLuck from anywhere else.
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck workspace with recent notes, a Markdown editor, outline, and backlinks">
@@ -39,43 +48,43 @@
 
 ## Your notes remain yours
 
-JotLuck does not put your notes in a proprietary database. Every note is a regular `.md`, `.markdown`, `.mdx`, or `.txt` file that any text editor can open. Use OneDrive, Git, Syncthing, or your own backup tools. Leaving JotLuck never requires a data export.
+Every note is an ordinary file: `.md`, `.markdown`, `.mdx`, or `.txt`. Any editor can open it. Any sync tool can carry it. If you stop using JotLuck tomorrow, your notes are already where they belong.
 
-| What matters     | How JotLuck handles it                                                          |
-| ---------------- | ------------------------------------------------------------------------------- |
-| File ownership   | Reads and writes the local folder you choose, without a note database           |
-| Privacy          | Core editing and search work offline; notebook content is not uploaded          |
-| Longevity        | Uses open plain-text formats that other tools can take over at any time         |
-| Writing workflow | Adds Live Preview, links, backlinks, local search, and offline completion       |
-| Release trust    | Official public builds will only use Releases; no public installer exists today |
+| What matters     | How JotLuck handles it                                             |
+| ---------------- | ------------------------------------------------------------------ |
+| File ownership   | Reads and writes the local folder you choose. No note database     |
+| Privacy          | Editing, search, and completion work offline                       |
+| Longevity        | Open plain-text formats, ready for any tool that comes next        |
+| Writing workflow | Live Preview, links, backlinks, local search, on-device completion |
+| Release trust    | Official builds appear only on GitHub Releases                     |
 
 ## Get started in three steps
 
-1. No public installer is available today. Developers can run the project from source using the instructions below; other users should wait for an explicit official asset on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases).
-2. The first launch opens the Open Notebook gate. Choose an existing folder, or create a notebook folder in the system picker. Later, press `Ctrl/Cmd+O` to switch folders.
-3. Start writing. Notes are saved directly into that folder, with no account required.
+1. **Get the app.** The first public installer lands on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases) — the only official source. Developers can build from source below.
+2. **Open a folder.** Any folder. It becomes your notebook. `Ctrl/Cmd+O` switches anytime.
+3. **Start writing.** Notes save as you type, straight into that folder.
 
-The Windows installer registers `.md`, `.markdown`, `.mdx`, and `.txt` as optional Open With choices. It never replaces the Windows default application for any of them.
+The installer offers `.md`, `.markdown`, `.mdx`, and `.txt` as optional "Open with" choices. Your defaults stay untouched.
 
-## Built for local writing
+## What it's like to write in JotLuck
 
-- **Plain-text notebooks**: folders are notebooks; `.md`, `.markdown`, `.mdx`, and `.txt` are notes.
-- **Focused editing**: CodeMirror 6, Live Preview, block editing, and keyboard navigation.
-- **Connected knowledge**: `[[Wiki-links]]`, aliases, backlinks, tags, and document outlines.
-- **Local search**: filter by keywords, regular expressions, tags, dates, and folders.
-- **Templates and assets**: custom templates, date placeholders, image paste, and relative paths.
-- **Flexible export**: PDF, DOCX, XLSX, CSV, TXT, and HTML.
-- **Offline completion**: completion models and notebook training data stay on the device.
-- **Native desktop behavior**: Windows file watching, system dialogs, and optional file associations.
+- **Instant from the first second.** Double-click a Markdown file and read it beautifully rendered. Editing is optional; the workspace is yours to arrange.
+- **A focused editor.** CodeMirror 6, Live Preview, block-level editing, keyboard-first.
+- **Notes that know each other.** `[[Wiki-links]]`, aliases, backlinks, tags, outlines.
+- **Find anything.** Local search by keyword, regex, tag, date, or folder.
+- **Start faster.** Templates with `{{date}}`. Pasted images land in `assets/` with relative paths.
+- **Six ways out.** Export to PDF, DOCX, XLSX, CSV, TXT, and HTML — straight into your existing workflow.
+- **A quiet helper.** Offline ghost-text completion. Tab to accept.
+- **Deep themes.** Three built-in themes, with more on the way. A theme here reshapes far more than colors — it redefines how the workspace feels.
+- **At home on Windows.** Native file watching, system dialogs, multi-window. Built on Tauri 2.
 
 ## Privacy and data safety
 
-- Notebook content stays in the folder you select.
-- JotLuck does not upload notebook content or require a cloud account.
-- When automatic update checks are disabled, the app does not request GitHub version data on startup.
-- An enabled or manual update check only queries public GitHub release information.
-- Deleting a note does not automatically delete images that may be shared by several notes.
-- Keep an independent backup or version history before bulk operations or first use of a preview build.
+- Your notes live in the folder you picked.
+- No uploads. No account.
+- Update checks are optional, and only ever query public release information.
+- Deleting a note keeps its images; assets can be shared between notes.
+- Keep your own backup before bulk operations.
 
 Report vulnerabilities through a [private GitHub security report](https://github.com/jiay98528-dev/JotLuck/security/advisories/new). Do not attach private notes or real folder information to a public issue. See the [Security Policy](./SECURITY.md).
 
@@ -100,28 +109,28 @@ macOS and Linux packages have not completed host-specific packaging, signing, an
 <details>
 <summary><strong>Is JotLuck free?</strong></summary>
 
-The JotLuck core source code is available under the MIT License. It can be used, inspected, modified, and distributed at no charge. The license does not require the official project to provide unlimited free support, signing, or other value-added services.
+The core source code is MIT-licensed. Free to use, inspect, modify, and share.
 
 </details>
 
 <details>
 <summary><strong>Does JotLuck upload my notes?</strong></summary>
 
-No. Notes, indexes, and offline completion data stay on the device. Network access only occurs when you enable or trigger a version check, or explicitly open an external link.
+No. Notes, indexes, and completion data stay on your device.
 
 </details>
 
 <details>
 <summary><strong>How do I sync between devices?</strong></summary>
 
-JotLuck does not bind you to a sync provider. Put the notebook folder in OneDrive, Syncthing, Git, or another file synchronization tool you trust.
+Put the notebook folder in the sync tool you already trust: OneDrive, Syncthing, Git, anything.
 
 </details>
 
 <details>
 <summary><strong>Can I open an existing Markdown folder?</strong></summary>
 
-Yes. JotLuck reads supported plain-text files from the folder you select. Keep a backup before the first operation on important material.
+Point JotLuck at it and start reading. Keep a backup first.
 
 </details>
 
