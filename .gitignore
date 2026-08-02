@@ -52,6 +52,28 @@ e2e/report/data/
 # Local audit runs and disposable Git worktrees
 .audit-runs/
 .worktrees/
+.cleanup-backup/
+
+# Internal process files (kept local, not published)
+.tool/
+.tool/
+.tool/
+tools/
+KEY_OBJECTIVES.md
+governance/
+plans/
+memory/
+release-evidence/
+验收报告/
+宣传片/
+doc/BP/
+doc/BS/
+AGENTS.md
+tool.md
+JotLuck-Audit-Report.md
+eslint_output.json
+current-layout.png
+scripts/tool-ci-validate.py
 
 # App assets (auto-generated)
 assets/
@@ -64,3 +86,4 @@ scripts/corpus/_web-cache/
 
 # Vite
 *.local
+spec/progress.md

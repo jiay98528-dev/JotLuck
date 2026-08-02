@@ -9,6 +9,9 @@ import {
   validateThemePackage,
 } from '../ThemePackInstaller';
 import type { ThemeManifestV2 } from '@/types/theme-pack';
+import { APP_THEME_VERSION } from '../ThemeRegistry';
+
+const nextMajorVersion = `${Number(APP_THEME_VERSION.split('.')[0]) + 1}.0.0`;
 
 function manifest(overrides: Partial<ThemeManifestV2> = {}): ThemeManifestV2 {
   return {
@@ -41,14 +44,14 @@ describe('ThemePackInstaller', () => {
       validateThemePackage({ manifest: manifest({ minAppVersion: '0.1.0-preview' }) }),
     ).toEqual([]);
     expect(
-      validateThemePackage({ manifest: manifest({ minAppVersion: '0.1.0' }) }).map(
+      validateThemePackage({ manifest: manifest({ minAppVersion: nextMajorVersion }) }).map(
         (issue) => issue.code,
       ),
     ).toContain('min-app-version');
     expect(
-      validateThemePackage({ manifest: manifest({ minAppVersion: '0.1.0-preview.1' }) }).map(
-        (issue) => issue.code,
-      ),
+      validateThemePackage({
+        manifest: manifest({ minAppVersion: `${nextMajorVersion}-preview.1` }),
+      }).map((issue) => issue.code),
     ).toContain('min-app-version');
     expect(
       validateThemePackage({ manifest: manifest({ minAppVersion: 'not-a-version' }) }).map(

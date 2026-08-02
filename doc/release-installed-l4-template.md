@@ -2,7 +2,7 @@
 
 版本：2026-07-27（installed-app evidence v2）
 
-> 复制本模板为单次发行记录，例如 `验收报告/2026-07-25-JotLuck-0.1.0-preview-installed-L4.md`。
+> 复制本模板为单次发行记录，例如 `验收报告/2026-07-25-JotLuck-0.10.0-rc.1-installed-L4.md`。
 > 所有 `状态` 必须填写 `PASS`，否则 `pnpm release:rc-gate` 必须阻断 RC 放行。任何失败项标记为 P0/P1/P2，不允许用 Web 自动化通过覆盖人工失败。
 >
 > **协议状态：本模板仅用于人工记录，不构成机器 PASS。** 文末 v1 JSON 示例是历史迁移参考，不能再被 `release:rc-gate` 接受。正式放行必须把本记录转换为已实现的“候选 commit → 只读原始报告 → 同执行者结构化二次转录 → 证据 commit”v2 证据链，并由校验器复算。
@@ -158,4 +158,4 @@
 - 2026-07-27：增加 materialization 来源绑定和 RF-10 原始性能样本/advisory 记录；参考线超标不再单独阻断。
 - 2026-07-27：增加 Shell/ProgID 文件关联观察、adapter/driver 双日志和冷启动前后零进程记录。
 - 2026-07-26：增加 GitHub REST provenance、同 run 双 artifact、固定 adapter/execution log 和卸载 MRU 保序记录。
-- 2026-07-25：模板升级为 installed-app evidence v2，增加原始产物、二次转录、counter/hash/commit 链及 `0.1.0-preview` V2S 不可达证据字段。
+- 2026-07-25：模板升级为 installed-app evidence v2，增加原始产物、二次转录、counter/hash/commit 链及 `v0.10.0-rc.1` V2S 不可达证据字段。

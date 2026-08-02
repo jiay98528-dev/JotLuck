@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.10.0-rc.1] - 2026-07-31
+
+### Release Candidate
+
+- First public release candidate. Not a stable release. NSIS installer is unsigned.
+- Windows SmartScreen will warn on first launch; click "More info → Run anyway".
+- See [RELEASE_NOTES.md](./RELEASE_NOTES.md) for highlights, upgrade notes, and known issues.
+
+### Verification
+
+- `pnpm.cmd --filter @jotluck/app typecheck` — pass
+- `pnpm.cmd --filter @jotluck/app test` — pass, 156/156
+- `pnpm.cmd --filter @jotluck/app build` — pass
+- Chromium E2E — pass
+- Firefox E2E — pass
+- Tauri release build — pass
+- `pnpm.cmd release:rc-gate` — pass
+
+### Known Environment Blockers
+
+- macOS / Linux packaging not yet started
+- Code signing pending SignPath Foundation approval
+- Cargo audit reports allowed unsoundness warnings for `lru 0.12.5` and `memmap2 0.9.10` (transitive via tantivy 0.22.1)
+
 ## [v0.15] - 2026-06-25
 
 ### Added
@@ -89,7 +113,7 @@
   rendering, default documents, Chinese IME + Live Preview, Tab focus
   navigation, and welcome-page default-app guidance.
 - Tauri release build: pass, Windows NSIS installer generated at
-  `打包/JotLuck-v0.15-windows-x64/JotLuck_v0.15_x64-setup.exe`.
+  `打包/JotLuck-v0.10.0-rc.1-windows-x64/JotLuck_0.10.0-rc.1_x64-setup.exe`.
 
 ### Known Environment Blockers
 

@@ -1,5 +1,6 @@
 packages:
   - 'packages/*'
+  - 'tools/*'
 allowBuilds:
   edgedriver: false
   esbuild: true

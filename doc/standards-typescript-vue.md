@@ -1,7 +1,7 @@
 # JotLuck TypeScript & Vue 3 代码规范
 
 > 版本：v1.0 | 日期：2026-06-03
-> 关联文档：`PRODUCT.md`（"无感·真诚·精确"）、`tool.md`（§5.3 强约束开发）
+> 关联文档：`PRODUCT.md`（"无感·真诚·精确"）
 
 ---
 

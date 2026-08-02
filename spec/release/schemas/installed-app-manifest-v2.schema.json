@@ -26,7 +26,7 @@
       "required": ["commit", "version"],
       "properties": {
         "commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
-        "version": { "type": "string", "const": "0.1.0-preview" }
+        "version": { "type": "string", "const": "0.10.0-rc.1" }
       }
     },
     "ci": {

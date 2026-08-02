@@ -56,8 +56,6 @@
  * A collapsible, draggable reference card that sits in the bottom-right
  * corner of the editor area. Shows common Markdown syntax in a compact,
  * categorized format. Position and state persist via localStorage.
- *
- * @see tool.md §5.3 (Constraint-Driven Development)
  */
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 

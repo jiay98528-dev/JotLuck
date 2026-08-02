@@ -120,7 +120,7 @@ const FIELD_PATTERNS: Array<[string, RegExp, string]> = [
   ],
   [
     'english-org',
-    /\b(?:[A-Z][A-Za-z&.-]*(?:\s+[A-Z][A-Za-z&.-]*){0,3}\s+(?:Inc|LLC|Ltd|Foundation|Association|University|Institute|Group|Studio|Press|Company|Corporation|Corp)|GitHub|Stack\s*Overflow|Reddit|Mozilla|Google|Microsoft|Apple|Meta|tool)\b/g,
+    /\b(?:[A-Z][A-Za-z&.-]*(?:\s+[A-Z][A-Za-z&.-]*){0,3}\s+(?:Inc|LLC|Ltd|Foundation|Association|University|Institute|Group|Studio|Press|Company|Corporation|Corp)|GitHub|Stack\s*Overflow|Reddit|Mozilla|Google|Microsoft|Apple|Meta)\b/g,
     'an organization',
   ],
   ['english-person', /\b[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,}){1,2}\b/g, 'someone'],

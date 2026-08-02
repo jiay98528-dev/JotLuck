@@ -2,19 +2,19 @@
 
 版本：2026-07-27
 
-从 `0.1.0-preview` 起，Web 自动化全绿只能表述为“自动化候选通过”，不能表述为“最终发布通过”。最终发布通过必须额外满足真实安装包 L4。历史报告中的旧版本号保持历史事实，不作迁移。
+从 `v0.10.0-rc.1` 起，Web 自动化全绿只能表述为“自动化候选通过”，不能表述为“最终发布通过”。最终发布通过必须额外满足真实安装包 L4。历史报告中的旧版本号保持历史事实，不作迁移。
 
 > **当前状态：fail-closed。** 旧 `jotluck-installed-l4-evidence` v1 只校验自报退出码，并要求证据文件绑定包含自身的新 HEAD，既可伪造又无法形成合法固定点，已永久禁用。协议 v2 已收紧为 GitHub Actions 固定执行与 REST provenance；其嵌套 WebDriver v2、旧 ASSOC launch trace、旧 RF-10 lifecycle 产物也已永久失效，必须分别使用 WebDriver v3、ASSOC v2 和 RF-10 v2。当前尚无同源正式 capture/evidence commit；`pnpm release:rc-gate` 还会被 V2S architecture-stop 以 code 10 阻断，`--autocomplete-only` 仍保留独立质量闸门。
 
 ## 两层 GUI 验收
 
 - Web GUI 烟测: 只用于验证本轮前端交互修复。
-- 安装版 L4: 必须基于 `JotLuck_0.1.0-preview_x64-setup.exe` 安装后的真实应用。
+- 安装版 L4: 必须基于 `JotLuck_0.10.0-rc.1_x64-setup.exe` 安装后的真实应用。
 
 ## 执行顺序
 
 1. 运行既有自动化: L1/L2/coverage/build/Rust check/test、三引擎 E2E、`tauri:build`。
-2. 生成并定位 `JotLuck_0.1.0-preview_x64-setup.exe`。默认路径为 `packages/app/src-tauri/target/release/bundle/nsis/JotLuck_0.1.0-preview_x64-setup.exe`。
+2. 生成并定位 `JotLuck_0.10.0-rc.1_x64-setup.exe`。默认路径为 `packages/app/src-tauri/target/release/bundle/nsis/JotLuck_0.10.0-rc.1_x64-setup.exe`。
 3. 复制并填写 [release-installed-l4-template.md](./release-installed-l4-template.md)。
 4. 在 L4 记录中粘贴执行前后的 `git status --short`，并填写 `L4-APP-VERSION`、`L4-INSTALLER-PATH`、`L4-INSTALLER-SHA256`。任何未提交/未跟踪文件必须清理、提交或解释。
 5. 将候选 commit 冻结并推送到 `main`，以 `workflow_dispatch + capture_installed_evidence` 运行完整 CI。capture job 只有在 L1、Vitest、Rust、三引擎 E2E、Windows 视觉、Tauri build/smoke 全部成功后，才从同一 run 的候选 artifact 安装并执行固定 adapter；任一 case 失败、skip、缺执行日志或观察产物时不上传 evidence artifact。
@@ -28,7 +28,7 @@
 
 固定目录为 `spec/release/required-cases/`，严格 case/raw/transcript/manifest Schema 位于 `spec/release/schemas/`。正式 gate 在下载前通过 GitHub REST 验证 repository、固定 workflow、`workflow_dispatch`、`main`、`head_sha`、run attempt、run/job/step conclusion，以及两个 artifact 的同 run 身份、固定名称、未过期、非空和 API digest；缺 token、网络/限流/非 200 或字段缺失不得降级。API 核验后才能把 artifact ID 交给下载动作。
 
-`0.1.0-preview` 还必须有独立 preview gate：Public L3 的 architecture-stop / fail-closed 可接受，但执行记录必须证明生产依赖图、Vite/Tauri bundle 与安装包均不存在 V2S Worker、factory、候选 manifest、候选二进制或自动加载路径。候选 workflow 必须把安装器、桌面 EXE 与真实 `dist` 一起作为同一不可变 artifact 上传；gate 会逐文件枚举下载后的 `dist`、复算字节数与 SHA256，并要求受管 inventory 精确覆盖，漏列文件也会失败。仅“未运行 V2S”或测试注入路径不能构成该证明。
+`v0.10.0-rc.1` 还必须有独立 preview gate：Public L3 的 architecture-stop / fail-closed 可接受，但执行记录必须证明生产依赖图、Vite/Tauri bundle 与安装包均不存在 V2S Worker、factory、候选 manifest、候选二进制或自动加载路径。候选 workflow 必须把安装器、桌面 EXE 与真实 `dist` 一起作为同一不可变 artifact 上传；gate 会逐文件枚举下载后的 `dist`、复算字节数与 SHA256，并要求受管 inventory 精确覆盖，漏列文件也会失败。仅“未运行 V2S”或测试注入路径不能构成该证明。
 
 性能参考线不再单独阻断 preview：RF-10 必须以版本化 lifecycle 保存 packaged/installed EXE 身份、20 次冷启动和 30 次运行中新窗口的全部原始时长，并记录每次进程/窗口边界；capture 与 verifier 共同复算 P90。冷启动超过 2 秒或热开窗超过 1 秒时返回 `pass-with-warnings` 和固定 advisory code；缺样本、数量错误、非正数、P90/advisory 不可复算、身份或证据不守恒仍是硬失败。
 
@@ -64,4 +64,4 @@
 - 2026-07-27：WebDriver 子协议升级为 v3 handshake 状态机；ASSOC/RF-10 升级为严格版本化观察对象；最终 gate 独立重哈希 provenance-bound `jotluck.exe`。旧嵌套产物全部失效。
 - 2026-07-27：补齐 REST resolver → 固定 ID 下载 → materializer → managed bundle 链；2 秒/1 秒性能参考线改为非阻断 advisory，样本与证据完整性不降级。
 - 2026-07-26：协议 v2 收紧为固定 adapter/非空观察产物/execution NDJSON，并以 GitHub Actions REST provenance 绑定同一候选 run 的安装器与 execution evidence；删除 preview gate 的手写 audit/test/build 成功 JSON。
-- 2026-07-25：升级为 `0.1.0-preview` gate，新增 Public L3 stop 但 V2S 生产不可达的独立证明，以及四扩展名/外部授权提升的安装版验证。
+- 2026-07-25：升级为 `v0.10.0-rc.1` gate，新增 Public L3 stop 但 V2S 生产不可达的独立证明，以及四扩展名/外部授权提升的安装版验证。

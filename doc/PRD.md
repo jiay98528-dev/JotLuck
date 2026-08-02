@@ -52,8 +52,8 @@ JotLuck 是本地优先、离线可用的 Markdown 笔记工具。数据以普�
 - 外部关联窗口具有 `external-readonly`、`external-edit`、`workspace` 三态。只读态不得初始化编辑器、文件树、目录扫描、索引、文件监听、补全、导出或更新检查；`.txt` 必须以保留换行的转义纯文本显示，Markdown 家族仍经安全清洗后渲染。
 - “启用编辑”只能读写当前外部授权文件，不得扫描父目录或写入最近笔记本；“添加到笔记”才可绑定该文件父目录、保留目标文件为当前项、启动目录级服务并持久记录最近笔记本。
 - 多窗口的笔记本 root、索引、文件监听器和补全检索必须按窗口隔离；关闭一个窗口不得影响其他窗口。外部文件授权归属其创建窗口，窗口关闭后撤销该授权。
-- 关于页显示构建版本 `v0.1.0-preview`。
-- `0.1.0-preview` 的独立 preview gate 允许 Public L3 继续 architecture-stop / fail-closed；但生产依赖图、桌面 bundle 和安装包均不得包含或可达 V2S Worker、factory、候选资产或自动加载路径。
+- 关于页显示构建版本 `v0.10.0-rc.1`。
+- `v0.10.0-rc.1` 的独立 preview gate 允许 Public L3 继续 architecture-stop / fail-closed；但生产依赖图、桌面 bundle 和安装包均不得包含或可达 V2S Worker、factory、候选资产或自动加载路径。
 - 文件关联安装只注册 `.md/.markdown/.mdx/.txt` 的可选打开程序；卸载只移除 JotLuck 自身槽位，并保持其他应用的 Open With 项和 `MRUList` 原有顺序，不修改当前默认 ProgID。
 - 正式 installed-app evidence 必须来自候选提交在 `main` 上触发的 GitHub Actions `workflow_dispatch`：固定 adapter 产生执行日志和可观察产物，GitHub REST 同时核验 workflow run、head SHA、attempt、job/step conclusion 及候选/证据 artifact 来源；本地结构校验不得单独产生正式 PASS。
 - 安装版性能必须保留 20 次冷启动和 30 次运行中新窗口的全部正数原始样本，并由捕获器、物化器和校验器复算 P90。样本缺失、数量错误、不可复算或证据不守恒继续阻断；参考机上冷启动 P90 超过 2 秒或热开窗 P90 超过 1 秒只产生固定代码的非阻断警告，不得因测试机并行负载单独否决内测候选。
@@ -68,8 +68,8 @@ JotLuck 是本地优先、离线可用的 Markdown 笔记工具。数据以普�
 - 2026-07-27：补齐 24 个固定安装版 adapter 与可信 evidence materialization 契约；将可复算的 2 秒/1 秒性能参考线降为非阻断警告，样本和来源完整性仍保持硬门控。
 - 2026-07-26：收紧 installed-app evidence v2 的真实执行与 GitHub Actions provenance 契约；补充卸载保持其他应用 Open With 顺序的产品约束。
 
-- 2026-07-25：新增关联文件多窗口产品合同：单进程一文件一窗口、路径去重、只读/单文件编辑/完整笔记本三态、四扩展名可选关联及窗口级服务隔离；构建版本指定为 `0.1.0-preview`。
-- 2026-07-25：补充 P1 最小授权边界与 `0.1.0-preview` 独立 gate：只读初始 grant、编辑仅提升单文件，以及 Public L3 停止态下生产依赖图必须排除 V2S。
+- 2026-07-25：新增关联文件多窗口产品合同：单进程一文件一窗口、路径去重、只读/单文件编辑/完整笔记本三态、四扩展名可选关联及窗口级服务隔离；构建版本指定为 `v0.10.0-rc.1`。
+- 2026-07-25：补充 P1 最小授权边界与 `v0.10.0-rc.1` 独立 gate：只读初始 grant、编辑仅提升单文件，以及 Public L3 停止态下生产依赖图必须排除 V2S。
 - 2026-07-13：F-17 的 Public V2S 有界架构预检停止：实际最大逐语言组合 Oracle@8/32 为 37%/40%，固定矩阵逐语言最好前沿也只有 37.5%/40.5%，未达到 40%/45% 总体门槛；未训练 Gate、未读取 final、未写 public，RC 继续 fail closed。
 - 2026-07-13：F-17 启动 Public V2S：双语 Subword MKN + 小型选择性门控，恢复 35%–42% 触发率与至少 35% 绝对可用率的双 final 发布合同，并要求唯一 manifest/单资产/单 publisher。
 - 2026-07-13：F-17 将固定短语库 V2R 标记为 architecture-blocked；16,384 档真实写作诊断表示率仅 13%（中文 6%），停止长训练并继续 fail closed。

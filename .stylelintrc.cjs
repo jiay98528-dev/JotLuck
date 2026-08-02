@@ -7,7 +7,6 @@
  * 3. 允许 .cm-* CodeMirror 内部类不受限制
  *
  * @see spec/frontend/design-system.md
- * @see tool.md §5.3 样式 Token 约束
  */
 
 module.exports = {

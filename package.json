@@ -1,6 +1,6 @@
 {
   "name": "jotluck",
-  "version": "0.1.0-preview",
+  "version": "0.10.0-rc.1",
   "private": true,
   "description": "Lightweight, local-first Markdown note-taking tool",
   "author": "Linghu Technology (Shenzhen) Co., Ltd.",
@@ -27,8 +27,8 @@
     "lint": "eslint .",
     "lint:tokens": "node scripts/lint-tokens.mjs",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --check \"*.{json,mjs,yml,yaml}\" \".github/**/*.yml\" \"AGENTS.md\" \"tool.md\" \"doc/**/*.md\" \"spec/**/*.md\" \"memory/**/*.md\" \"e2e/**/*.{ts,mjs}\" \"scripts/**/*.{ts,mjs,json}\" \"packages/**/*.{ts,vue,css,json,md,yaml}\"",
-    "format:fix": "prettier --write \"*.{json,mjs,yml,yaml}\" \".github/**/*.yml\" \"AGENTS.md\" \"tool.md\" \"doc/**/*.md\" \"spec/**/*.md\" \"memory/**/*.md\" \"e2e/**/*.{ts,mjs}\" \"scripts/**/*.{ts,mjs,json}\" \"packages/**/*.{ts,vue,css,json,md,yaml}\"",
+    "format": "prettier --check \"*.{json,mjs,yml,yaml}\" \".github/**/*.yml\" \"doc/**/*.md\" \"spec/**/*.md\" \"e2e/**/*.{ts,mjs}\" \"scripts/**/*.{ts,mjs,json}\" \"packages/**/*.{ts,vue,css,json,md,yaml}\"",
+    "format:fix": "prettier --write \"*.{json,mjs,yml,yaml}\" \".github/**/*.yml\" \"doc/**/*.md\" \"spec/**/*.md\" \"e2e/**/*.{ts,mjs}\" \"scripts/**/*.{ts,mjs,json}\" \"packages/**/*.{ts,vue,css,json,md,yaml}\"",
     "test": "pnpm --filter @jotluck/app test",
     "test:coverage": "pnpm --filter @jotluck/app test:coverage",
     "test:e2e:autocomplete-quality": "pnpm --filter @jotluck/app test:e2e:autocomplete-quality",

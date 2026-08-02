@@ -1,12 +1,12 @@
 # Known Limitations
 
-This document describes limitations for JotLuck `v0.1.0-preview`. These are not
+This document describes limitations for JotLuck `v0.10.0-rc.1`. These are not
 marketing claims; they are the remaining release constraints and expected
 behavior boundaries.
 
 ## Internal Preview Candidate Status
 
-- `v0.1.0-preview` is an unpublished, unsigned internal candidate. It is not a
+- `v0.10.0-rc.1` is an unpublished, unsigned internal candidate. It is not a
   formal RC or stable release, and no official public installer is currently available.
 - This candidate does not claim complete installed-app release evidence, final
   Rust audit evidence, signing, notarization, or host-specific validation for

@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { APP_VERSION } from '@/config/app-meta';
+
+const nextMajorVersion = `${Number(APP_VERSION.split('.')[0]) + 1}.0.0`;
 
 describe('useVersionCheck', () => {
   beforeEach(() => {
@@ -13,8 +16,8 @@ describe('useVersionCheck', () => {
       vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
-          tag_name: 'v0.1.0',
-          html_url: 'https://example.test/releases/0.1.0',
+          tag_name: `v${nextMajorVersion}`,
+          html_url: 'https://example.test/releases/stable',
           body: 'Stable release',
         }),
       }),
@@ -24,7 +27,7 @@ describe('useVersionCheck', () => {
 
     await versionCheck.checkNow();
 
-    expect(versionCheck.latestVersion.value).toBe('0.1.0');
+    expect(versionCheck.latestVersion.value).toBe(nextMajorVersion);
     expect(versionCheck.hasUpdate.value).toBe(true);
   });
 

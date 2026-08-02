@@ -72,7 +72,7 @@ preview/*          可选预览图
   "version": "1.0.0",
   "themeApi": 2,
   "runtime": "declarative",
-  "minAppVersion": "0.1.0-preview",
+  "minAppVersion": "0.10.0-rc.1",
   "name": "Example Theme",
   "author": "Local Author",
   "capabilities": ["tokens", "layout-preset", "ux-components"],

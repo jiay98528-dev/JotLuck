@@ -12,7 +12,7 @@ body:
     attributes:
       label: JotLuck 版本
       description: 可在“关于”页面或安装包名称中找到。
-      placeholder: 例如 v0.1.0-preview
+      placeholder: 例如 v0.10.0-rc.1
     validations:
       required: true
 
