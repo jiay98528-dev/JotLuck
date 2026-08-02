@@ -55,9 +55,9 @@ e2e/report/data/
 .cleanup-backup/
 
 # Internal process files (kept local, not published)
-.tool/
-.tool/
-.tool/
+.vibe-control/
+.codex/
+.claude/
 tools/
 KEY_OBJECTIVES.md
 governance/
@@ -69,11 +69,11 @@ release-evidence/
 doc/BP/
 doc/BS/
 AGENTS.md
-tool.md
+CLAUDE.md
 JotLuck-Audit-Report.md
 eslint_output.json
 current-layout.png
-scripts/tool-ci-validate.py
+scripts/vibe-control-ci-validate.py
 
 # App assets (auto-generated)
 assets/
