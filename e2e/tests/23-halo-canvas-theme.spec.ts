@@ -306,6 +306,211 @@ test.describe('Halo Canvas official theme', () => {
     expect(activeThemeCss).not.toContain('halo-canvas');
   });
 
+  test('keeps a historical file usable across atomic save events and native copy', async ({
+    page,
+    context,
+  }, testInfo: TestInfo) => {
+    test.skip(testInfo.project.name !== 'chromium', 'Clipboard verification is owned by Chromium.');
+    test.setTimeout(45_000);
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await activateHaloCanvas(page, testInfo);
+
+    await clickThemeJourneyControl(
+      page.getByRole('button', { name: '快速入门', exact: true }),
+      testInfo,
+    );
+    await ensureEditorReady(page);
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().currentContent ?? ''))
+      .toContain('欢迎使用 JotLuck');
+
+    const initialContent = await page.evaluate(
+      () => window.__jotluck_e2e?.debugState?.().currentContent ?? '',
+    );
+    expect(initialContent).toContain('欢迎使用 JotLuck');
+    await page.evaluate(() => navigator.clipboard.writeText('clipboard-permission-probe'));
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe('clipboard-permission-probe');
+    const editor = page.locator('.cm-content').first();
+    await editor.click();
+    await editor.evaluate((element) => (element as HTMLElement).focus());
+    await page.keyboard.press('Control+A');
+    await page.keyboard.press('Control+C');
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe(initialContent);
+
+    await page.evaluate(() => {
+      const runtime = window as Window & {
+        __haloAtomicSaveErrors?: string[];
+        __haloAtomicSaveObserver?: MutationObserver;
+      };
+      runtime.__haloAtomicSaveErrors = [];
+      const sampleErrors = () => {
+        for (const element of document.querySelectorAll('.status-error')) {
+          const message = element.textContent?.trim() ?? '';
+          if (message) runtime.__haloAtomicSaveErrors?.push(message);
+        }
+      };
+      runtime.__haloAtomicSaveObserver = new MutationObserver(sampleErrors);
+      runtime.__haloAtomicSaveObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+      sampleErrors();
+    });
+
+    const emitAtomicReplacement = async (): Promise<string> =>
+      page.evaluate(() => {
+        const bridge = window.__jotluck_e2e;
+        const activePath = bridge?.debugState?.().activePath ?? '';
+        if (!activePath || !bridge?.emitFileChange) {
+          throw new Error('The E2E file watcher bridge is not ready.');
+        }
+        bridge.emitFileChange([
+          { type: 'deleted', path: activePath },
+          {
+            type: 'renamed',
+            oldPath: `/.${activePath.split('/').pop()}.123.456.0.tmp`,
+            path: activePath,
+          },
+        ]);
+        return activePath;
+      });
+
+    await typeInEditor(page, '# 快速入门\n\n第一次连续编辑。');
+    const activePath = await emitAtomicReplacement();
+    await waitForAutoSave(page);
+    await expect(page.locator('.status-error')).toHaveCount(0);
+
+    await typeInEditor(page, '# 快速入门\n\n第一次连续编辑。\n\n第二次连续编辑。');
+    await emitAtomicReplacement();
+    await page.keyboard.press('Control+S');
+    await waitForAutoSave(page);
+    await expect(page.locator('.status-error')).toHaveCount(0);
+    const transientAtomicErrors = await page.evaluate(() => {
+      const runtime = window as Window & {
+        __haloAtomicSaveErrors?: string[];
+        __haloAtomicSaveObserver?: MutationObserver;
+      };
+      runtime.__haloAtomicSaveObserver?.disconnect();
+      return runtime.__haloAtomicSaveErrors ?? [];
+    });
+    expect(transientAtomicErrors).toEqual([]);
+    await expect
+      .poll(() =>
+        page.evaluate((path) => {
+          const raw = localStorage.getItem('jotluck-mockfs');
+          if (!raw) return '';
+          const files = (JSON.parse(raw) as { files?: Record<string, { content?: string }> }).files;
+          return files?.[path]?.content ?? '';
+        }, activePath),
+      )
+      .toContain('第二次连续编辑。');
+
+    await typeInEditor(page, '# 快速入门\n\n第一次连续编辑。\n\n第二次连续编辑。\n\n删除后恢复。');
+    await page.evaluate(async (path) => {
+      const bridge = window.__jotluck_e2e;
+      if (!bridge?.deleteNoteFile || !bridge.emitFileChange) {
+        throw new Error('The E2E file deletion bridge is not ready.');
+      }
+      await bridge.deleteNoteFile(path);
+      bridge.emitFileChange([
+        { type: 'deleted', path },
+        { type: 'modified', path },
+      ]);
+    }, activePath);
+    const retrySave = page.getByRole('button', { name: '重新保存当前笔记', exact: true });
+    await expect(retrySave).toBeVisible();
+    const retryBounds = await retrySave.boundingBox();
+    expect(retryBounds?.height).toBeGreaterThanOrEqual(44);
+    const missingFileDialog = page.getByRole('dialog', { name: '原文件已被移动或删除' });
+    if (!(await missingFileDialog.isVisible().catch(() => false))) {
+      await clickThemeJourneyControl(retrySave, testInfo);
+    }
+    await expect(missingFileDialog).toBeVisible();
+    await clickThemeJourneyControl(
+      missingFileDialog.getByRole('button', { name: '在原位置重建', exact: true }),
+      testInfo,
+    );
+    await waitForAutoSave(page);
+    await expect(page.locator('.status-error')).toHaveCount(0);
+    await expect
+      .poll(() =>
+        page.evaluate((path) => {
+          const raw = localStorage.getItem('jotluck-mockfs');
+          if (!raw) return '';
+          const files = (JSON.parse(raw) as { files?: Record<string, { content?: string }> }).files;
+          return files?.[path]?.content ?? '';
+        }, activePath),
+      )
+      .toContain('删除后恢复。');
+
+    const unsavedCopyMarker = '原位置不可写时另存的内容。';
+    await typeInEditor(page, `# 快速入门\n\n${unsavedCopyMarker}`);
+    await page.evaluate(async () => {
+      const bridge = window.__jotluck_e2e;
+      if (!bridge?.failNextSave || !bridge.requestClose) {
+        throw new Error('The E2E failed-save bridge is not ready.');
+      }
+      bridge.failNextSave();
+      await bridge.requestClose();
+    });
+    const failedSaveDialog = page.getByRole('dialog', { name: '这次修改还没保存' });
+    await expect(failedSaveDialog).toBeVisible();
+    await expect(failedSaveDialog.getByRole('button', { name: '不保存并退出' })).toBeVisible();
+    const saveCopyAndExit = failedSaveDialog.getByRole('button', { name: '另存副本并退出' });
+    const copyDownloadPromise = page.waitForEvent('download');
+    await clickThemeJourneyControl(saveCopyAndExit, testInfo);
+    const copyDownload = await copyDownloadPromise;
+    const copyDownloadPath = await copyDownload.path();
+    expect(copyDownloadPath).toBeTruthy();
+    expect(await readFile(copyDownloadPath!, 'utf8')).toContain(unsavedCopyMarker);
+    await expect(failedSaveDialog).toHaveCount(0);
+    // A normal browser tab cannot be closed by window.close(), so the live page must
+    // keep the original file marked dirty after creating the safe copy. A second close
+    // request can then retry the original save without losing the downloaded backup.
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().isDirty))
+      .toBe(true);
+    await page.evaluate(async () => {
+      window.__jotluck_e2e?.failNextSave?.('模拟关闭失败时保留草稿');
+      await window.__jotluck_e2e?.requestClose?.();
+    });
+    await expect(failedSaveDialog).toBeVisible();
+    await clickThemeJourneyControl(
+      failedSaveDialog.getByRole('button', { name: '不保存并退出', exact: true }),
+      testInfo,
+    );
+    await expect(failedSaveDialog).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().isDirty))
+      .toBe(true);
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.editor?.getContent() ?? ''))
+      .toContain(unsavedCopyMarker);
+    await clickThemeJourneyControl(
+      failedSaveDialog.getByRole('button', { name: '取消', exact: true }),
+      testInfo,
+    );
+    await page.evaluate(async () => window.__jotluck_e2e?.requestClose?.());
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().isDirty))
+      .toBe(false);
+
+    await clickThemeJourneyControl(
+      page
+        .locator('[data-theme-part="navigator"]')
+        .getByRole('button', { name: '格式示例', exact: true }),
+      testInfo,
+    );
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().activePath))
+      .not.toBe(activePath);
+  });
+
   test('keeps the repaired spacing contract and cockpit layers observable at runtime', async ({
     page,
   }, testInfo: TestInfo) => {

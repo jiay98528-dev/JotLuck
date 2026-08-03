@@ -40,6 +40,17 @@ describe('TauriIPCService recent notebook sanitizer', () => {
     expect(invokeMock).not.toHaveBeenCalledWith('open_notebook', expect.anything());
   });
 
+  it('selects a directory without rebinding the native notebook root', async () => {
+    const service = new TauriIPCService();
+    openMock.mockResolvedValueOnce('D:/Notes/Selected');
+
+    await expect(service.selectNotebook()).resolves.toEqual({
+      rootPath: 'D:/Notes/Selected',
+      name: 'Selected',
+    });
+    expect(invokeMock).not.toHaveBeenCalledWith('open_notebook', expect.anything());
+  });
+
   it('opens a selected directory and removes a failed recent root', async () => {
     const service = new TauriIPCService();
     localStorage.setItem(
@@ -134,5 +145,31 @@ describe('TauriIPCService path boundaries', () => {
     await expect(service.isPathInNotebook('C:/Notes', 'C:/Notes/a.md')).resolves.toBe(true);
     await expect(service.isPathInNotebook('C:/Notes', 'C:/Notes2/a.md')).resolves.toBe(false);
     await expect(service.isPathInNotebook('C:/NOTES', 'c:/notes/a.md')).resolves.toBe(true);
+  });
+});
+
+describe('TauriIPCService conditional text writes', () => {
+  it('forwards snapshot and expected revision without weakening the contract', async () => {
+    const service = new TauriIPCService();
+    invokeMock
+      .mockResolvedValueOnce({ content: '# A', revision: `sha256:${'a'.repeat(64)}` })
+      .mockResolvedValueOnce({ status: 'saved', revision: `sha256:${'b'.repeat(64)}` });
+
+    await expect(service.readFileSnapshot('/a.md')).resolves.toMatchObject({ content: '# A' });
+    await expect(
+      service.writeFileIfUnchanged('/a.md', '# B', `sha256:${'a'.repeat(64)}`),
+    ).resolves.toMatchObject({ status: 'saved' });
+
+    expect(invokeMock.mock.calls.slice(-2)).toEqual([
+      ['read_file_snapshot', { relativePath: '/a.md' }],
+      [
+        'write_file_if_unchanged',
+        {
+          relativePath: '/a.md',
+          content: '# B',
+          expectedRevision: `sha256:${'a'.repeat(64)}`,
+        },
+      ],
+    ]);
   });
 });

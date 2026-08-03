@@ -175,6 +175,8 @@ const LumenStatusBar = defineComponent({
     cursorLine: { type: Number as PropType<number | null>, default: null },
     cursorCol: { type: Number as PropType<number | null>, default: null },
     saveError: { type: String as PropType<string | null>, default: null },
+    retrySave: { type: Function as PropType<() => void>, default: undefined },
+    saveCopy: { type: Function as PropType<() => void>, default: undefined },
     actions: { type: Array as PropType<ShellAction[]>, default: () => [] },
   },
   setup(props) {
@@ -183,11 +185,35 @@ const LumenStatusBar = defineComponent({
         h(
           'span',
           { class: ['lumen-status__state', props.saveError && 'is-error'] },
-          props.statusText,
+          props.saveError || props.statusText,
         ),
         h('span', `${props.wordCount} 词 / ${props.charCount} 字`),
         h('span', props.cursorLine === null ? '就绪' : `第 ${props.cursorLine} 行`),
-        actionStrip(props.actions, true),
+        props.saveError
+          ? h('div', { class: 'lumen-action-strip' }, [
+              h(
+                'button',
+                {
+                  class: ['lumen-action', 'lumen-action--compact'],
+                  type: 'button',
+                  title: props.saveError,
+                  'aria-label': '重新保存当前笔记',
+                  onClick: () => props.retrySave?.(),
+                },
+                '重新保存',
+              ),
+              h(
+                'button',
+                {
+                  class: ['lumen-action', 'lumen-action--compact'],
+                  type: 'button',
+                  'aria-label': '另存当前笔记副本',
+                  onClick: () => props.saveCopy?.(),
+                },
+                '另存副本',
+              ),
+            ])
+          : actionStrip(props.actions, true),
       ]);
   },
 });

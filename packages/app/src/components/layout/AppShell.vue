@@ -82,6 +82,8 @@
             :last-saved-at="lastSavedAt"
             :region="statusBarRegion"
             :actions="actionsFor('status-right')"
+            @retry-save="$emit('retry-save')"
+            @save-copy="$emit('save-copy')"
           />
         </ThemeSlotBoundary>
       </template>
@@ -160,6 +162,8 @@
             :last-saved-at="lastSavedAt"
             :region="statusBarRegion"
             :actions="actionsFor('status-right')"
+            @retry-save="$emit('retry-save')"
+            @save-copy="$emit('save-copy')"
           />
         </ThemeSlotBoundary>
       </main>
@@ -251,6 +255,8 @@ const emit = defineEmits<{
   'navigate-backlink': [entry: BacklinkEntry];
   'select-tag': [tagName: string];
   'toggle-right-wing': [];
+  'retry-save': [];
+  'save-copy': [];
 }>();
 
 // ── Region objects: 将 ThemeChromeState 散字段聚合为统一 region ──
@@ -338,6 +344,8 @@ const statusBarSlotProps = computed(() => ({
   region: statusBarRegion.value,
   actions: actionsFor('status-right'),
   statusText: statusText.value,
+  retrySave: () => emit('retry-save'),
+  saveCopy: () => emit('save-copy'),
 }));
 
 const rightWingSlotProps = computed(() => ({

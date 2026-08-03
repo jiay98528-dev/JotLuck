@@ -2,9 +2,17 @@
   <Teleport to="body">
     <Transition name="welcome-overlay">
       <div v-if="visible" class="welcome-overlay" @click.self="close">
-        <div class="welcome-card">
+        <div
+          ref="overlayRef"
+          class="welcome-card"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="welcome-title"
+          tabindex="-1"
+          @keydown.escape.prevent.stop="skip"
+        >
           <div class="welcome-brand">
-            <h1 class="welcome-brand-name">JotLuck</h1>
+            <h1 id="welcome-title" class="welcome-brand-name">JotLuck</h1>
             <p class="welcome-brand-sub">轻量、本地、离线</p>
           </div>
 
@@ -100,7 +108,13 @@
             </button>
             <span v-else class="welcome-footer-spacer" />
 
-            <Button variant="default" size="md" class="welcome-next-btn" @click="nextStep">
+            <Button
+              variant="default"
+              size="md"
+              class="welcome-next-btn"
+              data-dialog-initial-focus
+              @click="nextStep"
+            >
               {{ currentStep < TOTAL_STEPS ? '下一步' : '完成设置' }}
             </Button>
           </div>
@@ -111,15 +125,16 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { open as openExternal } from '@tauri-apps/plugin-shell';
 import Button from '@/components/common/Button.vue';
+import { useDialogFocus } from '@/composables/useDialogFocus';
 import { isDesktopRuntime } from '@/utils/runtime';
+import { hasCompletedWelcome, markWelcomeCompleted } from '@/utils/welcome';
 
-defineProps<{ visible: boolean }>();
+const props = defineProps<{ visible: boolean }>();
 const emit = defineEmits<{ 'update:visible': [boolean]; complete: [] }>();
 
-const WELCOME_KEY = 'jotluck:welcome:completed';
 const AUTO_CHECK_KEY = 'jotluck:version:autoCheck';
 const AUTO_INSTALL_KEY = 'jotluck:version:autoInstall';
 const DEFAULT_EDITOR_PROMPT_KEY = 'jotluck:welcome:defaultEditorPrompted';
@@ -128,12 +143,30 @@ const TOTAL_STEPS = 6;
 const currentStep = ref(1);
 const autoCheckEnabled = ref(localStorage.getItem(AUTO_CHECK_KEY) === 'true');
 const defaultEditorNotice = ref('');
+const overlayRef = ref<HTMLDivElement | null>(null);
+
+useDialogFocus({
+  visible: () => props.visible,
+  containerRef: overlayRef,
+  initialFocus: '[data-dialog-initial-focus]',
+  fallbackFocus: () => document.querySelector<HTMLElement>('[data-testid="open-notebook-button"]'),
+});
 
 onMounted(() => {
-  if (localStorage.getItem(WELCOME_KEY) === '1') {
+  if (hasCompletedWelcome()) {
     emit('update:visible', false);
   }
 });
+
+watch(
+  () => props.visible,
+  (visible) => {
+    if (!visible) return;
+    currentStep.value = 1;
+    autoCheckEnabled.value = localStorage.getItem(AUTO_CHECK_KEY) === 'true';
+    defaultEditorNotice.value = '';
+  },
+);
 
 function nextStep(): void {
   if (currentStep.value < TOTAL_STEPS) {
@@ -148,15 +181,14 @@ function skip(): void {
 }
 
 function close(): void {
-  if (localStorage.getItem(WELCOME_KEY) === '1') {
-    emit('update:visible', false);
-  }
+  skip();
 }
 
 function complete(): void {
-  localStorage.setItem(WELCOME_KEY, '1');
+  markWelcomeCompleted();
   localStorage.setItem(AUTO_CHECK_KEY, String(autoCheckEnabled.value));
   localStorage.setItem(AUTO_INSTALL_KEY, 'false');
+  emit('update:visible', false);
   emit('complete');
 }
 

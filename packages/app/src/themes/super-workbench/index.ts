@@ -228,6 +228,10 @@ const superWorkbenchModule: OfficialThemeModule = {
   font-weight: var(--fw-semibold);
 }
 
+[data-theme-id='jotluck.super-workbench'] .super-status__state.is-error {
+  color: var(--signal-error);
+}
+
 [data-theme-id='jotluck.super-workbench'] .super-slot-shell {
   min-height: 0;
   height: 100%;

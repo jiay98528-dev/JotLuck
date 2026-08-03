@@ -1,7 +1,11 @@
 <template>
   <footer
     class="status-bar"
-    :class="[`status-bar--${region.density}`, `status-bar--layout-${region.layout}`]"
+    :class="[
+      `status-bar--${region.density}`,
+      `status-bar--layout-${region.layout}`,
+      { 'status-bar--error': saveError },
+    ]"
     :data-density="region.density"
     :data-layout="region.layout"
     data-theme-part="status"
@@ -10,9 +14,30 @@
   >
     <template v-if="region.layout === 'save-only'">
       <span class="status-reader-save" data-theme-part="status-save">
-        <span v-if="saveError" class="status-error" :title="saveError"
-          >&#9888; {{ saveError }}</span
-        >
+        <span v-if="saveError" class="status-error status-error-recovery">
+          <span class="status-error-message" :title="saveError">
+            <span aria-hidden="true">&#9888;</span>
+            <span>{{ saveError }}</span>
+          </span>
+          <span class="status-error-actions">
+            <button
+              class="status-error-action"
+              type="button"
+              aria-label="重新保存当前笔记"
+              @click="emit('retry-save')"
+            >
+              重新保存
+            </button>
+            <button
+              class="status-error-action status-error-action--secondary"
+              type="button"
+              aria-label="另存当前笔记副本"
+              @click="emit('save-copy')"
+            >
+              另存副本
+            </button>
+          </span>
+        </span>
         <span v-else-if="isSaving" class="status-saving">&#9203; 保存中...</span>
         <span v-else-if="isDirty" class="status-dirty">&#9679; 未保存</span>
         <span v-else class="status-saved" :class="{ ripple: showRipple }">&#10003; 已保存</span>
@@ -37,9 +62,30 @@
           size="sm"
         />
         <span class="status-right" data-theme-part="status-save">
-          <span v-if="saveError" class="status-error" :title="saveError"
-            >&#9888; {{ saveError }}</span
-          >
+          <span v-if="saveError" class="status-error status-error-recovery">
+            <span class="status-error-message" :title="saveError">
+              <span aria-hidden="true">&#9888;</span>
+              <span>{{ saveError }}</span>
+            </span>
+            <span class="status-error-actions">
+              <button
+                class="status-error-action"
+                type="button"
+                aria-label="重新保存当前笔记"
+                @click="emit('retry-save')"
+              >
+                重新保存
+              </button>
+              <button
+                class="status-error-action status-error-action--secondary"
+                type="button"
+                aria-label="另存当前笔记副本"
+                @click="emit('save-copy')"
+              >
+                另存副本
+              </button>
+            </span>
+          </span>
           <span v-else-if="isSaving" class="status-saving">&#9203; 保存中...</span>
           <span v-else-if="isDirty" class="status-dirty">&#9679; 未保存</span>
           <span v-else class="status-saved" :class="{ ripple: showRipple }">&#10003; 已保存</span>
@@ -59,9 +105,30 @@
         </span>
       </span>
       <span class="status-right" data-theme-part="status-save">
-        <span v-if="saveError" class="status-error" :title="saveError"
-          >&#9888; {{ saveError }}</span
-        >
+        <span v-if="saveError" class="status-error status-error-recovery">
+          <span class="status-error-message" :title="saveError">
+            <span aria-hidden="true">&#9888;</span>
+            <span>{{ saveError }}</span>
+          </span>
+          <span class="status-error-actions">
+            <button
+              class="status-error-action"
+              type="button"
+              aria-label="重新保存当前笔记"
+              @click="emit('retry-save')"
+            >
+              重新保存
+            </button>
+            <button
+              class="status-error-action status-error-action--secondary"
+              type="button"
+              aria-label="另存当前笔记副本"
+              @click="emit('save-copy')"
+            >
+              另存副本
+            </button>
+          </span>
+        </span>
         <span v-else-if="isSaving" class="status-saving">&#9203; 保存中...</span>
         <span v-else-if="isDirty" class="status-dirty">&#9679; 未保存</span>
         <span v-else class="status-saved" :class="{ ripple: showRipple }">&#10003; 已保存</span>
@@ -103,6 +170,11 @@ const props = withDefaults(
     actions: () => [],
   },
 );
+
+const emit = defineEmits<{
+  'retry-save': [];
+  'save-copy': [];
+}>();
 
 const showRipple = ref(false);
 let rippleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -168,6 +240,11 @@ watch(
       transparent 28%
     ),
     var(--paper-raised);
+}
+
+.status-bar.status-bar--error {
+  height: auto;
+  min-height: var(--touch-target-min);
 }
 
 .status-left,
@@ -244,13 +321,61 @@ watch(
   color: var(--accent);
 }
 
-.status-error {
+.status-error-recovery {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-width: 0;
+  max-width: min(760px, 74vw);
   color: var(--signal-error);
-  max-width: 300px;
-  display: inline-block;
+}
+
+.status-error-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.status-error-action {
+  min-height: var(--touch-target-min);
+  padding: 0 var(--space-8);
+  border: var(--border-thin) solid currentcolor;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--signal-error);
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+
+.status-error-action:hover {
+  background: color-mix(in oklch, var(--signal-error) 10%, transparent);
+}
+
+.status-error-action:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.status-error-action--secondary {
+  border-color: var(--rule-strong);
+  color: var(--ink-secondary);
+}
+
+.status-error-message {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+.status-error-message > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ripple {
@@ -295,6 +420,14 @@ watch(
   .status-dashboard-actions {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .status-error-recovery {
+    max-width: 100%;
+  }
+
+  .status-error-message {
+    display: none;
   }
 }
 </style>

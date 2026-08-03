@@ -154,16 +154,46 @@ const SuperStatusBar = defineComponent({
   name: 'SuperStatusBar',
   props: {
     statusText: { type: String, default: '' },
+    saveError: { type: String as PropType<string | null>, default: null },
     wordCount: { type: Number, default: 0 },
     charCount: { type: Number, default: 0 },
+    retrySave: { type: Function as PropType<() => void>, default: undefined },
+    saveCopy: { type: Function as PropType<() => void>, default: undefined },
     actions: { type: Array as PropType<ShellAction[]>, default: () => [] },
   },
   setup(props) {
     return () =>
       h('footer', { class: 'super-status', 'data-theme-plugin-slot': 'status-bar' }, [
-        h('span', { class: 'super-status__state' }, props.statusText),
+        h(
+          'span',
+          { class: ['super-status__state', props.saveError && 'is-error'], title: props.saveError },
+          props.saveError || props.statusText,
+        ),
         h('span', `${props.wordCount} 词 / ${props.charCount} 字`),
-        actionStrip(props.actions, true),
+        props.saveError
+          ? h('div', { class: 'super-action-strip' }, [
+              h(
+                'button',
+                {
+                  class: ['super-action', 'super-action--compact'],
+                  type: 'button',
+                  'aria-label': '重新保存当前笔记',
+                  onClick: () => props.retrySave?.(),
+                },
+                '重新保存',
+              ),
+              h(
+                'button',
+                {
+                  class: ['super-action', 'super-action--compact'],
+                  type: 'button',
+                  'aria-label': '另存当前笔记副本',
+                  onClick: () => props.saveCopy?.(),
+                },
+                '另存副本',
+              ),
+            ])
+          : actionStrip(props.actions, true),
       ]);
   },
 });

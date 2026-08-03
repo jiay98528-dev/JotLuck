@@ -17,6 +17,8 @@ import type {
   FileStat,
   FileChangeEvent,
   NotebookHandle,
+  TextFileSnapshot,
+  ConditionalWriteResult,
   UnwatchFn,
 } from '@/types';
 import { isMarkdownLikeFile } from '@/utils/note-files';
@@ -36,6 +38,8 @@ interface RustFileChangeEvent {
   path: string;
   old_path?: string | null;
   generation: number;
+  entry_kind?: 'file' | 'directory' | 'unknown';
+  rescan?: boolean;
 }
 
 // ── Recent notebooks cache key ──
@@ -78,14 +82,19 @@ export class TauriIPCService implements IFileSystemService {
   // Notebook Management
   // ====================================================================
 
-  async openNotebook(): Promise<NotebookHandle | null> {
+  async selectNotebook(): Promise<NotebookHandle | null> {
     const selected = await open({
       directory: true,
       multiple: false,
       title: '选择笔记本文件夹',
     });
     if (!selected) return null;
-    return this.openNotebookAt(selected);
+    return { rootPath: selected, name: this.displayNameFromPath(selected) };
+  }
+
+  async openNotebook(): Promise<NotebookHandle | null> {
+    const selected = await this.selectNotebook();
+    return selected ? this.openNotebookAt(selected.rootPath) : null;
   }
 
   async openNotebookAt(path: string): Promise<NotebookHandle> {
@@ -174,6 +183,22 @@ export class TauriIPCService implements IFileSystemService {
 
   async writeFile(path: string, content: string): Promise<void> {
     return invoke('write_file', { relativePath: path, content });
+  }
+
+  async readFileSnapshot(path: string): Promise<TextFileSnapshot> {
+    return invoke<TextFileSnapshot>('read_file_snapshot', { relativePath: path });
+  }
+
+  async writeFileIfUnchanged(
+    path: string,
+    content: string,
+    expectedRevision: string | null,
+  ): Promise<ConditionalWriteResult> {
+    return invoke<ConditionalWriteResult>('write_file_if_unchanged', {
+      relativePath: path,
+      content,
+      expectedRevision,
+    });
   }
 
   async writeBinary(path: string, base64: string): Promise<void> {
@@ -293,6 +318,8 @@ export class TauriIPCService implements IFileSystemService {
             ? payload.old_path
             : `/${payload.old_path}`
           : undefined,
+        entryKind: payload.entry_kind,
+        rescan: payload.rescan,
       });
     });
     this.unwatchFns.push(unlisten);

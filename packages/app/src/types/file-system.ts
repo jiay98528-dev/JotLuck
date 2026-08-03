@@ -24,11 +24,26 @@ export interface FileStat {
   path?: string;
 }
 
+/** A text file and the exact content revision observed by the reader. */
+export interface TextFileSnapshot {
+  content: string;
+  /** SHA-256 of the UTF-8 file bytes, formatted as `sha256:<hex>`. */
+  revision: string;
+}
+
+/** Result of a write that is allowed only when the disk revision still matches. */
+export type ConditionalWriteResult =
+  | { status: 'saved'; revision: string }
+  | { status: 'conflict'; actualRevision: string | null };
+
 /** 文件系统变更事件 */
 export interface FileChangeEvent {
   type: 'created' | 'modified' | 'deleted' | 'renamed';
   path: string;
   oldPath?: string;
+  /** Directory and ambiguous watcher events require a full tree refresh. */
+  entryKind?: 'file' | 'directory' | 'unknown';
+  rescan?: boolean;
 }
 
 /** 打开笔记本后返回的句柄 */
@@ -50,6 +65,17 @@ export type UnwatchFn = () => void;
 export interface IFileSystemService {
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
+  /** Read text together with the revision used by conditional editor saves. */
+  readFileSnapshot(path: string): Promise<TextFileSnapshot>;
+  /**
+   * Save only when the file still has `expectedRevision`.
+   * `null` means the path must not exist yet.
+   */
+  writeFileIfUnchanged(
+    path: string,
+    content: string,
+    expectedRevision: string | null,
+  ): Promise<ConditionalWriteResult>;
   /** Write binary file (base64 encoded payload) */
   writeBinary(path: string, base64: string): Promise<void>;
   /** Read binary file (returns base64 encoded string) */
@@ -68,7 +94,12 @@ export interface IFileSystemService {
   unwatchAll(): Promise<void>;
   resolvePath(root: string, ...segments: string[]): string;
   isPathInNotebook(root: string, path: string): Promise<boolean>;
-  /** Show a notebook picker. A user cancellation is not an error and returns null. */
+  /** Show a notebook picker without changing the backend-bound root. */
+  selectNotebook(): Promise<NotebookHandle | null>;
+  /**
+   * Legacy picker-and-open convenience. New workspace transitions must call
+   * `selectNotebook()` first, finish the old workspace, then call `openNotebookAt()`.
+   */
   openNotebook(): Promise<NotebookHandle | null>;
   /** Open a known notebook directory without showing a picker. Used by desktop file association. */
   openNotebookAt(path: string): Promise<NotebookHandle>;

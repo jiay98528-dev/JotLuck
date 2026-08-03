@@ -2,6 +2,7 @@ packages:
   - 'packages/*'
   - 'tools/*'
 allowBuilds:
+  '@ibm/plex': true
   edgedriver: false
   esbuild: true
   geckodriver: false

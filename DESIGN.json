@@ -1,0 +1,743 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-03T00:00:00+08:00",
+  "title": "Design System: JotLuck",
+  "extensions": {
+    "colorMeta": {
+      "binding-teal": {
+        "role": "primary",
+        "displayName": "装订深青 / Binding Teal",
+        "tonalRamp": [
+          "oklch(0.16 0.0412 193.7)",
+          "oklch(0.28 0.0412 193.7)",
+          "oklch(0.40 0.0412 193.7)",
+          "oklch(0.52 0.0412 193.7)",
+          "oklch(0.64 0.0412 193.7)",
+          "oklch(0.76 0.0412 193.7)",
+          "oklch(0.88 0.0412 193.7)",
+          "oklch(0.96 0.0412 193.7)"
+        ]
+      },
+      "proof-paper": {
+        "role": "neutral",
+        "displayName": "校样纸 / Proof Paper",
+        "tonalRamp": [
+          "oklch(0.16 0.0175 81.3)",
+          "oklch(0.28 0.0175 81.3)",
+          "oklch(0.40 0.0175 81.3)",
+          "oklch(0.52 0.0175 81.3)",
+          "oklch(0.64 0.0175 81.3)",
+          "oklch(0.76 0.0175 81.3)",
+          "oklch(0.88 0.0175 81.3)",
+          "oklch(0.96 0.0175 81.3)"
+        ]
+      },
+      "carbon-ink": {
+        "role": "neutral",
+        "displayName": "炭墨 / Carbon Ink",
+        "tonalRamp": [
+          "oklch(0.16 0.0037 308.3)",
+          "oklch(0.28 0.0037 308.3)",
+          "oklch(0.40 0.0037 308.3)",
+          "oklch(0.52 0.0037 308.3)",
+          "oklch(0.64 0.0037 308.3)",
+          "oklch(0.76 0.0037 308.3)",
+          "oklch(0.88 0.0037 308.3)",
+          "oklch(0.96 0.0037 308.3)"
+        ]
+      },
+      "registration-orange": {
+        "role": "secondary",
+        "displayName": "套准橙 / Registration Orange",
+        "tonalRamp": [
+          "oklch(0.16 0.1806 41.1)",
+          "oklch(0.28 0.1806 41.1)",
+          "oklch(0.40 0.1806 41.1)",
+          "oklch(0.52 0.1806 41.1)",
+          "oklch(0.64 0.1806 41.1)",
+          "oklch(0.76 0.1806 41.1)",
+          "oklch(0.88 0.1806 41.1)",
+          "oklch(0.96 0.1806 41.1)"
+        ],
+        "usage": [
+          "single approved hero ink ground behind the emphasized live-text segment",
+          "one approved rightward dry-brush tail connecting the title to the binding spine",
+          "restrained satellite hero ink dots",
+          "narrow hero CTA underprint",
+          "focus rings",
+          "annotation registration rings",
+          "active navigation location"
+        ],
+        "bans": [
+          "orange headline text",
+          "CTA primary fill",
+          "paragraph body copy",
+          "second large ink field",
+          "a second brush tail or speed-line repetition",
+          "editor paper or content overlap"
+        ]
+      },
+      "bookmark-yellow": {
+        "role": "tertiary",
+        "displayName": "书签黄 / Bookmark Yellow",
+        "tonalRamp": [
+          "oklch(0.16 0.1570 79.7)",
+          "oklch(0.28 0.1570 79.7)",
+          "oklch(0.40 0.1570 79.7)",
+          "oklch(0.52 0.1570 79.7)",
+          "oklch(0.64 0.1570 79.7)",
+          "oklch(0.76 0.1570 79.7)",
+          "oklch(0.88 0.1570 79.7)",
+          "oklch(0.96 0.1570 79.7)"
+        ]
+      },
+      "index-olive": {
+        "role": "tertiary",
+        "displayName": "索引橄榄 / Index Olive",
+        "tonalRamp": [
+          "oklch(0.16 0.0915 108)",
+          "oklch(0.28 0.0915 108)",
+          "oklch(0.40 0.0915 108)",
+          "oklch(0.52 0.0915 108)",
+          "oklch(0.64 0.0915 108)",
+          "oklch(0.76 0.0915 108)",
+          "oklch(0.88 0.0915 108)",
+          "oklch(0.96 0.0915 108)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display-latin": {
+        "displayName": "Latin Display",
+        "purpose": "English and French hero statements only."
+      },
+      "display-zh-hans": {
+        "displayName": "Simplified Chinese Display",
+        "purpose": "Simplified Chinese hero statements with language-owned line breaks."
+      },
+      "display-zh-hant": {
+        "displayName": "Traditional Chinese Display",
+        "purpose": "Traditional Chinese hero statements with language-owned line breaks."
+      },
+      "display-ja": {
+        "displayName": "Japanese Display",
+        "purpose": "Japanese hero statements with natural Japanese rhythm."
+      },
+      "display-ko": {
+        "displayName": "Korean Display",
+        "purpose": "Korean hero statements with natural Korean rhythm."
+      },
+      "hero-emphasis": {
+        "displayName": "Localized Hero Emphasis",
+        "purpose": "The approved emphasized segment inside the localized hero h1, using the locale-owned IBM Plex Sans 700 face in proof-paper ink over the compact orange ground, with carbon-ink fallback when that ground is unavailable."
+      },
+      "body": {
+        "displayName": "Localized Body",
+        "purpose": "Long-form reading and product explanations in the locale-specific IBM Plex Sans build."
+      },
+      "title": {
+        "displayName": "Interface Title",
+        "purpose": "Feature headings, page transitions, and release-state titles."
+      },
+      "label": {
+        "displayName": "Control Label",
+        "purpose": "Navigation, buttons, short states, and accessible control names."
+      },
+      "mono": {
+        "displayName": "Technical Evidence",
+        "purpose": "File extensions, formats, code, numbering, and measurements only."
+      }
+    },
+    "shadows": [
+      {
+        "name": "shadow-wing-sheet",
+        "value": "0 0 0 1px oklch(0.15 0.003 85 / 0.03), 0 1px 2px oklch(0.15 0.003 85 / 0.04), 0 2px 4px oklch(0.15 0.003 85 / 0.02)",
+        "purpose": "A single paper surface at rest."
+      },
+      {
+        "name": "shadow-wing-stack",
+        "value": "0 0 0 1px oklch(0.15 0.003 85 / 0.04), 0 2px 4px oklch(0.15 0.003 85 / 0.06), 0 4px 12px oklch(0.15 0.003 85 / 0.04)",
+        "purpose": "Overlapping sheets and hover lift."
+      },
+      {
+        "name": "shadow-wing-float",
+        "value": "0 0 0 1px oklch(0.15 0.003 85 / 0.05), 0 4px 8px oklch(0.15 0.003 85 / 0.08), 0 8px 24px oklch(0.15 0.003 85 / 0.06), 0 16px 32px oklch(0.15 0.003 85 / 0.02)",
+        "purpose": "The guided editor proof and temporary elevated surfaces."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-press",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Fast tactile press feedback."
+      },
+      {
+        "name": "ease-fold",
+        "value": "cubic-bezier(0.33, 1, 0.68, 1)",
+        "purpose": "Paper-sheet spatial movement."
+      },
+      {
+        "name": "ease-enter",
+        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "Non-bouncing arrival."
+      },
+      {
+        "name": "ease-exit",
+        "value": "cubic-bezier(0.55, 0, 1, 0.45)",
+        "purpose": "Decisive departure."
+      },
+      {
+        "name": "ease-fade",
+        "value": "cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Opacity-only state change."
+      },
+      {
+        "name": "duration-press",
+        "value": "80ms",
+        "purpose": "Pointer press."
+      },
+      {
+        "name": "duration-micro",
+        "value": "120ms",
+        "purpose": "Color and focus feedback."
+      },
+      {
+        "name": "duration-hover",
+        "value": "150ms",
+        "purpose": "One-pixel paper lift."
+      },
+      {
+        "name": "duration-release",
+        "value": "200ms",
+        "purpose": "Return to rest."
+      },
+      {
+        "name": "duration-page",
+        "value": "300ms",
+        "purpose": "Page or section arrival."
+      },
+      {
+        "name": "duration-expand",
+        "value": "350ms",
+        "purpose": "Menu and paper-stack expansion."
+      },
+      {
+        "name": "duration-scene",
+        "value": "400ms",
+        "purpose": "Maximum duration for a narrative scene change."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact",
+        "value": "480px",
+        "purpose": "Single-column navigation, popovers, and the narrowest phones."
+      },
+      {
+        "name": "stacked",
+        "value": "720px",
+        "purpose": "Replace sticky product storytelling with sequential paper sheets."
+      },
+      {
+        "name": "rail-collapse",
+        "value": "900px",
+        "purpose": "Collapse the two-column hero and secondary technical rail."
+      },
+      {
+        "name": "wide",
+        "value": "1120px",
+        "purpose": "Enable the full editorial composition and sticky narrative."
+      }
+    ],
+    "typographyDelivery": {
+      "fontSynthesis": "none",
+      "cssVariables": ["--font-display", "--font-body", "--font-label", "--font-mono"],
+      "manifestContract": {
+        "plannedPath": "packages/site/src/fonts/font-manifest.ts",
+        "requiredFields": [
+          "locale",
+          "role",
+          "family",
+          "weight",
+          "style",
+          "officialSource",
+          "releaseTagOrCommit",
+          "originalFilename",
+          "sourceSha256",
+          "woff2Sha256",
+          "unicodeRange",
+          "subsetToolVersion",
+          "subsetCommand",
+          "licenseId",
+          "oflPath",
+          "copyright",
+          "reservedFontNameReview",
+          "outputPath",
+          "allowedLocales"
+        ],
+        "requiredLicense": "OFL-1.1",
+        "publishedFormat": "woff2"
+      },
+      "loadingPolicy": {
+        "fontDisplay": "swap",
+        "preload": [
+          "current-locale hero Display 400",
+          "current-locale hero Body 700",
+          "current-locale first-fold editor Body 400"
+        ],
+        "fallbackMetricOverrides": [
+          "size-adjust",
+          "ascent-override",
+          "descent-override",
+          "line-gap-override"
+        ],
+        "thirdPartyFontRequests": 0,
+        "crossLocaleFontRequests": 0,
+        "maxFontSwapCls": 0.1
+      },
+      "buildGates": [
+        "Manifest entries are complete and every file hash matches.",
+        "Every used weight and style has a real face; synthetic fonts are disabled.",
+        "The 48-page locale corpus and editor demo corpus have complete cmap coverage.",
+        "Only the active locale font allowlist is requested at runtime.",
+        "No third-party font URL, unused preload, duplicate download, or MIME mismatch exists.",
+        "document.fonts.check succeeds for Display 400, Body 400, Body 700, Label 600, and Mono 500.",
+        "All six localized heroes preserve the approved line breaks and impact after font swap."
+      ],
+      "localeTokenBindings": {
+        "en": {
+          "display": "display-latin",
+          "heroEmphasis": "body",
+          "body": "body",
+          "label": "label",
+          "mono": "mono"
+        },
+        "fr": {
+          "display": "display-latin",
+          "heroEmphasis": "body",
+          "body": "body",
+          "label": "label",
+          "mono": "mono"
+        },
+        "zh-Hans": {
+          "display": "display-zh-hans",
+          "heroEmphasis": "body",
+          "body": "body",
+          "label": "label",
+          "mono": "mono"
+        },
+        "zh-Hant": {
+          "display": "display-zh-hant",
+          "heroEmphasis": "body",
+          "body": "body",
+          "label": "label",
+          "mono": "mono"
+        },
+        "ja": {
+          "display": "display-ja",
+          "heroEmphasis": "body",
+          "body": "body",
+          "label": "label",
+          "mono": "mono"
+        },
+        "ko": {
+          "display": "display-ko",
+          "heroEmphasis": "body",
+          "body": "body",
+          "label": "label",
+          "mono": "mono"
+        }
+      }
+    },
+    "materials": {
+      "paperFiberMaskV1": {
+        "asset": "assets/brand/textures/paper-fiber-mask-seamless-v1.webp",
+        "source": "OpenAI built-in ImageGen",
+        "format": "webp",
+        "dimensions": {
+          "width": 1254,
+          "height": 1254
+        },
+        "bytes": 74078,
+        "sha256": "A40953A1FE5A3D72E347466CA9227E266A6EA4868073A421FF4F368316D0026D",
+        "role": "Neutral near-white paper microtexture mask for proof paper and binding surfaces.",
+        "blendMode": "multiply",
+        "cssTileSize": "627px 627px",
+        "opacity": {
+          "bodyPaper": 0.28,
+          "blankHeroPaper": 0.64,
+          "bindingTeal": 0.18
+        },
+        "fixedLayerPositions": ["0 0", "157px 211px", "313px 79px", "471px 337px"],
+        "seamReview": "3x3 visual repeat pass",
+        "maxPublishedBytes": 98304,
+        "bans": [
+          "folds",
+          "vignette",
+          "shadows",
+          "stains",
+          "large flecks",
+          "visible seams",
+          "text-layer overlap"
+        ],
+        "requiredHostBinding": "--site-paper-texture: url('/assets/brand/textures/paper-fiber-mask-seamless-v1.webp')"
+      },
+      "heroInkGroundApprovedV1": {
+        "status": "approved by user on 2026-08-03 as the production Hero baseline",
+        "source": "OpenAI built-in ImageGen edit of the approved vermilion source",
+        "candidateEvidence": {
+          "filename": "vermilion-ink-ground-compact-mono-v2.png",
+          "dimensions": {
+            "width": 1536,
+            "height": 864
+          },
+          "bytes": 154465,
+          "sha256": "66775899F62BA25C82630108A04AC0AAC95AE416820AA4C688A0B8EEC4C63CCE",
+          "review": "V8 composition and contrast PASS; not yet a production asset path"
+        },
+        "assetType": "transparent single-color raster",
+        "role": "One orange-red screen-print ground behind the localized Hero emphasis live text, with one rightward dry-brush tail connecting to the binding spine.",
+        "colorBinding": "registration-orange",
+        "delivery": "local, decorative, aria-hidden, pointer-events none",
+        "compositionBoundary": "The approved dry-brush tail reaches the deep-teal binding spine; no visible pixels obscure editor text or controls.",
+        "fallback": "An asymmetric compact registration-orange field keeps the emphasis readable if the bitmap is unavailable; forced-colors uses carbon-ink text and no field.",
+        "bans": [
+          "a second rightward tail",
+          "repeated horizontal speed lines",
+          "second large ink field",
+          "multiply darkening into a deep-vermilion band",
+          "editor overlap",
+          "text baked into the raster"
+        ],
+        "requiredHostBindingAfterApproval": "--site-hero-ink-ground: url('/assets/brand/textures/hero-ink-ground-approved-v1.webp')"
+      }
+    },
+    "compositions": {
+      "heroPressStage": {
+        "register": "brand",
+        "scene": "Full-bleed warm proof-paper stage with a giant dual-type localized statement, one approved orange-red ink ground with a single rightward dry-brush tail and restrained satellite dots, a deep-teal action with a narrow orange underprint, and a tilted real-DOM editor stack.",
+        "titleComposition": {
+          "semanticElement": "single h1",
+          "voiceRole": "locale Display 400",
+          "emphasisRole": "locale Body 700",
+          "voiceColor": "carbon-ink",
+          "emphasisColorWhenInkReady": "proof-paper",
+          "emphasisFallbackColor": "carbon-ink",
+          "localeOwnsEmphasisSegment": true
+        },
+        "typeEcho": {
+          "display": "hero voice and editor document heading",
+          "body": "hero emphasis, editor UI, and editor body",
+          "orangeText": "forbidden",
+          "proofPaperTextOnOrangeGround": "required when the ground is visible"
+        },
+        "approvedInkGround": {
+          "color": "registration-orange",
+          "count": 1,
+          "semantics": "decorative, aria-hidden, pointer-events none; all title glyphs remain live DOM",
+          "placement": "behind the localized emphasis segment; its approved rightward dry-brush tail reaches the deep-teal binding spine without obscuring editor content",
+          "contrast": "proof-paper text against registration-orange is at least 3:1 for large text",
+          "readyState": "SSR omits data-ink-ready; add data-ink-ready=true only after the local bitmap decodes, otherwise keep carbon-ink emphasis text and hide the ground",
+          "bans": [
+            "a second rightward tail",
+            "repeated horizontal speed lines",
+            "second large ink field",
+            "deep-vermilion multiply band",
+            "editor paper or content overlap"
+          ]
+        },
+        "satelliteInkDots": {
+          "color": "registration-orange",
+          "density": "restrained and visually subordinate to the approved ground",
+          "semantics": "decorative, aria-hidden, pointer-events none",
+          "placement": "near the approved ground and title/editor seam; never inside product content"
+        },
+        "desktop": {
+          "minHeight": "min(100svh, 980px)",
+          "recommendedFloor": "720px",
+          "titleWidth": "30%–38% of viewport width",
+          "titleBoundingBoxArea": "12%–20% of first viewport",
+          "titleHeight": "45%–65% of first viewport",
+          "editorWidth": "55%–65% of viewport width, capped at 1080px",
+          "editorBoundingBoxArea": "at least 40% of first viewport",
+          "firstFoldRequiredTogether": [
+            "localized title",
+            "single primary action",
+            "real DOM editor proof"
+          ],
+          "singleColumnAtOrBelow": "1120px"
+        },
+        "editorSheetStack": {
+          "layers": 4,
+          "rotations": ["-4.2deg", "2.6deg", "-1.6deg", "0.8deg"],
+          "exposedOffsets": ["14px", "28px", "42px"],
+          "maxAbsoluteRotation": "6deg",
+          "frontLayer": "Keyboard-operable semantic editor DOM.",
+          "rearLayers": 3,
+          "frontLayers": 1
+        },
+        "progressAction": {
+          "background": "binding-teal",
+          "text": "proof-paper",
+          "radius": "12px 18px 10px 15px",
+          "prelaunchLabel": "查看发布进度",
+          "orangeFill": "forbidden",
+          "orangeUnderprint": {
+            "allowed": true,
+            "maxHeight": "12px",
+            "labelOverlap": "forbidden"
+          },
+          "falseDownloadAction": "forbidden"
+        },
+        "registrationField": {
+          "roles": ["composition anchors", "active-state location", "sheet alignment"],
+          "approvedDecorativeException": "The approvedInkGround with its single tail, satelliteInkDots, and narrow progressAction underprint only.",
+          "otherDecorationWithoutFunction": "forbidden"
+        },
+        "mobile": {
+          "order": ["giant localized title", "real product proof", "primary action"],
+          "editorLayers": 2,
+          "stickyScrub": false,
+          "complexRotation": false,
+          "frontLayerFlow": "normal document flow with content-driven height"
+        },
+        "bans": [
+          "global rounded application shell",
+          "orthogonal 50/50 hero split",
+          "designer-facing contract labels",
+          "editor proof below the hero",
+          "second large orange ink field",
+          "a second brush tail or repeated speed lines",
+          "orange ink on editor paper or content",
+          "deep-vermilion multiply band",
+          "orange or vermilion headline text",
+          "orange CTA primary fill",
+          "runtime-random rotation or offset"
+        ]
+      }
+    }
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single highest-priority action on a page or section.",
+      "html": "<button type=\"button\" class=\"ds-button-primary\">查看发布进度</button>",
+      "css": ".ds-button-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 20px; border: 1px solid var(--site-binding-teal, oklch(0.4898 0.0412 193.7)); border-radius: var(--site-radius-control, 12px 16px 14px 10px); background: var(--site-binding-teal, oklch(0.4898 0.0412 193.7)); color: var(--site-proof-paper, oklch(0.9723 0.0175 81.3)); font: 600 0.75rem/1.4 var(--font-label, system-ui, sans-serif); letter-spacing: 0.06em; cursor: pointer; box-shadow: 0 0 0 1px oklch(0.15 0.003 85 / 0.03), 0 1px 2px oklch(0.15 0.003 85 / 0.04), 0 2px 4px oklch(0.15 0.003 85 / 0.02); transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 150ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-button-primary:hover { transform: translateY(-1px); box-shadow: 0 0 0 1px oklch(0.15 0.003 85 / 0.04), 0 2px 4px oklch(0.15 0.003 85 / 0.06), 0 4px 12px oklch(0.15 0.003 85 / 0.04); } .ds-button-primary:focus-visible { outline: 2px solid var(--site-registration-orange, oklch(0.6307 0.1806 41.1)); outline-offset: 2px; } .ds-button-primary:active { transform: scale(0.97); } .ds-button-primary:disabled { opacity: 0.45; cursor: not-allowed; transform: none; } @media (prefers-reduced-motion: reduce) { .ds-button-primary { transition-duration: 0.01ms; transform: none; } }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A truthful secondary path such as viewing source.",
+      "html": "<a class=\"ds-button-secondary\" href=\"https://github.com/jiay98528-dev/JotLuck\">查看源代码</a>",
+      "css": ".ds-button-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 20px; border: 1px solid color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 45%, transparent); border-radius: var(--site-radius-control, 12px 16px 14px 10px); background: var(--site-proof-paper, oklch(0.9723 0.0175 81.3)); color: var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)); font: 600 0.75rem/1.4 var(--font-label, system-ui, sans-serif); letter-spacing: 0.06em; text-decoration: none; transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 150ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-button-secondary:hover { transform: translateY(-1px); box-shadow: 0 2px 8px oklch(0.15 0.003 85 / 0.06); } .ds-button-secondary:focus-visible { outline: 2px solid var(--site-registration-orange, oklch(0.6307 0.1806 41.1)); outline-offset: 2px; } .ds-button-secondary:active { transform: scale(0.97); } @media (prefers-reduced-motion: reduce) { .ds-button-secondary { transition-duration: 0.01ms; transform: none; } }"
+    },
+    {
+      "name": "Site Navigation",
+      "kind": "nav",
+      "refersTo": "site-navigation",
+      "description": "A low paper-edge index for the four primary routes.",
+      "html": "<nav class=\"ds-site-nav\" aria-label=\"主要导航\"><a href=\"/product/\" aria-current=\"page\">产品</a><a href=\"/download/\">下载</a><a href=\"/themes/\">主题</a><a href=\"/support/\">支持</a></nav>",
+      "css": ".ds-site-nav { display: flex; align-items: center; gap: 24px; padding: 12px 16px; border-block: 1px solid color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 20%, transparent); background: var(--site-proof-paper, oklch(0.9723 0.0175 81.3)); font: 600 0.75rem/1.4 var(--font-label, system-ui, sans-serif); } .ds-site-nav a { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border-bottom: 1px solid transparent; color: var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)); text-decoration: none; } .ds-site-nav a:hover { border-bottom-color: color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 45%, transparent); } .ds-site-nav a[aria-current=\"page\"] { border-bottom-color: var(--site-registration-orange, oklch(0.6307 0.1806 41.1)); font-weight: 600; } .ds-site-nav a:focus-visible { outline: 2px solid var(--site-registration-orange, oklch(0.6307 0.1806 41.1)); outline-offset: 2px; border-radius: var(--site-radius-compact, 8px 12px 7px 10px); } @media (max-width: 720px) { .ds-site-nav { flex-wrap: wrap; gap: 8px 16px; } }"
+    },
+    {
+      "name": "Language Selector",
+      "kind": "input",
+      "refersTo": "language-selector",
+      "description": "A path-preserving locale selector with a native control contract.",
+      "html": "<label class=\"ds-language-selector\"><span>语言</span><select aria-label=\"选择语言\"><option selected>简体中文</option><option>English</option><option>日本語</option></select></label>",
+      "css": ".ds-language-selector { display: inline-flex; align-items: center; gap: 8px; color: var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)); font: 600 0.75rem/1.4 var(--font-label, system-ui, sans-serif); } .ds-language-selector select { min-height: 44px; padding: 0 12px; border: 1px solid color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 35%, transparent); border-radius: var(--site-radius-control, 12px 16px 14px 10px); background: var(--site-proof-paper, oklch(0.9723 0.0175 81.3)); color: inherit; font: inherit; } .ds-language-selector select:hover { border-color: var(--site-binding-teal, oklch(0.4898 0.0412 193.7)); } .ds-language-selector select:focus-visible { outline: 2px solid var(--site-registration-orange, oklch(0.6307 0.1806 41.1)); outline-offset: 2px; } .ds-language-selector select:disabled { opacity: 0.45; cursor: not-allowed; }"
+    },
+    {
+      "name": "Technical Rail",
+      "kind": "custom",
+      "refersTo": "technical-rail",
+      "description": "A subordinate line that keeps factual product terms away from poetic copy.",
+      "html": "<aside class=\"ds-technical-rail\" aria-label=\"技术细节\"><span class=\"ds-technical-marker\" aria-hidden=\"true\"></span><span class=\"ds-technical-label\">本地文件</span><code>.md</code><code>.mdx</code><code>.txt</code></aside>",
+      "css": ".ds-technical-rail { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; border-block: 1px solid color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 22%, transparent); border-radius: var(--site-radius-compact, 8px 12px 7px 10px); background: var(--site-proof-paper, oklch(0.9723 0.0175 81.3)); color: color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 76%, transparent); font: 500 0.75rem/1.5 var(--font-body, system-ui, sans-serif); } .ds-technical-marker { width: 8px; height: 8px; border-radius: 9999px; background: var(--site-index-olive, oklch(0.6387 0.0915 108)); } .ds-technical-label { font-family: var(--font-body, system-ui, sans-serif); } .ds-technical-rail code { color: var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)); font: 500 0.75rem/1.5 var(--font-mono, ui-monospace, monospace); }"
+    },
+    {
+      "name": "Paper Sheet",
+      "kind": "card",
+      "refersTo": "paper-sheet",
+      "description": "A single proof sheet for one continuous idea, never a grid tile.",
+      "html": "<article class=\"ds-paper-sheet\"><span class=\"ds-paper-folio\">01</span><h3>一份文件，就是开始。</h3><p>无需账户，打开它，写下去。</p></article>",
+      "css": ".ds-paper-sheet { position: relative; isolation: isolate; overflow: hidden; max-width: 42rem; padding: 32px; border: 1px solid color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 14%, transparent); border-radius: var(--site-radius-sheet, 18px 24px 16px 22px); background: var(--site-proof-paper, oklch(0.9723 0.0175 81.3)); color: var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)); box-shadow: 0 0 0 1px oklch(0.15 0.003 85 / 0.03), 0 1px 2px oklch(0.15 0.003 85 / 0.04), 0 2px 4px oklch(0.15 0.003 85 / 0.02); font: 400 1rem/1.75 var(--font-body, system-ui, sans-serif); } .ds-paper-sheet h3 { max-width: 18ch; margin: 0 0 16px; font-size: clamp(1.5rem, 2.5vw, 2.5rem); font-weight: 600; line-height: 1.15; } .ds-paper-sheet p { max-width: 36em; margin: 0; } .ds-paper-folio { position: absolute; inset: 12px 16px auto auto; color: color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 60%, transparent); font: 500 0.75rem/1.5 var(--font-mono, ui-monospace, monospace); } @media (max-width: 720px) { .ds-paper-sheet { padding: 24px 16px; } } .ds-paper-sheet::before { content: \"\"; position: absolute; z-index: -1; inset: 0; border-radius: inherit; background-image: var(--site-paper-texture, none); background-position: 157px 211px; background-size: 627px 627px; mix-blend-mode: multiply; opacity: 0.28; pointer-events: none; }"
+    },
+    {
+      "name": "Release Status",
+      "kind": "chip",
+      "refersTo": "release-status",
+      "description": "A textual and shaped prelaunch state without a false download action.",
+      "html": "<p class=\"ds-release-status\" role=\"status\" aria-live=\"polite\"><span class=\"ds-release-mark\" aria-hidden=\"true\"></span><strong>下载即将开始</strong><span>预计 2026 年 8 月 15 日</span></p>",
+      "css": ".ds-release-status { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 44px; margin: 0; padding: 12px 16px; border: 1px solid color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 28%, transparent); border-radius: var(--site-radius-control, 12px 16px 14px 10px); background: var(--site-bookmark-yellow, oklch(0.8050 0.1570 79.7)); color: var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)); font: 600 0.75rem/1.4 var(--font-label, system-ui, sans-serif); } .ds-release-mark { width: 10px; height: 10px; border: 2px solid currentColor; border-radius: 9999px; background: transparent; } .ds-release-status strong { font-weight: 600; } .ds-release-status span:last-child { font-weight: 400; }"
+    },
+    {
+      "name": "Numbered Annotation",
+      "kind": "custom",
+      "refersTo": "annotation-number",
+      "description": "A keyboard-operable proof marker synchronized with one product scene.",
+      "html": "<button type=\"button\" class=\"ds-annotation\" aria-pressed=\"false\"><span class=\"ds-annotation-number\">02</span><span><strong>笔记关联</strong><small>查看哪些想法指向这里</small></span></button>",
+      "css": ".ds-annotation { display: grid; grid-template-columns: 32px 1fr; align-items: center; gap: 12px; min-height: 52px; width: 100%; padding: 8px 0; border: 0; border-block-end: 1px solid color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 20%, transparent); background: transparent; color: var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)); text-align: start; cursor: pointer; } .ds-annotation-number { display: inline-grid; place-items: center; width: 32px; height: 32px; border: 2px solid var(--site-registration-orange, oklch(0.6307 0.1806 41.1)); border-radius: 9999px; background: var(--site-proof-paper, oklch(0.9723 0.0175 81.3)); color: var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)); font: 600 0.75rem/1 var(--font-mono, ui-monospace, monospace); } .ds-annotation strong, .ds-annotation small { display: block; } .ds-annotation strong { font-weight: 600; } .ds-annotation small { margin-top: 4px; opacity: 0.72; } .ds-annotation:hover .ds-annotation-number, .ds-annotation[aria-pressed=\"true\"] .ds-annotation-number { transform: scale(1.06); } .ds-annotation:focus-visible { outline: 2px solid var(--site-registration-orange, oklch(0.6307 0.1806 41.1)); outline-offset: 2px; border-radius: var(--site-radius-compact, 8px 12px 7px 10px); } @media (prefers-reduced-motion: reduce) { .ds-annotation-number { transform: none !important; } }"
+    },
+    {
+      "name": "Editor Proof",
+      "kind": "custom",
+      "refersTo": "editor-proof",
+      "description": "A semantic miniature of the guided source, preview, Wiki-link, and backlink interaction.",
+      "html": "<section class=\"ds-editor-proof\" aria-label=\"JotLuck 编辑器演示\"><div class=\"ds-editor-modes\" role=\"tablist\" aria-label=\"视图模式\"><button type=\"button\" role=\"tab\" aria-selected=\"true\">源码</button><button type=\"button\" role=\"tab\" aria-selected=\"false\">预览</button></div><pre class=\"ds-editor-source\"><code># 夏日计划\n\n继续整理 [[旅行清单]]。</code></pre><article class=\"ds-editor-preview\"><h3>夏日计划</h3><p>继续整理 <button type=\"button\" class=\"ds-wikilink\">旅行清单</button>。</p><details><summary>反向链接 2</summary><ul><li>八月安排</li><li>出发前</li></ul></details></article></section>",
+      "css": ".ds-editor-proof { position: relative; isolation: isolate; display: grid; overflow: hidden; gap: 16px; max-width: 42rem; padding: 24px; border: 1px solid color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 16%, transparent); border-radius: var(--site-radius-proof, 8px 14px 10px 12px); background: var(--site-proof-paper, oklch(0.9723 0.0175 81.3)); color: var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)); box-shadow: 0 0 0 1px oklch(0.15 0.003 85 / 0.04), 0 2px 4px oklch(0.15 0.003 85 / 0.06), 0 4px 12px oklch(0.15 0.003 85 / 0.04); font: 400 1rem/1.75 var(--font-body, system-ui, sans-serif); } .ds-editor-modes { display: flex; gap: 4px; } .ds-editor-modes button, .ds-wikilink, .ds-editor-preview summary { min-height: 44px; color: inherit; font: inherit; cursor: pointer; } .ds-editor-modes button { padding: 0 12px; border: 1px solid transparent; border-radius: var(--site-radius-control, 12px 16px 14px 10px); background: transparent; } .ds-editor-modes button[aria-selected=\"true\"] { border-color: var(--site-binding-teal, oklch(0.4898 0.0412 193.7)); background: var(--site-binding-teal, oklch(0.4898 0.0412 193.7)); color: var(--site-proof-paper, oklch(0.9723 0.0175 81.3)); } .ds-editor-source { margin: 0; padding: 16px; overflow: auto; border-radius: var(--site-radius-control, 12px 16px 14px 10px); background: color-mix(in oklch, var(--site-binding-teal, oklch(0.4898 0.0412 193.7)) 8%, var(--site-proof-paper, oklch(0.9723 0.0175 81.3))); font: 500 0.875rem/1.6 var(--font-mono, ui-monospace), var(--font-body, system-ui), monospace; } .ds-editor-preview h3 { margin: 0 0 8px; font-weight: 600; } .ds-wikilink { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 0 8px; border: 0; border-bottom: 1px dashed currentColor; background: transparent; } .ds-editor-modes button:hover, .ds-wikilink:hover, .ds-editor-preview summary:hover { background: color-mix(in oklch, var(--site-binding-teal, oklch(0.4898 0.0412 193.7)) 8%, transparent); } .ds-editor-proof button:focus-visible, .ds-editor-preview summary:focus-visible { outline: 2px solid var(--site-registration-orange, oklch(0.6307 0.1806 41.1)); outline-offset: 2px; } @media (max-width: 720px) { .ds-editor-proof { padding: 16px; } } @media (prefers-reduced-motion: reduce) { .ds-editor-proof * { scroll-behavior: auto; } } .ds-editor-proof::before { content: \"\"; position: absolute; z-index: -1; inset: 0; border-radius: inherit; background-image: var(--site-paper-texture, none); background-position: 313px 79px; background-size: 627px 627px; mix-blend-mode: multiply; opacity: 0.28; pointer-events: none; }"
+    },
+    {
+      "name": "Hero Press Stage",
+      "kind": "custom",
+      "refersTo": "hero-press-stage",
+      "description": "The full-bleed impact composition: giant dual-type localized type, one compact orange-red ink ground with restrained satellite dots, a deep-teal prelaunch action with a narrow orange underprint, and a tilted real-DOM editor sheet stack in the same first viewport.",
+      "html": "<section class=\"ds-hero-stage\" data-ink-ready=\"true\" aria-labelledby=\"ds-hero-title\"><div class=\"ds-hero-copy\"><span class=\"ds-hero-ink-ground\" aria-hidden=\"true\"></span><p class=\"ds-hero-brand\">JotLuck</p><h1 id=\"ds-hero-title\"><span class=\"ds-hero-voice\">写作，<br>本应</span><span class=\"ds-hero-emphasis\">轻盈。</span></h1><span class=\"ds-hero-ink-dots\" aria-hidden=\"true\"><i></i><i></i><i></i></span></div><div class=\"ds-hero-stack\"><div class=\"ds-hero-sheet ds-hero-sheet-far\" aria-hidden=\"true\"><span class=\"ds-hero-texture\"></span></div><div class=\"ds-hero-sheet ds-hero-sheet-back\" aria-hidden=\"true\"><span class=\"ds-hero-texture\"></span></div><div class=\"ds-hero-sheet ds-hero-sheet-middle\" aria-hidden=\"true\"><span class=\"ds-hero-texture\"></span></div><section class=\"ds-hero-editor\" aria-label=\"JotLuck 编辑器产品证明\"><span class=\"ds-hero-spine\" aria-hidden=\"true\"></span><span class=\"ds-hero-texture\" aria-hidden=\"true\"></span><aside class=\"ds-hero-bookmarks\" aria-label=\"书签\"><strong>书签</strong><a href=\"#ds-hero-note\">写作的自由</a><a href=\"#ds-hero-backlinks\">在纸上思考</a></aside><article id=\"ds-hero-note\"><small>H1</small><h2>写作的自由</h2><p>文件留在本地，文字保持开放。</p><p>继续整理 <a class=\"ds-hero-wikilink\" href=\"#ds-hero-backlinks\">[[在纸上思考]]</a>。</p><h3>专注于当下</h3><p>源码、预览与关联都来自真实文本。</p></article><aside id=\"ds-hero-backlinks\" class=\"ds-hero-backlinks\" aria-label=\"反向链接\"><h3>反向链接</h3><a href=\"#ds-hero-note\">沉默的大多数</a><a href=\"#ds-hero-note\">卡片盒笔记法</a><a href=\"#ds-hero-note\">阅读与回想</a></aside><footer class=\"ds-hero-status\"><span>1,024 words</span><span>Markdown</span></footer></section></div><a class=\"ds-hero-action\" href=\"/download/\">查看发布进度</a></section>",
+      "css": ".ds-hero-stage, .ds-hero-stage * { box-sizing: border-box; } .ds-hero-stage { position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0, 0.36fr) minmax(0, 0.64fr); grid-template-rows: 1fr auto; column-gap: clamp(16px, 2vw, 40px); align-items: center; min-height: min(100svh, 980px); width: 100%; padding: clamp(24px, 4vw, 72px); overflow: hidden; background: var(--site-proof-paper, oklch(0.9723 0.0175 81.3)); color: var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)); } .ds-hero-stage::before { content: \"\"; position: absolute; z-index: -1; inset: 0; background-image: var(--site-paper-texture, none); background-size: 627px 627px; mix-blend-mode: multiply; opacity: 0.64; pointer-events: none; } .ds-hero-copy { position: relative; z-index: 4; isolation: isolate; grid-column: 1; grid-row: 1; align-self: end; min-width: 0; } .ds-hero-brand { margin: 0 0 clamp(32px, 5vw, 72px); font: 600 1rem/1.4 var(--font-label, system-ui, sans-serif); } .ds-hero-ink-ground { position: absolute; z-index: -1; left: -24px; bottom: -14px; width: calc(100% + 48px); max-width: calc(36vw - 24px); height: 46%; background-image: var(--site-hero-ink-ground, none), var(--site-hero-ink-ground, none), var(--site-hero-ink-ground, none), var(--site-hero-ink-ground, none), var(--site-hero-ink-ground, none); background-repeat: no-repeat; background-position: 22px 47%, 28px calc(47% + 5px), 14px calc(47% - 4px), -58px calc(47% + 2px), -116px calc(47% - 3px); background-size: 820px auto; pointer-events: none; } .ds-hero-stage:not([data-ink-ready=\"true\"]) .ds-hero-ink-ground { display: none; } .ds-hero-copy h1 { display: grid; justify-items: start; width: max-content; max-width: none; margin: 0; color: inherit; white-space: nowrap; } .ds-hero-voice { display: block; font: 400 clamp(5.75rem, 12vw, 12rem)/0.88 var(--font-display, serif); letter-spacing: -0.04em; } .ds-hero-emphasis { position: relative; z-index: 1; display: block; margin: 0.08em 0 0 0.18em; color: var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)); font: 700 clamp(4.75rem, 10vw, 10.5rem)/0.92 var(--font-body, system-ui, sans-serif); letter-spacing: -0.055em; } .ds-hero-stage[data-ink-ready=\"true\"] .ds-hero-emphasis { color: var(--site-proof-paper, oklch(0.9723 0.0175 81.3)); text-shadow: 0.7px 0.5px 0 color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 18%, transparent); } .ds-hero-ink-dots { position: absolute; z-index: 5; top: 46%; right: -26px; width: 62px; height: 82px; pointer-events: none; } .ds-hero-ink-dots i { position: absolute; display: block; background: var(--site-registration-orange, oklch(0.6307 0.1806 41.1)); box-shadow: 0.7px 0.5px 0 color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 12%, transparent); } .ds-hero-ink-dots i:nth-child(1) { top: 3px; left: 2px; width: 7px; height: 8px; border-radius: 57% 43% 48% 52% / 45% 58% 42% 55%; transform: rotate(13deg); } .ds-hero-ink-dots i:nth-child(2) { top: 31px; left: 25px; width: 17px; height: 18px; border-radius: 46% 54% 58% 42% / 52% 43% 57% 48%; transform: rotate(-8deg); } .ds-hero-ink-dots i:nth-child(3) { top: 69px; left: 45px; width: 10px; height: 11px; border-radius: 51% 49% 44% 56% / 58% 47% 53% 42%; transform: rotate(6deg); } .ds-hero-action { position: relative; z-index: 4; isolation: isolate; grid-column: 1; grid-row: 2; align-self: start; justify-self: start; display: inline-flex; align-items: center; justify-content: center; min-width: 220px; min-height: 52px; margin-top: clamp(28px, 4vw, 56px); padding: 0 24px; border: 1px solid color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 22%, transparent); border-radius: 12px 18px 10px 15px; background: var(--site-binding-teal, oklch(0.4898 0.0412 193.7)); color: var(--site-proof-paper, oklch(0.9723 0.0175 81.3)); box-shadow: 0 2px 4px oklch(0.15 0.003 85 / 0.06), 0 4px 12px oklch(0.15 0.003 85 / 0.04); font: 600 0.875rem/1.4 var(--font-label, system-ui, sans-serif); text-decoration: none; transform: rotate(-0.35deg); transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 150ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-hero-action::after { content: \"\"; position: absolute; z-index: -1; left: 10px; right: -4px; bottom: -7px; height: 10px; border-radius: 41% 59% 48% 52% / 60% 42% 58% 40%; background: var(--site-registration-orange, oklch(0.6307 0.1806 41.1)); transform: rotate(0.8deg); pointer-events: none; } .ds-hero-action:hover { transform: translateY(-1px) rotate(-0.35deg); box-shadow: 0 2px 4px oklch(0.15 0.003 85 / 0.08), 0 6px 16px oklch(0.15 0.003 85 / 0.07); } .ds-hero-action:active { transform: scale(0.97) rotate(-0.35deg); } .ds-hero-action:focus-visible, .ds-hero-editor a:focus-visible { outline: 2px solid var(--site-registration-orange, oklch(0.6307 0.1806 41.1)); outline-offset: 3px; } .ds-hero-stack { position: relative; z-index: 2; grid-column: 2; grid-row: 1 / 3; align-self: center; justify-self: end; width: min(64vw, 1080px); max-width: 100%; min-height: clamp(480px, 48vw, 700px); transform: translateX(-2%); } .ds-hero-sheet, .ds-hero-editor { position: absolute; isolation: isolate; overflow: hidden; border: 1px solid color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 16%, transparent); border-radius: var(--site-radius-proof, 8px 14px 10px 12px); background-color: var(--site-proof-paper, oklch(0.9723 0.0175 81.3)); box-shadow: 0 0 0 1px oklch(0.15 0.003 85 / 0.04), 0 2px 4px oklch(0.15 0.003 85 / 0.06), 0 4px 12px oklch(0.15 0.003 85 / 0.04); } .ds-hero-texture { position: absolute; z-index: 0; inset: 0; background-image: var(--site-paper-texture, none); background-position: var(--texture-position, 0 0); background-size: 627px 627px; mix-blend-mode: multiply; opacity: 0.28; pointer-events: none; } .ds-hero-sheet-far { --texture-position: 0 0; inset: 1% 3% 10% 9%; transform: rotate(-4.2deg); } .ds-hero-sheet-back { --texture-position: 157px 211px; inset: 3% 2% 8% 7%; transform: rotate(2.6deg); } .ds-hero-sheet-middle { --texture-position: 471px 337px; inset: 6% 0 5% 4%; transform: rotate(-1.6deg); } .ds-hero-editor { --texture-position: 313px 79px; inset: 10% 0 0 0; display: grid; grid-template-columns: minmax(160px, 0.2fr) minmax(300px, 1fr) minmax(190px, 0.24fr); grid-template-rows: 1fr auto; transform: rotate(0.8deg); font: 400 0.875rem/1.6 var(--font-body, system-ui, sans-serif); } .ds-hero-editor > :not(.ds-hero-texture):not(.ds-hero-spine) { position: relative; z-index: 1; } .ds-hero-spine { position: absolute; z-index: 2; inset: 0 auto 0 0; width: 42px; overflow: hidden; background: var(--site-binding-teal, oklch(0.4898 0.0412 193.7)); } .ds-hero-spine::after { content: \"\"; position: absolute; inset: 0; background-image: var(--site-paper-texture, none); background-size: 627px 627px; mix-blend-mode: multiply; opacity: 0.18; } .ds-hero-bookmarks, .ds-hero-backlinks { display: grid; align-content: start; gap: 8px; padding: 56px 18px 24px 58px; } .ds-hero-bookmarks { border-inline-end: 1px solid color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 14%, transparent); } .ds-hero-bookmarks strong, .ds-hero-editor h3 { font-weight: 600; } .ds-hero-bookmarks a, .ds-hero-backlinks a, .ds-hero-wikilink { display: inline-flex; align-items: center; min-height: 44px; color: inherit; text-decoration-color: color-mix(in oklch, currentColor 46%, transparent); text-underline-offset: 4px; } .ds-hero-bookmarks a:hover, .ds-hero-backlinks a:hover, .ds-hero-wikilink:hover { background: color-mix(in oklch, var(--site-bookmark-yellow, oklch(0.8050 0.1570 79.7)) 18%, transparent); } .ds-hero-editor article { padding: 64px clamp(24px, 4vw, 64px) 32px; } .ds-hero-editor article small { font-family: var(--font-mono, ui-monospace, monospace); } .ds-hero-editor h2 { margin: 0 0 24px; font: 400 clamp(1.75rem, 3vw, 3.5rem)/1.05 var(--font-display, serif); } .ds-hero-editor h3 { margin: 32px 0 8px; font-size: 1.25rem; } .ds-hero-backlinks { padding-inline-start: 22px; border-inline-start: 1px solid color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 14%, transparent); } .ds-hero-backlinks h3 { margin: 0 0 12px; } .ds-hero-status { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 16px; min-height: 44px; padding: 10px 20px 10px 56px; border-top: 1px solid color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 14%, transparent); font: 500 0.75rem/1.5 var(--font-mono, ui-monospace, monospace); } @media (max-width: 1120px) { .ds-hero-stage { grid-template-columns: 1fr; grid-template-rows: auto auto auto; gap: 48px; min-height: auto; padding-block: 56px; } .ds-hero-copy { grid-column: 1; grid-row: 1; align-self: auto; width: max-content; max-width: 100%; } .ds-hero-voice { font-size: clamp(5.25rem, 20vw, 9rem); } .ds-hero-emphasis { font-size: clamp(4.5rem, 18vw, 8rem); } .ds-hero-ink-dots { top: 52%; right: 0; } .ds-hero-stack { grid-column: 1; grid-row: 2; justify-self: stretch; width: 100%; min-height: 620px; transform: none; } .ds-hero-action { grid-column: 1; grid-row: 3; margin-top: 0; } } @media (max-width: 720px) { .ds-hero-stage { overflow: clip; } .ds-hero-ink-dots i:nth-child(2) { width: 14px; height: 15px; } .ds-hero-stack { display: grid; min-height: 0; } .ds-hero-sheet-far, .ds-hero-sheet-back { display: none; } .ds-hero-sheet-middle { position: absolute; inset: 8px 6px -8px 12px; transform: none; } .ds-hero-editor { position: relative; inset: auto; min-height: 0; grid-template-columns: 1fr; grid-template-rows: auto 1fr auto auto; transform: none; } .ds-hero-bookmarks { display: flex; flex-wrap: wrap; padding: 20px 16px 12px 52px; border-inline-end: 0; border-bottom: 1px solid color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 14%, transparent); } .ds-hero-editor article { padding: 28px 18px 20px 52px; } .ds-hero-backlinks { padding: 16px 18px 16px 52px; border-inline-start: 0; border-top: 1px solid color-mix(in oklch, var(--site-carbon-ink, oklch(0.3346 0.0037 308.3)) 14%, transparent); } } @media (forced-colors: active) { .ds-hero-ink-ground, .ds-hero-action::after { display: none; } .ds-hero-emphasis { color: CanvasText; text-shadow: none; } } @media (prefers-reduced-motion: reduce) { .ds-hero-stage *, .ds-hero-stage *::before, .ds-hero-stage *::after { scroll-behavior: auto; transition-duration: 0.01ms !important; } .ds-hero-action { transform: none; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "羽翼印刷所 / The Winged Press",
+    "overview": "JotLuck 的公共官网像一张刚从小型印刷机上揭下的校样：写作者坐在有日光的安静书桌前，深青色装订台承住一叠暖纸，纸上的每个标记都对应真实产品能力。它不是复古装饰，也不是杂志版式套装。装订、套准、批注和纸页层级共同说明一件事：纯文本可以轻盈，也可以精确。\n\n根级设计契约同时保护两个表面。公共官网属于 brand register，允许巨型活字、整块颜色和滚动叙事；JotLuck 应用属于 product register，必须无感、真诚、精确。官网可以吸引注意，嵌入的编辑器证明必须退后并服务写作。任何官网规则都不得覆盖 Theme API、应用主题 scope 或现有工作区行为。\n\n画面拒绝 SaaS 模板感、企业软件感、终端极客感和无功能依据的装饰。主要构图使用非对称装订平面、真实 DOM 编辑器、编号批注和清晰的技术说明层，不依赖卡片阵列、伪截图或素材图填充。首页 Hero 是一张接近满视口的印刷舞台，不得被统一圆角外壳、正交 50/50 分栏或设计规范标签收编。",
+    "keyCharacteristics": [
+      "深青装订平面与暖纸正文形成明确的物理层级。",
+      "巨型双字体本地化主张与倾斜叠纸编辑器在首屏同时达到视觉峰值。",
+      "主句通过展示体与本地 IBM Plex Sans 粗体建立重点，强调段以校样纸色活字压在紧凑橘红印面上；编辑器复用同一字体角色。",
+      "结构承担装饰功能，套准标记、纸边和编号都具有叙事或交互用途。",
+      "产品证据可操作、可验证，并通过真实清洗后的 Markdown 管线渲染。",
+      "桌面端采用编排式滚动，移动端和减弱动效模式采用等价的线性纸页序列。",
+      "所有商业状态、平台状态和语言能力保持可核验。"
+    ],
+    "rules": [
+      {
+        "name": "The Surface Register Rule",
+        "body": "官网负责建立记忆，应用负责让工具消失。品牌表现不得侵入写作、保存、搜索或阅读流程。",
+        "section": "overview"
+      },
+      {
+        "name": "The Working Proof Rule",
+        "body": "任何产品画面都必须是真实语义 DOM 和真实交互结果，禁止用伪造截图代替能力证明。",
+        "section": "overview"
+      },
+      {
+        "name": "The Hero Impact Rule",
+        "body": "首页第一屏必须同时出现巨型本地化主张、唯一主动作和占据主要面积的真实编辑器证明。任一对象退化为次级卡片时，Hero 视为失败。",
+        "section": "overview"
+      },
+      {
+        "name": "The Emphasis Is Typographic and Printed Rule",
+        "body": "Hero 的重点首先来自同一语义 `h1` 内的字体、字重、字面密度和断行差异；强调段允许以校样纸色的真实文本压在一块紧凑橘红印面上。橘红印面必须止于标题与装订交界，不得形成向右拖尾、速度线或覆盖编辑器内容。每种语言独立确认强调片段。",
+        "section": "overview"
+      },
+      {
+        "name": "The Controlled Imperfection Rule",
+        "body": "内容内部继续服从 4px 栅格；纸页外轮廓使用命名的不对称圆角、确定性偏移和轻微旋转建立有机感，禁止运行时随机抖动。",
+        "section": "overview"
+      },
+      {
+        "name": "The Linear Fallback Rule",
+        "body": "任何滚动编排都必须在移动端、键盘路径和减弱动效模式下变成完整、顺序不变的静态叙事。",
+        "section": "overview"
+      },
+      {
+        "name": "The Binding Plane Rule",
+        "body": "深青必须一次承担一个完整结构面。若它只剩若干圆角标签，或膨胀成替代巨型主句与编辑器证明的半屏矩形，品牌骨架都已经丢失。",
+        "section": "colors"
+      },
+      {
+        "name": "The Registration Not Decoration Rule",
+        "body": "橙、黄、橄榄优先标记状态或关系。Hero 允许一个 `aria-hidden` 的紧凑橘红印面承托强调段、少量卫星墨点，以及主动作下方不超过 12px 的窄套印底边；主印面必须停在深青装订脊处，不能生成第二块大型墨迹、向右拖尾、速度线或编辑器覆盖。除此之外，无法说明功能的彩色标记必须删除。",
+        "section": "colors"
+      },
+      {
+        "name": "The Contrast Owns the Copy Rule",
+        "body": "正文只使用炭墨与校样纸的高对比组合。低注意力不等于低可读性，所有文本和控件边界必须满足 WCAG 2.1 AA。",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Registers of Type Rule",
+        "body": "诗性主句与技术证据必须分行、分组、分字体角色。禁止在同一句中突然插入原始技术名词。",
+        "section": "typography"
+      },
+      {
+        "name": "The Locale Owns the Line Rule",
+        "body": "每种语言独立确定行长、断句和字面密度。禁止为了视觉对齐而损害自然表达。",
+        "section": "typography"
+      },
+      {
+        "name": "The Mono Is Evidence Rule",
+        "body": "等宽字体只说明文件、代码、格式或测量，不用来伪装“开发者气质”。",
+        "section": "typography"
+      },
+      {
+        "name": "The Depth Has a Job Rule",
+        "body": "每一道阴影必须回答“哪张纸在谁上面”。回答不出时，移除阴影。",
+        "section": "elevation"
+      },
+      {
+        "name": "The Still Page Rule",
+        "body": "页面完成入场后必须稳定。品牌表现来自构图与活字，不来自持续运动。",
+        "section": "elevation"
+      },
+      {
+        "name": "The Focus Before Flourish Rule",
+        "body": "键盘焦点、减弱动效和 200% 缩放优先于任何编排效果。粘性内容不得遮挡当前焦点。",
+        "section": "elevation"
+      },
+      {
+        "name": "The Honest Control Rule",
+        "body": "每个看起来可点击的元素都必须能操作并产生可观察结果；纯装饰不得伪装成控件。",
+        "section": "components"
+      },
+      {
+        "name": "The No Modal First Rule",
+        "body": "官网没有表单、购买或账户任务。语言、发布信息和支持路径使用页面内渐进结构，不用模态框抢占阅读。",
+        "section": "components"
+      },
+      {
+        "name": "The Source Order Rule",
+        "body": "非对称视觉不得改变语义顺序。屏幕阅读器与键盘必须按标题、说明、证明、动作的顺序前进。",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Do 把官网当作品牌表面，把嵌入编辑器当作产品表面。官网可以表达，编辑器必须安静、真实、任务优先。",
+      "Do 让结构承担视觉工作。使用装订平面、纸边、套准标记、导航轨、编号批注和真实编辑器层级构图。",
+      "Do 保持样机级 Hero 冲击力。让巨型双字体本地化主句、深青主动作和倾斜真实编辑器在第一屏同时成立。",
+      "Do 坚持已确认的装订四色。暖纸承担 Hero 舞台，深青承担编辑器装订、主要结构和动作，炭墨承担语气段与阅读，橙承担紧凑强调印面、克制墨点、主动作窄底边和功能性定位，黄与橄榄承担书签和状态。",
+      "Do 将诗性主句和技术证据放在独立的语义与字体层。任一层都必须可以单独阅读。",
+      "Do 使用真实语义 DOM 和真实清洗后的 Markdown 管线展示能力，每个控件都必须对应可观察结果。",
+      "Do 让内容内部遵守 4px 布局节奏，纸页外轮廓则使用确定性角度、露边和不对称圆角。2px 只用于紧凑控件对齐。",
+      "Do 只用纸张层级解释叠放、焦点和交互。使用已登记的连续纸纤维蒙版，纹理、颗粒、套准偏移不得干扰文字。",
+      "Do 将正文控制在拉丁语言 65 到 75ch、CJK 约 36em，并保持明确的字号与字重级差。",
+      "Do 将动效限制在 80 到 400ms，优先使用透明度和 transform，并为每段动效提供等价静态状态。",
+      "Do 在非对称构图中保持语义源码顺序，确保标题、地标、链接、模式切换和反向链接可被辅助技术理解。",
+      "Do 满足 WCAG 2.1 AA，正文至少 4.5:1，大文字和 UI 边界至少 3:1，焦点清晰，Tab 顺序合理，触控目标至少 44px。",
+      "Do 使用文字或形状配合颜色表达状态，并在 200% 缩放时保持内容和操作可达。",
+      "Do 在移动端把粘性滚动改为线性纸页序列，保留相同叙事和动作。",
+      "Do 让发布状态、平台状态、商业状态、语言能力和产品演示保持可验证。",
+      "Do 保持轻量，每个语言构建只加载有固定版本、哈希、OFL 和覆盖语料的当前语言字体，非关键演示延迟加载。"
+    ],
+    "donts": [
+      "Don't 使用渐变、渐变文字、纯黑、纯白、装饰性光晕、默认玻璃拟态或新的暗色表面。",
+      "Don't 复刻 SaaS 模板感。巨型标题与 CTA 必须属于非对称装订构图并紧邻真实产品证据，不能变成居中标题、摘要和胶囊按钮。",
+      "Don't 使用相同卡片网格、嵌套卡片、大圆角图标加标题、Hero 指标、正交 50/50 Hero、超过 1px 的彩色侧边条或包住一切的容器。",
+      "Don't 统一放大所有圆角来冒充有机感。外层舞台保持全幅，纸页和印章使用经过命名的不对称轮廓。",
+      "Don't 模仿企业软件感、终端极客感或密集多层导航。复杂度不能直接变成视觉重量。",
+      "Don't 滑向通用编辑杂志公式。印刷身份来自装订、校样、套准和工作文档结构，不来自装饰性斜体、首字下沉、分栏细线或小号等宽标签。",
+      "Don't 在同一行混合诗性文案与原始技术名词。中文页面的技术标签必须本地化并降低视觉权重。",
+      "Don't 使用全大写正文、破折号式插入语、重复标题或仅复述标题的开场句。",
+      "Don't 使用虚假应用截图、虚构商城库存、占位社区链接、装饰性素材人物或与真实功能无关的插画。",
+      "Don't 只为冲击力添加阴影、纹理、动画或噪声。禁止未登记纹理、可见平铺接缝、持续环境运动、回弹缓动、视差依赖和布局属性动画。",
+      "Don't 把已批准的紧凑橘红印面误删，也不要把它扩张为第二个视觉主体。禁止向右拖尾、横向速度线、跨入编辑器的刷痕、深朱红叠层、第二块大型墨迹、橘红标题文字或 CTA 橘红主填充；允许的橘红只包括强调印面、克制墨点、主动作窄底边和功能性定位。",
+      "Don't 只依赖颜色、悬停、动画或空间位置传达含义。",
+      "Don't 隐藏焦点、让键盘顺序违背视觉顺序、把关键动作藏在仅悬停可见区域或强迫用户观看动效。",
+      "Don't 把低注意力元信息做成低对比或难读文字。克制不能削弱可访问性。",
+      "Don't 硬编码主题身份、添加未作用域的主题覆盖，或让官网样式改变应用 Theme API 合同。",
+      "Don't 用商城、支持推广、模态框或主动 CTA 打断写作、保存、阅读和搜索流程。"
+    ]
+  }
+}

@@ -89,13 +89,18 @@
           </template>
 
           <!-- Exporting: spinner -->
-          <div v-if="exportState === 'exporting'" class="export-status">
+          <div
+            v-if="exportState === 'exporting'"
+            class="export-status"
+            role="status"
+            aria-live="polite"
+          >
             <span class="spinner"></span>
             <span class="status-text">正在导出...</span>
           </div>
 
           <!-- Success -->
-          <div v-if="exportState === 'success'" class="export-status">
+          <div v-if="exportState === 'success'" class="export-status" role="status">
             <svg
               class="checkmark"
               viewBox="0 0 24 24"
@@ -111,7 +116,7 @@
           </div>
 
           <!-- Error -->
-          <div v-if="exportState === 'error'" class="export-status error-block">
+          <div v-if="exportState === 'error'" class="export-status error-block" role="alert">
             <svg
               class="error-icon"
               viewBox="0 0 24 24"
@@ -134,7 +139,7 @@
             <Button variant="default" :disabled="!hasContent" @click="doExport">导出</Button>
           </template>
           <template v-if="exportState === 'exporting'">
-            <Button variant="secondary" disabled>取消</Button>
+            <Button variant="secondary" @click="cancel">取消导出</Button>
             <Button variant="default" loading disabled>导出中...</Button>
           </template>
           <template v-if="exportState === 'success'">
@@ -147,7 +152,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import { exportNote } from '@/services/Exporter';
 import { ExportFormat } from '@/types';
 import type { ExportResult } from '@/types';
@@ -185,12 +190,15 @@ type ExportState = 'idle' | 'exporting' | 'success' | 'error';
 const exportState = ref<ExportState>('idle');
 const exportMessage = ref<string>('');
 const exportError = ref<string>('');
+const completedFormat = ref<ExportFormat>(ExportFormat.PDF);
+let exportRunId = 0;
+let activeExportController: AbortController | null = null;
 
 const hasContent = computed(() => {
   return !!(props.markdownContent && props.markdownContent.trim().length > 0);
 });
 const exportSuccessLabel = computed(() =>
-  selectedFormat.value === ExportFormat.PDF ? '打印流程已结束' : '已导出',
+  completedFormat.value === ExportFormat.PDF ? '打印流程已结束' : '已导出',
 );
 
 // ── Format definitions ─────────────────────────────────
@@ -249,8 +257,15 @@ function selectFormat(fmt: ExportFormat): void {
 }
 
 function cancel(): void {
+  invalidateExportRun();
   emit('cancel');
   emit('update:visible', false);
+}
+
+function invalidateExportRun(): void {
+  exportRunId++;
+  activeExportController?.abort();
+  activeExportController = null;
 }
 
 function resetState(): void {
@@ -258,6 +273,7 @@ function resetState(): void {
   includeFrontmatter.value = true;
   includeWikiLinks.value = true;
   codeLineNumbers.value = false;
+  completedFormat.value = ExportFormat.PDF;
   exportState.value = 'idle';
   exportMessage.value = '';
   exportError.value = '';
@@ -266,6 +282,11 @@ function resetState(): void {
 async function doExport(): Promise<void> {
   if (!hasContent.value || exportState.value === 'exporting') return;
 
+  activeExportController?.abort();
+  const controller = new AbortController();
+  activeExportController = controller;
+  const runId = ++exportRunId;
+  const runFormat = selectedFormat.value;
   exportState.value = 'exporting';
   exportError.value = '';
 
@@ -274,14 +295,18 @@ async function doExport(): Promise<void> {
       props.markdownContent!,
       props.noteTitle || '笔记',
       {
-        format: selectedFormat.value,
+        format: runFormat,
         includeFrontmatter: includeFrontmatter.value,
         includeWikiLinks: includeWikiLinks.value,
         codeLineNumbers: codeLineNumbers.value,
+        signal: controller.signal,
       },
     );
 
+    if (!isCurrentExportRun(runId, controller)) return;
+
     if (result.success) {
+      completedFormat.value = runFormat;
       exportState.value = 'success';
       exportMessage.value =
         result.message || (result.fileName ? `文件已保存：${result.fileName}` : '文件已导出');
@@ -290,21 +315,31 @@ async function doExport(): Promise<void> {
     exportState.value = 'error';
     exportError.value = result.error || '导出过程中发生未知错误';
   } catch (error) {
+    if (!isCurrentExportRun(runId, controller)) return;
     exportState.value = 'error';
     exportError.value = error instanceof Error ? error.message : '导出过程中发生未知错误';
+  } finally {
+    if (runId === exportRunId && activeExportController === controller) {
+      activeExportController = null;
+    }
   }
 }
 
+function isCurrentExportRun(runId: number, controller: AbortController): boolean {
+  return runId === exportRunId && !controller.signal.aborted && props.visible;
+}
+
 // ── Watch visible to reset on open ─────────────────────
-import { watch } from 'vue';
 watch(
   () => props.visible,
   (val) => {
+    invalidateExportRun();
     if (val) {
       resetState();
     }
   },
 );
+onUnmounted(invalidateExportRun);
 </script>
 
 <style scoped>

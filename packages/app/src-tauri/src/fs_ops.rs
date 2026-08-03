@@ -7,11 +7,13 @@ use crate::path::{is_ignored_notebook_directory_name, resolve_safe_path};
 use crate::window_session::WindowSessionRegistry;
 use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::fs;
+use std::fs::{self, File};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, State, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
@@ -19,6 +21,84 @@ use uuid::Uuid;
 
 static WRITE_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 const MAX_EXTERNAL_NOTE_BYTES: u64 = 5 * 1024 * 1024;
+
+/// Serializes in-process mutations by canonical path. The map lock is held only
+/// long enough to obtain per-path locks; disk I/O never runs under the map lock.
+pub struct FileMutationCoordinator(Mutex<HashMap<String, Weak<Mutex<()>>>>);
+
+impl FileMutationCoordinator {
+    pub fn new() -> Self {
+        Self(Mutex::new(HashMap::new()))
+    }
+
+    fn with_paths<T>(
+        &self,
+        paths: &[PathBuf],
+        action: impl FnOnce() -> Result<T, String>,
+    ) -> Result<T, String> {
+        let mut keyed_paths = paths
+            .iter()
+            .map(|path| (mutation_path_key(path), path.clone()))
+            .collect::<Vec<_>>();
+        keyed_paths.sort_by(|left, right| left.0.cmp(&right.0));
+        keyed_paths.dedup_by(|left, right| left.0 == right.0);
+
+        let locks = {
+            let mut registry = self
+                .0
+                .lock()
+                .map_err(|_| "file mutation coordinator lock poisoned".to_string())?;
+            registry.retain(|_, lock| lock.strong_count() > 0);
+            keyed_paths
+                .into_iter()
+                .map(|(key, _)| {
+                    let lock = registry
+                        .get(&key)
+                        .and_then(Weak::upgrade)
+                        .unwrap_or_else(|| {
+                            let lock = Arc::new(Mutex::new(()));
+                            registry.insert(key, Arc::downgrade(&lock));
+                            lock
+                        });
+                    lock
+                })
+                .collect::<Vec<_>>()
+        };
+        let _guards = locks
+            .iter()
+            .map(|lock| {
+                lock.lock()
+                    .map_err(|_| "file mutation path lock poisoned".to_string())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        action()
+    }
+}
+
+fn mutation_path_key(path: &Path) -> String {
+    let normalized = external_path_to_slash(path);
+    #[cfg(windows)]
+    let normalized = normalized.to_lowercase();
+    normalized
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TextFileSnapshot {
+    pub content: String,
+    pub revision: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(
+    tag = "status",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum ConditionalWriteResult {
+    Saved { revision: String },
+    Conflict { actual_revision: Option<String> },
+}
 
 /// Per-window notebook roots. A webview must never observe another window's
 /// active notebook simply because both windows share the same process.
@@ -116,6 +196,15 @@ struct ExternalAccessGrant {
     directory_access: bool,
     capabilities: ExternalAccessCapabilities,
     expires_at: Instant,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct PreparedExternalNotebookPromotion {
+    access_token: String,
+    owner_window_label: String,
+    original_root: PathBuf,
+    original_file: PathBuf,
+    canonical_root: PathBuf,
 }
 
 /// In-memory, session-scoped external file capabilities.
@@ -292,6 +381,26 @@ impl ExternalAccessGrants {
         markdown_only: bool,
         for_write: bool,
     ) -> Result<PathBuf, String> {
+        self.resolve_file_inner(access_token, relative_path, markdown_only, for_write, false)
+    }
+
+    pub fn resolve_file_for_conditional_write(
+        &self,
+        access_token: &str,
+        relative_path: &str,
+        markdown_only: bool,
+    ) -> Result<PathBuf, String> {
+        self.resolve_file_inner(access_token, relative_path, markdown_only, true, true)
+    }
+
+    fn resolve_file_inner(
+        &self,
+        access_token: &str,
+        relative_path: &str,
+        markdown_only: bool,
+        for_write: bool,
+        allow_missing_granted_file: bool,
+    ) -> Result<PathBuf, String> {
         let grant = self.grant(access_token, if for_write { can_write } else { can_read })?;
         let root = grant.root.clone();
         let target = resolve_safe_path(&root, relative_path).map_err(|e| e.to_string())?;
@@ -331,14 +440,18 @@ impl ExternalAccessGrants {
                 }
                 return Ok(canonical_target);
             }
-            if !grant.directory_access {
-                return Err("external file grant does not allow creating sibling files".to_string());
-            }
-            return Ok(canonical_parent.join(
+            let missing_target = canonical_parent.join(
                 target
                     .file_name()
                     .ok_or_else(|| "external file has no name".to_string())?,
-            ));
+            );
+            if !grant.directory_access {
+                if allow_missing_granted_file && missing_target == grant.file {
+                    return Ok(missing_target);
+                }
+                return Err("external file grant does not allow creating sibling files".to_string());
+            }
+            return Ok(missing_target);
         }
 
         let canonical_target = target
@@ -353,9 +466,47 @@ impl ExternalAccessGrants {
         Ok(canonical_target)
     }
 
-    pub fn promote_to_notebook_after_validation(
+    pub(crate) fn prepare_notebook_promotion(
         &self,
         access_token: &str,
+        owner_window_label: &str,
+    ) -> Result<PreparedExternalNotebookPromotion, String> {
+        let (original_root, original_file) = {
+            let mut grants = self
+                .0
+                .lock()
+                .map_err(|_| "external access state lock poisoned".to_string())?;
+            let grant = grants
+                .get(access_token)
+                .ok_or_else(|| "external access grant is invalid or expired".to_string())?;
+            if grant.expires_at <= Instant::now() {
+                grants.remove(access_token);
+                return Err("external access grant is invalid or expired".to_string());
+            }
+            if grant.owner_window_label != owner_window_label {
+                return Err("external access grant belongs to another window".to_string());
+            }
+            if grant.directory_access {
+                return Err("external access grant is already a notebook".to_string());
+            }
+            (grant.root.clone(), grant.file.clone())
+        };
+
+        // Canonicalization and readability probing may block. They deliberately
+        // run after the grant lock has been released.
+        let canonical_root = canonical_readable_notebook_root(&original_root)?;
+        Ok(PreparedExternalNotebookPromotion {
+            access_token: access_token.to_string(),
+            owner_window_label: owner_window_label.to_string(),
+            original_root,
+            original_file,
+            canonical_root,
+        })
+    }
+
+    pub(crate) fn commit_prepared_notebook_promotion(
+        &self,
+        prepared: &PreparedExternalNotebookPromotion,
         commit_root: impl FnOnce(&Path) -> Result<(), String>,
     ) -> Result<PathBuf, String> {
         let mut grants = self
@@ -363,20 +514,53 @@ impl ExternalAccessGrants {
             .lock()
             .map_err(|_| "external access state lock poisoned".to_string())?;
         let grant = grants
-            .get_mut(access_token)
+            .get_mut(&prepared.access_token)
             .ok_or_else(|| "external access grant is invalid or expired".to_string())?;
         if grant.expires_at <= Instant::now() {
-            grants.remove(access_token);
+            grants.remove(&prepared.access_token);
             return Err("external access grant is invalid or expired".to_string());
         }
-        let canonical_root = canonical_readable_notebook_root(&grant.root)?;
-        commit_root(&canonical_root)?;
-        grant.root = canonical_root.clone();
+        if grant.owner_window_label != prepared.owner_window_label
+            || grant.root != prepared.original_root
+            || grant.file != prepared.original_file
+            || grant.directory_access
+        {
+            return Err("external access grant changed during notebook promotion".to_string());
+        }
+
+        // Callers acquire locks in session -> grant -> notebook-root order. No
+        // disk I/O occurs in this commit section.
+        commit_root(&prepared.canonical_root)?;
+        grant.root = prepared.canonical_root.clone();
         grant.directory_access = true;
+        // Workspace commands own all writes after promotion. Invalidating the
+        // single-file write capability prevents a late external-editor task
+        // from writing through the old token after the session changes mode.
+        grant.capabilities.write = false;
         grant.capabilities.list = true;
         grant.capabilities.watch = true;
         grant.expires_at = Instant::now() + EXTERNAL_GRANT_IDLE_TIMEOUT;
-        Ok(canonical_root)
+        Ok(prepared.canonical_root.clone())
+    }
+
+    pub fn promote_to_notebook_after_validation(
+        &self,
+        access_token: &str,
+        commit_root: impl FnOnce(&Path) -> Result<(), String>,
+    ) -> Result<PathBuf, String> {
+        let owner = {
+            let grants = self
+                .0
+                .lock()
+                .map_err(|_| "external access state lock poisoned".to_string())?;
+            grants
+                .get(access_token)
+                .ok_or_else(|| "external access grant is invalid or expired".to_string())?
+                .owner_window_label
+                .clone()
+        };
+        let prepared = self.prepare_notebook_promotion(access_token, &owner)?;
+        self.commit_prepared_notebook_promotion(&prepared, commit_root)
     }
 }
 
@@ -526,12 +710,222 @@ fn replace_file(tmp_path: &Path, target: &Path) -> std::io::Result<()> {
     fs::rename(tmp_path, target)
 }
 
-fn write_text_file_atomically(target: &Path, content: &str) -> Result<(), String> {
+#[cfg(windows)]
+fn rename_no_replace(old_path: &Path, new_path: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+
+    const MOVEFILE_WRITE_THROUGH: u32 = 0x8;
+    extern "system" {
+        fn MoveFileExW(
+            existing_file_name: *const u16,
+            new_file_name: *const u16,
+            flags: u32,
+        ) -> i32;
+    }
+    let old_wide = old_path
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect::<Vec<_>>();
+    let new_wide = new_path
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect::<Vec<_>>();
+    let result =
+        unsafe { MoveFileExW(old_wide.as_ptr(), new_wide.as_ptr(), MOVEFILE_WRITE_THROUGH) };
+    if result == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn rename_no_replace(old_path: &Path, new_path: &Path) -> std::io::Result<()> {
+    use std::ffi::CString;
+    use std::os::raw::{c_char, c_int, c_uint};
+    use std::os::unix::ffi::OsStrExt;
+
+    const AT_FDCWD: c_int = -100;
+    const RENAME_NOREPLACE: c_uint = 1;
+    extern "C" {
+        fn renameat2(
+            old_dir_fd: c_int,
+            old_path: *const c_char,
+            new_dir_fd: c_int,
+            new_path: *const c_char,
+            flags: c_uint,
+        ) -> c_int;
+    }
+    let old = CString::new(old_path.as_os_str().as_bytes()).map_err(|_| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "source path contains NUL")
+    })?;
+    let new = CString::new(new_path.as_os_str().as_bytes()).map_err(|_| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "target path contains NUL")
+    })?;
+    let result = unsafe {
+        renameat2(
+            AT_FDCWD,
+            old.as_ptr(),
+            AT_FDCWD,
+            new.as_ptr(),
+            RENAME_NOREPLACE,
+        )
+    };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn rename_no_replace(old_path: &Path, new_path: &Path) -> std::io::Result<()> {
+    use std::ffi::CString;
+    use std::os::raw::{c_char, c_int, c_uint};
+    use std::os::unix::ffi::OsStrExt;
+
+    const RENAME_EXCL: c_uint = 0x0000_0004;
+    extern "C" {
+        fn renamex_np(old_path: *const c_char, new_path: *const c_char, flags: c_uint) -> c_int;
+    }
+    let old = CString::new(old_path.as_os_str().as_bytes()).map_err(|_| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "source path contains NUL")
+    })?;
+    let new = CString::new(new_path.as_os_str().as_bytes()).map_err(|_| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "target path contains NUL")
+    })?;
+    let result = unsafe { renamex_np(old.as_ptr(), new.as_ptr(), RENAME_EXCL) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+#[cfg(not(any(
+    windows,
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "ios"
+)))]
+fn rename_no_replace(old_path: &Path, new_path: &Path) -> std::io::Result<()> {
+    if old_path.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "atomic no-replace directory rename is unsupported on this platform",
+        ));
+    }
+    fs::hard_link(old_path, new_path)?;
+    if let Err(error) = fs::remove_file(old_path) {
+        let _ = fs::remove_file(new_path);
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn stage_text_file(target: &Path, content: &str) -> Result<PathBuf, String> {
     let tmp_path = unique_write_temp_path(target)?;
-    fs::write(&tmp_path, content).map_err(|e| format!("写入文件失败: {}", e))?;
-    replace_file(&tmp_path, target).map_err(|e| {
+    let staged = (|| {
+        let mut file = File::create(&tmp_path).map_err(|e| format!("写入文件失败: {e}"))?;
+        file.write_all(content.as_bytes())
+            .map_err(|e| format!("写入文件失败: {e}"))?;
+        file.sync_all().map_err(|e| format!("同步文件失败: {e}"))?;
+        Ok::<(), String>(())
+    })();
+    if let Err(error) = staged {
         let _ = fs::remove_file(&tmp_path);
+        return Err(error);
+    }
+    Ok(tmp_path)
+}
+
+fn commit_staged_text_file(tmp_path: &Path, target: &Path) -> Result<(), String> {
+    replace_file(tmp_path, target).map_err(|e| {
+        let _ = fs::remove_file(tmp_path);
         format!("保存文件失败: {}", e)
+    })
+}
+
+fn write_text_file_atomically(target: &Path, content: &str) -> Result<(), String> {
+    let tmp_path = stage_text_file(target, content)?;
+    commit_staged_text_file(&tmp_path, target)
+}
+
+fn content_revision(bytes: &[u8]) -> String {
+    format!("sha256:{:x}", Sha256::digest(bytes))
+}
+
+fn read_text_snapshot_from_target(target: &Path, label: &str) -> Result<TextFileSnapshot, String> {
+    let bytes = fs::read(target).map_err(|e| format!("{label}: {e}"))?;
+    let revision = content_revision(&bytes);
+    let content =
+        String::from_utf8(bytes).map_err(|e| format!("{label}: 文件不是 UTF-8 文本: {e}"))?;
+    Ok(TextFileSnapshot { content, revision })
+}
+
+fn current_text_revision(target: &Path) -> Result<Option<String>, String> {
+    match fs::read(target) {
+        Ok(bytes) => Ok(Some(content_revision(&bytes))),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("读取当前文件版本失败: {error}")),
+    }
+}
+
+fn write_text_file_if_unchanged_at(
+    target: &Path,
+    content: &str,
+    expected_revision: Option<&str>,
+    coordinator: &FileMutationCoordinator,
+) -> Result<ConditionalWriteResult, String> {
+    write_text_file_if_unchanged_at_with_before_commit(
+        target,
+        content,
+        expected_revision,
+        coordinator,
+        |_| Ok(()),
+    )
+}
+
+fn write_text_file_if_unchanged_at_with_before_commit(
+    target: &Path,
+    content: &str,
+    expected_revision: Option<&str>,
+    coordinator: &FileMutationCoordinator,
+    before_final_check: impl FnOnce(&Path) -> Result<(), String>,
+) -> Result<ConditionalWriteResult, String> {
+    coordinator.with_paths(&[target.to_path_buf()], || {
+        let actual_revision = current_text_revision(target)?;
+        if actual_revision.as_deref() != expected_revision {
+            return Ok(ConditionalWriteResult::Conflict { actual_revision });
+        }
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
+        }
+        let tmp_path = stage_text_file(target, content)?;
+        if let Err(error) = before_final_check(&tmp_path) {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(error);
+        }
+        let final_revision = match current_text_revision(target) {
+            Ok(revision) => revision,
+            Err(error) => {
+                let _ = fs::remove_file(&tmp_path);
+                return Err(error);
+            }
+        };
+        if final_revision.as_deref() != expected_revision {
+            let _ = fs::remove_file(&tmp_path);
+            return Ok(ConditionalWriteResult::Conflict {
+                actual_revision: final_revision,
+            });
+        }
+        commit_staged_text_file(&tmp_path, target)?;
+        Ok(ConditionalWriteResult::Saved {
+            revision: content_revision(content.as_bytes()),
+        })
     })
 }
 
@@ -846,6 +1240,21 @@ pub fn read_file(
     read_file_at(&root_path, &relative_path)
 }
 
+/// Read a workspace note together with the exact UTF-8 content revision used
+/// by conditional editor saves.
+#[tauri::command]
+pub fn read_file_snapshot(
+    window: WebviewWindow,
+    relative_path: String,
+    root: State<NotebookRoot>,
+    sessions: State<WindowSessionRegistry>,
+) -> Result<TextFileSnapshot, String> {
+    assert_workspace(&window, &sessions)?;
+    let root_path = notebook_root_for(&window, &root)?;
+    let target = resolve_safe_path(&root_path, &relative_path).map_err(|e| e.to_string())?;
+    read_text_snapshot_from_target(&target, "读取文件失败")
+}
+
 fn read_file_at(root_path: &Path, relative_path: &str) -> Result<String, String> {
     let target = resolve_safe_path(root_path, relative_path).map_err(|e| e.to_string())?;
 
@@ -856,8 +1265,10 @@ fn read_file_at(root_path: &Path, relative_path: &str) -> Result<String, String>
     fs::read_to_string(&target).map_err(|e| format!("读取文件失败: {}", e))
 }
 
-fn read_external_note_content(target: &Path) -> Result<String, String> {
-    let size = fs::metadata(target)
+fn read_external_note_bytes(target: &Path) -> Result<Vec<u8>, String> {
+    let mut file = File::open(target).map_err(|e| format!("读取外部文件失败: {e}"))?;
+    let size = file
+        .metadata()
         .map_err(|e| format!("读取外部文件元数据失败: {e}"))?
         .len();
     if size > MAX_EXTERNAL_NOTE_BYTES {
@@ -866,7 +1277,27 @@ fn read_external_note_content(target: &Path) -> Result<String, String> {
             size as f64 / (1024.0 * 1024.0)
         ));
     }
-    fs::read_to_string(target).map_err(|e| format!("读取外部文件失败: {e}"))
+    let mut bytes = Vec::with_capacity(size as usize);
+    (&mut file)
+        .take(MAX_EXTERNAL_NOTE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("读取外部文件失败: {e}"))?;
+    if bytes.len() as u64 > MAX_EXTERNAL_NOTE_BYTES {
+        return Err("外部文件在读取时超过 5 MB，已停止加载以避免应用无响应".to_string());
+    }
+    Ok(bytes)
+}
+
+fn read_external_note_snapshot(target: &Path) -> Result<TextFileSnapshot, String> {
+    let bytes = read_external_note_bytes(target)?;
+    let revision = content_revision(&bytes);
+    let content = String::from_utf8(bytes)
+        .map_err(|e| format!("读取外部文件失败: 文件不是 UTF-8 文本: {e}"))?;
+    Ok(TextFileSnapshot { content, revision })
+}
+
+fn read_external_note_content(target: &Path) -> Result<String, String> {
+    read_external_note_snapshot(target).map(|snapshot| snapshot.content)
 }
 
 /// Read one markdown-family file by absolute path without opening its parent as notebook.
@@ -905,6 +1336,18 @@ pub fn read_external_note_file(
     read_external_note_content(&target)
 }
 
+#[tauri::command]
+pub fn read_external_note_file_snapshot(
+    window: WebviewWindow,
+    access_token: String,
+    relative_path: String,
+    access: State<ExternalAccessGrants>,
+) -> Result<TextFileSnapshot, String> {
+    assert_external_owner(&window, &access, &access_token)?;
+    let target = access.resolve_file(&access_token, &relative_path, false, false)?;
+    read_external_note_snapshot(&target)
+}
+
 /// Write content to a file (relative to notebook root).
 /// Uses atomic write: write to temp file first, then rename.
 #[tauri::command]
@@ -914,23 +1357,57 @@ pub fn write_file(
     content: String,
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
+    coordinator: State<FileMutationCoordinator>,
 ) -> Result<(), String> {
     assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
-    write_file_at(&root_path, &relative_path, &content)
+    write_file_at_coordinated(&root_path, &relative_path, &content, &coordinator)
 }
 
+#[cfg(test)]
 fn write_file_at(root_path: &Path, relative_path: &str, content: &str) -> Result<(), String> {
+    write_file_at_coordinated(
+        root_path,
+        relative_path,
+        content,
+        &FileMutationCoordinator::new(),
+    )
+}
+
+fn write_file_at_coordinated(
+    root_path: &Path,
+    relative_path: &str,
+    content: &str,
+    coordinator: &FileMutationCoordinator,
+) -> Result<(), String> {
     let target = resolve_safe_path(root_path, relative_path).map_err(|e| e.to_string())?;
+    coordinator.with_paths(std::slice::from_ref(&target), || {
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
+        }
+        write_text_file_atomically(&target, content)
+    })
+}
 
-    // Ensure parent directory exists
-    if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
-    }
-
-    write_text_file_atomically(&target, content)?;
-
-    Ok(())
+#[tauri::command]
+pub fn write_file_if_unchanged(
+    window: WebviewWindow,
+    relative_path: String,
+    content: String,
+    expected_revision: Option<String>,
+    root: State<NotebookRoot>,
+    sessions: State<WindowSessionRegistry>,
+    coordinator: State<FileMutationCoordinator>,
+) -> Result<ConditionalWriteResult, String> {
+    assert_workspace(&window, &sessions)?;
+    let root_path = notebook_root_for(&window, &root)?;
+    let target = resolve_safe_path(&root_path, &relative_path).map_err(|e| e.to_string())?;
+    write_text_file_if_unchanged_at(
+        &target,
+        &content,
+        expected_revision.as_deref(),
+        &coordinator,
+    )
 }
 
 /// Write one markdown-family file by absolute path without opening its parent as notebook.
@@ -942,11 +1419,14 @@ pub fn write_external_markdown_file(
     content: String,
     access: State<ExternalAccessGrants>,
     sessions: State<WindowSessionRegistry>,
+    coordinator: State<FileMutationCoordinator>,
 ) -> Result<(), String> {
     assert_external_edit(&window, &sessions, &access_token)?;
     assert_external_owner(&window, &access, &access_token)?;
     let target = access.resolve_file(&access_token, &relative_path, true, true)?;
-    write_text_file_atomically(&target, &content)
+    coordinator.with_paths(std::slice::from_ref(&target), || {
+        write_text_file_atomically(&target, &content)
+    })
 }
 
 #[cfg(test)]
@@ -969,11 +1449,40 @@ pub fn write_external_note_file(
     content: String,
     access: State<ExternalAccessGrants>,
     sessions: State<WindowSessionRegistry>,
+    coordinator: State<FileMutationCoordinator>,
 ) -> Result<(), String> {
     assert_external_edit(&window, &sessions, &access_token)?;
     assert_external_owner(&window, &access, &access_token)?;
     let target = access.resolve_file(&access_token, &relative_path, false, true)?;
-    write_text_file_atomically(&target, &content).map_err(|e| format!("保存外部文件失败: {}", e))
+    coordinator
+        .with_paths(std::slice::from_ref(&target), || {
+            write_text_file_atomically(&target, &content)
+        })
+        .map_err(|e| format!("保存外部文件失败: {e}"))
+}
+
+#[tauri::command]
+// Tauri injects managed state as individual command parameters; grouping them would change the IPC ABI.
+#[allow(clippy::too_many_arguments)]
+pub fn write_external_note_file_if_unchanged(
+    window: WebviewWindow,
+    access_token: String,
+    relative_path: String,
+    content: String,
+    expected_revision: Option<String>,
+    access: State<ExternalAccessGrants>,
+    sessions: State<WindowSessionRegistry>,
+    coordinator: State<FileMutationCoordinator>,
+) -> Result<ConditionalWriteResult, String> {
+    assert_external_edit(&window, &sessions, &access_token)?;
+    assert_external_owner(&window, &access, &access_token)?;
+    let target = access.resolve_file_for_conditional_write(&access_token, &relative_path, false)?;
+    write_text_file_if_unchanged_at(
+        &target,
+        &content,
+        expected_revision.as_deref(),
+        &coordinator,
+    )
 }
 
 /// Open the native save dialog, write the selected note, then issue its grant.
@@ -986,8 +1495,9 @@ pub fn save_external_note_as(
     content: String,
     access: State<ExternalAccessGrants>,
     sessions: State<WindowSessionRegistry>,
+    coordinator: State<FileMutationCoordinator>,
 ) -> Result<ExternalFileHandle, String> {
-    assert_workspace(&window, &sessions)?;
+    sessions.assert_save_as_allowed(window.label())?;
     let selected = app
         .dialog()
         .file()
@@ -1001,7 +1511,9 @@ pub fn save_external_note_as(
         .map_err(|e| format!("unable to resolve selected save path: {e}"))?;
     let path_text = path.to_string_lossy().to_string();
     let target = resolve_external_note_file_for_write(&path_text)?;
-    write_text_file_atomically(&target, &content)?;
+    coordinator.with_paths(std::slice::from_ref(&target), || {
+        write_text_file_atomically(&target, &content)
+    })?;
     access.grant_for_saved_file(&path_text, window.label())
 }
 
@@ -1024,23 +1536,40 @@ pub fn write_binary_file(
     base64: String,
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
+    coordinator: State<FileMutationCoordinator>,
 ) -> Result<(), String> {
     assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
-    write_binary_file_at(&root_path, &relative_path, &base64)
+    write_binary_file_at_coordinated(&root_path, &relative_path, &base64, &coordinator)
 }
 
+#[cfg(test)]
 fn write_binary_file_at(root_path: &Path, relative_path: &str, base64: &str) -> Result<(), String> {
+    write_binary_file_at_coordinated(
+        root_path,
+        relative_path,
+        base64,
+        &FileMutationCoordinator::new(),
+    )
+}
+
+fn write_binary_file_at_coordinated(
+    root_path: &Path,
+    relative_path: &str,
+    base64: &str,
+    coordinator: &FileMutationCoordinator,
+) -> Result<(), String> {
     let target = resolve_safe_path(root_path, relative_path).map_err(|e| e.to_string())?;
     let bytes = general_purpose::STANDARD
         .decode(base64.as_bytes())
         .map_err(|e| format!("图片数据解码失败: {}", e))?;
 
-    if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
-    }
-
-    fs::write(&target, bytes).map_err(|e| format!("写入二进制文件失败: {}", e))
+    coordinator.with_paths(std::slice::from_ref(&target), || {
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
+        }
+        fs::write(&target, bytes).map_err(|e| format!("写入二进制文件失败: {e}"))
+    })
 }
 
 /// Read binary content from a file (returns base64 payload).
@@ -1074,20 +1603,25 @@ pub fn delete_file(
     relative_path: String,
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
+    coordinator: State<FileMutationCoordinator>,
 ) -> Result<(), String> {
     assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
-    delete_file_at(&root_path, &relative_path)
+    delete_file_at_coordinated(&root_path, &relative_path, &coordinator)
 }
 
-fn delete_file_at(root_path: &Path, relative_path: &str) -> Result<(), String> {
+fn delete_file_at_coordinated(
+    root_path: &Path,
+    relative_path: &str,
+    coordinator: &FileMutationCoordinator,
+) -> Result<(), String> {
     let target = resolve_safe_path(root_path, relative_path).map_err(|e| e.to_string())?;
-
-    if !target.exists() {
-        return Err(format!("文件不存在: {}", relative_path));
-    }
-
-    trash::delete(&target).map_err(|e| format!("删除失败: {}", e))
+    coordinator.with_paths(std::slice::from_ref(&target), || {
+        if !target.exists() {
+            return Err(format!("文件不存在: {relative_path}"));
+        }
+        trash::delete(&target).map_err(|e| format!("删除失败: {e}"))
+    })
 }
 
 /// Create a new directory (relative to notebook root).
@@ -1116,33 +1650,58 @@ pub fn rename_file(
     new_relative_path: String,
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
+    coordinator: State<FileMutationCoordinator>,
 ) -> Result<(), String> {
     assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
-    rename_file_at(&root_path, &old_relative_path, &new_relative_path)
+    rename_file_at_coordinated(
+        &root_path,
+        &old_relative_path,
+        &new_relative_path,
+        &coordinator,
+    )
 }
 
+#[cfg(test)]
 fn rename_file_at(
     root_path: &Path,
     old_relative_path: &str,
     new_relative_path: &str,
 ) -> Result<(), String> {
+    rename_file_at_coordinated(
+        root_path,
+        old_relative_path,
+        new_relative_path,
+        &FileMutationCoordinator::new(),
+    )
+}
+
+fn rename_file_at_coordinated(
+    root_path: &Path,
+    old_relative_path: &str,
+    new_relative_path: &str,
+    coordinator: &FileMutationCoordinator,
+) -> Result<(), String> {
     let old_target = resolve_safe_path(root_path, old_relative_path).map_err(|e| e.to_string())?;
     let new_target = resolve_safe_path(root_path, new_relative_path).map_err(|e| e.to_string())?;
-
-    if !old_target.exists() {
-        return Err(format!("文件不存在: {}", old_relative_path));
-    }
-    if old_target == new_target {
-        return Ok(());
-    }
-    if new_target.exists() {
-        return Err(format!("目标文件已存在: {}", new_relative_path));
-    }
-    if let Some(parent) = new_target.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("创建目标目录失败: {}", e))?;
-    }
-    fs::rename(&old_target, &new_target).map_err(|e| format!("重命名失败: {}", e))
+    coordinator.with_paths(&[old_target.clone(), new_target.clone()], || {
+        if !old_target.exists() {
+            return Err(format!("文件不存在: {old_relative_path}"));
+        }
+        if old_target == new_target {
+            return Ok(());
+        }
+        if let Some(parent) = new_target.parent() {
+            fs::create_dir_all(parent).map_err(|e| format!("创建目标目录失败: {e}"))?;
+        }
+        rename_no_replace(&old_target, &new_target).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists || new_target.exists() {
+                format!("目标文件已存在: {new_relative_path}")
+            } else {
+                format!("重命名失败: {error}")
+            }
+        })
+    })
 }
 
 /// Get file metadata (mtime, size) for conflict detection.
@@ -1182,6 +1741,7 @@ pub fn get_file_meta(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Barrier};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_notebook(name: &str) -> PathBuf {
@@ -1289,6 +1849,40 @@ mod tests {
             assert!(!grant.capabilities.watch);
         }
 
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn prepared_external_promotion_revalidates_grant_root_before_commit() {
+        let root = temp_notebook("stale-external-promotion");
+        let target = root.join("external.md");
+        std::fs::write(&target, "# External").unwrap();
+        let access = ExternalAccessGrants::new();
+        let handle = access
+            .grant_for_existing_file(&target.to_string_lossy(), "window-a")
+            .unwrap();
+        let prepared = access
+            .prepare_notebook_promotion(&handle.access_token, "window-a")
+            .unwrap();
+        {
+            let mut grants = access.0.lock().unwrap();
+            grants.get_mut(&handle.access_token).unwrap().root = root.join("changed-root");
+        }
+        let root_commit_called = std::sync::atomic::AtomicBool::new(false);
+
+        let result = access.commit_prepared_notebook_promotion(&prepared, |_| {
+            root_commit_called.store(true, Ordering::SeqCst);
+            Ok(())
+        });
+
+        assert!(result.is_err());
+        assert!(!root_commit_called.load(Ordering::SeqCst));
+        let grants = access.0.lock().unwrap();
+        let grant = grants.get(&handle.access_token).unwrap();
+        assert!(!grant.directory_access);
+        assert!(!grant.capabilities.list);
+        assert!(!grant.capabilities.watch);
+        drop(grants);
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -1409,6 +2003,236 @@ mod tests {
     }
 
     #[test]
+    fn directory_rename_is_no_replace_and_preserves_both_trees_on_collision() {
+        let root = temp_notebook("rename-directory-collision");
+        std::fs::create_dir_all(root.join("source")).unwrap();
+        std::fs::create_dir_all(root.join("target")).unwrap();
+        std::fs::write(root.join("source/source.md"), "source").unwrap();
+        std::fs::write(root.join("target/target.md"), "target").unwrap();
+
+        assert!(rename_file_at(&root, "/source", "/target").is_err());
+        assert_eq!(
+            std::fs::read_to_string(root.join("source/source.md")).unwrap(),
+            "source"
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join("target/target.md")).unwrap(),
+            "target"
+        );
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn conditional_write_uses_sha256_revision_and_never_overwrites_a_conflict() {
+        let root = temp_notebook("conditional-write");
+        let target = root.join("note.md");
+        std::fs::write(&target, "first").unwrap();
+        let coordinator = FileMutationCoordinator::new();
+        let snapshot = read_text_snapshot_from_target(&target, "read").unwrap();
+
+        assert_eq!(snapshot.revision, content_revision(b"first"));
+        assert!(snapshot.revision.starts_with("sha256:"));
+        assert_eq!(snapshot.revision.len(), 71);
+
+        std::fs::write(&target, "external change").unwrap();
+        let conflict = write_text_file_if_unchanged_at(
+            &target,
+            "local draft",
+            Some(&snapshot.revision),
+            &coordinator,
+        )
+        .unwrap();
+        assert_eq!(
+            conflict,
+            ConditionalWriteResult::Conflict {
+                actual_revision: Some(content_revision(b"external change"))
+            }
+        );
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "external change");
+
+        let actual_revision = match conflict {
+            ConditionalWriteResult::Conflict {
+                actual_revision: Some(revision),
+            } => revision,
+            _ => unreachable!(),
+        };
+        let saved = write_text_file_if_unchanged_at(
+            &target,
+            "local draft",
+            Some(&actual_revision),
+            &coordinator,
+        )
+        .unwrap();
+        assert_eq!(
+            saved,
+            ConditionalWriteResult::Saved {
+                revision: content_revision(b"local draft")
+            }
+        );
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "local draft");
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn conditional_write_rechecks_the_target_after_staging() {
+        let root = temp_notebook("conditional-staging-race");
+        let target = root.join("note.md");
+        std::fs::write(&target, "base").unwrap();
+        let expected = content_revision(b"base");
+        let coordinator = FileMutationCoordinator::new();
+        let result = write_text_file_if_unchanged_at_with_before_commit(
+            &target,
+            "local draft",
+            Some(&expected),
+            &coordinator,
+            |_| {
+                std::fs::write(&target, "external during staging")
+                    .map_err(|error| error.to_string())
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            result,
+            ConditionalWriteResult::Conflict {
+                actual_revision: Some(content_revision(b"external during staging"))
+            }
+        );
+        assert_eq!(
+            std::fs::read_to_string(&target).unwrap(),
+            "external during staging"
+        );
+        assert_eq!(
+            std::fs::read_dir(&root)
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| entry.file_name().to_string_lossy().contains(".tmp"))
+                .count(),
+            0
+        );
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn conditional_write_requires_null_revision_to_recreate_a_missing_note() {
+        let root = temp_notebook("conditional-missing");
+        let target = root.join("note.md");
+        let coordinator = FileMutationCoordinator::new();
+
+        let conflict = write_text_file_if_unchanged_at(
+            &target,
+            "draft",
+            Some(&content_revision(b"old")),
+            &coordinator,
+        )
+        .unwrap();
+        assert_eq!(
+            conflict,
+            ConditionalWriteResult::Conflict {
+                actual_revision: None
+            }
+        );
+        assert!(!target.exists());
+
+        let saved = write_text_file_if_unchanged_at(&target, "draft", None, &coordinator).unwrap();
+        assert!(matches!(saved, ConditionalWriteResult::Saved { .. }));
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "draft");
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn concurrent_conditional_writers_have_exactly_one_winner() {
+        let root = temp_notebook("conditional-race");
+        let target = root.join("note.md");
+        std::fs::write(&target, "base").unwrap();
+        let expected = content_revision(b"base");
+        let coordinator = Arc::new(FileMutationCoordinator::new());
+        let barrier = Arc::new(Barrier::new(3));
+
+        let handles = ["first", "second"].map(|content| {
+            let target = target.clone();
+            let expected = expected.clone();
+            let coordinator = Arc::clone(&coordinator);
+            let barrier = Arc::clone(&barrier);
+            std::thread::spawn(move || {
+                barrier.wait();
+                write_text_file_if_unchanged_at(&target, content, Some(&expected), &coordinator)
+                    .unwrap()
+            })
+        });
+        barrier.wait();
+        let results = handles.map(|handle| handle.join().unwrap());
+
+        assert_eq!(
+            results
+                .iter()
+                .filter(|result| matches!(result, ConditionalWriteResult::Saved { .. }))
+                .count(),
+            1
+        );
+        assert_eq!(
+            results
+                .iter()
+                .filter(|result| matches!(result, ConditionalWriteResult::Conflict { .. }))
+                .count(),
+            1
+        );
+        let final_content = std::fs::read_to_string(&target).unwrap();
+        assert!(final_content == "first" || final_content == "second");
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn concurrent_renames_cannot_replace_the_same_destination() {
+        let root = temp_notebook("rename-race");
+        std::fs::write(root.join("first.md"), "first").unwrap();
+        std::fs::write(root.join("second.md"), "second").unwrap();
+        let coordinator = Arc::new(FileMutationCoordinator::new());
+        let barrier = Arc::new(Barrier::new(3));
+
+        let handles = ["/first.md", "/second.md"].map(|source| {
+            let root = root.clone();
+            let coordinator = Arc::clone(&coordinator);
+            let barrier = Arc::clone(&barrier);
+            std::thread::spawn(move || {
+                barrier.wait();
+                rename_file_at_coordinated(&root, source, "/target.md", &coordinator)
+            })
+        });
+        barrier.wait();
+        let results = handles.map(|handle| handle.join().unwrap());
+
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        assert_eq!(results.iter().filter(|result| result.is_err()).count(), 1);
+        let target_content = std::fs::read_to_string(root.join("target.md")).unwrap();
+        assert!(target_content == "first" || target_content == "second");
+        let remaining_sources = ["first.md", "second.md"]
+            .iter()
+            .filter(|name| root.join(name).exists())
+            .count();
+        assert_eq!(remaining_sources, 1);
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn conditional_write_wire_shape_uses_camel_case_actual_revision() {
+        let value = serde_json::to_value(ConditionalWriteResult::Conflict {
+            actual_revision: Some(content_revision(b"disk")),
+        })
+        .unwrap();
+
+        assert_eq!(value["status"], "conflict");
+        assert!(value.get("actualRevision").is_some());
+        assert!(value.get("actual_revision").is_none());
+    }
+
+    #[test]
     fn real_fs_rejects_path_escape() {
         let root = temp_notebook("fs-escape");
         let result = write_file_at(&root, "/../outside.md", "bad");
@@ -1466,6 +2290,38 @@ mod tests {
         assert!(access
             .resolve_file(&handle.access_token, &handle.relative_path, true, true)
             .is_ok());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn conditional_external_write_can_address_only_the_deleted_granted_file() {
+        let root = temp_notebook("external-deleted-grant");
+        let target = root.join("external.md");
+        std::fs::write(&target, "# External").unwrap();
+        let access = ExternalAccessGrants::new();
+        let handle = access
+            .grant_for_existing_file(&target.to_string_lossy(), "window-a")
+            .unwrap();
+        access
+            .enable_file_write(&handle.access_token, "window-a", &handle.absolute_path)
+            .unwrap();
+        std::fs::remove_file(&target).unwrap();
+
+        assert!(access
+            .resolve_file(&handle.access_token, &handle.relative_path, false, true)
+            .is_err());
+        let resolved = access
+            .resolve_file_for_conditional_write(&handle.access_token, &handle.relative_path, false)
+            .unwrap();
+        assert_eq!(resolved.file_name(), target.file_name());
+        assert_eq!(
+            resolved.parent().unwrap().canonicalize().unwrap(),
+            root.canonicalize().unwrap()
+        );
+        assert!(access
+            .resolve_file_for_conditional_write(&handle.access_token, "/sibling.md", false)
+            .is_err());
+
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -1606,6 +2462,9 @@ mod tests {
         assert!(access
             .promote_to_notebook_after_validation(&handle.access_token, |_| Ok(()))
             .is_ok());
+        assert!(access
+            .resolve_file(&handle.access_token, &handle.relative_path, false, true)
+            .is_err());
 
         std::fs::remove_dir_all(root).unwrap();
     }

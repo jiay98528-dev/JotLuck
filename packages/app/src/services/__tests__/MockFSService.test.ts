@@ -86,6 +86,35 @@ describe('MockFSService sample notebook', () => {
     );
   });
 
+  it('rejects a conditional save after an external-style write changed the revision', async () => {
+    const fs = new MockFSService(0);
+    await fs.writeFile('/draft.md', '# Original');
+    const snapshot = await fs.readFileSnapshot('/draft.md');
+    expect(snapshot.revision).toMatch(/^sha256:[a-f0-9]{64}$/u);
+
+    await fs.writeFile('/draft.md', '# External');
+    await expect(
+      fs.writeFileIfUnchanged('/draft.md', '# Local', snapshot.revision),
+    ).resolves.toMatchObject({ status: 'conflict' });
+    await expect(fs.readFile('/draft.md')).resolves.toBe('# External');
+  });
+
+  it('writes on a matching revision and enforces create-only null revisions', async () => {
+    const fs = new MockFSService(0);
+    await fs.writeFile('/draft.md', '# Original');
+    const snapshot = await fs.readFileSnapshot('/draft.md');
+
+    const saved = await fs.writeFileIfUnchanged('/draft.md', '# Local', snapshot.revision);
+    expect(saved).toMatchObject({ status: 'saved' });
+    await expect(fs.readFile('/draft.md')).resolves.toBe('# Local');
+    await expect(fs.writeFileIfUnchanged('/draft.md', '# Replace', null)).resolves.toMatchObject({
+      status: 'conflict',
+    });
+    await expect(fs.writeFileIfUnchanged('/new.md', '# New', null)).resolves.toMatchObject({
+      status: 'saved',
+    });
+  });
+
   it('rejects rename collisions instead of overwriting the destination', async () => {
     const fs = new MockFSService(0);
     await fs.writeFile('/source.md', '# Source');

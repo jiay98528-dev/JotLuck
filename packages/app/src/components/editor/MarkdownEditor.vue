@@ -81,6 +81,7 @@ const props = withDefaults(
 const lineNumberCompartment = new Compartment();
 const livePreviewCompartment = new Compartment();
 const autocompleteCompartment = new Compartment();
+const readOnlyCompartment = new Compartment();
 
 // NotebookHome owns the predictor in the product path. The fallback keeps the
 // component independently mountable in unit tests and isolated previews.
@@ -234,6 +235,10 @@ function createState(doc: string) {
       // Ghost text keymap must precede defaultKeymap (indentWithTab) so Tab
       // is intercepted for ghost text acceptance before indentation logic.
       autocompleteCompartment.of(autocompleteExtensions()),
+      readOnlyCompartment.of([
+        EditorState.readOnly.of(props.readOnly),
+        EditorView.editable.of(!props.readOnly),
+      ]),
       keymap.of([{ key: 'Enter', run: handlePendingFormatEnter }]),
       ...jotluckExtensions(props.placeholder, props.sourceOnly),
       lineNumberCompartment.of(props.showLineNumbers ? lineNumbers() : []),
@@ -369,6 +374,35 @@ watch(
   },
 );
 
+// Keep the same editor instance while note/workspace transitions briefly lock writes.
+// A non-editable content DOM remains selectable, so Ctrl/Cmd+A and Ctrl/Cmd+C still work.
+watch(
+  () => props.readOnly,
+  (readOnly) => {
+    if (!view) return;
+    view.dispatch({
+      effects: readOnlyCompartment.reconfigure([
+        EditorState.readOnly.of(readOnly),
+        EditorView.editable.of(!readOnly),
+      ]),
+    });
+  },
+);
+
+function onEditorHostDrop(event: DragEvent): void {
+  props.onEditorDrop?.(event);
+}
+
+function onEditorHostDragOver(event: DragEvent): void {
+  props.onEditorDragOver?.(event);
+}
+
+function onEditorHostPaste(event: ClipboardEvent): void {
+  // preventDefault must happen in the browser's original event turn. Image handlers
+  // therefore synchronously return true when they take ownership, then do I/O in the background.
+  if (props.onEditorPaste?.(event) === true) event.preventDefault();
+}
+
 // Dynamic live preview toggle
 watch(
   () => [props.livePreview, props.wikiLinkRevision, props.imageRevision] as const,
@@ -451,19 +485,10 @@ onMounted(() => {
     });
   }
 
-  // Drag/drop handlers
-  if (props.onEditorDrop) {
-    editorHost.value.addEventListener('drop', props.onEditorDrop);
-  }
-  if (props.onEditorDragOver) {
-    editorHost.value.addEventListener('dragover', props.onEditorDragOver);
-  }
-  if (props.onEditorPaste) {
-    editorHost.value.addEventListener('paste', async (e) => {
-      const result = await props.onEditorPaste!(e);
-      if (result === true) e.preventDefault();
-    });
-  }
+  // Stable wrappers read the latest props, so a transition can disable uploads without remounting.
+  editorHost.value.addEventListener('drop', onEditorHostDrop);
+  editorHost.value.addEventListener('dragover', onEditorHostDragOver);
+  editorHost.value.addEventListener('paste', onEditorHostPaste);
 
   // Selection tracking
   document.addEventListener('selectionchange', onSelectionChange);
@@ -480,6 +505,9 @@ onUnmounted(() => {
   const e2eBridge = getJotLuckE2EBridge();
   if (e2eBridge?.editor?.id === INSTANCE_ID) delete e2eBridge.editor;
   document.removeEventListener('selectionchange', onSelectionChange);
+  editorHost.value?.removeEventListener('drop', onEditorHostDrop);
+  editorHost.value?.removeEventListener('dragover', onEditorHostDragOver);
+  editorHost.value?.removeEventListener('paste', onEditorHostPaste);
   if (view) {
     view.contentDOM.removeEventListener('compositionend', onCompositionEndApplyDeferred);
     view.contentDOM.removeEventListener('compositionstart', onCompositionStartRefreshScan);

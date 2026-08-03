@@ -77,6 +77,10 @@ export type {
   InstalledThemePack,
   ThemeValidationIssue,
   ThemePackInstallResult,
+  ThemeRecoveryDialogMode,
+  ThemeRecoveryDialogIntent,
+  ThemeStatusRecoverySlotProps,
+  ThemeRecoveryDialogSlotProps,
 } from './theme-pack';
 
 // --- note.ts ---
@@ -125,6 +129,8 @@ export type { ExportOptions, ExportResult, ShareOptions } from './export';
 export type {
   DirEntry,
   FileStat,
+  TextFileSnapshot,
+  ConditionalWriteResult,
   FileChangeEvent,
   NotebookHandle,
   UnwatchFn,

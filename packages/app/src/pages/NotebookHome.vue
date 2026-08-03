@@ -90,9 +90,9 @@
         class="editor-shell-frame"
         :class="{
           'editor-shell-frame--external': isExternalEditing,
-          'editor-shell-frame--opening': isNotebookOpening,
+          'editor-shell-frame--opening': isInteractionLocked,
         }"
-        :aria-busy="isNotebookOpening"
+        :aria-busy="isInteractionLocked"
       >
         <div v-if="isExternalEditing" class="external-edit-banner" role="status">
           <span>单文件编辑 · 未扫描所在目录</span>
@@ -128,6 +128,8 @@
           @navigate-backlink="onBacklinkNavigate"
           @select-tag="onTagSelect"
           @toggle-right-wing="showRightWing = !showRightWing"
+          @retry-save="retryCurrentSave"
+          @save-copy="saveCurrentAsCopy"
         >
           <template v-if="!isWorkspaceUnbound" #drawer-bottom>
             <ThemeSlotBoundary
@@ -247,6 +249,7 @@
                             ref="editorRef"
                             :key="`split-${isScratchSession ? 'draft' : shellActivePath}`"
                             :model-value="currentContent"
+                            :read-only="isInteractionLocked"
                             :placeholder="isScratchSession ? '开始输入文字' : undefined"
                             :show-line-numbers="!isLargeDocument"
                             :live-preview="false"
@@ -260,17 +263,17 @@
                             :predictor="completionPredictor"
                             :enable-autocomplete="!isExternalEditing && !isLargeDocument"
                             :on-editor-drop="
-                              isExternalEditing || isNotebookOpening
+                              isExternalEditing || isInteractionLocked
                                 ? undefined
                                 : imageUpload.handleDrop
                             "
                             :on-editor-drag-over="
-                              isExternalEditing || isNotebookOpening
+                              isExternalEditing || isInteractionLocked
                                 ? undefined
                                 : imageUpload.handleDragOver
                             "
                             :on-editor-paste="
-                              isExternalEditing || isNotebookOpening
+                              isExternalEditing || isInteractionLocked
                                 ? undefined
                                 : imageUpload.handlePaste
                             "
@@ -298,6 +301,7 @@
                         ref="editorRef"
                         :key="`live-${isScratchSession ? 'draft' : shellActivePath}`"
                         :model-value="currentContent"
+                        :read-only="isInteractionLocked"
                         :placeholder="isScratchSession ? '开始输入文字' : undefined"
                         :show-line-numbers="false"
                         :live-preview="true"
@@ -313,17 +317,17 @@
                         :predictor="completionPredictor"
                         :enable-autocomplete="!isExternalEditing && !isLargeDocument"
                         :on-editor-drop="
-                          isExternalEditing || isNotebookOpening
+                          isExternalEditing || isInteractionLocked
                             ? undefined
                             : imageUpload.handleDrop
                         "
                         :on-editor-drag-over="
-                          isExternalEditing || isNotebookOpening
+                          isExternalEditing || isInteractionLocked
                             ? undefined
                             : imageUpload.handleDragOver
                         "
                         :on-editor-paste="
-                          isExternalEditing || isNotebookOpening
+                          isExternalEditing || isInteractionLocked
                             ? undefined
                             : imageUpload.handlePaste
                         "
@@ -339,12 +343,12 @@
           </template>
         </AppShell>
         <div
-          v-if="isNotebookOpening && !isWorkspaceUnbound"
+          v-if="isInteractionLocked && !isWorkspaceUnbound"
           class="workspace-opening-overlay"
           role="status"
           aria-live="polite"
         >
-          正在打开笔记本…
+          {{ isNotebookOpening ? '正在打开笔记本…' : '正在打开笔记…' }}
         </div>
       </div>
     </Transition>
@@ -673,7 +677,7 @@
         ref="scratchExitDialogRef"
         tabindex="-1"
         class="modal-overlay"
-        @keydown.escape="cancelScratchExit"
+        @keydown.escape="cancelUnsavedExit"
       >
         <div
           class="modal-card"
@@ -683,19 +687,60 @@
           aria-labelledby="scratch-exit-title"
         >
           <div class="modal-header">
-            <h2 id="scratch-exit-title">保存临时草稿？</h2>
+            <h2 id="scratch-exit-title">{{ unsavedDialogTitle }}</h2>
           </div>
           <div class="modal-body">
-            <p class="delete-confirm-text">
-              当前草稿还没有保存为文件。可以选择保存位置，或放弃这次临时内容。
-            </p>
+            <p class="delete-confirm-text">{{ unsavedDialogMessage }}</p>
           </div>
           <div class="modal-footer">
-            <button class="btn btn--secondary" data-dialog-initial-focus @click="cancelScratchExit">
+            <button class="btn btn--secondary" data-dialog-initial-focus @click="cancelUnsavedExit">
               取消
             </button>
-            <button class="btn btn--secondary" @click="discardScratchAndClose">不保存</button>
-            <button class="btn btn--primary" @click="saveScratchAndClose">保存</button>
+            <button
+              v-if="unsavedDialogMode !== 'scratch'"
+              class="btn btn--secondary"
+              @click="copyCurrentContent"
+            >
+              复制全文
+            </button>
+            <button
+              v-if="unsavedDialogMode === 'conflict'"
+              class="btn btn--secondary"
+              @click="reloadCurrentFromDisk"
+            >
+              {{ unsavedDialogIntent === 'close' ? '采用外部版本并退出' : '采用外部版本' }}
+            </button>
+            <button
+              v-if="unsavedDialogMode === 'conflict' || unsavedDialogMode === 'missing'"
+              class="btn btn--secondary"
+              @click="overwriteCurrentDiskVersion"
+            >
+              {{
+                unsavedDialogMode === 'missing'
+                  ? unsavedDialogIntent === 'close'
+                    ? '在原位置重建并退出'
+                    : '在原位置重建'
+                  : unsavedDialogIntent === 'close'
+                    ? '覆盖原文件并退出'
+                    : '覆盖原文件'
+              }}
+            </button>
+            <button
+              v-if="isScratchSession || unsavedDialogIntent === 'close'"
+              class="btn btn--secondary"
+              @click="discardUnsavedAndClose"
+            >
+              {{ isScratchSession ? '不保存' : '不保存并退出' }}
+            </button>
+            <button class="btn btn--primary" @click="saveUnsavedAsCopy">
+              {{
+                isScratchSession
+                  ? '保存'
+                  : unsavedDialogIntent === 'close'
+                    ? '另存副本并退出'
+                    : '另存副本'
+              }}
+            </button>
           </div>
         </div>
       </div>
@@ -751,6 +796,8 @@ import type {
   FileChangeEvent,
   UnwatchFn,
   NotebookHandle,
+  TextFileSnapshot,
+  ConditionalWriteResult,
   WindowBootstrapPayload,
   PromotedNotebookPayload,
 } from '@/types';
@@ -791,6 +838,7 @@ import {
 } from '@/utils/note-files';
 import { getDraftMarkdownFileName } from '@/utils/draft-file-name';
 import { getJotLuckE2EBridge, peekJotLuckE2EBridge } from '@/utils/e2e-bridge';
+import { summarizeActiveFileChanges } from '@/utils/file-change-events';
 import { isDesktopRuntime, shouldPersistMockFs } from '@/utils/runtime';
 import {
   loadCustomTemplatesFromFiles,
@@ -848,7 +896,6 @@ function createFileSystem(): IFileSystemService {
 }
 const fs: IFileSystemService = createFileSystem();
 const supportedNoteExtensionsText = supportedNoteExtensionsLabel();
-const MOCK_FS_STORAGE_KEY = 'jotluck-mockfs';
 const LARGE_DOCUMENT_PREVIEW_DELAY_THRESHOLD_CHARS = 120_000;
 const LARGE_DOCUMENT_PREVIEW_DELAY_THRESHOLD_LINES = 3_000;
 const LARGE_DOCUMENT_DEFERRED_WORK_DELAY_MS = 1800;
@@ -876,6 +923,14 @@ interface OpenedFilePayload {
   notebookRoot: string;
   relativePath: string;
   accessToken?: string;
+}
+
+interface SaveIssue {
+  kind: 'io' | 'conflict' | 'missing';
+  source: 'workspace' | 'external';
+  path: string;
+  message: string;
+  actualRevision?: string | null;
 }
 
 type ExternalSessionMode = 'none' | 'readonly' | 'edit-shell';
@@ -927,6 +982,8 @@ const isScratchSession = ref(false);
 const workspaceGateStatus = ref<NotebookOpenGateStatus | null>(null);
 const workspaceGateError = ref('');
 const isNotebookOpening = ref(false);
+const isNoteSwitching = ref(false);
+const isInteractionLocked = computed(() => isNotebookOpening.value || isNoteSwitching.value);
 const notebookOpenGateRef = ref<NotebookOpenGateExposed | null>(null);
 const isWorkspaceUnbound = computed(() => workspaceGateStatus.value !== null);
 const customTemplates = ref<TemplateItem[]>([]);
@@ -950,7 +1007,8 @@ let notebookWatchGeneration = 0;
 let notebookDataGeneration = 0;
 let watcherRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 const pendingWatcherEvents: FileChangeEvent[] = [];
-let watcherFlushPromise: Promise<void> | null = null;
+let watcherFlushChain: Promise<void> = Promise.resolve();
+let fileTreeRequestId = 0;
 let backgroundTrainingTimer: ReturnType<typeof setTimeout> | null = null;
 const MAX_FILE_TREE_ENTRIES = 5000;
 
@@ -996,6 +1054,7 @@ const customTemplateDisabledReason = computed(() => {
   if (!activeNotebookRoot.value) return '请先打开一个笔记本，再保存自定义模板。';
   return '';
 });
+let forcedE2ESaveFailure: string | null = null;
 const e2eBridge = getJotLuckE2EBridge();
 if (e2eBridge) {
   e2eBridge.debugState = () => ({
@@ -1007,12 +1066,21 @@ if (e2eBridge) {
     activeNotebookRoot: activeNotebookRoot.value,
     isWorkspaceUnbound: isWorkspaceUnbound.value,
     isNotebookOpening: isNotebookOpening.value,
+    isNoteSwitching: isNoteSwitching.value,
+    saveIssueKind: saveIssue.value?.kind ?? null,
   });
   e2eBridge.listNotePaths = () =>
     files.value
       .filter((entry) => entry.isFile && isSupportedNoteFile(entry.name))
       .map((entry) => entry.path);
   e2eBridge.selectNote = (path) => onSelectNote(path);
+  e2eBridge.readNoteFile = (path) => fs.readFile(path);
+  e2eBridge.writeNoteFileExternally = (path, content) => fs.writeFile(path, content);
+  e2eBridge.deleteNoteFile = (path) => fs.deleteFile(path);
+  e2eBridge.failNextSave = (message = '模拟原文件位置不可写') => {
+    forcedE2ESaveFailure = message;
+  };
+  e2eBridge.requestClose = () => requestDesktopWindowClose();
 }
 const externalFilePath = computed(() => externalFile.value?.absolutePath ?? '');
 const externalFileName = computed(() => {
@@ -1298,11 +1366,37 @@ const externalEditDialogSlotProps = computed(() => ({
   confirmEditOnly: () => confirmExternalEdit(),
 }));
 
+const unsavedDialogMode = computed<'scratch' | 'save-failed' | 'conflict' | 'missing'>(() => {
+  if (isScratchSession.value) return 'scratch';
+  if (saveIssue.value?.kind === 'conflict') return 'conflict';
+  if (saveIssue.value?.kind === 'missing') return 'missing';
+  return 'save-failed';
+});
+const unsavedDialogTitle = computed(() => {
+  if (unsavedDialogMode.value === 'scratch') return '保存临时草稿？';
+  if (unsavedDialogMode.value === 'conflict') return '原文件和本地草稿不一样';
+  if (unsavedDialogMode.value === 'missing') return '原文件已被移动或删除';
+  return '这次修改还没保存';
+});
+const unsavedDialogMessage = computed(() => {
+  if (unsavedDialogMode.value === 'scratch') {
+    return '当前草稿还没有保存为文件。可以选择保存位置，或放弃这次临时内容。';
+  }
+  return saveIssue.value?.message ?? '原文件现在无法写入。本地草稿仍在，可以先另存副本或复制全文。';
+});
+
 const scratchExitDialogSlotProps = computed(() => ({
   visible: showScratchExitDialog.value,
-  cancel: cancelScratchExit,
-  discard: discardScratchAndClose,
-  save: saveScratchAndClose,
+  mode: unsavedDialogMode.value,
+  intent: unsavedDialogIntent.value,
+  message: saveIssue.value?.message ?? saveError.value,
+  cancel: cancelUnsavedExit,
+  discard: discardUnsavedAndClose,
+  saveCopy: saveUnsavedAsCopy,
+  copyContent: copyCurrentContent,
+  reloadExternal: reloadCurrentFromDisk,
+  overwrite: overwriteCurrentDiskVersion,
+  save: saveUnsavedAsCopy,
 }));
 
 function openThemeDialogSlot(slot: ThemeSlotId): void {
@@ -1329,13 +1423,14 @@ function closeThemeDialogSlot(slot: ThemeSlotId): void {
   else if (slot === 'new-file-dialog') cancelNewFile();
   else if (slot === 'delete-confirm-dialog') cancelDeleteFile();
   else if (slot === 'external-edit-dialog') showExternalEditConfirm.value = false;
-  else if (slot === 'scratch-exit-dialog') cancelScratchExit();
+  else if (slot === 'scratch-exit-dialog') cancelUnsavedExit();
 }
 
 const themeHostUi = computed(() => ({
   editor: {
     getContent: () => currentContent.value,
     setContent: (content: string) => {
+      if (isInteractionLocked.value) return;
       if (isExternalSession.value || requireBoundWorkspace('编辑笔记')) {
         onEditorContentUpdate(content);
       }
@@ -1405,12 +1500,26 @@ useDialogFocus({
 const previewImages = usePreviewImageResolver(fs);
 const imageUpload = useImageUpload(
   fs,
-  () => editorRef.value?.getEditorView() ?? null,
-  () => activePath.value,
-  async (path) => {
-    await previewImages.prime(path);
-    await refreshFileTree();
+  () => {
+    const view = editorRef.value?.getEditorView() ?? null;
+    if (!view || !activePath.value || isScratchSession.value || isExternalSession.value)
+      return null;
+    return {
+      workspaceEpoch: notebookDataGeneration,
+      notePath: activePath.value,
+      view,
+    };
   },
+  async (path, owner) => {
+    await previewImages.prime(path);
+    if (
+      owner.workspaceEpoch === notebookDataGeneration &&
+      normalizePath(owner.notePath) === normalizePath(activePath.value)
+    ) {
+      await refreshFileTree();
+    }
+  },
+  (failure) => toast.show(failure.message, 'error', 6000),
 );
 
 watch(
@@ -1487,7 +1596,7 @@ function scheduleSplitEditorMountForCurrentMode(): void {
 function onSplitContentUpdate(content: string): void {
   if (
     !isScratchSession.value &&
-    (!activeNotebookRoot.value || isWorkspaceUnbound.value || isNotebookOpening.value)
+    (!activeNotebookRoot.value || isWorkspaceUnbound.value || isInteractionLocked.value)
   ) {
     requireBoundWorkspace('编辑笔记');
     return;
@@ -1498,19 +1607,23 @@ function onSplitContentUpdate(content: string): void {
   updateEditorStats(content);
   if (isScratchSession.value) {
     isDirty.value = content.trim().length > 0;
-    saveError.value = null;
+    clearSaveIssue();
   } else if (activePath.value) {
     isDirty.value = true;
-    saveError.value = null;
-    rememberPendingMockFileWrite(activePath.value, content);
-    if (saveTimer) clearTimeout(saveTimer);
-    const savingPath = activePath.value;
-    const savingRoot = activeNotebookRoot.value;
-    const savingGeneration = notebookDataGeneration;
-    saveTimer = setTimeout(
-      () => void debouncedSave(savingPath, content, revision, savingRoot, savingGeneration),
-      600,
-    );
+    clearTransientSaveIssueOnEdit();
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    if (!isAutosavePausedForDiskIssue()) {
+      const savingPath = activePath.value;
+      const savingRoot = activeNotebookRoot.value;
+      const savingGeneration = notebookDataGeneration;
+      saveTimer = setTimeout(
+        () => void debouncedSave(savingPath, content, revision, savingRoot, savingGeneration),
+        600,
+      );
+    }
   }
   // Debounce preview update for split mode
   if (splitDebounceTimer) clearTimeout(splitDebounceTimer);
@@ -1551,15 +1664,41 @@ function onSplitDragStart(e: MouseEvent): void {
 const isDirty = ref(false);
 const isSaving = ref(false);
 const saveError = ref<string | null>(null);
+const saveIssue = ref<SaveIssue | null>(null);
+const currentDiskRevision = ref<string | null>(null);
 const lastSavedAt = ref<number | null>(null);
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let saveGeneration = 0;
 let contentRevision = 0;
+let localWriteEpoch = 0;
 let currentSavePromise: Promise<boolean> | null = null;
 let noteSelectionQueue: Promise<void> = Promise.resolve();
 let noteSelectionVersion = 0;
 let externalSelectionVersion = 0;
-const pendingMockFileWrites = new Map<string, string>();
+const unsavedDialogIntent = ref<'recover' | 'close'>('recover');
+
+function clearSaveIssue(): void {
+  saveIssue.value = null;
+  saveError.value = null;
+}
+
+function clearTransientSaveIssueOnEdit(): void {
+  if (saveIssue.value && saveIssue.value.kind !== 'io') return;
+  clearSaveIssue();
+}
+
+function isAutosavePausedForDiskIssue(): boolean {
+  return saveIssue.value?.kind === 'conflict' || saveIssue.value?.kind === 'missing';
+}
+
+function reportSaveIssue(issue: SaveIssue, openRecovery = issue.kind !== 'io'): void {
+  saveIssue.value = issue;
+  saveError.value = issue.message;
+  if (openRecovery) {
+    unsavedDialogIntent.value = 'recover';
+    showScratchExitDialog.value = true;
+  }
+}
 
 // --- Editor Stats ---
 const editorStats = reactive({
@@ -1730,39 +1869,46 @@ function openedFileFromBootstrap(
   };
 }
 
-async function commitWorkspaceHandle(
-  handle: NotebookHandle,
-  stagedFiles: DirEntry[] | null = null,
-  watcherAlreadyStopped = false,
-): Promise<void> {
-  if (!watcherAlreadyStopped) await stopNotebookWatcher();
+async function suspendWorkspaceForTransition(): Promise<void> {
+  await stopNotebookWatcher();
   completionTrainer?.cancelCurrentRun();
   completionTrainer = null;
   indexStore.reset();
   noteSelectionVersion++;
+  externalSelectionVersion++;
+  isNoteSwitching.value = false;
   saveGeneration++;
+  notebookDataGeneration++;
+  fileTreeRequestId++;
   if (saveTimer) {
     clearTimeout(saveTimer);
     saveTimer = null;
   }
-  pendingMockFileWrites.clear();
+}
+
+async function commitWorkspaceHandle(
+  handle: NotebookHandle,
+  stagedFiles: DirEntry[] | null = null,
+  transitionAlreadyStarted = false,
+): Promise<void> {
+  if (!transitionAlreadyStarted) await suspendWorkspaceForTransition();
 
   isScratchSession.value = false;
   workspaceGateStatus.value = null;
   workspaceGateError.value = '';
   activeNotebookRoot.value = normalizeOsPath(handle.rootPath);
-  notebookDataGeneration++;
   notebookName.value = handle.name || displayNameFromPath(handle.rootPath);
   activePath.value = '';
   contentRevision++;
   currentContent.value = '';
+  currentDiskRevision.value = null;
   files.value = stagedFiles ?? [];
   currentDir.value = '/';
   customTemplates.value = [];
   errorMessage.value = '';
   isDirty.value = false;
   isSaving.value = false;
-  saveError.value = null;
+  clearSaveIssue();
   lastSavedAt.value = null;
   showLeftDrawer.value = false;
   showTemplate.value = false;
@@ -1783,12 +1929,13 @@ async function enterWorkspaceGate(error = ''): Promise<void> {
   completionTrainer = null;
   indexStore.reset();
   noteSelectionVersion++;
+  externalSelectionVersion++;
+  isNoteSwitching.value = false;
   saveGeneration++;
   if (saveTimer) {
     clearTimeout(saveTimer);
     saveTimer = null;
   }
-  pendingMockFileWrites.clear();
 
   isScratchSession.value = false;
   externalSessionMode.value = 'none';
@@ -1800,6 +1947,7 @@ async function enterWorkspaceGate(error = ''): Promise<void> {
   activePath.value = '';
   contentRevision++;
   currentContent.value = '';
+  currentDiskRevision.value = null;
   files.value = [];
   currentDir.value = '/';
   customTemplates.value = [];
@@ -1807,7 +1955,7 @@ async function enterWorkspaceGate(error = ''): Promise<void> {
   errorMessage.value = '';
   isDirty.value = false;
   isSaving.value = false;
-  saveError.value = null;
+  clearSaveIssue();
   lastSavedAt.value = null;
   showLeftDrawer.value = false;
   showRightWing.value = true;
@@ -1826,18 +1974,43 @@ async function enterWorkspaceGate(error = ''): Promise<void> {
   await notebookOpenGateRef.value?.focusPrimary();
 }
 
+async function restoreWorkspaceAfterFailedBinding(previousRoot: string): Promise<void> {
+  if (!previousRoot) return;
+  const rollback = await fs.openNotebookAt(previousRoot);
+  if (!notebookRootsEqual(rollback.rootPath, previousRoot)) {
+    throw new Error('恢复后的笔记本根目录与原目录不一致');
+  }
+  activeNotebookRoot.value = normalizeOsPath(rollback.rootPath);
+  await restartNotebookWatcher(activeNotebookRoot.value);
+  void completeNotebookInitializationInBackground(activeNotebookRoot.value, notebookDataGeneration);
+}
+
 async function openNotebookRoot(rootPath: string): Promise<void> {
+  const previousRoot = activeNotebookRoot.value;
   isScratchSession.value = false;
-  const handle = await fs.openNotebookAt(rootPath);
-  await commitWorkspaceHandle(handle);
+  await suspendWorkspaceForTransition();
+  try {
+    const handle = await fs.openNotebookAt(rootPath);
+    await commitWorkspaceHandle(handle, null, true);
+  } catch (error) {
+    await restoreWorkspaceAfterFailedBinding(previousRoot);
+    throw error;
+  }
 }
 
 async function openNotebookFromExternalGrant(accessToken: string): Promise<void> {
   const openFromGrant = fs.openNotebookFromExternalGrant;
   if (!openFromGrant) throw new Error('当前桌面文件会话不支持外部目录授权');
+  const previousRoot = activeNotebookRoot.value;
   isScratchSession.value = false;
-  const handle = await openFromGrant.call(fs, accessToken);
-  await commitWorkspaceHandle(handle);
+  await suspendWorkspaceForTransition();
+  try {
+    const handle = await openFromGrant.call(fs, accessToken);
+    await commitWorkspaceHandle(handle, null, true);
+  } catch (error) {
+    await restoreWorkspaceAfterFailedBinding(previousRoot);
+    throw error;
+  }
 }
 
 function markStartupReady(mode: 'workspace' | 'external' | 'gate'): void {
@@ -1853,6 +2026,8 @@ function markStartupReady(mode: 'workspace' | 'external' | 'gate'): void {
 
 async function stopNotebookWatcher(): Promise<void> {
   notebookWatchGeneration++;
+  const e2eBridge = getJotLuckE2EBridge();
+  if (e2eBridge) e2eBridge.emitFileChange = undefined;
   if (watcherRefreshTimer) {
     clearTimeout(watcherRefreshTimer);
     watcherRefreshTimer = null;
@@ -1861,7 +2036,7 @@ async function stopNotebookWatcher(): Promise<void> {
   unwatchNotebook?.();
   unwatchNotebook = null;
   await fs.unwatchAll();
-  if (watcherFlushPromise) await watcherFlushPromise.catch(() => undefined);
+  await watcherFlushChain.catch(() => undefined);
 }
 
 function queueWatcherRefresh(
@@ -1879,20 +2054,18 @@ function queueWatcherRefresh(
   if (watcherRefreshTimer) clearTimeout(watcherRefreshTimer);
   watcherRefreshTimer = setTimeout(() => {
     watcherRefreshTimer = null;
-    const task = flushWatcherEvents(expectedRoot, expectedWatcherGeneration);
-    watcherFlushPromise = task;
-    const clearWatcherFlush = () => {
-      if (watcherFlushPromise === task) watcherFlushPromise = null;
-    };
-    void task.then(clearWatcherFlush, clearWatcherFlush);
+    const events = pendingWatcherEvents.splice(0);
+    watcherFlushChain = watcherFlushChain
+      .catch(() => undefined)
+      .then(() => flushWatcherEvents(events, expectedRoot, expectedWatcherGeneration));
   }, 120);
 }
 
 async function flushWatcherEvents(
+  events: FileChangeEvent[],
   expectedRoot: string,
   expectedWatcherGeneration: number,
 ): Promise<void> {
-  const events = pendingWatcherEvents.splice(0);
   const isCurrentWatcher = () =>
     expectedWatcherGeneration === notebookWatchGeneration &&
     notebookRootsEqual(expectedRoot, activeNotebookRoot.value);
@@ -1904,10 +2077,7 @@ async function flushWatcherEvents(
   )
     return;
   const active = normalizePath(activePath.value);
-  const activeEvents = events.filter(
-    (event) =>
-      normalizePath(event.path) === active || normalizePath(event.oldPath ?? '') === active,
-  );
+  const activeChange = summarizeActiveFileChanges(events, active);
 
   for (const event of events) {
     if (event.type === 'deleted' || event.type === 'renamed') {
@@ -1922,7 +2092,7 @@ async function flushWatcherEvents(
       const path = normalizePath(event.path);
       const fileName = path.split('/').pop() ?? '';
       if (
-        (event.type === 'created' || event.type === 'modified') &&
+        (event.type === 'created' || event.type === 'modified' || event.type === 'renamed') &&
         isSupportedNoteFile(fileName)
       ) {
         await indexStore.refreshDocument(fs, path);
@@ -1934,28 +2104,80 @@ async function flushWatcherEvents(
     console.warn('[NotebookHome] 文件监控刷新失败', error);
   }
 
-  if (activeEvents.some((event) => event.type === 'deleted' || event.type === 'renamed')) {
-    if (isDirty.value) {
-      saveError.value = '当前文件已在 JotLuck 外部被移动或删除，请另存内容后再继续。';
-    } else {
-      clearActiveNoteState();
+  const requiresActiveRecheck =
+    activeChange.destructive ||
+    activeChange.changed ||
+    events.some((event) => event.rescan || event.entryKind === 'directory');
+  if (!active || !requiresActiveRecheck) return;
+
+  const expectedContentRevision = contentRevision;
+  const expectedLocalWriteEpoch = localWriteEpoch;
+  let diskSnapshot: TextFileSnapshot;
+  try {
+    // A replacement may be reported as remove + rename, or even as remove before the matching
+    // rename arrives. The final path is authoritative: if it is readable, the file was not lost.
+    diskSnapshot = await fs.readFileSnapshot(active);
+  } catch (error) {
+    if (
+      !isCurrentWatcher() ||
+      normalizePath(activePath.value) !== active ||
+      contentRevision !== expectedContentRevision ||
+      localWriteEpoch !== expectedLocalWriteEpoch
+    ) {
+      return;
+    }
+    if (
+      activeChange.destructive ||
+      events.some(
+        (event) =>
+          event.rescan ||
+          (event.entryKind === 'directory' &&
+            (event.type === 'deleted' || event.type === 'renamed')),
+      )
+    ) {
+      if (isDirty.value) {
+        reportSaveIssue({
+          kind: 'missing',
+          source: 'workspace',
+          path: active,
+          actualRevision: null,
+          message: '原文件已被移动或删除。本地草稿仍在；可以另存副本，或明确选择在原位置重建。',
+        });
+      } else {
+        clearActiveNoteState();
+      }
+      return;
+    }
+    if (!isDirty.value) {
+      reportSaveIssue(
+        {
+          kind: 'io',
+          source: 'workspace',
+          path: active,
+          message: error instanceof Error ? error.message : String(error),
+        },
+        false,
+      );
     }
     return;
   }
-  if (active && activeEvents.some((event) => event.type === 'modified') && !isDirty.value) {
-    try {
-      const content = await fs.readFile(active);
-      if (!isCurrentWatcher() || normalizePath(activePath.value) !== active || isDirty.value)
-        return;
-      contentRevision++;
-      currentContent.value = content;
-      updateHeadings(content);
-      updateEditorStats(content);
-      refreshSplitPreviewIfVisible();
-    } catch (error) {
-      saveError.value = error instanceof Error ? error.message : String(error);
-    }
+
+  if (
+    !isCurrentWatcher() ||
+    normalizePath(activePath.value) !== active ||
+    isDirty.value ||
+    contentRevision !== expectedContentRevision ||
+    localWriteEpoch !== expectedLocalWriteEpoch
+  ) {
+    return;
   }
+  contentRevision++;
+  currentContent.value = diskSnapshot.content;
+  currentDiskRevision.value = diskSnapshot.revision;
+  clearSaveIssue();
+  updateHeadings(diskSnapshot.content);
+  updateEditorStats(diskSnapshot.content);
+  refreshSplitPreviewIfVisible();
 }
 
 async function restartNotebookWatcher(rootPath: string): Promise<void> {
@@ -1963,14 +2185,16 @@ async function restartNotebookWatcher(rootPath: string): Promise<void> {
   unwatchNotebook?.();
   unwatchNotebook = null;
   try {
-    const unwatch = await fs.watch(rootPath, (event) =>
-      queueWatcherRefresh(event, rootPath, generation),
-    );
+    const handleFileChange = (event: FileChangeEvent | FileChangeEvent[]) =>
+      queueWatcherRefresh(event, rootPath, generation);
+    const unwatch = await fs.watch(rootPath, handleFileChange);
     if (generation !== notebookWatchGeneration) {
       unwatch();
       return;
     }
     unwatchNotebook = unwatch;
+    const e2eBridge = getJotLuckE2EBridge();
+    if (e2eBridge) e2eBridge.emitFileChange = handleFileChange;
   } catch (error) {
     // eslint-disable-next-line no-console
     console.warn('[NotebookHome] 文件监控启动失败', error);
@@ -2018,7 +2242,7 @@ async function openInitialNotebook(): Promise<boolean> {
   return false;
 }
 
-function enterNotebookFileState(path: string, content: string): void {
+function enterNotebookFileState(path: string, content: string, revision: string): void {
   isScratchSession.value = false;
   externalSessionMode.value = 'none';
   void revokeExternalGrant(externalFile.value);
@@ -2027,9 +2251,10 @@ function enterNotebookFileState(path: string, content: string): void {
   activePath.value = path;
   contentRevision++;
   currentContent.value = content;
+  currentDiskRevision.value = revision;
   isDirty.value = false;
   isSaving.value = false;
-  saveError.value = null;
+  clearSaveIssue();
   lastSavedAt.value = Date.now();
   updateHeadings(content);
   updateEditorStats(content);
@@ -2037,11 +2262,23 @@ function enterNotebookFileState(path: string, content: string): void {
   refreshSplitPreviewIfVisible();
 }
 
-async function readExternalNoteFile(openedFile: OpenedFilePayload): Promise<string> {
+async function revisionForText(content: string): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(content),
+  );
+  return `sha256:${Array.from(new Uint8Array(digest))
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
+async function readExternalNoteFileSnapshot(
+  openedFile: OpenedFilePayload,
+): Promise<TextFileSnapshot> {
   if (isDesktopRuntime()) {
     if (!openedFile.accessToken) throw new Error('External file grant is missing or expired');
     return withTimeout(
-      invoke<string>('read_external_note_file', {
+      invoke<TextFileSnapshot>('read_external_note_file_snapshot', {
         accessToken: openedFile.accessToken,
         relativePath: normalizePath(openedFile.relativePath),
       }),
@@ -2051,28 +2288,47 @@ async function readExternalNoteFile(openedFile: OpenedFilePayload): Promise<stri
   }
   const filesByPath = peekJotLuckE2EBridge()?.externalFiles ?? {};
   if (Object.prototype.hasOwnProperty.call(filesByPath, openedFile.absolutePath)) {
-    return filesByPath[openedFile.absolutePath] ?? '';
+    const content = filesByPath[openedFile.absolutePath] ?? '';
+    return { content, revision: await revisionForText(content) };
   }
   const absolutePath = openedFile.absolutePath;
   throw new Error(`测试外部文件不存在: ${absolutePath}`);
 }
 
-async function writeExternalNoteFile(
+async function writeExternalNoteFileIfUnchanged(
   openedFile: OpenedFilePayload,
   content: string,
-): Promise<void> {
+  expectedRevision: string | null,
+): Promise<ConditionalWriteResult> {
   if (isDesktopRuntime()) {
     if (!openedFile.accessToken) throw new Error('External file grant is missing or expired');
-    await invoke('write_external_note_file', {
+    return invoke<ConditionalWriteResult>('write_external_note_file_if_unchanged', {
       accessToken: openedFile.accessToken,
       relativePath: normalizePath(openedFile.relativePath),
       content,
+      expectedRevision,
     });
-    return;
   }
   const e2eBridge = getJotLuckE2EBridge();
   if (!e2eBridge) throw new Error('Web external file writes are available only in E2E mode');
   e2eBridge.externalFiles = e2eBridge.externalFiles ?? {};
+  const hasCurrent = Object.prototype.hasOwnProperty.call(
+    e2eBridge.externalFiles,
+    openedFile.absolutePath,
+  );
+  const observedContent = hasCurrent
+    ? (e2eBridge.externalFiles[openedFile.absolutePath] ?? '')
+    : null;
+  const actualRevision = observedContent === null ? null : await revisionForText(observedContent);
+  if (
+    (observedContent === null) !==
+      !Object.prototype.hasOwnProperty.call(e2eBridge.externalFiles, openedFile.absolutePath) ||
+    (observedContent !== null &&
+      e2eBridge.externalFiles[openedFile.absolutePath] !== observedContent)
+  ) {
+    return writeExternalNoteFileIfUnchanged(openedFile, content, expectedRevision);
+  }
+  if (actualRevision !== expectedRevision) return { status: 'conflict', actualRevision };
   e2eBridge.externalFiles[openedFile.absolutePath] = content;
   e2eBridge.externalWrites = e2eBridge.externalWrites ?? [];
   e2eBridge.externalWrites.push({
@@ -2080,6 +2336,7 @@ async function writeExternalNoteFile(
     content,
     time: Date.now(),
   });
+  return { status: 'saved', revision: await revisionForText(content) };
 }
 
 async function revokeExternalGrant(openedFile: OpenedFilePayload | null): Promise<void> {
@@ -2103,7 +2360,7 @@ function splitAbsoluteFilePath(path: string): { root: string; relativePath: stri
   return { root, relativePath: `/${normalized.slice(slash + 1)}` };
 }
 
-function downloadScratchAsMarkdown(fileName: string): void {
+function downloadCurrentContentAsMarkdown(fileName: string): void {
   const blob = new Blob([currentContent.value], { type: 'text/markdown;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -2113,10 +2370,14 @@ function downloadScratchAsMarkdown(fileName: string): void {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+function downloadScratchAsMarkdown(fileName: string): void {
+  downloadCurrentContentAsMarkdown(fileName);
   toast.show('Web 预览已下载草稿；当前仍停留在临时草稿。', 'info', 3500);
 }
 
-async function enterNotebookFromSavedScratch(savedFile: OpenedFilePayload): Promise<void> {
+async function enterNotebookFromSavedNote(savedFile: OpenedFilePayload): Promise<void> {
   const relativePath = normalizePath(savedFile.relativePath);
   if (isDesktopRuntime()) {
     if (!savedFile.accessToken) throw new Error('保存后的外部文件授权已失效');
@@ -2157,9 +2418,59 @@ async function saveScratchAs(): Promise<boolean> {
     ],
   });
   */
-  await enterNotebookFromSavedScratch(savedFile);
+  await enterNotebookFromSavedNote(savedFile);
 
   toast.show('草稿已保存为笔记。', 'success', 2500);
+  return true;
+}
+
+async function saveCurrentAsCopy(): Promise<boolean> {
+  await imageUpload.waitForIdle();
+  syncCurrentContentFromEditor();
+  const wasExternalEditing = isExternalEditing.value;
+  const sourcePath = isExternalEditing.value ? externalFile.value?.relativePath : activePath.value;
+  const defaultFileName = ensureMarkdownExtension(
+    basenameFromPath(sourcePath ?? '') || getDraftMarkdownFileName(currentContent.value),
+  );
+
+  if (!isDesktopRuntime()) {
+    downloadCurrentContentAsMarkdown(defaultFileName);
+    if (!isExternalEditing.value && sourcePath) clearPendingSaveForPath(sourcePath);
+    lastSavedAt.value = Date.now();
+    toast.show('副本已下载；原文件和本地草稿仍保持原样。', 'success', 3500);
+    return true;
+  }
+
+  let savedFile: OpenedFilePayload;
+  try {
+    savedFile = await invoke<OpenedFilePayload>('save_external_note_as', {
+      defaultFileName,
+      content: currentContent.value,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/cancel(?:led|ed)?|取消/i.test(message)) {
+      toast.show('已取消另存副本。', 'info', 2500);
+    } else {
+      toast.show(`另存副本失败：${message}`, 'error', 5000);
+    }
+    return false;
+  }
+
+  if (!isExternalEditing.value && sourcePath) clearPendingSaveForPath(sourcePath);
+  lastSavedAt.value = Date.now();
+  if (wasExternalEditing) {
+    await revokeExternalGrant(savedFile);
+    toast.show('副本已保存；原文件和本地草稿仍保持原样。', 'success', 3500);
+    return true;
+  }
+  try {
+    await enterNotebookFromSavedNote(savedFile);
+    toast.show('副本已保存，并已打开它所在的文件夹。', 'success', 3000);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    toast.show(`副本已保存，但未能打开它所在的文件夹：${message}`, 'warning', 5000);
+  }
   return true;
 }
 
@@ -2250,63 +2561,12 @@ function basenameFromPath(path: string): string {
   return normalizePath(path).split('/').pop() ?? '';
 }
 
-function writeMockFileToStorage(path: string, content: string): void {
-  if (isDesktopRuntime() || !shouldPersistMockFs()) return;
-  const raw = localStorage.getItem(MOCK_FS_STORAGE_KEY);
-  if (!raw) return;
-
-  try {
-    const data = JSON.parse(raw) as {
-      files?: Record<string, { content: string; mtime: number; size: number }>;
-      dirs?: Record<string, string[]>;
-      version?: number;
-    };
-    if (!data.files || !data.dirs) return;
-    const normalized = normalizePath(path);
-    const now = Date.now();
-    data.files[normalized] = {
-      content,
-      mtime: now,
-      size: encodeContentSize(content),
-    };
-
-    const parent = parentDirFromPath(normalized);
-    const name = basenameFromPath(normalized);
-    data.dirs[parent] = data.dirs[parent] ?? [];
-    if (name && !data.dirs[parent].includes(name)) data.dirs[parent].push(name);
-    localStorage.setItem(MOCK_FS_STORAGE_KEY, JSON.stringify(data));
-  } catch {
-    // MockFSService will recover corrupted storage on next startup.
+async function createTextFile(path: string, content: string): Promise<string> {
+  const result = await fs.writeFileIfUnchanged(path, content, null);
+  if (result.status === 'conflict') {
+    throw new Error(`文件已存在：${path}`);
   }
-}
-
-function rememberPendingMockFileWrite(path: string, content: string): void {
-  if (
-    isDesktopRuntime() ||
-    !shouldPersistMockFs() ||
-    isExternalEditing.value ||
-    isScratchSession.value
-  )
-    return;
-  pendingMockFileWrites.set(normalizePath(path), content);
-}
-
-function flushPendingMockFileWritesSync(): void {
-  if (
-    isDesktopRuntime() ||
-    !shouldPersistMockFs() ||
-    !activeNotebookRoot.value ||
-    isWorkspaceUnbound.value ||
-    isNotebookOpening.value
-  )
-    return;
-  syncCurrentContentFromEditor();
-  if (!isExternalEditing.value && !isScratchSession.value && activePath.value) {
-    pendingMockFileWrites.set(normalizePath(activePath.value), currentContent.value);
-  }
-  for (const [path, content] of pendingMockFileWrites) {
-    writeMockFileToStorage(path, content);
-  }
+  return result.revision;
 }
 
 async function flushPendingCurrentSave(): Promise<boolean> {
@@ -2345,16 +2605,73 @@ async function flushPendingCurrentSave(): Promise<boolean> {
   return !isDirty.value && !saveError.value;
 }
 
+async function retryCurrentSave(): Promise<boolean> {
+  syncCurrentContentFromEditor();
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+
+  if (saveIssue.value?.kind === 'conflict' || saveIssue.value?.kind === 'missing') {
+    unsavedDialogIntent.value = 'recover';
+    showScratchExitDialog.value = true;
+    return false;
+  }
+
+  if (isScratchSession.value) return saveScratchAs();
+  if (isWorkspaceUnbound.value || isNotebookOpening.value) {
+    requireBoundWorkspace('保存笔记');
+    return false;
+  }
+
+  if (isExternalReadonly.value) return false;
+  const externalSnapshot = externalFile.value ? { ...externalFile.value } : null;
+  if (!isExternalEditing.value && !activePath.value) {
+    toast.show('当前没有可保存的笔记。', 'info', 2500);
+    return false;
+  }
+  if (isExternalEditing.value && !externalSnapshot) {
+    toast.show('当前外部文件的写入授权已失效。', 'error', 4000);
+    return false;
+  }
+
+  const revision = contentRevision;
+  const content = currentContent.value;
+  isDirty.value = true;
+
+  const saved =
+    isExternalEditing.value && externalSnapshot
+      ? await debouncedExternalSave(content, externalSnapshot, revision)
+      : activePath.value
+        ? await debouncedSave(
+            activePath.value,
+            content,
+            revision,
+            activeNotebookRoot.value,
+            notebookDataGeneration,
+          )
+        : false;
+
+  if (!saved) {
+    if (!saveError.value) {
+      reportSaveIssue(
+        {
+          kind: 'io',
+          source: isExternalEditing.value ? 'external' : 'workspace',
+          path: isExternalEditing.value ? (externalSnapshot?.relativePath ?? '') : activePath.value,
+          message: '当前笔记没有可写入的文件位置',
+        },
+        false,
+      );
+    }
+    toast.show(`重新保存失败：${saveError.value}`, 'error', 4000);
+  }
+  return saved;
+}
+
 async function flushCurrentSaveOrBlock(reason: string): Promise<boolean> {
-  if (imageUpload.isUploading.value) {
-    toast.show(`${reason}失败：图片仍在写入当前笔记本，请稍后重试。`, 'error', 4000);
-    return false;
-  }
+  await imageUpload.waitForIdle();
   await flushPendingCurrentSave();
-  if (imageUpload.isUploading.value) {
-    toast.show(`${reason}失败：图片仍在写入当前笔记本，请稍后重试。`, 'error', 4000);
-    return false;
-  }
   if (!isDirty.value && !saveError.value) return true;
   const message = saveError.value
     ? `${reason}失败：${saveError.value}`
@@ -2412,31 +2729,38 @@ async function performOpenNotebook(): Promise<void> {
   const previousRoot = activeNotebookRoot.value;
   const startedFromGate = isWorkspaceUnbound.value;
   let shouldResumePreviousWatcher = false;
-  if (previousRoot && !(await flushCurrentSaveOrBlock('切换笔记本'))) return;
-
-  isNotebookOpening.value = true;
   if (startedFromGate) {
     workspaceGateStatus.value = 'opening';
     workspaceGateError.value = '';
   }
 
   try {
-    const handle = await fs.openNotebook();
-    if (!handle) {
+    // Selection is deliberately side-effect free. Cancelling the picker leaves the
+    // old backend root, watcher, editor and all pending work untouched.
+    const selection = await fs.selectNotebook();
+    if (!selection) {
       if (startedFromGate) workspaceGateStatus.value = 'idle';
       return;
     }
 
-    const nextRoot = normalizeOsPath(handle.rootPath);
+    const nextRoot = normalizeOsPath(selection.rootPath);
     if (previousRoot && notebookRootsEqual(previousRoot, nextRoot)) {
       toast.show('当前已经是这个笔记本。', 'info', 2500);
       return;
     }
 
-    if (previousRoot) {
-      shouldResumePreviousWatcher = true;
-      await stopNotebookWatcher();
+    if (previousRoot) isNoteSwitching.value = true;
+    await imageUpload.waitForIdle();
+    if (previousRoot && !(await flushCurrentSaveOrBlock('切换笔记本'))) {
+      isNoteSwitching.value = false;
+      return;
     }
+
+    await suspendWorkspaceForTransition();
+    shouldResumePreviousWatcher = Boolean(previousRoot);
+    isNotebookOpening.value = true;
+
+    const handle = await fs.openNotebookAt(selection.rootPath);
 
     let stagedFiles: DirEntry[];
     try {
@@ -2449,6 +2773,7 @@ async function performOpenNotebook(): Promise<void> {
           if (!notebookRootsEqual(rollback.rootPath, previousRoot)) {
             throw new Error('恢复后的笔记本根目录与原目录不一致');
           }
+          activeNotebookRoot.value = normalizeOsPath(rollback.rootPath);
           toast.show(`无法打开所选文件夹，已保留原笔记本：${message}`, 'error', 5000);
         } catch (rollbackError) {
           const rollbackMessage =
@@ -2470,6 +2795,20 @@ async function performOpenNotebook(): Promise<void> {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    if (previousRoot && shouldResumePreviousWatcher) {
+      try {
+        const rollback = await fs.openNotebookAt(previousRoot);
+        if (!notebookRootsEqual(rollback.rootPath, previousRoot)) {
+          throw new Error('恢复后的笔记本根目录与原目录不一致');
+        }
+        activeNotebookRoot.value = normalizeOsPath(rollback.rootPath);
+      } catch (rollbackError) {
+        const rollbackMessage =
+          rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+        await enterWorkspaceGate(`切换失败，且无法恢复原笔记本：${rollbackMessage}`);
+        shouldResumePreviousWatcher = false;
+      }
+    }
     if (startedFromGate) {
       workspaceGateStatus.value = 'error';
       workspaceGateError.value = `无法打开笔记本：${message}`;
@@ -2478,6 +2817,7 @@ async function performOpenNotebook(): Promise<void> {
     }
   } finally {
     isNotebookOpening.value = false;
+    isNoteSwitching.value = false;
     if (
       shouldResumePreviousWatcher &&
       previousRoot &&
@@ -2496,7 +2836,6 @@ async function performOpenNotebook(): Promise<void> {
 
 function clearPendingSaveForPath(path: string): void {
   const normalized = normalizePath(path);
-  pendingMockFileWrites.delete(normalized);
   if (normalizePath(activePath.value) === normalized) {
     if (saveTimer) {
       clearTimeout(saveTimer);
@@ -2511,11 +2850,18 @@ async function enterExternalFileSession(
   options: { setLoading?: boolean } = {},
 ): Promise<void> {
   const sessionGeneration = ++externalSessionGeneration;
-  if (!(await flushPendingCurrentSave())) return;
+  isNoteSwitching.value = true;
+  await imageUpload.waitForIdle();
+  if (!(await flushPendingCurrentSave())) {
+    if (sessionGeneration === externalSessionGeneration) isNoteSwitching.value = false;
+    return;
+  }
   if (sessionGeneration !== externalSessionGeneration) {
     await revokeExternalGrant(openedFile);
     return;
   }
+  await suspendWorkspaceForTransition();
+  isNotebookOpening.value = true;
   const previousExternalFile = externalFile.value;
   if (
     previousExternalFile &&
@@ -2547,7 +2893,7 @@ async function enterExternalFileSession(
   notebookName.value = '外部文件';
 
   try {
-    const content = await readExternalNoteFile(openedFile);
+    const snapshot = await readExternalNoteFileSnapshot(openedFile);
     if (sessionGeneration !== externalSessionGeneration) {
       await revokeExternalGrant(openedFile);
       return;
@@ -2555,15 +2901,16 @@ async function enterExternalFileSession(
     externalFile.value = openedFile;
     externalSessionMode.value = 'readonly';
     contentRevision++;
-    currentContent.value = content;
+    currentContent.value = snapshot.content;
+    currentDiskRevision.value = snapshot.revision;
     rememberExternalOpenedFile(openedFile);
-    exposeOnlyCurrentExternalFile(openedFile, content);
+    exposeOnlyCurrentExternalFile(openedFile, snapshot.content);
     isDirty.value = false;
     isSaving.value = false;
-    saveError.value = null;
+    clearSaveIssue();
     lastSavedAt.value = null;
-    updateHeadings(content);
-    updateEditorStats(content);
+    updateHeadings(snapshot.content);
+    updateEditorStats(snapshot.content);
     scheduleSplitEditorMountForCurrentMode();
     updateExternalPreview();
   } catch (e) {
@@ -2572,6 +2919,7 @@ async function enterExternalFileSession(
     externalSessionMode.value = 'readonly';
     contentRevision++;
     currentContent.value = '';
+    currentDiskRevision.value = null;
     exposeOnlyCurrentExternalFile(openedFile, '');
     externalError.value = `${openedFile.absolutePath}\n${e instanceof Error ? e.message : String(e)}`;
     updateHeadings('');
@@ -2581,6 +2929,10 @@ async function enterExternalFileSession(
     if (shouldSetLoading && sessionGeneration === externalSessionGeneration) {
       loading.value = false;
       markStartupReady('external');
+    }
+    if (sessionGeneration === externalSessionGeneration) {
+      isNotebookOpening.value = false;
+      isNoteSwitching.value = false;
     }
   }
 }
@@ -2663,15 +3015,32 @@ async function initNotebook(): Promise<void> {
   }
 }
 
-async function refreshCustomTemplates(migrateLegacy = false): Promise<void> {
+async function refreshCustomTemplates(
+  migrateLegacy = false,
+  expectedRoot = activeNotebookRoot.value,
+  expectedGeneration = notebookDataGeneration,
+): Promise<void> {
   if (!activeNotebookRoot.value || isScratchSession.value || isExternalSession.value) {
     customTemplates.value = [];
     return;
   }
   try {
     if (migrateLegacy) await migrateLegacyCustomTemplates(fs);
-    customTemplates.value = await loadCustomTemplatesFromFiles(fs);
+    const nextTemplates = await loadCustomTemplatesFromFiles(fs);
+    if (
+      expectedGeneration !== notebookDataGeneration ||
+      !notebookRootsEqual(expectedRoot, activeNotebookRoot.value)
+    ) {
+      return;
+    }
+    customTemplates.value = nextTemplates;
   } catch (e) {
+    if (
+      expectedGeneration !== notebookDataGeneration ||
+      !notebookRootsEqual(expectedRoot, activeNotebookRoot.value)
+    ) {
+      return;
+    }
     customTemplates.value = [];
     // eslint-disable-next-line no-console
     console.warn('[NotebookHome] 自定义模板加载失败', e);
@@ -2698,9 +3067,10 @@ function clearActiveNoteState(): void {
   activePath.value = '';
   contentRevision++;
   currentContent.value = '';
+  currentDiskRevision.value = null;
   isDirty.value = false;
   isSaving.value = false;
-  saveError.value = null;
+  clearSaveIssue();
   loading.value = false;
   updateHeadings('');
   updateEditorStats('');
@@ -2730,29 +3100,55 @@ async function listDirectoryRecursive(
   return result;
 }
 
-async function refreshFileTree(): Promise<void> {
+async function refreshFileTree(
+  expectedRoot = activeNotebookRoot.value,
+  expectedGeneration = notebookDataGeneration,
+): Promise<boolean> {
+  const requestId = ++fileTreeRequestId;
   const nextFiles = await listDirectoryRecursive('/');
+  if (
+    requestId !== fileTreeRequestId ||
+    expectedGeneration !== notebookDataGeneration ||
+    !notebookRootsEqual(expectedRoot, activeNotebookRoot.value)
+  ) {
+    return false;
+  }
   files.value = nextFiles;
   const existingPaths = nextFiles
     .filter((entry) => entry.isFile && isSupportedNoteFile(entry.name))
     .map((entry) => normalizePath(entry.path));
   indexStore.synchronizeFromFileTree(existingPaths);
   wikiLinkRevision.value++;
+  return true;
 }
 
 async function loadDirectory(dir: string): Promise<void> {
-  currentDir.value = normalizeDir(dir);
-  await refreshFileTree();
+  const expectedRoot = activeNotebookRoot.value;
+  const expectedGeneration = notebookDataGeneration;
+  if (await refreshFileTree(expectedRoot, expectedGeneration)) {
+    currentDir.value = normalizeDir(dir);
+  }
 }
 
 async function loadDirectoryShallow(dir: string): Promise<void> {
   const normalized = normalizeDir(dir);
-  currentDir.value = normalized;
-  files.value = (await fs.listDirectory(normalized)).filter(
+  const expectedRoot = activeNotebookRoot.value;
+  const expectedGeneration = notebookDataGeneration;
+  const requestId = ++fileTreeRequestId;
+  const nextFiles = (await fs.listDirectory(normalized)).filter(
     (entry) =>
       !entry.name.startsWith('.') &&
       (!entry.isDirectory || !isIgnoredNotebookDirectory(entry.name)),
   );
+  if (
+    requestId !== fileTreeRequestId ||
+    expectedGeneration !== notebookDataGeneration ||
+    !notebookRootsEqual(expectedRoot, activeNotebookRoot.value)
+  ) {
+    return;
+  }
+  currentDir.value = normalized;
+  files.value = nextFiles;
 }
 
 async function completeNotebookInitializationInBackground(
@@ -2760,8 +3156,10 @@ async function completeNotebookInitializationInBackground(
   expectedGeneration: number,
 ): Promise<void> {
   try {
+    const requestId = ++fileTreeRequestId;
     const nextFiles = await listDirectoryRecursive('/');
     if (
+      requestId !== fileTreeRequestId ||
       expectedGeneration !== notebookDataGeneration ||
       expectedRoot !== activeNotebookRoot.value
     ) {
@@ -2777,7 +3175,13 @@ async function completeNotebookInitializationInBackground(
     ) {
       return;
     }
-    await refreshCustomTemplates(true);
+    await refreshCustomTemplates(true, expectedRoot, expectedGeneration);
+    if (
+      expectedGeneration !== notebookDataGeneration ||
+      !notebookRootsEqual(expectedRoot, activeNotebookRoot.value)
+    ) {
+      return;
+    }
     connectPredictor();
   } catch (error) {
     if (
@@ -2798,17 +3202,25 @@ function onDrawerNavigateDir(path: string): void {
 // --- File Operations ---
 async function onSelectNote(path: string): Promise<void> {
   const selectionVersion = ++noteSelectionVersion;
+  isNoteSwitching.value = true;
   const task = noteSelectionQueue
     .catch(() => undefined)
     .then(() => {
       if (selectionVersion !== noteSelectionVersion) return;
       return selectNoteNow(path, selectionVersion);
+    })
+    .finally(() => {
+      if (selectionVersion === noteSelectionVersion) isNoteSwitching.value = false;
     });
   noteSelectionQueue = task.catch(() => undefined);
   await task;
 }
 
 async function selectNoteNow(path: string, selectionVersion: number): Promise<void> {
+  // Existing uploads own the current note. Finish them while that note and editor
+  // are still valid, then capture their inserted Markdown in the final save.
+  await imageUpload.waitForIdle();
+  if (selectionVersion !== noteSelectionVersion) return;
   // Flush any pending save before switching notes
   if (saveTimer) {
     clearTimeout(saveTimer);
@@ -2847,13 +3259,13 @@ async function selectNoteNow(path: string, selectionVersion: number): Promise<vo
   loading.value = true;
   isDirty.value = false;
   isSaving.value = false;
-  saveError.value = null;
+  clearSaveIssue();
 
   // Read content BEFORE setting activePath — prevents editor mounting with empty content
   // while onMounted is still async (predictor.initialize blocking view creation).
-  let content: string;
+  let snapshot: TextFileSnapshot;
   try {
-    content = await fs.readFile(path);
+    snapshot = await fs.readFileSnapshot(path);
     if (selectionVersion !== noteSelectionVersion) return;
   } catch (e) {
     if (selectionVersion !== noteSelectionVersion) return;
@@ -2877,12 +3289,13 @@ async function selectNoteNow(path: string, selectionVersion: number): Promise<vo
   isScratchSession.value = false;
   activePath.value = path;
   contentRevision++;
-  currentContent.value = content;
+  currentContent.value = snapshot.content;
+  currentDiskRevision.value = snapshot.revision;
 
   const dir = path.substring(0, path.lastIndexOf('/') + 1) || '/';
   currentDir.value = normalizeDir(dir);
-  updateHeadings(content);
-  updateEditorStats(content);
+  updateHeadings(snapshot.content);
+  updateEditorStats(snapshot.content);
   refreshSplitPreviewIfVisible();
   try {
     await indexStore.refreshDocument(fs, path);
@@ -2909,35 +3322,53 @@ async function onSelectExternalNote(path: string): Promise<void> {
     return;
   }
 
-  if (!(await flushPendingCurrentSave())) return;
+  isNoteSwitching.value = true;
+  await imageUpload.waitForIdle();
+  if (selectionVersion !== externalSelectionVersion) return;
+  if (!(await flushPendingCurrentSave())) {
+    if (selectionVersion === externalSelectionVersion) isNoteSwitching.value = false;
+    return;
+  }
   if (selectionVersion !== externalSelectionVersion) return;
   loading.value = true;
   errorMessage.value = '';
-  saveError.value = null;
+  clearSaveIssue();
   isSaving.value = false;
 
   try {
     const openedFile =
       externalOpenedFileMap.value[normalizedPath] ?? openedFileFromRelative(normalizedPath);
-    const content = await readExternalNoteFile(openedFile);
+    const snapshot = await readExternalNoteFileSnapshot(openedFile);
     if (selectionVersion !== externalSelectionVersion) return;
     externalFile.value = openedFile;
     contentRevision++;
-    currentContent.value = content;
+    currentContent.value = snapshot.content;
+    currentDiskRevision.value = snapshot.revision;
     rememberExternalOpenedFile(openedFile);
     isDirty.value = false;
     lastSavedAt.value = null;
-    updateHeadings(content);
-    updateEditorStats(content);
+    updateHeadings(snapshot.content);
+    updateEditorStats(snapshot.content);
     refreshSplitPreviewIfVisible();
     showLeftDrawer.value = false;
     void nextTick(() => editorRef.value?.focus());
   } catch (e) {
     if (selectionVersion !== externalSelectionVersion) return;
-    saveError.value = e instanceof Error ? e.message : String(e);
+    reportSaveIssue(
+      {
+        kind: 'io',
+        source: 'external',
+        path: normalizedPath,
+        message: e instanceof Error ? e.message : String(e),
+      },
+      false,
+    );
     toast.show(`打开外部文件失败：${saveError.value}`, 'error', 4000);
   } finally {
-    if (selectionVersion === externalSelectionVersion) loading.value = false;
+    if (selectionVersion === externalSelectionVersion) {
+      loading.value = false;
+      isNoteSwitching.value = false;
+    }
   }
 }
 
@@ -3103,20 +3534,39 @@ async function confirmNewFile(): Promise<void> {
     return;
   }
   showNewFileDialog.value = false;
-  const path = joinPath(currentDir.value, name);
+  const requestedDirectory = currentDir.value;
   const content = isMarkdownLikeFile(name) ? `# ${stripSupportedNoteExtension(name)}\n\n` : '';
+  isNoteSwitching.value = true;
   try {
-    await fs.writeFile(path, content);
-    await refreshFileTree();
+    if (!(await flushCurrentSaveOrBlock('新建文件'))) return;
+    const expectedRoot = activeNotebookRoot.value;
+    const expectedGeneration = notebookDataGeneration;
+    const path = joinPath(requestedDirectory, name);
+    const revision = await createTextFile(path, content);
+    if (
+      expectedGeneration !== notebookDataGeneration ||
+      !notebookRootsEqual(expectedRoot, activeNotebookRoot.value)
+    ) {
+      return;
+    }
+    if (!(await refreshFileTree(expectedRoot, expectedGeneration))) return;
     await indexStore.refreshDocument(fs, path);
+    if (
+      expectedGeneration !== notebookDataGeneration ||
+      !notebookRootsEqual(expectedRoot, activeNotebookRoot.value)
+    ) {
+      return;
+    }
     void trainCurrentFile(path, content);
-    enterNotebookFileState(path, content);
+    enterNotebookFileState(path, content, revision);
   } catch (error) {
     toast.show(
       `新建文件失败：${error instanceof Error ? error.message : String(error)}`,
       'error',
       4000,
     );
+  } finally {
+    isNoteSwitching.value = false;
   }
 }
 
@@ -3201,7 +3651,7 @@ function confirmExternalEdit(): void {
   showExternalEditConfirm.value = false;
   externalSessionMode.value = 'edit-shell';
   showRightWing.value = true;
-  saveError.value = null;
+  clearSaveIssue();
   void nextTick(() => editorRef.value?.focus());
 }
 
@@ -3218,22 +3668,38 @@ async function enableExternalEdit(): Promise<void> {
 async function openExternalParentAsNotebook(): Promise<void> {
   if (!externalFile.value) return;
   const target = externalFile.value;
-  if (!(await flushPendingCurrentSave())) return;
+  isNoteSwitching.value = true;
+  await imageUpload.waitForIdle();
+  if (!(await flushPendingCurrentSave())) {
+    isNoteSwitching.value = false;
+    return;
+  }
+  syncCurrentContentFromEditor();
+  const preservedDraft = currentContent.value;
+  await suspendWorkspaceForTransition();
+  isNotebookOpening.value = true;
   loading.value = true;
   externalError.value = '';
+  let workspaceCommitted = false;
   try {
     let initialRelativePath = target.relativePath;
     if (!isDesktopRuntime()) {
-      await openNotebookRoot('/');
+      const handle = await fs.openNotebookAt('/');
+      await commitWorkspaceHandle(handle, null, true);
+      workspaceCommitted = true;
       await hydrateMockNotebookFromExternalFiles(target.notebookRoot);
     } else {
       const promoted = await invoke<PromotedNotebookPayload>('promote_external_file_to_notebook');
-      await commitWorkspaceHandle({ rootPath: promoted.rootPath, name: promoted.name });
+      await commitWorkspaceHandle({ rootPath: promoted.rootPath, name: promoted.name }, null, true);
+      workspaceCommitted = true;
       initialRelativePath = normalizePath(promoted.initialRelativePath);
     }
     await loadDirectoryShallow('/');
     wikiLinkRevision.value++;
     await onSelectNote(initialRelativePath);
+    if (normalizePath(activePath.value) !== normalizePath(initialRelativePath)) {
+      throw new Error('目标文件在切换期间不可读取');
+    }
     await revokeExternalGrant(target);
     externalSessionMode.value = 'none';
     externalFile.value = null;
@@ -3247,9 +3713,33 @@ async function openExternalParentAsNotebook(): Promise<void> {
       notebookDataGeneration,
     );
   } catch (e) {
-    externalError.value = e instanceof Error ? e.message : String(e);
+    const message = e instanceof Error ? e.message : String(e);
+    if (workspaceCommitted) {
+      void revokeExternalGrant(target);
+      isScratchSession.value = true;
+      externalSessionMode.value = 'none';
+      externalFile.value = null;
+      externalFiles.value = [];
+      externalOpenedNotes.value = [];
+      externalOpenedFileMap.value = {};
+      activePath.value = '';
+      contentRevision++;
+      currentContent.value = preservedDraft;
+      currentDiskRevision.value = null;
+      isDirty.value = preservedDraft.trim().length > 0;
+      clearSaveIssue();
+      errorMessage.value = message;
+      updateHeadings(preservedDraft);
+      updateEditorStats(preservedDraft);
+      refreshSplitPreviewIfVisible();
+      toast.show('目标文件暂时无法打开，原内容已保留为临时草稿。', 'error', 6000);
+    } else {
+      externalError.value = message;
+    }
   } finally {
     loading.value = false;
+    isNotebookOpening.value = false;
+    isNoteSwitching.value = false;
   }
 }
 
@@ -3289,7 +3779,7 @@ async function hydrateMockNotebookFromExternalFiles(rootPath: string): Promise<v
 function onContentUpdate(content: string): void {
   if (
     !isScratchSession.value &&
-    (!activeNotebookRoot.value || isWorkspaceUnbound.value || isNotebookOpening.value)
+    (!activeNotebookRoot.value || isWorkspaceUnbound.value || isInteractionLocked.value)
   ) {
     requireBoundWorkspace('编辑笔记');
     return;
@@ -3300,15 +3790,18 @@ function onContentUpdate(content: string): void {
   updateEditorStats(content);
   if (isScratchSession.value) {
     isDirty.value = content.trim().length > 0;
-    saveError.value = null;
+    clearSaveIssue();
     refreshSplitPreviewIfVisible();
     return;
   }
   if (activePath.value) {
     isDirty.value = true;
-    saveError.value = null;
-    rememberPendingMockFileWrite(activePath.value, content);
-    if (saveTimer) clearTimeout(saveTimer);
+    clearTransientSaveIssueOnEdit();
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    if (isAutosavePausedForDiskIssue()) return;
     const savingPath = activePath.value;
     const savingRoot = activeNotebookRoot.value;
     const savingGeneration = notebookDataGeneration;
@@ -3320,14 +3813,19 @@ function onContentUpdate(content: string): void {
 }
 
 function onExternalContentUpdate(content: string): void {
+  if (isInteractionLocked.value) return;
   const revision = ++contentRevision;
   currentContent.value = content;
   updateHeadings(content);
   updateEditorStats(content);
   if (externalFile.value) {
     isDirty.value = true;
-    saveError.value = null;
-    if (saveTimer) clearTimeout(saveTimer);
+    clearTransientSaveIssueOnEdit();
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    if (isAutosavePausedForDiskIssue()) return;
     const savingFile = { ...externalFile.value };
     saveTimer = setTimeout(() => void debouncedExternalSave(content, savingFile, revision), 600);
   }
@@ -3363,6 +3861,7 @@ async function debouncedSave(
   revision = contentRevision,
   expectedRoot = activeNotebookRoot.value,
   expectedWorkspaceGeneration = notebookDataGeneration,
+  expectedRevisionOverride?: string | null,
 ): Promise<boolean> {
   const previousSave = currentSavePromise;
   const saveTask = (async () => {
@@ -3377,25 +3876,67 @@ async function debouncedSave(
         isWorkspaceUnbound.value ||
         isNotebookOpening.value ||
         expectedWorkspaceGeneration !== notebookDataGeneration ||
-        !notebookRootsEqual(expectedRoot, activeNotebookRoot.value)
+        !notebookRootsEqual(expectedRoot, activeNotebookRoot.value) ||
+        normalizePath(path) !== normalizePath(activePath.value)
       ) {
         throw new Error('笔记本已取消绑定或正在切换，已拒绝过期写入');
       }
-      await fs.writeFile(path, content);
+      if (forcedE2ESaveFailure) {
+        const message = forcedE2ESaveFailure;
+        forcedE2ESaveFailure = null;
+        throw new Error(message);
+      }
+      const expectedRevision =
+        expectedRevisionOverride === undefined
+          ? currentDiskRevision.value
+          : expectedRevisionOverride;
+      const result = await fs.writeFileIfUnchanged(path, content, expectedRevision);
+      if (result.status === 'conflict') {
+        const kind = result.actualRevision === null ? 'missing' : 'conflict';
+        reportSaveIssue({
+          kind,
+          source: 'workspace',
+          path,
+          actualRevision: result.actualRevision,
+          message:
+            kind === 'missing'
+              ? '原文件已不存在。本地草稿仍在；可以另存副本，或明确选择在原位置重建。'
+              : '原文件已被其他程序或窗口修改。JotLuck 已停止覆盖，本地草稿仍完整保留。',
+        });
+        return false;
+      }
       if (gen !== saveGeneration) return true;
-      await indexStore.refreshDocument(fs, path);
+      currentDiskRevision.value = result.revision;
+      localWriteEpoch++;
+      clearSaveIssue();
+      try {
+        await indexStore.refreshDocument(fs, path);
+      } catch (error) {
+        // The file is already safely written; an index refresh must not turn it into a save failure.
+        // eslint-disable-next-line no-console
+        console.warn('[NotebookHome] 保存后索引刷新失败', error);
+      }
       void trainCurrentFile(path, content);
       if (gen !== saveGeneration) return true;
       wikiLinkRevision.value++;
       lastSavedAt.value = Date.now();
-      pendingMockFileWrites.delete(normalizePath(path));
       const elapsed = Date.now() - start;
       if (elapsed < 500) await new Promise((r) => setTimeout(r, 500 - elapsed));
       if (gen !== saveGeneration) return true;
       if (activePath.value === path && contentRevision === revision) isDirty.value = false;
       return true;
     } catch (e) {
-      if (gen === saveGeneration) saveError.value = String(e);
+      if (gen === saveGeneration) {
+        reportSaveIssue(
+          {
+            kind: 'io',
+            source: 'workspace',
+            path,
+            message: e instanceof Error ? e.message : String(e),
+          },
+          false,
+        );
+      }
       return false;
     } finally {
       if (gen === saveGeneration) isSaving.value = false;
@@ -3413,6 +3954,7 @@ async function debouncedExternalSave(
   content: string,
   openedFile: OpenedFilePayload,
   revision = contentRevision,
+  expectedRevisionOverride?: string | null,
 ): Promise<boolean> {
   const previousSave = currentSavePromise;
   const saveTask = (async () => {
@@ -3421,8 +3963,32 @@ async function debouncedExternalSave(
     isSaving.value = true;
     const start = Date.now();
     try {
-      await writeExternalNoteFile(openedFile, content);
+      if (externalFileKey(externalFile.value) !== externalFileKey(openedFile)) {
+        return false;
+      }
+      const expectedRevision =
+        expectedRevisionOverride === undefined
+          ? currentDiskRevision.value
+          : expectedRevisionOverride;
+      const result = await writeExternalNoteFileIfUnchanged(openedFile, content, expectedRevision);
+      if (result.status === 'conflict') {
+        const kind = result.actualRevision === null ? 'missing' : 'conflict';
+        reportSaveIssue({
+          kind,
+          source: 'external',
+          path: openedFile.relativePath,
+          actualRevision: result.actualRevision,
+          message:
+            kind === 'missing'
+              ? '原文件已不存在。本地草稿仍在；可以另存副本，或明确选择在原位置重建。'
+              : '原文件已被其他程序或窗口修改。JotLuck 已停止覆盖，本地草稿仍完整保留。',
+        });
+        return false;
+      }
       if (gen !== saveGeneration) return true;
+      currentDiskRevision.value = result.revision;
+      localWriteEpoch++;
+      clearSaveIssue();
       lastSavedAt.value = Date.now();
       const elapsed = Date.now() - start;
       if (elapsed < 300) await new Promise((r) => setTimeout(r, 300 - elapsed));
@@ -3435,7 +4001,17 @@ async function debouncedExternalSave(
       }
       return true;
     } catch (e) {
-      saveError.value = e instanceof Error ? e.message : String(e);
+      if (gen === saveGeneration) {
+        reportSaveIssue(
+          {
+            kind: 'io',
+            source: 'external',
+            path: openedFile.relativePath,
+            message: e instanceof Error ? e.message : String(e),
+          },
+          false,
+        );
+      }
       return false;
     } finally {
       if (gen === saveGeneration) isSaving.value = false;
@@ -3743,19 +4319,37 @@ async function onTemplateSelect(_tpl: unknown, content: string): Promise<void> {
   const titleMatch = content.match(/^#\s+(.+)$/m);
   const name = titleMatch?.[1]?.trim() || '新笔记';
   const path = `/${name}.md`;
+  showTemplate.value = false;
+  isNoteSwitching.value = true;
   try {
-    await fs.writeFile(path, content);
-    await refreshFileTree();
+    if (!(await flushCurrentSaveOrBlock('从模板新建笔记'))) return;
+    const expectedRoot = activeNotebookRoot.value;
+    const expectedGeneration = notebookDataGeneration;
+    const revision = await createTextFile(path, content);
+    if (
+      expectedGeneration !== notebookDataGeneration ||
+      !notebookRootsEqual(expectedRoot, activeNotebookRoot.value)
+    ) {
+      return;
+    }
+    if (!(await refreshFileTree(expectedRoot, expectedGeneration))) return;
     await indexStore.refreshDocument(fs, path);
+    if (
+      expectedGeneration !== notebookDataGeneration ||
+      !notebookRootsEqual(expectedRoot, activeNotebookRoot.value)
+    ) {
+      return;
+    }
     void trainCurrentFile(path, content);
-    enterNotebookFileState(path, content);
-    showTemplate.value = false;
+    enterNotebookFileState(path, content, revision);
   } catch (error) {
     toast.show(
       `从模板新建失败：${error instanceof Error ? error.message : String(error)}`,
       'error',
       4000,
     );
+  } finally {
+    isNoteSwitching.value = false;
   }
 }
 
@@ -3764,25 +4358,51 @@ async function onCreateBlank(): Promise<void> {
   const today = new Date().toISOString().slice(0, 10);
   const path = `/笔记-${today}.md`;
   const content = '# 新笔记\n\n';
+  showTemplate.value = false;
+  isNoteSwitching.value = true;
   try {
-    await fs.writeFile(path, content);
-    await refreshFileTree();
+    if (!(await flushCurrentSaveOrBlock('新建笔记'))) return;
+    const expectedRoot = activeNotebookRoot.value;
+    const expectedGeneration = notebookDataGeneration;
+    const revision = await createTextFile(path, content);
+    if (
+      expectedGeneration !== notebookDataGeneration ||
+      !notebookRootsEqual(expectedRoot, activeNotebookRoot.value)
+    ) {
+      return;
+    }
+    if (!(await refreshFileTree(expectedRoot, expectedGeneration))) return;
     await indexStore.refreshDocument(fs, path);
+    if (
+      expectedGeneration !== notebookDataGeneration ||
+      !notebookRootsEqual(expectedRoot, activeNotebookRoot.value)
+    ) {
+      return;
+    }
     void trainCurrentFile(path, content);
-    enterNotebookFileState(path, content);
-    showTemplate.value = false;
+    enterNotebookFileState(path, content, revision);
   } catch (error) {
     toast.show(
       `新建笔记失败：${error instanceof Error ? error.message : String(error)}`,
       'error',
       4000,
     );
+  } finally {
+    isNoteSwitching.value = false;
   }
 }
 
 // --- Keyboard ---
 function onGlobalKeydown(e: KeyboardEvent): void {
   const key = e.key.toLowerCase();
+  if (
+    isInteractionLocked.value &&
+    (e.ctrlKey || e.metaKey) &&
+    (key === 's' || key === 'o' || key === 'k' || (e.shiftKey && key === 'p'))
+  ) {
+    e.preventDefault();
+    return;
+  }
   if ((e.ctrlKey || e.metaKey) && key === 's') {
     e.preventDefault();
     e.stopPropagation();
@@ -3791,7 +4411,7 @@ function onGlobalKeydown(e: KeyboardEvent): void {
     } else if (isWorkspaceUnbound.value) {
       requireBoundWorkspace('保存笔记');
     } else {
-      void flushPendingCurrentSave();
+      void retryCurrentSave();
     }
     return;
   }
@@ -3802,7 +4422,7 @@ function onGlobalKeydown(e: KeyboardEvent): void {
     void requestOpenNotebook();
     return;
   }
-  if (isWorkspaceUnbound.value || isNotebookOpening.value) return;
+  if (isWorkspaceUnbound.value || isInteractionLocked.value) return;
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'p') {
     e.preventDefault();
     e.stopPropagation();
@@ -3901,52 +4521,177 @@ function hasUnsavedScratch(): boolean {
 }
 
 function onBeforeUnload(e: BeforeUnloadEvent): void {
-  flushPendingMockFileWritesSync();
-  if (!hasUnsavedScratch()) return;
+  if (!isDirty.value) return;
   e.preventDefault();
   e.returnValue = '';
 }
 
-async function closeCurrentWindow(): Promise<void> {
+async function closeCurrentWindow(): Promise<boolean> {
   allowWindowClose = true;
   try {
     if (isDesktopRuntime()) {
       await invoke('destroy_current_window');
-    } else {
-      window.close();
+      return true;
     }
+    window.close();
+    if (window.closed) return true;
+    allowWindowClose = false;
+    toast.show('浏览器不允许自动关闭当前标签页，请手动关闭。', 'warning', 4000);
+    return false;
   } catch (error) {
     allowWindowClose = false;
     const message = error instanceof Error ? error.message : String(error);
     toast.show(`关闭窗口失败：${message}`, 'error', 5000);
+    return false;
   }
 }
 
 async function requestDesktopWindowClose(): Promise<void> {
   if (hasUnsavedScratch()) {
+    unsavedDialogIntent.value = 'close';
     showScratchExitDialog.value = true;
     return;
   }
-  if (!(await flushCurrentSaveOrBlock('关闭窗口'))) return;
+  isNoteSwitching.value = true;
+  if (!(await flushCurrentSaveOrBlock('关闭窗口'))) {
+    isNoteSwitching.value = false;
+    unsavedDialogIntent.value = 'close';
+    showScratchExitDialog.value = true;
+    return;
+  }
   await closeCurrentWindow();
+  isNoteSwitching.value = false;
 }
 
-function cancelScratchExit(): void {
+function cancelUnsavedExit(): void {
   showScratchExitDialog.value = false;
+  if (!isNotebookOpening.value) isNoteSwitching.value = false;
 }
 
-async function discardScratchAndClose(): Promise<void> {
-  currentContent.value = '';
-  isDirty.value = false;
-  showScratchExitDialog.value = false;
-  await closeCurrentWindow();
+async function copyCurrentContent(): Promise<void> {
+  syncCurrentContentFromEditor();
+  try {
+    await navigator.clipboard.writeText(currentContent.value);
+    toast.show('全文已复制。', 'success', 2200);
+    return;
+  } catch {
+    // Desktop WebViews can deny Clipboard API despite a user gesture. Use the
+    // legacy command as a narrow fallback so recovery does not depend on editor focus.
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = currentContent.value;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand('copy');
+  textarea.remove();
+  toast.show(
+    copied ? '全文已复制。' : '复制失败，请先另存副本。',
+    copied ? 'success' : 'error',
+    3000,
+  );
 }
 
-async function saveScratchAndClose(): Promise<void> {
-  const saved = await saveScratchAs();
+async function reloadCurrentFromDisk(): Promise<void> {
+  const issue = saveIssue.value;
+  if (!issue || issue.kind !== 'conflict') return;
+  const intent = unsavedDialogIntent.value;
+  const expectedPath = issue.path;
+  const expectedSource = issue.source;
+  const expectedWorkspaceGeneration = notebookDataGeneration;
+  const expectedExternalKey = externalFileKey(externalFile.value);
+  isNoteSwitching.value = true;
+  try {
+    const snapshot =
+      expectedSource === 'external' && externalFile.value
+        ? await readExternalNoteFileSnapshot({ ...externalFile.value })
+        : await fs.readFileSnapshot(expectedPath);
+    if (
+      saveIssue.value !== issue ||
+      expectedWorkspaceGeneration !== notebookDataGeneration ||
+      (expectedSource === 'workspace' &&
+        normalizePath(activePath.value) !== normalizePath(expectedPath)) ||
+      (expectedSource === 'external' && externalFileKey(externalFile.value) !== expectedExternalKey)
+    ) {
+      return;
+    }
+    contentRevision++;
+    currentContent.value = snapshot.content;
+    currentDiskRevision.value = snapshot.revision;
+    isDirty.value = false;
+    clearSaveIssue();
+    showScratchExitDialog.value = false;
+    updateHeadings(snapshot.content);
+    updateEditorStats(snapshot.content);
+    refreshSplitPreviewIfVisible();
+    toast.show('已采用磁盘上的版本；本地草稿未写回原文件。', 'info', 3500);
+    if (intent === 'close') await closeCurrentWindow();
+  } catch (error) {
+    reportSaveIssue({
+      kind: 'io',
+      source: expectedSource,
+      path: expectedPath,
+      message: `读取磁盘版本失败：${error instanceof Error ? error.message : String(error)}`,
+    });
+  } finally {
+    isNoteSwitching.value = false;
+  }
+}
+
+async function overwriteCurrentDiskVersion(): Promise<void> {
+  const issue = saveIssue.value;
+  if (!issue || (issue.kind !== 'conflict' && issue.kind !== 'missing')) return;
+  const intent = unsavedDialogIntent.value;
+  syncCurrentContentFromEditor();
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  const revision = contentRevision;
+  const content = currentContent.value;
+  isDirty.value = true;
+  isNoteSwitching.value = true;
+  const externalSnapshot = externalFile.value ? { ...externalFile.value } : null;
+  const saved =
+    issue.source === 'external' && externalSnapshot
+      ? await debouncedExternalSave(
+          content,
+          externalSnapshot,
+          revision,
+          issue.actualRevision ?? null,
+        )
+      : await debouncedSave(
+          issue.path,
+          content,
+          revision,
+          activeNotebookRoot.value,
+          notebookDataGeneration,
+          issue.actualRevision ?? null,
+        );
+  isNoteSwitching.value = false;
   if (!saved) return;
   showScratchExitDialog.value = false;
+  toast.show(
+    issue.kind === 'missing' ? '已在原位置重建文件。' : '已按你的选择覆盖原文件。',
+    'success',
+    3000,
+  );
+  if (intent === 'close') await closeCurrentWindow();
+}
+
+async function discardUnsavedAndClose(): Promise<void> {
   await closeCurrentWindow();
+}
+
+async function saveUnsavedAsCopy(): Promise<void> {
+  const intent = unsavedDialogIntent.value;
+  const saved = isScratchSession.value ? await saveScratchAs() : await saveCurrentAsCopy();
+  if (!saved) return;
+  showScratchExitDialog.value = false;
+  if (intent === 'close') await closeCurrentWindow();
 }
 
 // Reconnect predictor when editor remounts due to :key changes (view-mode / note switch).

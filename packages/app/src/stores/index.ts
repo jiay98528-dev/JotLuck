@@ -10,6 +10,7 @@ import { ref, computed } from 'vue';
 import type { IFileSystemService } from '@/types';
 import { IndexService } from '@/services/IndexService';
 import type { SearchEngine } from '@/services/SearchEngine';
+import { useSearchStore } from '@/stores/search';
 
 export type IndexStatus = 'idle' | 'building' | 'ready' | 'error';
 
@@ -27,6 +28,7 @@ export const useIndexStore = defineStore('index', () => {
 
   function reset(): void {
     initializeGeneration++;
+    useSearchStore().resetWorkspaceState();
     indexService = null;
     status.value = 'idle';
     error.value = null;

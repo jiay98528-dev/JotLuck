@@ -13,7 +13,13 @@ export default tseslint.config(
       'e2e/**',
       '**/target/**',
       '**/.v2r/**',
+      '.audit-runs/**',
+      '.worktrees/**',
+      'garden-gpt-image-2/**',
+      'memory/**',
       'scripts/**',
+      'tools/**',
+      '宣传片/**',
     ],
   },
 

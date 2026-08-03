@@ -196,6 +196,26 @@ impl WindowSessionRegistry {
         }
     }
 
+    /// A user-selected Save As destination is allowed from a workspace or an external file that
+    /// the user has explicitly placed into edit mode. Read-only external previews stay blocked.
+    pub fn assert_save_as_allowed(&self, window_label: &str) -> Result<(), String> {
+        let state = self
+            .0
+            .lock()
+            .map_err(|_| "window session registry lock poisoned".to_string())?;
+        let session = state
+            .sessions
+            .get(window_label)
+            .ok_or_else(|| "window has no startup session".to_string())?;
+        match &session.payload {
+            WindowBootstrapPayload::Workspace { .. }
+            | WindowBootstrapPayload::ExternalEdit { .. } => Ok(()),
+            WindowBootstrapPayload::ExternalReadonly { .. } => {
+                Err("read-only external files cannot be saved as a copy".to_string())
+            }
+        }
+    }
+
     pub fn external_file_for(&self, window_label: &str) -> Result<ExternalOpenedFile, String> {
         let state = self
             .0
@@ -296,9 +316,16 @@ pub fn promote_external_file_to_notebook(
     access: State<'_, ExternalAccessGrants>,
     notebook_root: State<'_, NotebookRoot>,
 ) -> Result<PromotedNotebookPayload, String> {
+    let snapshot = sessions.external_file_for(window.label())?;
+    access.assert_owner(&snapshot.access_token, window.label())?;
+    let prepared = access.prepare_notebook_promotion(&snapshot.access_token, window.label())?;
     let (opened_file, root) = sessions.promote_external(window.label(), |opened_file| {
-        access.assert_owner(&opened_file.access_token, window.label())?;
-        access.promote_to_notebook_after_validation(&opened_file.access_token, |root| {
+        if opened_file.access_token != snapshot.access_token
+            || opened_file.absolute_path != snapshot.absolute_path
+        {
+            return Err("external file session changed during notebook promotion".to_string());
+        }
+        access.commit_prepared_notebook_promotion(&prepared, |root| {
             notebook_root.set_for(window.label(), root.to_path_buf())
         })
     })?;
@@ -423,6 +450,8 @@ mod tests {
             WindowBootstrapPayload::ExternalReadonly { .. }
         ));
         assert!(registry.assert_workspace("first-window").is_err());
+        assert!(registry.assert_save_as_allowed("first-window").is_ok());
+        assert!(registry.assert_save_as_allowed("second-window").is_err());
         assert!(registry
             .assert_external_edit("first-window", "first-token")
             .is_ok());
@@ -445,6 +474,7 @@ mod tests {
         assert_eq!(promoted_file.access_token, "first-token");
         assert_eq!(marker, "promoted");
         assert!(registry.assert_workspace("first-window").is_ok());
+        assert!(registry.assert_save_as_allowed("first-window").is_ok());
 
         registry.remove("first-window");
         assert!(registry.label_for_path(&first).unwrap().is_none());

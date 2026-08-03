@@ -42,6 +42,11 @@ export class IndexService {
   private tagIndex: Map<string, string[]> = new Map();
   private allDocuments: Record<string, DocumentEntry> = {};
   private documentContents: Map<string, string> = new Map();
+  /**
+   * Monotonic per-path operation revisions. Any async read must still own the
+   * latest revision before it is allowed to mutate an index.
+   */
+  private pathRevisions: Map<string, number> = new Map();
   private indexedNoteCount = 0;
   private populateRecent: boolean;
 
@@ -49,6 +54,17 @@ export class IndexService {
     const normalized = path.replace(/\\/g, '/');
     if (normalized === '/') return '/';
     return normalized.endsWith('/') ? normalized.slice(0, -1) : normalized;
+  }
+
+  private beginPathMutation(path: string): number {
+    const normalized = this.normalizePath(path);
+    const revision = (this.pathRevisions.get(normalized) ?? 0) + 1;
+    this.pathRevisions.set(normalized, revision);
+    return revision;
+  }
+
+  private ownsPathMutation(path: string, revision: number): boolean {
+    return this.pathRevisions.get(this.normalizePath(path)) === revision;
   }
 
   private clearIndexesForPaths(pathsToRemove: string[]): void {
@@ -122,6 +138,7 @@ export class IndexService {
     }
 
     const stale = [...knownPaths].filter((path) => !existing.has(this.normalizePath(path)));
+    stale.forEach((path) => this.beginPathMutation(path));
     this.clearIndexesForPaths(stale);
   }
 
@@ -136,6 +153,11 @@ export class IndexService {
   }
 
   async buildFullIndex(): Promise<SearchIndex> {
+    // Invalidate every read started by an earlier incremental operation. Paths
+    // found by this scan receive a fresh revision below.
+    for (const path of this.pathRevisions.keys()) {
+      this.beginPathMutation(path);
+    }
     this.allDocuments = {};
     this.wikiOutgoing.clear();
     this.wikiIncoming.clear();
@@ -153,6 +175,7 @@ export class IndexService {
     }
 
     // Build incoming wiki-link map from already-extracted outgoing links (done in indexFile)
+    this.wikiIncoming.clear();
     for (const [source, outgoing] of this.wikiOutgoing) {
       for (const target of outgoing) {
         if (!this.wikiIncoming.has(target)) this.wikiIncoming.set(target, []);
@@ -203,7 +226,8 @@ export class IndexService {
       this.indexedNoteCount += noteEntries.length;
 
       await runLimited(noteEntries, INDEX_FILE_CONCURRENCY, async (entry) => {
-        await this.indexFile(entry.path);
+        const revision = this.beginPathMutation(entry.path);
+        await this.indexFile(entry.path, revision);
       });
 
       for (const entry of entries) {
@@ -218,9 +242,10 @@ export class IndexService {
     }
   }
 
-  private async indexFile(path: string): Promise<string | null> {
+  private async indexFile(path: string, revision: number): Promise<string | null> {
     try {
       const content = await this.fs.readFile(path);
+      if (!this.ownsPathMutation(path, revision)) return null;
       this.documentContents.set(path, content);
       const fm = parseFrontmatter(content);
       const title =
@@ -257,6 +282,15 @@ export class IndexService {
       }
       this.wikiOutgoing.set(path, outgoing);
 
+      // Incremental updates must keep backlinks in lockstep with outgoing links.
+      this.wikiIncoming.clear();
+      for (const [source, targets] of this.wikiOutgoing) {
+        for (const target of targets) {
+          if (!this.wikiIncoming.has(target)) this.wikiIncoming.set(target, []);
+          this.wikiIncoming.get(target)!.push(source);
+        }
+      }
+
       const created = fm.data.created ? new Date(fm.data.created).getTime() : undefined;
 
       const folder = path.substring(0, path.lastIndexOf('/') + 1) || '/';
@@ -265,9 +299,10 @@ export class IndexService {
       this.allDocuments[path] = entry;
 
       // Clear old tag associations for this path (idempotent re-index)
-      for (const [, paths] of this.tagIndex) {
+      for (const [tag, paths] of this.tagIndex) {
         const idx = paths.indexOf(path);
         if (idx >= 0) paths.splice(idx, 1);
+        if (paths.length === 0) this.tagIndex.delete(tag);
       }
 
       // Tag index
@@ -284,17 +319,20 @@ export class IndexService {
   }
 
   async updateDocument(path: string): Promise<void> {
-    const content = await this.indexFile(path);
+    const normalizedPath = this.normalizePath(path);
+    const revision = this.beginPathMutation(normalizedPath);
+    const content = await this.indexFile(normalizedPath, revision);
+    if (!this.ownsPathMutation(normalizedPath, revision) || content === null) return;
     // Sync updated content into the search engine
-    const entry = this.allDocuments[path];
-    if (entry && content !== null) {
-      this.engine.updateDocument(path, entry, content);
+    const entry = this.allDocuments[normalizedPath];
+    if (entry) {
+      this.engine.updateDocument(normalizedPath, entry, content);
     }
     // 更新 recentNotesList（新建/编辑笔记后书签圆点需要显示）
-    this.recentNotesList = this.recentNotesList.filter((n) => n.path !== path);
+    this.recentNotesList = this.recentNotesList.filter((n) => n.path !== normalizedPath);
     this.recentNotesList.unshift({
-      path,
-      title: entry?.title ?? stripSupportedNoteExtension(path.split('/').pop() ?? ''),
+      path: normalizedPath,
+      title: entry?.title ?? stripSupportedNoteExtension(normalizedPath.split('/').pop() ?? ''),
       lastOpenedAt: Date.now(),
     });
     this.recentNotesList.sort((a, b) => b.lastOpenedAt - a.lastOpenedAt);
@@ -304,7 +342,9 @@ export class IndexService {
   }
 
   removeDocument(path: string): void {
-    this.clearIndexesForPaths([path]);
+    const normalizedPath = this.normalizePath(path);
+    this.beginPathMutation(normalizedPath);
+    this.clearIndexesForPaths([normalizedPath]);
   }
 
   /** 获取所有已索引文档的标题列表 (用于结构化补全) */

@@ -64,6 +64,21 @@ describe('Exporter CSV safety', () => {
     expect(capturedBlob).not.toBeNull();
     expect(await capturedBlob!.text()).toBe(`"'=HYPERLINK(""https://example.test"")"`);
   });
+
+  it('does not trigger a download when the export is already cancelled', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      exportNote('# cancelled', 'cancelled', {
+        format: ExportFormat.CSV,
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
+    expect(capturedBlob).toBeNull();
+  });
 });
 
 describe('Exporter PDF terminal states', () => {
@@ -164,6 +179,26 @@ describe('Exporter PDF terminal states', () => {
     });
     iframe.dispatchEvent(new Event('load'));
     expect(print).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('iframe')).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('aborts PDF preparation through the shared cleanup path', async () => {
+    const print = vi.fn();
+    mockPrintWindow(print);
+    const controller = new AbortController();
+    const resultPromise = exportNote('# PDF', 'cancelled', {
+      format: ExportFormat.PDF,
+      signal: controller.signal,
+    });
+    const iframe = currentIframe();
+    const rejection = expect(resultPromise).rejects.toMatchObject({ name: 'AbortError' });
+
+    controller.abort();
+    await rejection;
+
+    iframe.dispatchEvent(new Event('load'));
+    expect(print).not.toHaveBeenCalled();
     expect(document.querySelector('iframe')).toBeNull();
     expect(vi.getTimerCount()).toBe(0);
   });

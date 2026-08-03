@@ -1,6 +1,6 @@
 [package]
 name = "jotluck"
-version = "0.10.0-rc.1"
+version = "0.10.2"
 description = "JotLuck — local-first Markdown note-taking tool"
 authors = ["Linghu Technology (Shenzhen) Co., Ltd."]
 license = "MIT"
@@ -44,3 +44,4 @@ chrono = "0.4"
 regex = "1"
 unicode-normalization = "0.1"
 uuid = { version = "1", features = ["v4"] }
+sha2 = "0.10"

@@ -198,8 +198,8 @@ export function subscribeTrainingMeta(
 }
 
 export class CompletionTrainingService {
-  private running = false;
   private generation = 0;
+  private readonly pathSequencesByScope = new Map<string, Map<string, number>>();
   /** Current filesystem fact source, intentionally independent of persisted training meta. */
   private readonly currentFilePathsByScope = new Map<string, Set<string>>();
 
@@ -217,19 +217,22 @@ export class CompletionTrainingService {
   }
 
   async trainNotebook(entries: DirEntry[]): Promise<void> {
-    this.captureCurrentFileFacts(this.storageScope, entries);
-    // A newer filesystem snapshot supersedes an in-flight scan. Advancing the
-    // generation makes every stale read/result a no-op while this call starts
-    // the replacement run immediately.
-    if (this.running) {
-      this.generation++;
-      this.running = false;
+    const scope = normalizeTrainingScope(this.storageScope);
+    this.captureCurrentFileFacts(scope, entries);
+    // Every snapshot supersedes every prior run, including runs that began in
+    // another workspace but are still waiting on filesystem reads.
+    const generation = ++this.generation;
+    // Capture every participating path before the first await. A direct file
+    // save/remove/rename will advance both the generation and its path token.
+    const pathSequences = new Map<string, number>();
+    for (const entry of entries) {
+      if (entry.isFile && this.isTrainablePath(entry.path)) {
+        pathSequences.set(entry.path, this.beginPathMutation(scope, entry.path));
+      }
     }
-    this.running = true;
-    const generation = this.generation;
     const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     let meta: CompletionTrainingMeta = {
-      ...loadTrainingMeta(this.storageScope),
+      ...loadTrainingMeta(scope),
       status: 'training',
       lastError: undefined,
       successCount: 0,
@@ -237,12 +240,14 @@ export class CompletionTrainingService {
       failedPaths: {},
       lastRunId: runId,
     };
-    if (!this.isCurrentGeneration(generation)) return;
-    saveTrainingMeta(meta, this.storageScope);
+    if (!this.isCurrentRun(generation, scope)) return;
+    saveTrainingMeta(meta, scope);
 
     try {
       await this.predictor.initialize();
-      if (!this.isCurrentGeneration(generation)) return;
+      if (!this.isCurrentRun(generation, scope) || !this.ownsPathSnapshot(scope, pathSequences)) {
+        return;
+      }
       const retainedPaths = entries
         .filter(
           (entry) =>
@@ -252,14 +257,24 @@ export class CompletionTrainingService {
         )
         .map((entry) => entry.path);
       this.predictor.retainDocumentContributions(retainedPaths);
-      const candidates = entries.filter((entry) => this.shouldTrainEntry(entry, meta));
+      const candidates = entries
+        .filter((entry) => this.shouldTrainEntry(entry, meta))
+        .map((entry) => ({
+          entry,
+          pathSequence: pathSequences.get(entry.path)!,
+        }));
       for (let i = 0; i < candidates.length; i += 4) {
-        if (!this.isCurrentGeneration(generation)) return;
+        if (!this.isCurrentRun(generation, scope)) return;
         const batch = candidates.slice(i, i + 4);
         const results = await Promise.all(
-          batch.map((entry) => this.trainEntry(entry, meta, generation)),
+          batch.map(({ entry, pathSequence }) =>
+            this.trainEntry(entry, meta, generation, scope, pathSequence),
+          ),
         );
-        if (!this.isCurrentGeneration(generation)) return;
+        if (!this.isCurrentRun(generation, scope)) return;
+        // A direct save/remove/rename superseded one of these file reads. Stop
+        // this snapshot before its older metadata can overwrite that mutation.
+        if (results.some((result) => result.stale)) return;
         for (const result of results) {
           if (result.ok) {
             meta.successCount++;
@@ -269,10 +284,11 @@ export class CompletionTrainingService {
           }
         }
         meta = normalizeMeta({ ...meta, status: 'training', updatedAt: Date.now() });
-        saveTrainingMeta(meta, this.storageScope);
+        saveTrainingMeta(meta, scope);
         await idleDelay();
+        if (!this.isCurrentRun(generation, scope)) return;
       }
-      if (!this.isCurrentGeneration(generation)) return;
+      if (!this.isCurrentRun(generation, scope)) return;
       const status = meta.failureCount === 0 ? 'done' : meta.successCount > 0 ? 'partial' : 'error';
       saveTrainingMeta(
         normalizeMeta({
@@ -284,10 +300,10 @@ export class CompletionTrainingService {
               ? `${meta.failureCount} file(s) failed during autocomplete training`
               : undefined,
         }),
-        this.storageScope,
+        scope,
       );
     } catch (error) {
-      if (!this.isCurrentGeneration(generation)) return;
+      if (!this.isCurrentRun(generation, scope)) return;
       saveTrainingMeta(
         normalizeMeta({
           ...meta,
@@ -295,19 +311,17 @@ export class CompletionTrainingService {
           updatedAt: Date.now(),
           lastError: error instanceof Error ? error.message : String(error),
         }),
-        this.storageScope,
+        scope,
       );
-    } finally {
-      if (this.isCurrentGeneration(generation)) this.running = false;
     }
   }
 
   cancelCurrentRun(): void {
     this.generation++;
-    this.running = false;
   }
 
   async trainFile(path: string, content: string, stat?: CompletionTrainingFileMeta): Promise<void> {
+    const scope = normalizeTrainingScope(this.storageScope);
     if (!this.isTrainablePath(path)) {
       this.removePath(path);
       return;
@@ -318,33 +332,36 @@ export class CompletionTrainingService {
       this.removePath(path);
       return;
     }
-    this.getCurrentFileFacts(this.storageScope).add(path);
+    this.generation++;
+    const pathSequence = this.beginPathMutation(scope, path);
+    if (!this.isCurrentScope(scope) || !this.ownsPathMutation(scope, path, pathSequence)) return;
+    this.getCurrentFileFacts(scope).add(path);
     this.predictor.replaceDocumentContribution(path, stripUntrainableMarkdown(content));
-    const meta = loadTrainingMeta(this.storageScope);
+    const meta = loadTrainingMeta(scope);
     meta.trainedPaths[path] = {
       mtime: stat?.mtime ?? Date.now(),
       size,
     };
-    saveTrainingMeta(
-      normalizeMeta({ ...meta, status: 'done', updatedAt: Date.now() }),
-      this.storageScope,
-    );
+    saveTrainingMeta(normalizeMeta({ ...meta, status: 'done', updatedAt: Date.now() }), scope);
   }
 
   removePath(path: string): void {
-    this.getCurrentFileFacts(this.storageScope).delete(path);
+    const scope = normalizeTrainingScope(this.storageScope);
+    this.generation++;
+    this.beginPathMutation(scope, path);
+    this.getCurrentFileFacts(scope).delete(path);
     this.predictor.removeDocumentContribution(path);
-    const meta = loadTrainingMeta(this.storageScope);
-    if (!(path in meta.trainedPaths)) return;
-    delete meta.trainedPaths[path];
-    saveTrainingMeta(
-      normalizeMeta({ ...meta, status: 'done', updatedAt: Date.now() }),
-      this.storageScope,
-    );
+    const meta = loadTrainingMeta(scope);
+    if (path in meta.trainedPaths) delete meta.trainedPaths[path];
+    saveTrainingMeta(normalizeMeta({ ...meta, status: 'done', updatedAt: Date.now() }), scope);
   }
 
   renamePath(oldPath: string, newPath: string): void {
-    const facts = this.getCurrentFileFacts(this.storageScope);
+    const scope = normalizeTrainingScope(this.storageScope);
+    this.generation++;
+    this.beginPathMutation(scope, oldPath);
+    this.beginPathMutation(scope, newPath);
+    const facts = this.getCurrentFileFacts(scope);
     facts.delete(oldPath);
     const newPathIsTrainable = this.isTrainablePath(newPath);
     if (newPathIsTrainable) {
@@ -353,32 +370,43 @@ export class CompletionTrainingService {
     } else {
       this.predictor.removeDocumentContribution(oldPath);
     }
-    const meta = loadTrainingMeta(this.storageScope);
+    const meta = loadTrainingMeta(scope);
     const previous = meta.trainedPaths[oldPath];
-    if (!previous) return;
-    delete meta.trainedPaths[oldPath];
-    if (newPathIsTrainable) meta.trainedPaths[newPath] = previous;
-    saveTrainingMeta(
-      normalizeMeta({ ...meta, status: 'done', updatedAt: Date.now() }),
-      this.storageScope,
-    );
+    if (previous) {
+      delete meta.trainedPaths[oldPath];
+      if (newPathIsTrainable) meta.trainedPaths[newPath] = previous;
+    }
+    saveTrainingMeta(normalizeMeta({ ...meta, status: 'done', updatedAt: Date.now() }), scope);
   }
 
   resetContributions(): void {
+    const scope = normalizeTrainingScope(this.storageScope);
     this.cancelCurrentRun();
-    this.currentFilePathsByScope.set(this.storageScope, new Set());
+    this.currentFilePathsByScope.set(scope, new Set());
+    this.pathSequencesByScope.delete(scope);
     this.predictor.resetNotebookContributions();
-    saveTrainingMeta(createDefaultTrainingMeta(), this.storageScope);
+    saveTrainingMeta(createDefaultTrainingMeta(), scope);
   }
 
   private async trainEntry(
     entry: DirEntry,
     meta: CompletionTrainingMeta,
     generation: number,
-  ): Promise<{ ok: true; path: string } | { ok: false; path: string; error: string }> {
+    scope: string,
+    pathSequence: number,
+  ): Promise<
+    | { ok: true; path: string; stale?: false }
+    | { ok: false; path: string; error: string; stale?: false }
+    | { ok: true; path: string; stale: true }
+  > {
     try {
       const content = await this.fs.readFile(entry.path);
-      if (!this.isCurrentGeneration(generation)) return { ok: true, path: entry.path };
+      if (
+        !this.isCurrentRun(generation, scope) ||
+        !this.ownsPathMutation(scope, entry.path, pathSequence)
+      ) {
+        return { ok: true, path: entry.path, stale: true };
+      }
       const actualSize = utf8ByteLength(content);
       if (actualSize > MAX_TRAINING_FILE_SIZE) {
         this.predictor.removeDocumentContribution(entry.path);
@@ -392,6 +420,12 @@ export class CompletionTrainingService {
       };
       return { ok: true, path: entry.path };
     } catch (error) {
+      if (
+        !this.isCurrentRun(generation, scope) ||
+        !this.ownsPathMutation(scope, entry.path, pathSequence)
+      ) {
+        return { ok: true, path: entry.path, stale: true };
+      }
       return {
         ok: false,
         path: entry.path,
@@ -402,6 +436,37 @@ export class CompletionTrainingService {
 
   private isCurrentGeneration(generation: number): boolean {
     return generation === this.generation;
+  }
+
+  private isCurrentScope(scope: string): boolean {
+    return normalizeTrainingScope(this.storageScope) === normalizeTrainingScope(scope);
+  }
+
+  private isCurrentRun(generation: number, scope: string): boolean {
+    return this.isCurrentGeneration(generation) && this.isCurrentScope(scope);
+  }
+
+  private beginPathMutation(scope: string, path: string): number {
+    const normalizedScope = normalizeTrainingScope(scope);
+    let sequences = this.pathSequencesByScope.get(normalizedScope);
+    if (!sequences) {
+      sequences = new Map();
+      this.pathSequencesByScope.set(normalizedScope, sequences);
+    }
+    const sequence = (sequences.get(path) ?? 0) + 1;
+    sequences.set(path, sequence);
+    return sequence;
+  }
+
+  private ownsPathMutation(scope: string, path: string, sequence: number): boolean {
+    return this.pathSequencesByScope.get(normalizeTrainingScope(scope))?.get(path) === sequence;
+  }
+
+  private ownsPathSnapshot(scope: string, snapshot: ReadonlyMap<string, number>): boolean {
+    for (const [path, sequence] of snapshot) {
+      if (!this.ownsPathMutation(scope, path, sequence)) return false;
+    }
+    return true;
   }
 
   private shouldTrainEntry(entry: DirEntry, meta: CompletionTrainingMeta): boolean {
@@ -423,21 +488,22 @@ export class CompletionTrainingService {
     scope: string,
     signal: AbortSignal,
   ): Promise<Array<{ path: string; content: string }>> {
-    const paths = [...(this.currentFilePathsByScope.get(normalizeTrainingScope(scope)) ?? [])].sort(
-      (a, b) => a.localeCompare(b, 'en'),
+    const normalizedScope = normalizeTrainingScope(scope);
+    if (!this.isCurrentScope(normalizedScope)) return [];
+    const paths = [...(this.currentFilePathsByScope.get(normalizedScope) ?? [])].sort((a, b) =>
+      a.localeCompare(b, 'en'),
     );
     const documents: Array<{ path: string; content: string }> = [];
     for (const path of paths) {
-      if (
-        signal.aborted ||
-        normalizeTrainingScope(this.storageScope) !== normalizeTrainingScope(scope)
-      ) {
-        break;
-      }
+      if (signal.aborted || !this.isCurrentScope(normalizedScope)) break;
       if (!this.isTrainablePath(path)) continue;
+      const pathSequence = this.pathSequencesByScope.get(normalizedScope)?.get(path) ?? 0;
       try {
         const content = await this.fs.readFile(path);
-        if (signal.aborted) break;
+        if (signal.aborted || !this.isCurrentScope(normalizedScope)) break;
+        if ((this.pathSequencesByScope.get(normalizedScope)?.get(path) ?? 0) !== pathSequence) {
+          continue;
+        }
         if (new TextEncoder().encode(content).byteLength > MAX_TRAINING_FILE_SIZE) continue;
         documents.push({ path, content: stripUntrainableMarkdown(content) });
       } catch {
@@ -449,6 +515,7 @@ export class CompletionTrainingService {
   }
 
   private captureCurrentFileFacts(scope: string, entries: readonly DirEntry[]): void {
+    const normalizedScope = normalizeTrainingScope(scope);
     const paths = entries
       .filter(
         (entry) =>
@@ -457,7 +524,12 @@ export class CompletionTrainingService {
           (entry.size === undefined || entry.size <= MAX_TRAINING_FILE_SIZE),
       )
       .map((entry) => entry.path);
-    this.currentFilePathsByScope.set(normalizeTrainingScope(scope), new Set(paths));
+    const nextPaths = new Set(paths);
+    const previousPaths = this.currentFilePathsByScope.get(normalizedScope) ?? new Set<string>();
+    for (const previousPath of previousPaths) {
+      if (!nextPaths.has(previousPath)) this.beginPathMutation(normalizedScope, previousPath);
+    }
+    this.currentFilePathsByScope.set(normalizedScope, nextPaths);
   }
 
   private getCurrentFileFacts(scope: string): Set<string> {

@@ -1,6 +1,6 @@
 # JotLuck 主题开发标准
 
-版本：2026-07-25
+版本：2026-08-03
 适用范围：Theme API v2、本地主题市场、`.mltheme` 导入包、官方主题模块、UX Theme Plugin
 
 ## 1. 规范地位
@@ -472,13 +472,15 @@ type ThemeSlotId =
 
 ### 10.1 AppShell slots
 
-| Slot         | Props                                                                                                                                                   |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app-shell`  | `chrome`, `activePath`, `noteTitle`, `notebookName`, `showTopBar`, `showRightWing`                                                                      |
-| `topbar`     | `noteTitle`, `notebookName`, `region`, `leftActions`, `centerActions`, `rightActions`                                                                   |
-| `left-wing`  | `notes`, `activePath`, `region`, `actions`, `onSelectNote`                                                                                              |
-| `right-wing` | `headings`, `backlinks`, `tags`, `activeHeadingId`, `collapsed`, `region`, `onNavigateHeading`, `onNavigateBacklink`, `onSelectTag`, `onToggleCollapse` |
-| `status-bar` | `charCount`, `wordCount`, `lineCount`, `cursorLine`, `cursorCol`, `isDirty`, `isSaving`, `saveError`, `lastSavedAt`, `region`, `actions`, `statusText`  |
+| Slot         | Props                                                                                                                                                                           |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app-shell`  | `chrome`, `activePath`, `noteTitle`, `notebookName`, `showTopBar`, `showRightWing`                                                                                              |
+| `topbar`     | `noteTitle`, `notebookName`, `region`, `leftActions`, `centerActions`, `rightActions`                                                                                           |
+| `left-wing`  | `notes`, `activePath`, `region`, `actions`, `onSelectNote`                                                                                                                      |
+| `right-wing` | `headings`, `backlinks`, `tags`, `activeHeadingId`, `collapsed`, `region`, `onNavigateHeading`, `onNavigateBacklink`, `onSelectTag`, `onToggleCollapse`                         |
+| `status-bar` | `charCount`, `wordCount`, `lineCount`, `cursorLine`, `cursorCol`, `isDirty`, `isSaving`, `saveError`, `lastSavedAt`, `region`, `actions`, `statusText`, `retrySave`, `saveCopy` |
+
+`saveError` 非空时，主题必须同时呈现可操作的 `retrySave` 与 `saveCopy`，不能只显示警告文字。`retrySave` 遇到磁盘冲突时会打开宿主恢复对话框，不代表主题可以直接覆盖文件。
 
 ### 10.2 工作区 slots
 
@@ -493,22 +495,24 @@ type ThemeSlotId =
 
 ### 10.3 弹窗与状态层 slots
 
-| Slot                    | Props                                                                                                                  |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `dialogs.theme`         | `visible`, `activeThemeId`, `themes`, `entitlements`, `commerceError`, `close`, `activateTheme`, `refreshEntitlements` |
-| `command-palette`       | `visible`, `close`                                                                                                     |
-| `file-drawer`           | `visible`, `files`, `activePath`, `loading`, `error`, `close`                                                          |
-| `export-dialog`         | `visible`, `notePath`, `noteTitle`, `close`                                                                            |
-| `template-dialog`       | `visible`, `activePath`, `close`                                                                                       |
-| `settings-dialog`       | `visible`, `completionSettings`, `completionTrainingMeta`, `close`                                                     |
-| `share-dialog`          | `visible`, `noteTitle`, `close`                                                                                        |
-| `toast-container`       | `activeThemeId`                                                                                                        |
-| `update-notification`   | `visible`, `latestVersion`, `releaseUrl`, `close`                                                                      |
-| `markdown-cheat-sheet`  | `activeThemeId`                                                                                                        |
-| `new-file-dialog`       | `visible`, `fileName`, `supportedExtensions`, `cancel`, `confirm`                                                      |
-| `delete-confirm-dialog` | `visible`, `path`, `name`, `cancel`, `confirm`                                                                         |
-| `external-edit-dialog`  | `visible`, `cancel`, `confirmEditOnly`, `confirmScan`                                                                  |
-| `scratch-exit-dialog`   | `visible`, `cancel`, `discard`, `save`                                                                                 |
+| Slot                    | Props                                                                                                                                                                                                    |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dialogs.theme`         | `visible`, `activeThemeId`, `themes`, `entitlements`, `commerceError`, `close`, `activateTheme`, `refreshEntitlements`                                                                                   |
+| `command-palette`       | `visible`, `close`                                                                                                                                                                                       |
+| `file-drawer`           | `visible`, `files`, `activePath`, `loading`, `error`, `close`                                                                                                                                            |
+| `export-dialog`         | `visible`, `notePath`, `noteTitle`, `close`                                                                                                                                                              |
+| `template-dialog`       | `visible`, `activePath`, `close`                                                                                                                                                                         |
+| `settings-dialog`       | `visible`, `completionSettings`, `completionTrainingMeta`, `close`                                                                                                                                       |
+| `share-dialog`          | `visible`, `noteTitle`, `close`                                                                                                                                                                          |
+| `toast-container`       | `activeThemeId`                                                                                                                                                                                          |
+| `update-notification`   | `visible`, `latestVersion`, `releaseUrl`, `close`                                                                                                                                                        |
+| `markdown-cheat-sheet`  | `activeThemeId`                                                                                                                                                                                          |
+| `new-file-dialog`       | `visible`, `fileName`, `supportedExtensions`, `cancel`, `confirm`                                                                                                                                        |
+| `delete-confirm-dialog` | `visible`, `path`, `name`, `cancel`, `confirm`                                                                                                                                                           |
+| `external-edit-dialog`  | `visible`, `cancel`, `confirmEditOnly`, `confirmScan`                                                                                                                                                    |
+| `scratch-exit-dialog`   | `visible`, `mode` (`scratch` / `save-failed` / `conflict` / `missing`), `intent` (`recover` / `close`), `message`, `cancel`, `discard`, `save`, `saveCopy`, `copyContent`, `reloadExternal`, `overwrite` |
+
+`conflict` 表示磁盘内容已变化，`missing` 表示原路径已不存在。主题只能调用宿主提供的恢复回调：不得自行读写文件，也不得把 `overwrite` 伪装成普通“重试”。两种模式都必须保留“另存副本”和“复制全文”；`conflict` 还必须提供“采用外部版本”与明确覆盖，`missing` 必须提供明确重建。`intent=close` 时还应提供不保存退出。
 
 Slot props 是主题与宿主的契约。主题组件必须对缺失可选字段做防御处理，因为某些 slot 在特定页面状态下不会提供完整数据。
 
@@ -602,6 +606,8 @@ pnpm.cmd --filter @jotluck/app build
 
 ## 变更记录
 
+- 2026-08-03：扩展既有 `scratch-exit-dialog` 的冲突/文件缺失恢复状态，加入采用外部版本、明确覆盖/重建、另存副本与复制全文回调；不新增 slot，文件 IO 仍由宿主独占。
+- 2026-08-02：为 `status-bar` 补充 `retrySave` / `saveCopy` 恢复回调，并让 `scratch-exit-dialog` 承载保存失败后的明确退出选择；主题不得隐藏宿主恢复闭环。
 - 2026-07-25：澄清 `external-reader` 保持 `enableEdit` / `openParentAsNotebook` props 兼容；默认文案为“添加到笔记”，不新增 ThemeSlotId 或 ThemeActionId。
 - 2026-07-11：为 `RightWing` 增加 `inspector-rail-toggle` 稳定样式部件契约；明确窄轨状态为组件本地 ARIA 交互，不扩展 Theme API 或 action 路由。
 - 2026-07-10：新增默认 slot `data-theme-part` 稳定样式部件契约；明确 wrapper 保留宿主控件、官方主题 CSS 资产化、spacing/玻璃 computed-style 与真实运行时预览验收要求。

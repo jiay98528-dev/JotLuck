@@ -2,6 +2,7 @@ import type { PredictionResult } from '@/utils/ngram-engine';
 import type { CompletionRequestDiagnostics } from '@/services/MarkdownPredictor';
 import type { CompletionAblationMode } from '@/services/completion/types';
 import type { HybridRetrievalHealthDiagnostics } from '@/services/completion/hybrid-retrieval-types';
+import type { FileChangeEvent } from '@/types';
 
 export interface JotLuckE2EOpenedFile {
   absolutePath?: string;
@@ -61,9 +62,17 @@ export interface JotLuckE2EBridge {
     activeNotebookRoot: string;
     isWorkspaceUnbound: boolean;
     isNotebookOpening: boolean;
+    isNoteSwitching: boolean;
+    saveIssueKind: 'io' | 'conflict' | 'missing' | null;
   };
   listNotePaths?: () => string[];
   selectNote?: (path: string) => Promise<void>;
+  readNoteFile?: (path: string) => Promise<string>;
+  writeNoteFileExternally?: (path: string, content: string) => Promise<void>;
+  deleteNoteFile?: (path: string) => Promise<void>;
+  failNextSave?: (message?: string) => void;
+  requestClose?: () => Promise<void>;
+  emitFileChange?: (event: FileChangeEvent | FileChangeEvent[]) => void;
 }
 
 export function isJotLuckE2EBridgeEnabled(): boolean {

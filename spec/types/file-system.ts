@@ -34,6 +34,18 @@ export interface FileStat {
   isFile: boolean;
 }
 
+/** 文本文件内容及读取时对应的精确版本。 */
+export interface TextFileSnapshot {
+  content: string;
+  /** UTF-8 文件字节的 SHA-256，格式为 `sha256:<64位小写十六进制>`。 */
+  revision: string;
+}
+
+/** 仅在磁盘版本未变化时写入的结果。 */
+export type ConditionalWriteResult =
+  | { status: 'saved'; revision: string }
+  | { status: 'conflict'; actualRevision: string | null };
+
 // ===== 文件变更事件 =====
 
 /** 文件系统变更事件 */
@@ -44,6 +56,10 @@ export interface FileChangeEvent {
   path: string;
   /** 旧路径（仅 renamed 事件） */
   oldPath?: string;
+  /** 变更对象类型；目录与未知类型不会被笔记扩展名过滤。 */
+  entryKind?: 'file' | 'directory' | 'unknown';
+  /** true 表示增量事件不足以描述最终状态，调用方必须完整刷新。 */
+  rescan?: boolean;
 }
 
 // ===== 笔记本句柄 =====
@@ -79,6 +95,14 @@ export interface IFileSystemService {
   readFile(path: string): Promise<string>;
   /** 写入文本文件（原子写入：.tmp → rename） */
   writeFile(path: string, content: string): Promise<void>;
+  /** 一次读取正文和对应版本，供编辑器建立保存基线。 */
+  readFileSnapshot(path: string): Promise<TextFileSnapshot>;
+  /** 仅当当前磁盘版本仍等于 expectedRevision 时写入；null 表示目标必须不存在。 */
+  writeFileIfUnchanged(
+    path: string,
+    content: string,
+    expectedRevision: string | null,
+  ): Promise<ConditionalWriteResult>;
   /** 删除文件 */
   deleteFile(path: string): Promise<void>;
   /** 重命名/移动文件 */
@@ -124,8 +148,11 @@ export interface IFileSystemService {
 
   // --- 笔记本管理 ---
 
-  /** 弹出文件夹选择器，打开笔记本根目录 */
-  openNotebook(): Promise<NotebookHandle>;
+  /** 只弹出文件夹选择器，不切换当前后端根目录；取消返回 null。 */
+  selectNotebook(): Promise<NotebookHandle | null>;
+
+  /** 兼容旧调用的“选择并打开”；工作区切换不得使用此接口。 */
+  openNotebook(): Promise<NotebookHandle | null>;
 
   /** 使用已知目录路径打开笔记本，不弹出系统选择器。桌面端文件关联使用此入口。 */
   openNotebookAt(path: string): Promise<NotebookHandle>;

@@ -54,6 +54,10 @@ e2e/report/data/
 .worktrees/
 .cleanup-backup/
 
+# Website concept explorations (local-only, not committed)
+site-concepts/
+garden-gpt-image-2/
+
 # Internal process files (kept local, not published)
 .vibe-control/
 .codex/
@@ -80,6 +84,15 @@ assets/
 !packages/app/src/assets/
 !packages/app/src/assets/theme-assets/
 !packages/app/src/assets/theme-assets/*.webp
+
+# Approved public-site material asset
+!assets/
+assets/*
+!assets/brand/
+assets/brand/*
+!assets/brand/textures/
+assets/brand/textures/*
+!assets/brand/textures/paper-fiber-mask-seamless-v1.webp
 
 # Autocomplete web corpus cache (local-only)
 scripts/corpus/_web-cache/

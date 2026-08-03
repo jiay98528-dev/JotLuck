@@ -39,6 +39,12 @@ export interface ExportOptions {
    * - 'omit'    : strip images entirely
    */
   imageHandling: 'embed' | 'attach' | 'link' | 'omit';
+
+  /**
+   * Cancels pending export preparation. Implementations must check this signal
+   * immediately before opening print UI or triggering a file download.
+   */
+  signal?: AbortSignal;
 }
 
 /**

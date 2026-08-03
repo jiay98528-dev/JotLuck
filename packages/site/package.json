@@ -1,0 +1,31 @@
+{
+  "name": "@jotluck/site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "vue-tsc --noEmit",
+    "check": "pnpm typecheck && eslint src --max-warnings 0 && prettier --check .",
+    "build": "node scripts/build-locales.mjs",
+    "build:locale": "vite-ssg build"
+  },
+  "dependencies": {
+    "@jotluck/renderer": "workspace:*",
+    "@unhead/vue": "3.1.7",
+    "vite-ssg": "28.3.0",
+    "vue": "^3.5.35",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@ibm/plex": "6.4.1",
+    "@ibm/plex-sans-sc": "1.1.0",
+    "@ibm/plex-sans-tc": "1.1.1",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "eslint": "^9.39.5",
+    "prettier": "^3.8.3",
+    "typescript": "^5.9.3",
+    "vite": "6.4.3",
+    "vue-tsc": "^3.2.6"
+  }
+}

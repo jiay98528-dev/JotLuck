@@ -95,4 +95,61 @@ describe('ExportDialog error recovery', () => {
     await flushPromises();
     wrapper.unmount();
   });
+
+  it('aborts a closed run and ignores its late result after the dialog reopens', async () => {
+    let resolveFirst!: (value: { success: boolean; message: string }) => void;
+    let resolveSecond!: (value: { success: boolean; message: string }) => void;
+    exportNoteMock
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecond = resolve;
+          }),
+      );
+    const wrapper = mount(ExportDialog, {
+      props: { visible: true, markdownContent: 'content' },
+      attachTo: document.body,
+    });
+
+    findButton('导出').click();
+    const firstSignal = exportNoteMock.mock.calls[0]?.[2]?.signal as AbortSignal;
+    expect(firstSignal.aborted).toBe(false);
+    await flushPromises();
+    findButton('取消导出').click();
+    expect(firstSignal.aborted).toBe(true);
+
+    await wrapper.setProps({ visible: false });
+    await wrapper.setProps({ visible: true });
+    findButton('导出').click();
+    resolveFirst({ success: true, message: '过期任务完成' });
+    await flushPromises();
+
+    expect(document.body.textContent).toContain('正在导出...');
+    expect(document.body.textContent).not.toContain('过期任务完成');
+
+    resolveSecond({ success: true, message: '当前任务完成' });
+    await flushPromises();
+    expect(document.body.textContent).toContain('当前任务完成');
+    wrapper.unmount();
+  });
+
+  it('aborts the active exporter when unmounted', () => {
+    exportNoteMock.mockImplementationOnce(() => new Promise(() => undefined));
+    const wrapper = mount(ExportDialog, {
+      props: { visible: true, markdownContent: 'content' },
+      attachTo: document.body,
+    });
+
+    findButton('导出').click();
+    const signal = exportNoteMock.mock.calls[0]?.[2]?.signal as AbortSignal;
+    wrapper.unmount();
+
+    expect(signal.aborted).toBe(true);
+  });
 });

@@ -37,6 +37,14 @@ interface InternalExportOptions {
   imageHandling: 'embed' | 'attach' | 'link' | 'omit';
 }
 
+function createExportAbortError(): DOMException {
+  return new DOMException('导出已取消', 'AbortError');
+}
+
+function throwIfExportAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw createExportAbortError();
+}
+
 function buildInternalOpts(options?: Partial<ExportOptions>): InternalExportOptions {
   return {
     includeFrontmatter: options?.includeFrontmatter ?? true,
@@ -109,16 +117,25 @@ function renderToStyledHtml(md: string, opts: InternalExportOptions): string {
 // Download Helper
 // ============================================================================
 
-function triggerDownload(content: string | Blob, fileName: string, mime: string): void {
+function triggerDownload(
+  content: string | Blob,
+  fileName: string,
+  mime: string,
+  signal?: AbortSignal,
+): void {
   const blob = content instanceof Blob ? content : new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  try {
+    document.body.appendChild(a);
+    throwIfExportAborted(signal);
+    a.click();
+  } finally {
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
 }
 
 // ============================================================================
@@ -130,6 +147,8 @@ function exportPDF(
   fileName: string,
   options?: Partial<ExportOptions>,
 ): Promise<ExportResult> {
+  const signal = options?.signal;
+  throwIfExportAborted(signal);
   const opts = buildInternalOpts(options);
   const bodyHtml = renderToStyledHtml(md, opts);
   const printableHtml = `<!DOCTYPE html>
@@ -155,7 +174,7 @@ function exportPDF(
 </body>
 </html>`;
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const iframe = document.createElement('iframe');
     iframe.style.cssText =
       'position:fixed;top:0;left:0;width:100%;height:100%;border:none;z-index:99999;';
@@ -166,14 +185,26 @@ function exportPDF(
     let settled = false;
     let preparationTimer: number | undefined;
 
-    const settle = (result: ExportResult): void => {
-      if (settled) return;
-      settled = true;
+    const cleanup = (): void => {
+      signal?.removeEventListener('abort', abort);
       if (preparationTimer !== undefined) window.clearTimeout(preparationTimer);
       iframe.onload = null;
       iframe.onerror = null;
       iframe.remove();
+    };
+
+    const settle = (result: ExportResult): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
       resolve(result);
+    };
+
+    const abort = (): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(createExportAbortError());
     };
 
     const fail = (error: string): void => {
@@ -182,6 +213,10 @@ function exportPDF(
 
     iframe.onload = () => {
       if (settled) return;
+      if (signal?.aborted) {
+        abort();
+        return;
+      }
       const printWindow = iframe.contentWindow;
       if (!printWindow) {
         fail('PDF 打印页面不可用，请重试');
@@ -192,6 +227,12 @@ function exportPDF(
         printWindow.focus();
       } catch {
         // Some WebViews deny programmatic focus; printing can still proceed.
+      }
+
+      if (settled) return;
+      if (signal?.aborted) {
+        abort();
+        return;
       }
 
       try {
@@ -215,6 +256,8 @@ function exportPDF(
     iframe.onerror = () => fail('PDF 打印页面加载失败，请重试');
 
     try {
+      signal?.addEventListener('abort', abort, { once: true });
+      throwIfExportAborted(signal);
       iframe.srcdoc = printableHtml;
       preparationTimer = window.setTimeout(() => fail('PDF 打印页面准备超时，请重试'), 5000);
       document.body.appendChild(iframe);
@@ -637,10 +680,12 @@ async function exportDocx(
   });
 
   const blob = await Packer.toBlob(doc);
+  throwIfExportAborted(options?.signal);
   triggerDownload(
     blob,
     `${fileName}.docx`,
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    options?.signal,
   );
   return { success: true, format: ExportFormat.DOCX, fileName: `${fileName}.docx` };
 }
@@ -729,10 +774,12 @@ async function exportXlsx(
         }));
 
   const blob = await writeXlsxFile(sheets).toBlob();
+  throwIfExportAborted(options?.signal);
   triggerDownload(
     blob,
     `${fileName}.xlsx`,
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    options?.signal,
   );
   return { success: true, format: ExportFormat.XLSX, fileName: `${fileName}.xlsx` };
 }
@@ -748,7 +795,12 @@ function exportCsv(md: string, fileName: string, options?: Partial<ExportOptions
 
   if (tables.length === 0) {
     // No tables — export the whole content as a single-cell CSV
-    triggerDownload(escapeCsvCell(processed), `${fileName}.csv`, 'text/csv;charset=UTF-8');
+    triggerDownload(
+      escapeCsvCell(processed),
+      `${fileName}.csv`,
+      'text/csv;charset=UTF-8',
+      options?.signal,
+    );
     return { success: true, format: ExportFormat.CSV, fileName: `${fileName}.csv` };
   }
 
@@ -760,7 +812,7 @@ function exportCsv(md: string, fileName: string, options?: Partial<ExportOptions
     })
     .join('\n\n');
 
-  triggerDownload(csvContent, `${fileName}.csv`, 'text/csv;charset=UTF-8');
+  triggerDownload(csvContent, `${fileName}.csv`, 'text/csv;charset=UTF-8', options?.signal);
   return { success: true, format: ExportFormat.CSV, fileName: `${fileName}.csv` };
 }
 
@@ -819,7 +871,7 @@ function exportTxt(md: string, fileName: string, options?: Partial<ExportOptions
     // Trim leading/trailing whitespace
     .trim();
 
-  triggerDownload(processed, `${fileName}.txt`, 'text/plain;charset=UTF-8');
+  triggerDownload(processed, `${fileName}.txt`, 'text/plain;charset=UTF-8', options?.signal);
   return { success: true, format: ExportFormat.TXT, fileName: `${fileName}.txt` };
 }
 
@@ -846,7 +898,7 @@ function exportHtml(md: string, fileName: string, options?: Partial<ExportOption
 </body>
 </html>`;
 
-  triggerDownload(html, `${fileName}.html`, 'text/html;charset=UTF-8');
+  triggerDownload(html, `${fileName}.html`, 'text/html;charset=UTF-8', options?.signal);
   return { success: true, format: ExportFormat.HTML, fileName: `${fileName}.html` };
 }
 
@@ -1006,6 +1058,7 @@ export async function exportNote(
   fileName: string,
   options?: Partial<ExportOptions>,
 ): Promise<ExportResult> {
+  throwIfExportAborted(options?.signal);
   if (!markdown && markdown !== '') {
     return { success: false, format: options?.format ?? ExportFormat.PDF, error: '笔记内容为空' };
   }

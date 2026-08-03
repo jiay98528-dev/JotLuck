@@ -467,6 +467,39 @@ export interface ThemePackageInput {
 
 export type ThemeSlotProps = Record<string, unknown>;
 
+/** Recovery states exposed by the existing scratch-exit-dialog slot. */
+export type ThemeRecoveryDialogMode = 'scratch' | 'save-failed' | 'conflict' | 'missing';
+
+export type ThemeRecoveryDialogIntent = 'recover' | 'close';
+
+/**
+ * Minimum recovery contract for status-bar replacements.
+ * A theme must keep both actions reachable whenever error is non-null.
+ */
+export interface ThemeStatusRecoverySlotProps extends ThemeSlotProps {
+  error: string | null;
+  retry: () => void | Promise<void>;
+  saveCopy: () => void | Promise<void>;
+}
+
+/**
+ * Recovery contract carried by the existing scratch-exit-dialog slot.
+ * Conflict and missing-file outcomes remain explicit user choices.
+ */
+export interface ThemeRecoveryDialogSlotProps extends ThemeSlotProps {
+  visible: boolean;
+  mode: ThemeRecoveryDialogMode;
+  intent: ThemeRecoveryDialogIntent;
+  message: string | null;
+  cancel: () => void;
+  discard: () => void | Promise<void>;
+  saveCopy: () => void | Promise<void>;
+  copyContent: () => void | Promise<void>;
+  reloadExternal: () => void | Promise<void>;
+  overwrite: () => void | Promise<void>;
+  save: () => void | Promise<void>;
+}
+
 export interface ThemeHostStorage {
   get: (key: string) => string | null;
   set: (key: string, value: string) => void;

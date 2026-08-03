@@ -272,6 +272,7 @@ import {
 } from '@/services/CompletionSettings';
 import type { CompletionTrainingMeta } from '@/services/CompletionTrainingService';
 import { useDialogFocus } from '@/composables/useDialogFocus';
+import { requestWelcomeReplay } from '@/utils/welcome';
 
 const props = withDefaults(
   defineProps<{
@@ -402,8 +403,8 @@ async function onCheckUpdate(): Promise<void> {
 }
 
 function onReplayWelcome(): void {
-  localStorage.removeItem('jotluck:welcome:completed');
-  window.location.reload();
+  requestWelcomeReplay();
+  close();
 }
 
 function close(): void {

@@ -149,4 +149,26 @@ describe('editor theme part contracts', () => {
 
     expect(exportNote).toHaveBeenCalledTimes(1);
   });
+
+  it('offers an actionable retry when saving fails', async () => {
+    const wrapper = mount(StatusBar, {
+      props: {
+        saveError: '当前文件不可写',
+        isDirty: true,
+        region: { layout: 'dashboard', density: 'productive' },
+      },
+    });
+
+    const retry = wrapper.get('button[aria-label="重新保存当前笔记"]');
+    const saveCopy = wrapper.get('button[aria-label="另存当前笔记副本"]');
+    expect(wrapper.text()).toContain('当前文件不可写');
+    expect(retry.text()).toContain('重新保存');
+    expect(saveCopy.text()).toContain('另存副本');
+
+    await retry.trigger('click');
+    await saveCopy.trigger('click');
+
+    expect(wrapper.emitted('retry-save')).toEqual([[]]);
+    expect(wrapper.emitted('save-copy')).toEqual([[]]);
+  });
 });

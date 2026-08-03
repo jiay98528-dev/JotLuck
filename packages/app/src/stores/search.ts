@@ -18,6 +18,7 @@ export const useSearchStore = defineStore('search', () => {
   const error = ref<string | null>(null);
   const searchHistory = ref<string[]>([]);
   const selectedIndex = ref(-1);
+  const workspaceRevision = ref(0);
 
   const resultCount = computed(() => results.value.length);
   const hasResults = computed(() => results.value.length > 0);
@@ -64,6 +65,20 @@ export const useSearchStore = defineStore('search', () => {
     localStorage.removeItem(HISTORY_KEY);
   }
 
+  /**
+   * Starts a new workspace search scope while intentionally preserving the
+   * user's cross-workspace query history.
+   */
+  function resetWorkspaceState(): void {
+    workspaceRevision.value++;
+    query.value = '';
+    results.value = [];
+    isSearching.value = false;
+    isVisible.value = false;
+    error.value = null;
+    selectedIndex.value = -1;
+  }
+
   function open(queryText?: string): void {
     if (queryText) query.value = queryText;
     isVisible.value = true;
@@ -97,6 +112,7 @@ export const useSearchStore = defineStore('search', () => {
     error,
     searchHistory,
     selectedIndex,
+    workspaceRevision,
     resultCount,
     hasResults,
     hasQuery,
@@ -106,6 +122,7 @@ export const useSearchStore = defineStore('search', () => {
     addToHistory,
     loadHistory,
     clearHistory,
+    resetWorkspaceState,
     open,
     close,
     selectNext,

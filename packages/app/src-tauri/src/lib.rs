@@ -246,6 +246,7 @@ pub fn run() {
         }))
         .manage(fs_ops::NotebookRoot::new())
         .manage(fs_ops::ExternalAccessGrants::new())
+        .manage(fs_ops::FileMutationCoordinator::new())
         .manage(window_session::WindowSessionRegistry::new())
         .manage(file_watcher::FileWatcherState::new())
         .manage(completion_retrieval::CompletionRetrievalStates::new())
@@ -290,11 +291,15 @@ pub fn run() {
             fs_ops::get_notebook_root,
             fs_ops::list_directory,
             fs_ops::read_file,
+            fs_ops::read_file_snapshot,
             fs_ops::read_external_note_file,
+            fs_ops::read_external_note_file_snapshot,
             fs_ops::write_file,
+            fs_ops::write_file_if_unchanged,
             fs_ops::read_external_markdown_file,
             fs_ops::write_external_markdown_file,
             fs_ops::write_external_note_file,
+            fs_ops::write_external_note_file_if_unchanged,
             fs_ops::save_external_note_as,
             fs_ops::revoke_external_access,
             fs_ops::read_binary_file,

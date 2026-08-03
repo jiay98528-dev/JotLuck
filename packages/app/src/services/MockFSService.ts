@@ -11,6 +11,8 @@ import type {
   FileStat,
   IFileSystemService,
   NotebookHandle,
+  TextFileSnapshot,
+  ConditionalWriteResult,
   UnwatchFn,
 } from '@/types';
 import { isMarkdownLikeFile, isSupportedNoteFile } from '@/utils/note-files';
@@ -55,6 +57,16 @@ function normalizePath(path: string): string {
 
 function encodeSize(content: string): number {
   return new TextEncoder().encode(content).length;
+}
+
+async function textRevision(content: string): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(content),
+  );
+  return `sha256:${Array.from(new Uint8Array(digest))
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('')}`;
 }
 
 function createSampleNotebook(): MockFSData {
@@ -308,6 +320,51 @@ export class MockFSService implements IFileSystemService {
     await delay(this.latency);
   }
 
+  async readFileSnapshot(path: string): Promise<TextFileSnapshot> {
+    await delay(this.latency);
+    const normalized = normalizePath(path);
+    const file = this.data.files[normalized];
+    if (!file) throw new Error(`文件不存在: ${normalized}`);
+    const content = file.content;
+    return { content, revision: await textRevision(content) };
+  }
+
+  async writeFileIfUnchanged(
+    path: string,
+    content: string,
+    expectedRevision: string | null,
+  ): Promise<ConditionalWriteResult> {
+    const normalized = normalizePath(path);
+    const nextRevision = await textRevision(content);
+    await delay(this.latency);
+
+    // Hashing yields to the event loop. Recheck the exact observed content before
+    // committing so a concurrent mock write cannot slip between compare and replace.
+    for (;;) {
+      const observedContent = this.data.files[normalized]?.content;
+      const actualRevision =
+        observedContent === undefined ? null : await textRevision(observedContent);
+      if (this.data.files[normalized]?.content !== observedContent) continue;
+      if (actualRevision !== expectedRevision) {
+        return { status: 'conflict', actualRevision };
+      }
+
+      const now = Date.now();
+      this.data.files[normalized] = {
+        content,
+        mtime: now,
+        size: encodeSize(content),
+      };
+      const parent = this.parentDir(normalized);
+      if (!this.data.dirs[parent]) this.data.dirs[parent] = [];
+      const name = this.basename(normalized);
+      if (!this.data.dirs[parent].includes(name)) this.data.dirs[parent].push(name);
+      this.persist();
+      await delay(this.latency);
+      return { status: 'saved', revision: nextRevision };
+    }
+  }
+
   async writeBinary(path: string, base64: string): Promise<void> {
     await this.writeFile(path, base64);
   }
@@ -455,10 +512,15 @@ export class MockFSService implements IFileSystemService {
     return candidate === notebookRoot || candidate.startsWith(`${notebookRoot}/`);
   }
 
-  async openNotebook(): Promise<NotebookHandle | null> {
+  async selectNotebook(): Promise<NotebookHandle | null> {
     await delay(this.latency);
     if (this.pickerError) throw new Error(this.pickerError);
     return this.pickerResult ? { ...this.pickerResult } : null;
+  }
+
+  async openNotebook(): Promise<NotebookHandle | null> {
+    const selected = await this.selectNotebook();
+    return selected ? this.openNotebookAt(selected.rootPath) : null;
   }
 
   async openNotebookAt(path: string): Promise<NotebookHandle> {

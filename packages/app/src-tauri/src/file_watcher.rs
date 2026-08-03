@@ -6,7 +6,7 @@
 
 use crate::fs_ops::{ExternalAccessGrants, NotebookRoot};
 use crate::window_session::WindowSessionRegistry;
-use notify::event::{CreateKind, ModifyKind, RenameMode};
+use notify::event::{CreateKind, ModifyKind, RemoveKind, RenameMode};
 use notify::{Event, EventKind, RecursiveMode, Watcher};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -16,12 +16,14 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, State, WebviewWindow};
 
 /// File change event emitted to the frontend.
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct FileChangeEvent {
     pub kind: String,             // "create" | "modify" | "remove" | "rename"
     pub path: String,             // relative path within notebook
     pub old_path: Option<String>, // for rename events
     pub generation: u64,
+    pub entry_kind: String, // "file" | "directory" | "unknown"
+    pub rescan: bool,
 }
 
 pub struct FileWatcherState {
@@ -138,21 +140,19 @@ fn start_watching(
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             };
 
-            let event = match event_result {
-                Ok(e) => e,
-                Err(_) => continue,
-            };
-
-            // Watch notes and supported image assets.
-            let is_supported = event.paths.iter().any(|path| is_supported_path(path));
-            if !is_supported {
-                continue;
-            }
-
-            let change_event = event_to_change_event(&event, &root_path, generation);
-
-            if let Some(ce) = change_event {
-                let _ = app_handle.emit_to(&window_label, "file-change", ce);
+            match event_result {
+                Ok(event) => {
+                    for change in event_to_change_events(&event, &root_path, generation) {
+                        let _ = app_handle.emit_to(&window_label, "file-change", change);
+                    }
+                }
+                Err(_) => {
+                    let _ = app_handle.emit_to(
+                        &window_label,
+                        "file-change",
+                        rescan_change_event(generation),
+                    );
+                }
             }
         }
     });
@@ -163,55 +163,225 @@ fn start_watching(
     })
 }
 
-/// Convert a notify Event to our simplified FileChangeEvent.
-fn event_to_change_event(event: &Event, root: &Path, generation: u64) -> Option<FileChangeEvent> {
-    let path_for = |path: &Path| -> Option<String> {
-        path.strip_prefix(root)
-            .ok()
-            .map(|p| p.to_string_lossy().replace('\\', "/"))
-    };
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EntryKind {
+    File,
+    Directory,
+    Unknown,
+}
 
-    if let EventKind::Modify(ModifyKind::Name(ref mode)) = event.kind {
-        let (old_path, new_path) = match mode {
-            RenameMode::Both => (
-                event.paths.first().and_then(|path| path_for(path)),
-                event.paths.get(1).and_then(|path| path_for(path)),
-            ),
-            RenameMode::To => (None, event.paths.first().and_then(|path| path_for(path))),
-            RenameMode::From => return None,
-            _ => (
-                event.paths.first().and_then(|path| path_for(path)),
-                event.paths.last().and_then(|path| path_for(path)),
-            ),
-        };
-
-        return Some(FileChangeEvent {
-            kind: "rename".to_string(),
-            path: new_path?,
-            old_path,
-            generation,
-        });
+impl EntryKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::File => "file",
+            Self::Directory => "directory",
+            Self::Unknown => "unknown",
+        }
     }
+}
 
-    let path = event.paths.first().and_then(|path| path_for(path))?;
+fn relative_event_path(path: &Path, root: &Path) -> Option<String> {
+    path.strip_prefix(root)
+        .ok()
+        .map(|relative| relative.to_string_lossy().replace('\\', "/"))
+}
 
-    let kind = match event.kind {
-        EventKind::Create(ref c) => match c {
-            CreateKind::File => "create",
-            CreateKind::Folder => return None, // skip folders
-            _ => return None,
-        },
-        EventKind::Modify(ModifyKind::Data(_) | ModifyKind::Metadata(_)) => "modify",
-        EventKind::Remove(_) => "remove",
-        _ => return None,
-    };
+fn classify_path(path: &Path, hint: Option<EntryKind>) -> EntryKind {
+    if let Some(hint) = hint {
+        return hint;
+    }
+    if path.is_dir() {
+        EntryKind::Directory
+    } else if path.is_file() || is_supported_path(path) {
+        EntryKind::File
+    } else {
+        EntryKind::Unknown
+    }
+}
 
+fn change_for_path(
+    kind: &str,
+    path: &Path,
+    old_path: Option<&Path>,
+    entry_kind: EntryKind,
+    root: &Path,
+    generation: u64,
+) -> Option<FileChangeEvent> {
+    if entry_kind == EntryKind::File && !is_supported_path(path) {
+        return None;
+    }
     Some(FileChangeEvent {
         kind: kind.to_string(),
-        path,
+        path: relative_event_path(path, root)?,
+        old_path: old_path.and_then(|old| relative_event_path(old, root)),
+        generation,
+        entry_kind: entry_kind.as_str().to_string(),
+        rescan: entry_kind != EntryKind::File,
+    })
+}
+
+fn rescan_change_event(generation: u64) -> FileChangeEvent {
+    FileChangeEvent {
+        kind: "modify".to_string(),
+        path: String::new(),
         old_path: None,
         generation,
-    })
+        entry_kind: "unknown".to_string(),
+        rescan: true,
+    }
+}
+
+fn rename_pair_to_events(
+    old: &Path,
+    new: &Path,
+    root: &Path,
+    generation: u64,
+) -> Vec<FileChangeEvent> {
+    let old_inside = relative_event_path(old, root).is_some();
+    let new_inside = relative_event_path(new, root).is_some();
+    if !old_inside && !new_inside {
+        return Vec::new();
+    }
+
+    // Atomic saves move an unsupported hidden temp file onto the supported
+    // note path. That is a modification, never a user-visible move-away.
+    if old_inside
+        && new_inside
+        && !new.is_dir()
+        && !is_supported_path(old)
+        && is_supported_path(new)
+    {
+        return change_for_path("modify", new, None, EntryKind::File, root, generation)
+            .into_iter()
+            .collect();
+    }
+
+    let entry_kind = if old.is_dir() || new.is_dir() {
+        EntryKind::Directory
+    } else if is_supported_path(old) || is_supported_path(new) {
+        EntryKind::File
+    } else {
+        EntryKind::Unknown
+    };
+
+    let change = match (old_inside, new_inside, entry_kind) {
+        (true, true, EntryKind::File) if is_supported_path(old) && is_supported_path(new) => {
+            change_for_path("rename", new, Some(old), entry_kind, root, generation)
+        }
+        (true, true, EntryKind::File) if is_supported_path(old) => {
+            change_for_path("remove", old, None, entry_kind, root, generation)
+        }
+        (true, true, EntryKind::File) => {
+            change_for_path("create", new, None, entry_kind, root, generation)
+        }
+        (true, true, _) => change_for_path("rename", new, Some(old), entry_kind, root, generation),
+        (true, false, _) => change_for_path("remove", old, None, entry_kind, root, generation),
+        (false, true, _) => change_for_path("create", new, None, entry_kind, root, generation),
+        (false, false, _) => None,
+    };
+    change.into_iter().collect()
+}
+
+/// Convert one notify event into every relevant note/tree event. notify may
+/// batch multiple paths into one callback, especially on Windows.
+fn event_to_change_events(event: &Event, root: &Path, generation: u64) -> Vec<FileChangeEvent> {
+    if let EventKind::Modify(ModifyKind::Name(ref mode)) = event.kind {
+        return match mode {
+            RenameMode::Both => event
+                .paths
+                .chunks(2)
+                .flat_map(|pair| match pair {
+                    [old, new] => rename_pair_to_events(old, new, root, generation),
+                    [path] => {
+                        change_for_path("modify", path, None, EntryKind::Unknown, root, generation)
+                            .into_iter()
+                            .collect()
+                    }
+                    _ => Vec::new(),
+                })
+                .collect(),
+            RenameMode::From => event
+                .paths
+                .iter()
+                .filter_map(|path| {
+                    change_for_path(
+                        "remove",
+                        path,
+                        None,
+                        classify_path(path, None),
+                        root,
+                        generation,
+                    )
+                })
+                .collect(),
+            RenameMode::To => event
+                .paths
+                .iter()
+                .filter_map(|path| {
+                    change_for_path(
+                        "create",
+                        path,
+                        None,
+                        classify_path(path, None),
+                        root,
+                        generation,
+                    )
+                })
+                .collect(),
+            _ if event.paths.len() == 2 => {
+                rename_pair_to_events(&event.paths[0], &event.paths[1], root, generation)
+            }
+            _ => event
+                .paths
+                .iter()
+                .filter_map(|path| {
+                    change_for_path("modify", path, None, EntryKind::Unknown, root, generation)
+                })
+                .collect(),
+        };
+    }
+
+    let (kind, hint, ambiguous) = match event.kind {
+        EventKind::Create(ref create) => (
+            "create",
+            match create {
+                CreateKind::File => Some(EntryKind::File),
+                CreateKind::Folder => Some(EntryKind::Directory),
+                _ => None,
+            },
+            false,
+        ),
+        EventKind::Modify(ModifyKind::Data(_)) => ("modify", Some(EntryKind::File), false),
+        EventKind::Modify(ModifyKind::Metadata(_)) => ("modify", None, false),
+        EventKind::Modify(_) => ("modify", None, true),
+        EventKind::Remove(ref remove) => (
+            "remove",
+            match remove {
+                RemoveKind::File => Some(EntryKind::File),
+                RemoveKind::Folder => Some(EntryKind::Directory),
+                _ => None,
+            },
+            false,
+        ),
+        EventKind::Any | EventKind::Other => ("modify", None, true),
+        _ => return Vec::new(),
+    };
+
+    if event.paths.is_empty() && ambiguous {
+        return vec![rescan_change_event(generation)];
+    }
+    event
+        .paths
+        .iter()
+        .filter_map(|path| {
+            let entry_kind = if ambiguous {
+                EntryKind::Unknown
+            } else {
+                classify_path(path, hint)
+            };
+            change_for_path(kind, path, None, entry_kind, root, generation)
+        })
+        .collect()
 }
 
 fn is_supported_path(path: &Path) -> bool {
@@ -291,6 +461,33 @@ pub fn stop_file_watcher(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_root(name: &str) -> PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("JotLuck-watcher-{name}-{suffix}"));
+        std::fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    fn rename_event(old_path: &str, new_path: &str) -> Event {
+        Event::new(EventKind::Modify(ModifyKind::Name(RenameMode::Both)))
+            .add_path(PathBuf::from(old_path))
+            .add_path(PathBuf::from(new_path))
+    }
+
+    fn rename_from_event(old_path: &str) -> Event {
+        Event::new(EventKind::Modify(ModifyKind::Name(RenameMode::From)))
+            .add_path(PathBuf::from(old_path))
+    }
+
+    fn rename_to_event(new_path: &str) -> Event {
+        Event::new(EventKind::Modify(ModifyKind::Name(RenameMode::To)))
+            .add_path(PathBuf::from(new_path))
+    }
 
     fn guard_with_receiver() -> (WatcherGuard, mpsc::Receiver<()>) {
         let (stop_tx, stop_rx) = mpsc::channel();
@@ -344,5 +541,151 @@ mod tests {
         assert!(state.stop_for("first").unwrap());
         assert!(first_rx.recv_timeout(Duration::from_millis(200)).is_ok());
         assert!(second_rx.recv_timeout(Duration::from_millis(50)).is_err());
+    }
+
+    #[test]
+    fn atomic_temp_file_replacement_is_reported_as_modify() {
+        let root = Path::new("notebook");
+        let event = rename_event("notebook/.history.md.123.456.0.tmp", "notebook/history.md");
+
+        let change = event_to_change_events(&event, root, 7).remove(0);
+
+        assert_eq!(change.kind, "modify");
+        assert_eq!(change.path, "history.md");
+        assert_eq!(change.old_path, None);
+        assert_eq!(change.generation, 7);
+        assert_eq!(change.entry_kind, "file");
+        assert!(!change.rescan);
+    }
+
+    #[test]
+    fn real_note_rename_keeps_its_direction() {
+        let root = Path::new("notebook");
+        let event = rename_event("notebook/history.md", "notebook/archive.md");
+
+        let change = event_to_change_events(&event, root, 8).remove(0);
+
+        assert_eq!(change.kind, "rename");
+        assert_eq!(change.path, "archive.md");
+        assert_eq!(change.old_path.as_deref(), Some("history.md"));
+        assert_eq!(change.generation, 8);
+    }
+
+    #[test]
+    fn split_rename_from_reports_the_old_note_as_removed() {
+        let root = Path::new("notebook");
+        let event = rename_from_event("notebook/history.md");
+
+        let change = event_to_change_events(&event, root, 9).remove(0);
+
+        assert_eq!(change.kind, "remove");
+        assert_eq!(change.path, "history.md");
+        assert_eq!(change.old_path, None);
+        assert_eq!(change.generation, 9);
+    }
+
+    #[test]
+    fn note_moved_out_of_root_is_reported_as_remove() {
+        let root = Path::new("notebook");
+        let event = rename_event("notebook/history.md", "archive/history.md");
+
+        let change = event_to_change_events(&event, root, 10).remove(0);
+
+        assert_eq!(change.kind, "remove");
+        assert_eq!(change.path, "history.md");
+        assert_eq!(change.entry_kind, "file");
+    }
+
+    #[test]
+    fn note_moved_into_root_is_reported_as_create() {
+        let root = Path::new("notebook");
+        let event = rename_event("archive/history.md", "notebook/history.md");
+
+        let change = event_to_change_events(&event, root, 11).remove(0);
+
+        assert_eq!(change.kind, "create");
+        assert_eq!(change.path, "history.md");
+    }
+
+    #[test]
+    fn split_rename_to_reports_the_new_note_as_created() {
+        let root = Path::new("notebook");
+        let event = rename_to_event("notebook/history.md");
+
+        let change = event_to_change_events(&event, root, 12).remove(0);
+
+        assert_eq!(change.kind, "create");
+        assert_eq!(change.path, "history.md");
+    }
+
+    #[test]
+    fn folder_remove_requests_full_rescan() {
+        let root = Path::new("notebook");
+        let event = Event::new(EventKind::Remove(RemoveKind::Folder))
+            .add_path(PathBuf::from("notebook/folder"));
+
+        let change = event_to_change_events(&event, root, 13).remove(0);
+
+        assert_eq!(change.kind, "remove");
+        assert_eq!(change.path, "folder");
+        assert_eq!(change.entry_kind, "directory");
+        assert!(change.rescan);
+    }
+
+    #[test]
+    fn folder_rename_keeps_direction_and_requests_full_rescan() {
+        let root = temp_root("folder-rename");
+        let old = root.join("old");
+        let new = root.join("new");
+        std::fs::create_dir_all(&new).unwrap();
+        let event = Event::new(EventKind::Modify(ModifyKind::Name(RenameMode::Both)))
+            .add_path(old)
+            .add_path(new);
+
+        let change = event_to_change_events(&event, &root, 15).remove(0);
+
+        assert_eq!(change.kind, "rename");
+        assert_eq!(change.path, "new");
+        assert_eq!(change.old_path.as_deref(), Some("old"));
+        assert_eq!(change.entry_kind, "directory");
+        assert!(change.rescan);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn folder_moved_out_of_root_is_removed_and_rescanned() {
+        let root = temp_root("folder-move-out");
+        let outside = temp_root("folder-move-out-destination");
+        let old = root.join("folder");
+        let new = outside.join("folder");
+        std::fs::create_dir_all(&new).unwrap();
+        let event = Event::new(EventKind::Modify(ModifyKind::Name(RenameMode::Both)))
+            .add_path(old)
+            .add_path(new);
+
+        let change = event_to_change_events(&event, &root, 16).remove(0);
+
+        assert_eq!(change.kind, "remove");
+        assert_eq!(change.path, "folder");
+        assert_eq!(change.entry_kind, "directory");
+        assert!(change.rescan);
+        std::fs::remove_dir_all(root).unwrap();
+        std::fs::remove_dir_all(outside).unwrap();
+    }
+
+    #[test]
+    fn multi_path_events_do_not_drop_later_notes() {
+        let root = Path::new("notebook");
+        let event = Event::new(EventKind::Modify(ModifyKind::Data(
+            notify::event::DataChange::Content,
+        )))
+        .add_path(PathBuf::from("notebook/first.md"))
+        .add_path(PathBuf::from("notebook/second.md"));
+
+        let changes = event_to_change_events(&event, root, 14);
+
+        assert_eq!(changes.len(), 2);
+        assert_eq!(changes[0].path, "first.md");
+        assert_eq!(changes[1].path, "second.md");
     }
 }

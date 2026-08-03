@@ -343,6 +343,109 @@ describe('CompletionTrainingService', () => {
     expect(predictor.hasDocumentContribution('/late.md')).toBe(false);
   });
 
+  it('rejects a delayed training read after the predictor changes workspace without an explicit cancel', async () => {
+    let resolveRead: ((value: string) => void) | undefined;
+    const fs = mockFs({});
+    vi.mocked(fs.readFile).mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveRead = resolve;
+        }),
+    );
+    const predictor = new MarkdownPredictor();
+    predictor.setStorageScope('workspace-a');
+    const service = new CompletionTrainingService(fs, predictor);
+    const run = service.trainNotebook([
+      { path: '/late.md', name: 'late.md', isFile: true, isDirectory: false, size: 40, mtime: 1 },
+    ]);
+    await vi.waitFor(() => expect(fs.readFile).toHaveBeenCalledWith('/late.md'));
+
+    predictor.setStorageScope('workspace-b');
+    resolveRead?.('旧工作区的延迟训练不得写入新工作区。');
+    await run;
+
+    expect(predictor.hasDocumentContribution('/late.md')).toBe(false);
+    expect(loadTrainingMeta('workspace-b').trainedPaths).toEqual({});
+  });
+
+  it('keeps a newer per-file contribution when an older notebook read finishes last', async () => {
+    let resolveRead: ((value: string) => void) | undefined;
+    const fs = mockFs({});
+    vi.mocked(fs.readFile).mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveRead = resolve;
+        }),
+    );
+    const predictor = new MarkdownPredictor();
+    const service = new CompletionTrainingService(fs, predictor);
+    const run = service.trainNotebook([
+      { path: '/same.md', name: 'same.md', isFile: true, isDirectory: false, size: 40, mtime: 1 },
+    ]);
+    await vi.waitFor(() => expect(fs.readFile).toHaveBeenCalledWith('/same.md'));
+
+    await service.trainFile('/same.md', 'new contribution phrase new contribution phrase', {
+      mtime: 2,
+      size: 48,
+    });
+    resolveRead?.('stale contribution phrase stale contribution phrase');
+    await run;
+
+    expect(predictor.hasDocumentContribution('/same.md')).toBe(true);
+    expect(loadTrainingMeta().trainedPaths['/same.md']?.mtime).toBe(2);
+  });
+
+  it('invalidates a notebook snapshot when a file changes during predictor initialization', async () => {
+    let resolveInitialize: (() => void) | undefined;
+    const fs = mockFs({ '/same.md': 'stale disk contribution' });
+    const predictor = new MarkdownPredictor();
+    vi.spyOn(predictor, 'initialize').mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveInitialize = resolve;
+        }),
+    );
+    const service = new CompletionTrainingService(fs, predictor);
+    const run = service.trainNotebook([
+      { path: '/same.md', name: 'same.md', isFile: true, isDirectory: false, size: 40, mtime: 1 },
+    ]);
+    await vi.waitFor(() => expect(predictor.initialize).toHaveBeenCalled());
+
+    await service.trainFile('/same.md', 'new initialization contribution', {
+      mtime: 2,
+      size: 31,
+    });
+    resolveInitialize?.();
+    await run;
+
+    expect(fs.readFile).not.toHaveBeenCalled();
+    expect(loadTrainingMeta().trainedPaths['/same.md']?.mtime).toBe(2);
+  });
+
+  it('does not restore a path removed while its notebook read is pending', async () => {
+    let resolveRead: ((value: string) => void) | undefined;
+    const fs = mockFs({});
+    vi.mocked(fs.readFile).mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveRead = resolve;
+        }),
+    );
+    const predictor = new MarkdownPredictor();
+    const service = new CompletionTrainingService(fs, predictor);
+    const run = service.trainNotebook([
+      { path: '/gone.md', name: 'gone.md', isFile: true, isDirectory: false, size: 40, mtime: 1 },
+    ]);
+    await vi.waitFor(() => expect(fs.readFile).toHaveBeenCalledWith('/gone.md'));
+
+    service.removePath('/gone.md');
+    resolveRead?.('removed contribution must remain removed');
+    await run;
+
+    expect(predictor.hasDocumentContribution('/gone.md')).toBe(false);
+    expect(loadTrainingMeta()).toMatchObject({ status: 'done', trainedPaths: {} });
+  });
+
   it('lets a newer notebook snapshot supersede an in-flight run', async () => {
     let resolveOldRead: ((value: string) => void) | undefined;
     const fs = mockFs({ '/new.md': 'new snapshot phrase new snapshot phrase' });

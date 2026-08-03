@@ -8,16 +8,56 @@
 import { useSearchStore } from '@/stores/search';
 import { useIndexStore } from '@/stores/index';
 import type { SearchResult, SearchQuery, DateRange } from '@/types';
+import { getCurrentScope, onScopeDispose } from 'vue';
 
-let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 const DEBOUNCE_MS = 250;
 
 export function useSearch() {
   const searchStore = useSearchStore();
   const indexStore = useIndexStore();
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let requestRevision = 0;
+
+  function cancelPendingSearch(): void {
+    requestRevision++;
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
+  }
+
+  function runSearch(
+    queryText: string,
+    workspaceRevision: number,
+    expectedRequestRevision: number,
+  ): void {
+    if (
+      workspaceRevision !== searchStore.workspaceRevision ||
+      expectedRequestRevision !== requestRevision
+    ) {
+      return;
+    }
+    const engine = indexStore.getEngine();
+    if (!engine) {
+      searchStore.clearResults();
+      return;
+    }
+
+    const query = parseSearchQuery(queryText);
+    const results = engine.search(query);
+    if (
+      workspaceRevision !== searchStore.workspaceRevision ||
+      expectedRequestRevision !== requestRevision ||
+      engine !== indexStore.getEngine()
+    ) {
+      return;
+    }
+    searchStore.setResults(results);
+    if (queryText.trim()) searchStore.addToHistory(queryText);
+  }
 
   function searchWithDebounce(queryText: string): void {
-    if (debounceTimer) clearTimeout(debounceTimer);
+    cancelPendingSearch();
     searchStore.setQuery(queryText);
 
     if (!queryText.trim()) {
@@ -25,22 +65,22 @@ export function useSearch() {
       return;
     }
 
+    const workspaceRevision = searchStore.workspaceRevision;
+    const expectedRequestRevision = requestRevision;
     debounceTimer = setTimeout(() => {
-      searchImmediately(queryText);
+      debounceTimer = null;
+      runSearch(queryText, workspaceRevision, expectedRequestRevision);
     }, DEBOUNCE_MS);
   }
 
   function searchImmediately(queryText: string): void {
-    const engine = indexStore.getEngine();
-    if (!engine) return;
-
+    cancelPendingSearch();
     searchStore.setQuery(queryText);
-    const query = parseSearchQuery(queryText);
-    const results = engine.search(query);
-    searchStore.setResults(results);
-    if (queryText.trim()) {
-      searchStore.addToHistory(queryText);
+    if (!queryText.trim()) {
+      searchStore.clearResults();
+      return;
     }
+    runSearch(queryText, searchStore.workspaceRevision, requestRevision);
   }
 
   function selectResultByQuery(tagQuery: string): void {
@@ -53,7 +93,13 @@ export function useSearch() {
   }
 
   function closeSearch(): void {
+    cancelPendingSearch();
     searchStore.close();
+  }
+
+  function resetWorkspaceState(): void {
+    cancelPendingSearch();
+    searchStore.resetWorkspaceState();
   }
 
   function navigateUp(): void {
@@ -66,12 +112,15 @@ export function useSearch() {
     return searchStore.getSelected();
   }
 
+  if (getCurrentScope()) onScopeDispose(cancelPendingSearch);
+
   return {
     searchWithDebounce,
     searchImmediately,
     selectResultByQuery,
     openSearch,
     closeSearch,
+    resetWorkspaceState,
     navigateUp,
     navigateDown,
     getSelected,
