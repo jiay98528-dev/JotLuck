@@ -1,22 +1,24 @@
 # JotLuck 离线补全模型训练说明
 
-> 版本：v1.0
-> 日期：2026-07-14
-> 状态：Public V2R、Public V2S 均已停止；公共 L3 默认未绑定；本文是模型训练与证据流程的唯一操作说明
+> 版本：v2.0
+> 日期：2026-08-05
+> 状态：Public V2R、Public V2S 继续停止；`public-v2-free-decoder-v1` 只进入下一版本 DEVELOPMENT 训练；公共 L3 默认未绑定；本文是模型训练与证据流程的唯一操作说明
 
 ## 1. 当前结论
 
 JotLuck 的离线补全不是一个单模型系统。结构化补全、当前文档 L1、Personal L2、Notebook/Hybrid 和可选 Public L3 经过同一个 Resolver，最终只显示一条 ghost text。公共模型失败或不存在时，其他确定性路径仍可工作。
 
-当前不得继续训练或发布公共模型：
+当前边界分为“历史停止架构”和“下一版本开发训练”两部分：
 
 - `public-phrase-transformer-v1`（V2R）受 `scripts/corpus/autocomplete-v2r-architecture-stop.json` 阻断。固定短语输出空间无法覆盖真实写作 continuation。
 - `public-v2s-mkn-v1`（V2S）受 `scripts/corpus/autocomplete-v2s-architecture-stop.json` 阻断。固定矩阵的 development Oracle 未达到预登记架构门槛。
 - 两份 stop 都是 `releaseEvidence:false` 的停止依据，不是模型质量 PASS；它们只证明对应架构不应继续同根因训练。
 - `packages/app/public/autocomplete/` 当前没有可运行的 canonical Public L3。生产 `MarkdownPredictor` 不自动导入已停止的 V2S Worker。
 - RC 的预期结果是 code `10`。不得删除 stop、修改资格布尔值或降低阈值来改变结果。
+- 新 engine `public-v2-free-decoder-v1` 已获准在独立 DEVELOPMENT 切片训练，但只允许形成 `trained` 或经 Oracle 后的 `oraclePassed` 候选；不得写 production public、切换默认引擎、读取 final 或改变当前 RC。
+- V2.2 使用新的 8K Unigram + byte fallback、`JLFDQ02` group-size 64 量化格式和独立缓存。它不能复用 V2R/V2S 的 ID、manifest、缓存、final 或停止证据。
 
-因此，本文的“训练流程”用于解释已有管线、复核历史候选，以及约束未来新架构；不是继续当前 V2S 矩阵的运行许可。
+因此，本文的“训练流程”既用于复核历史停止事实，也作为 V2.2 开发候选的操作合同；它绝不是恢复 V2R/V2S 或发布 V2.2 的许可。
 
 ## 2. 唯一真相源
 
@@ -29,6 +31,8 @@ JotLuck 的离线补全不是一个单模型系统。结构化补全、当前文
 | V2S 停止事实       | `scripts/corpus/autocomplete-v2s-architecture-stop.json`                                          | 当前公共训练入口的硬停止记录                      |
 | v4 来源批准事实    | `scripts/corpus/provenance.json`、`scripts/corpus/SOURCES.md`                                     | 旧 curated/synthetic 来源与永久排除项             |
 | V2R/V2S 来源事实   | `scripts/corpus/autocomplete-v2r-generator.json`、`scripts/corpus/autocomplete-v2r-external.json` | v3.1 生成器、外部来源和选择身份                   |
+| V2.2 训练/评测入口 | `scripts/autocomplete-v2-free/`                                                                   | selection、训练、JLFDQ02、评测、final pair ledger |
+| 幻15节点操作边界   | `scripts/autocomplete-v2-free/remote/README.md`                                                   | 只描述显式人工初始化、传输、任务与状态合同        |
 | Tatoeba 清洗与许可 | `scripts/corpus/tatoeba-cc0-cleaning-report.json`、`scripts/corpus/licenses/tatoeba-cc0.md`       | 固定 CC0 子集、清洗结果和许可证证据               |
 | 训练缓存           | `scripts/corpus/_web-cache/`                                                                      | 可删除、可再生、Git ignored；不得单独作为放行证据 |
 | 正式公共入口       | `packages/app/public/autocomplete/autocomplete-public.manifest.json`                              | 未来发布时只能有这一份 canonical manifest         |
@@ -72,10 +76,13 @@ V2R/V2S 固定 selection 只允许以下来源：
 
 `provenance.json` 中的 curated/synthetic-v1 只属于 v4 历史来源，不得混入 V2R/V2S selection。Common Voice 没有批准快照，不得自动补入。网页、小说、未知许可证正文、产品规格、E2E holdout 和补全评测样本不得进入训练。
 
+V2.2 selection 可以从现有约 24.9MiB、哈希完整且许可证仍有效的 V2R train 文档重新物化；任何补充来源都必须是项目自有或具有明确 SPDX/许可证据的公开数据。每篇文档固定记录 source、许可证据、语言、类别、字节数、内容 SHA-256、生成/清洗版本和 seed。训练阶段固定为 32MiB 全链路 smoke、128MiB 四候选矩阵；只有全部失败且最佳候选距离每项 Oracle 门槛均不超过 5 个百分点时，才允许扩到 256MiB 重跑完整矩阵，否则 architecture-stop。清洗池硬上限 512MiB。
+
 ### 4.2 永久隔离
 
 - `scripts/corpus/novel-zh/` 永久硬隔离；文件存在不代表获准训练。
 - `doc/`、`spec/`、`memory/`、E2E fixture 和所有 holdout 永远不是语料来源。
+- 用户笔记、Personal/Notebook 数据、反馈、本地指标、代码、frontmatter、密钥和测试答案永远不得进入公共训练 selection。
 - 自指补全文案、高重复 anchor、站点导航、聊天提示、真实姓名、邮箱、电话、地址和账号必须为 0。
 
 ### 4.3 数据拆分
@@ -105,7 +112,20 @@ V2R/V2S 固定 selection 只允许以下来源：
 
 Gate 不会改变候选文本或重新排列 Top-1。训练 Gate 前，生成器必须先在未过滤机会集通过 Oracle；bank miss 不能标成 abstain，也不能从分母删除。
 
-### 5.2 停止态命令
+### 5.2 V2.2 开放词表 decoder
+
+- engine：`public-v2-free-decoder-v1`；
+- 候选矩阵：16M Q4、16M Q8、24M Q4、32M Q4；16M 只训练一份 float checkpoint，再从同一权重分别导出 Q4/Q8；
+- tokenizer：单一 8K Unigram、完整 256-byte fallback、NFKC 与训练/Rust runtime golden parity；
+- 模型：decoder-only、context 256、seed `20260805`、AdamW betas `0.9/0.95`、weight decay `0.1`、peak LR `3e-4`、2% warmup + cosine、FP16 GradScaler、clip `1.0`、global batch 128；
+- 量化：`JLFDQ02` / `jotluck.autocomplete.quantized-decoder.v2`，group-size 64，Q4/Q8 分组 F16 scale，F16 vector；model header、payload 和每个 tensor 都绑定哈希与完整覆盖；
+- checkpoint：每 1,000 optimizer step 原子写入，可 resume，只保留最近两个与 best；最多 3 epochs，以 dev loss 选择 best；
+- 生命周期：`trained` 只能 dev/E2E 加载且 Oracle 全零；`oraclePassed` 才允许 calibration/validation；`releaseEligible` 只可能由双 final 与 Windows GUI/IME 证据齐备后的唯一 publisher 生成；
+- 预算：model + tokenizer + manifest + 新增 runtime 静态增量 ≤24MiB，峰值增量内存 ≤192MiB，模型推理 p90 ≤80ms。
+
+本机负责源码、selection、评测、Rust parity 和 final 保管；幻15只执行哈希绑定的 CUDA 训练 job。final 不上传幻15或 VPS。传输必须先写临时名，复核 bytes/SHA-256 后同卷原子转正；SSH 断开不得终止由计划任务托管的训练。Tailscale direct 达到 20Mbps 时保持直连，否则才评估 VPS Peer Relay；Peer Relay 低于 10Mbps或不稳定才另行决定 WireGuard。任何系统账户、OpenSSH、Tailscale、防火墙、计划任务或 VPS 变更都必须由用户在目标机器上显式执行，仓库脚本不得自动远程施加配置。
+
+### 5.3 历史停止态命令
 
 当前只允许只读检查：
 
@@ -146,26 +166,28 @@ SilenceFalseRate     = silence 误触发 F / 50
 Oracle@K             = 前 K 个候选任一满足人工参考的 checkpoint 数 / 200
 ```
 
-V2S 架构预检要求 Oracle@8 ≥40%、Oracle@32 ≥45%、中英文 Oracle@8 各 ≥32%。发布要求每套：
+V2.2 架构预检要求 Oracle@8 ≥45%、Oracle@32 ≥55%、中英文 Oracle@8 各 ≥40%；任一失败立即停止该候选，不训练 visibility gate、不读取 final。发布要求每套：
 
 - 触发率 35%–42%（70–84/200）；
 - 绝对可用率 ≥35%（至少 70/200）；
 - silence false ≤3%，按 50 个样本即最多 1 次；
-- 每种语言绝对可用率 ≥30%，每类别 ≥25%；
+- 每种语言绝对可用率 ≥32%，每类别 ≥30%；
 - 完整候选池和最终 ghost 的 mixed 均为 0；
 - 全请求与可见 ghost p90 均 ≤140ms；
-- B0 + Public 不得低于 Public-off B0，cold 新增覆盖至少 8pp。
+- 结构化结果与精确编辑区间正确率 100%，主线程不得出现 >50ms 模型任务。
+
+V2S 的 40%/45%/32% 只属于历史停止实验，不得用于降低 V2.2 门槛。
 
 Oracle 必须使用全部机会点为分母。固定探针、seeded 场景、条件 bank-hit 指标、轮询上界延迟和 skipped E2E 都不能成为发布质量 PASS。
 
 ## 7. 候选、final 与发布顺序
 
-未来新架构只有在新 ADR、新 engine ID、新 manifest schema 和未观察 holdout 已冻结后，才能重新进入以下流程：
+V2.2 只有在新 ADR、新 engine ID、新 manifest schema 和未观察 holdout 已冻结后，才能进入以下流程：
 
 1. 物化批准语料并生成逐文档 selection manifest。
 2. 运行许可、隐私、重复、分布和 train–validation overlap 治理。
-3. 在隔离 candidate 目录训练；训练器永远不得写 `packages/app/public/`。
-4. 使用绑定模型真实重放 validation，先验证绝对 Oracle，再验证 Top-1、Gate 和运行时。
+3. 在隔离 candidate 目录训练并生成 `trained` manifest；训练器永远不得写 `packages/app/public/`。
+4. 使用绑定模型真实重放 Oracle；通过后由不可覆盖的评测 manifest 晋升为 `oraclePassed`，再运行 calibration、validation、Top-1、Gate 和运行时门禁。
 5. 冻结候选、阈值、模型 SHA、训练输入树和 evaluator 源码树。
 6. 同时 claim cold/workspace final SHA，之后才解封 final 明文。
 7. final 失败、中断或 overlap 失败都消费该版本，禁止回到同一 final 调参。
@@ -175,14 +197,14 @@ Oracle 必须使用全部机会点为分母。固定探针、seeded 场景、条
 
 正式证据必须绑定精确候选 commit、模型 SHA、训练输入树、holdout 树、evaluator 源码树、原始执行 transcript、非零 counters、退出码、运行时报告、WebView smoke 和二次只读转录。任何 skip、零测试、ignored 唯一产物、路径越界、符号链接或内容漂移都失败关闭。
 
-## 8. 未来重启条件
+## 8. 停止与边界条件
 
-当前 V2S 不因增加同分布语料而重启。已有 3→8→24MiB 曲线没有单调收益，且最大模型已接近预算。若未来重新研究公共 L3，必须满足：
+当前 V2S 不因增加同分布语料而重启。已有 3→8→24MiB 曲线没有单调收益，且最大模型已接近预算。V2.2 也只能在预登记的 32/128/可选256MiB 阶段内运行；不得用无界扩池或降低门槛延长路线。任何后续新架构必须满足：
 
 - 新 ADR 解释它如何突破候选覆盖或 Top-1 排序瓶颈；
 - 使用新的 engine ID 和 manifest schema，不修改历史 stop；
 - 新 validation/final 在训练前冻结，不能复用已观察 development；
-- 先执行有界 24/48/96MiB 或等价规模实验，并预登记停止条件；
+- 先执行有界矩阵并预登记停止条件；
 - 若首个扩容档 Oracle@8/32 增益均 <2pp，停止同分布扩容；下一档增益 <1pp 时确认饱和；
 - 选择性 Gate 不能提升原始 Top-1，因此原始 Top-1 低于 70/200 时不得声称可达到 35%绝对可用率；
 - 新方案仍只能占用一个 `CompletionPublicEngine` 插槽和一个 canonical public manifest。
@@ -192,6 +214,10 @@ Oracle 必须使用全部机会点为分母。固定探针、seeded 场景、条
 ## 9. 最小维护检查表
 
 - [ ] 当前 stop 是否仍在 CLI、trainer、publisher、verifier 和 RC 输入读取前生效？
+- [ ] V2.2 候选是否始终处于 `trained → oraclePassed → releaseEligible` 的单向生命周期，且训练器不能直接伪造后两态？
+- [ ] 16M Q4/Q8 是否来自同一 float checkpoint，而不是重复训练两份权重？
+- [ ] JLFDQ02 group64、Python quantized 与 Rust logits/token/Top-K parity 是否在真实 smoke 权重上通过？
+- [ ] 幻15/VPS 是否只接收训练 bundle，且从未接收 final、用户数据或凭据？
 - [ ] 普通生产 bundle 是否不包含已停止 Worker/WASM/ONNX？
 - [ ] public 目录是否只有零或一份 canonical manifest及其唯一内容寻址资产？
 - [ ] selection 的每篇文档是否能回溯到批准来源、许可证和内容 SHA？

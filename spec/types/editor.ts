@@ -122,6 +122,12 @@ export interface PredictionResult {
   confidence: number;
   /** 预测起点在文档中的位置 */
   from: number;
+  /** 权威 UTF-16 编辑；接受时不能直接插入 text */
+  edit: CompletionTextEdit;
+  /** 仅用于 ghost 呈现 */
+  displayText: string;
+  mode: 'structured' | 'predictive';
+  kind: CompletionCandidateKind;
   source?: 'structured' | 'ngram' | 'recent' | 'llm';
   sourceLayer?: CompletionSourceLayer;
   providerId?: string;
@@ -131,6 +137,23 @@ export interface PredictionResult {
   learningBoost?: number;
   learningPenalty?: number;
 }
+
+export interface CompletionTextEdit {
+  from: number;
+  to: number;
+  insertText: string;
+}
+
+export type CompletionCandidateKind =
+  | 'format'
+  | 'wiki-link'
+  | 'tag'
+  | 'file-path'
+  | 'list'
+  | 'sequence'
+  | 'phrase'
+  | 'word'
+  | 'text';
 
 export type CompletionSourceLayer =
   | 'l1'
@@ -168,7 +191,10 @@ export interface CompletionSource {
 
 export interface CompletionContext {
   doc: string;
+  documentFrom: number;
+  documentRevision: number;
   cursorPos: number;
+  localCursorPos: number;
   line: {
     text: string;
     from: number;
@@ -188,6 +214,10 @@ export interface CompletionContext {
 
 export interface CompletionCandidate {
   text: string;
+  displayText: string;
+  edit: CompletionTextEdit;
+  mode: 'structured' | 'predictive';
+  kind: CompletionCandidateKind;
   confidence: number;
   informationScore?: number;
   from: number;
@@ -197,6 +227,16 @@ export interface CompletionCandidate {
   syntaxType: string;
   learnable: boolean;
   priority: number;
+  contributors: Array<{
+    providerId: string;
+    sourceLayer?: CompletionSourceLayer;
+    rawScore: number;
+    calibratedScore: number;
+  }>;
+  priorityTier: 'structured' | 'document-session' | 'personal-workspace' | 'public' | 'fallback';
+  rawScore: number;
+  calibratedScore: number;
+  feedbackPolicy: 'none' | 'session' | 'retained';
 }
 
 export interface CompletionProvider {

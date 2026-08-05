@@ -63,22 +63,31 @@ Vue 3 + Pinia + Vite
 - `save_converted_document_as` 只接受转换 ID 和本地化对话框请求，不接受任意源路径。后端强制 `.md`、选择唯一资产目录、在目标父目录创建同卷临时项并提交；成功后撤销文档源授权，将新 Markdown 建立现有可写外部 grant，并把窗口会话原子替换为 `external-edit`。
 - Windows 编辑器集成通过 `SHAssocEnumHandlers` 枚举并优先使用 `IAssocHandler::Invoke`；对没有注册跨 apartment 代理的处理器，只使用同一 `IAssocHandler::GetName` 返回的完整可执行文件路径，验证为现存的绝对 `.exe` 后把源文件作为独立 argv 启动。handler ID 只引用当前窗口后端枚举缓存，任何路径都不解析注册表命令；没有候选或上述路径失败时使用系统 Open With。默认应用状态通过实际 ProgID 查询，设置入口优先 `ms-settings:defaultapps?registeredAppUser=JotLuck`，旧系统回退总页。
 
-## 离线补全架构（3.11）
+## 离线补全架构（3.11，V2.2）
 
 - `MarkdownPredictor` 是工作区级稳定 facade，组合 Markdown 上下文扫描、结构化 Provider、Resolver、N-gram 引擎和按工作区隔离的学习仓库；编辑器 keyed 重建不重建 Predictor。
-- 数据层固定为当前文档 L1、notebook 按文件可撤销贡献 N2、仅接收明确用户反馈的 Personal L2，以及应用级只读单例 L3。各层分别输出 top-k 候选；N2 先汇总跨文档支持再剪枝，不与 Personal L2 原始计数合并。
-- 学习仓库统一持久化 Personal L2、accepted lexicon、signals、metrics 和元数据；写入按 scope 串行合并，可用时使用 Web Locks，并通过 BroadcastChannel/storage event 同步多标签页。
-- `CompletionEngineRouter` 管理唯一、模型无关的 `CompletionPublicEngine` 生成插槽与未来只做重排的 V2.1 `CompletionRanker`。公共插槽默认未绑定；只有通过独立证据的模型才能显式安装。epoch、workspace scope、document version、UTF-16 cursor、deadline 与 AbortSignal 继续作为迟到结果边界。
-- Public V2S 的目标 canonical 入口为 `packages/app/public/autocomplete/autocomplete-public.manifest.json`，只引用一份内容寻址 v6 二进制；候选阶段仍保留当前 v4 pair 的 fail-closed 状态，正式切换时必须删除旧 pair。任何时刻都不得同时发布两代公共资产，冻结 V1 只存在于隔离评测闭包。
+- CodeMirror 6 `CompletionDocumentContextField` 是热路径上下文真相源：每次 `ChangeSet` 单调递增 document revision，并维护光标语法节点路径、block 类型、标题链、当前/前一段有界切片和语言提示。打开文档允许一次完整初始化；之后禁止在请求热路径调用 `doc.toString()`、计算全文 fingerprint 或从文首扫描 fence/frontmatter。
+- 内核拆为结构化平面与预测平面。结构化平面在 composition 稳定后立即调度 Wiki-link、标签、路径、格式和列表；预测平面只在 paragraph/list/quote 行尾、40ms 防抖后运行。两平面最终都进入同一 Resolver 并只显示一条 ghost。
+- 数据层固定为当前文档增量段落 L1、每工作区/进程最多 100 条的 Session History、notebook 按文件可撤销贡献 N2、只接收 `retained` 的 Personal L2，以及应用级唯一只读公共插槽。L1 由变更覆盖的段落贡献撤销/重建，N2 先汇总跨文档支持再剪枝；各层原始分数不得直接跨 Provider 比较。
+- `CompletionProviderRegistry` 在 Predictor 生命周期内注册一次类型安全描述符，固定声明 mode、上下文能力、priority tier、最大候选数、20ms 本地软预算/35ms Hybrid 软预算、反馈能力和数据权限；不提供任意 JS/WASM/原生代码 Provider 插件。调度顺序为结构化 → 当前文档/Session → Personal/Notebook/Hybrid → 唯一公共生成器 → generic fallback。
+- 候选以 `CompletionTextEdit { from, to, insertText }` 作为唯一正文写入；`displayText` 只用于 ghost。去重保留全部 `contributors`，候选同时携带 mode、kind、providerId、sourceLayer、priorityTier、raw/calibrated score 和 feedback policy。
+- 请求快照由 `editorSessionId + workspaceScope + documentRevision + UTF-16 cursor + contextSnapshot + deadlineAt` 构成，异步入口一律携带 `AbortSignal`。桌面总请求 80ms 硬截止；超过截止、revision/scope/cursor/epoch 不一致或已经显示 fallback 时，迟到结果直接丢弃。
+- 学习仓库 v5 统一保存 Personal L2、legacyAccepted、accepted lexicon、signals、metrics 和元数据；写入按 scope 串行合并，可用时使用 Web Locks，并通过 BroadcastChannel/storage event 同步多标签页。v4 已接受数据只进入 `legacyAccepted` 且以 0.5 权重参与排序，不能伪造 retained 统计。
+- 反馈状态机为 `shown → accepted → retained | modified | reverted`，另含 `explicitRejected` 和 `abandoned`。只有 retained 才持久学习；结构化补全永不写语料。准入 `persist | memoryOnly | skip` 由宿主根据会话、block 和敏感内容决定。
+- `CompletionEngineRouter` 管理唯一、模型无关的 `CompletionPublicEngine` 生成插槽。公共插槽默认未绑定；只有通过独立证据的模型才能显式安装。V2R/V2S 停止态继续保留且不能作为 fallback。
+- 下一版本公共引擎 ID 为 `public-v2-free-decoder-v1`，使用新协议和新缓存。Windows/Tauri 由同一签名可执行文件的隐藏常驻 completion worker 执行长度帧请求、latest-only 取消和 Job Object 资源限制；warmup 重算跨模型/tokenizer 的 candidate hash，并校验 `JLFDQ02`、group-size 64 Q4/Q8 F16 scales、header、payload hash、matrix 与完整张量布局。worker 只返回不可信原始文本，宿主重新执行语言、长度、Markdown、循环、mixed 与精确编辑门控。
+- 模型生命周期是单向 `trained → oraclePassed → releaseEligible`。trainer 只能生成 dev/E2E 可加载的 `trained` manifest；Oracle evaluator 才能晋升第二态；唯一 publisher 只有在双 final 与 Windows GUI/IME 证据齐备时才生成第三态。任何 manifest 布尔值都不能绕过对应原始观察和哈希绑定。
+- 训练控制面与 CUDA 数据面分离：当前工作站持有 selection、evaluator 和 final；幻15仅执行内容寻址、可恢复的训练 job。Tailscale direct 优先，VPS 只可作为端到端加密 Peer Relay；传输使用临时名 + SHA-256 + 同卷原子转正，final、用户数据和凭据不得上传训练节点或 VPS。
+- 公共上下文胶囊只包含标题链、当前段落、前一段尾部和至多一个无路径检索片段，最多 256 tokens；不得提供整篇正文、文件名或工作区清单。模型、8K Unigram+byte fallback tokenizer、manifest 与新增宿主总静态增量 ≤24MiB，增量峰值内存 ≤192MiB，模型推理 p90 ≤80ms。
+- 新公共路线固定 16M/24M/32M Q4 与 16M Q8；Oracle@8/32 预检必须分别 ≥45%/55%，且中英文 Oracle@8 各 ≥40%。不通过则停止，不训练 gate、不读取 final、不发布资产。双 final 与真实 Windows IME GUI 闭环前只允许 dev/E2E flag。
+- Web/PWA 不运行下一版本公共 decoder，只保留结构化、Session、Personal、Notebook/Hybrid 的安全降级，不继承 Windows cold 质量声明。
+- Public V2S 的旧 canonical 入口与 v6 二进制仅属于停止实验记录，不再是目标架构。任何时刻仍不得同时发布两代公共资产，冻结 V1 只存在于隔离评测闭包。
 - 已停止的 `public-phrase-transformer-v1` 训练、语料治理、量化和证据代码保留在 `scripts/` 供复核；其 Worker、ONNX adapter、默认 factory 与 `onnxruntime-web` 已从生产依赖图移除。`autocomplete-v2r-architecture-stop.json` 继续阻断长训练、publisher 与 v5 verifier。
-- Public V2S 在专用 Worker 内执行中英文独立的边界感知 Subword Modified Kneser-Ney 查询和小型选择性门控。宿主只传光标前最后 256 个 UTF-8 字节；Worker 只返回原始文本/分数，Router 校验并盖章插入位置、来源、层级和优先级。Worker/CSP/资产校验失败时返回空 L3，禁止主线程推理。
-- canonical manifest 与内容寻址二进制只有在 schema、大小和 SHA 全部通过后才可写入 `jotluck-public-v2s-v1` CacheStorage；离线时只读该验证后缓存，身份不符立即关闭 Public L3。中英文 tokenizer/Trie 可在训练期分别选择，但发布时仍封装为同一 v6 二进制和一个公共插槽。
 - `public-v2s-mkn-v1` 的固定矩阵与唯一逐语言组合修正已完成；最大 5,735,917B 候选的 development Oracle@8/32 为 37%/40%，固定矩阵逐语言最好前沿为 37.5%/40.5%，仍未达到 40%/45% 总体架构门槛。`autocomplete-v2s-architecture-stop.json` 因此在任何输入读取前阻断训练、Gate repack、组合和 publisher；CI 只能确认公共 L3 继续 fail closed，不能把停止状态计为质量 PASS。
 - 停止态下 `MarkdownPredictor` 只接受显式注入的 `CompletionPublicEngine`，不自动导入 V2S factory；因此普通生产 bundle 不含已停止 Worker。V2S engine/factory 源码仅供单元测试和隔离评测复核，不能由无 manifest 的生产路径隐式激活。
-- 公共模型仍须满足 manifest+单资产 ≤6MiB、主线程无模型长任务、双 p90 ≤140ms、独立 cold/workspace final 和完整证据绑定；发布器只能原子替换唯一 canonical profile，不能并行安装多版本或用旧模型 fallback 掩盖失败。
 - 结构化 Provider、L1、Personal L2、Notebook N2 与 Hybrid 是互补来源而非公共模型版本；公共 L3 缺失或失败时它们继续提供免费确定性路径。
 
-## 离线补全可插拔扩展（3.12，V2.1 规划）
+## 离线语义补全研究（3.12，V3）
 
 - V2 将普通候选整理为最多 8 条的不可变 `CandidateBatch`，携带 engine epoch、workspace scope、document version、UTF-16 cursor、deadline 和取消信号；确定性结构化候选旁路语义扩展。
 - Web/PWA 的工作区短语检索运行在专用 Worker，Tauri 使用 Rust 应用状态中的等价内存后端；两端共享候选协议，并统一在 TypeScript 层执行排名、Resolver 和质量门控。后端失败或超时始终退回免费 V2 fallback。
@@ -88,10 +97,10 @@ Vue 3 + Pinia + Vite
 - 冻结 V1 通过独立子进程运行仓库内压缩快照，manifest 实算绑定 commit、逐文件、旧模型、观测补丁和聚合树 SHA；生产依赖与 Vite bundle 检查必须证明该快照不可达。普通 CI 复算 fail-closed 资产一致性，RC 则重新读取所有绑定文件并计算 canonical/tree SHA；Windows Tauri 发布还必须提供真实 WebView2 smoke 证据。
 - Web/Rust 工作区索引采用相同的 fail-closed 默认预算：2,000 篇文档、单文档 512KiB、总输入 16MiB、单文档 20,000 entries、总计 300,000 entries。贡献只保存 fingerprint 和可逆统计；替换超限时保留旧贡献，不驻留原始正文。
 - `CompletionEngineRouter` 只在请求安全边界原子切换已预热引擎。异步结果必须校验 epoch、文档版本、光标和焦点；超过 deadline 或迟到的结果被丢弃，不能替换已显示的 ghost。
-- V2.1 的 `SemanticReranker` 位于候选硬门控之后、最终 Resolver 之前，不作为普通 Provider。它只能重排已有候选，不能改写文本、插入位置、来源归因或学习属性。
-- `.mlcompletion` 是签名数据包，只能包含白名单模型、tokenizer、manifest 和校验信息，禁止任意 JS/WASM/原生代码。首版由固定 ONNX/WASM Worker 宿主加载；Tauri 不采用运行时下载 sidecar。
-- 插件只接收截断上下文和候选，不暴露文件系统、工作区枚举或网络能力。安装、预热、升级、授权变化、切换和回滚必须原子化，免费 V2 始终保持可用。
-- 免费 V2 的公共检索资产以 ≤4MiB 为产品目标、6MiB 为兼容硬上限；工作区内存索引与 V2.1 可选包分别核算。
+- V3 只在 V2.2 cold/workspace 双 final 通过后启动；首期使用独立 Windows/Tauri 实验宿主和隔离候选目录，不实现 `.mlcompletion`、授权、商店、支付或账号，也不改变 V2 默认引擎。
+- 固定矩阵为 48M/64M/80M、Q4/Q8 与 C1/C2/C3 的 256/512/1024-token 胶囊；不扩展为更大通用模型。模型与实验宿主 ≤96MiB，增量内存 ≤256MiB，可见 p90 ≤140ms。
+- 研究候选必须在同集对照中让 cold/workspace 绝对可用率相对精确哈希绑定 V2 各提升至少 8pp，false trigger ≤3%、mixed 0，且结构化和强 Personal/Notebook 候选零回归。
+- 固定 60 任务中英 dogfood 的 retained characters/opportunity 必须提升至少 15%，接受后撤销率不得恶化。任一质量、许可、体积或运行门禁失败即停止；只有研究通过后另立付费产品化 ADR 与计划。
 
 ## 主题数据流
 
@@ -119,6 +128,9 @@ Vue 3 + Pinia + Vite
 ## 变更记录
 
 - 2026-08-05：Windows 专业编辑器启动增加不可跨 apartment 的关联处理器兼容路径；仍只使用系统枚举返回的完整可执行文件，不解析注册表命令，并保留 Open With 末级回退。
+
+- 2026-08-05：离线补全升级到 V2.2 双平面、CM6 增量上下文、精确 TextEdit、retained 学习与 v5 持久化；登记 `public-v2-free-decoder-v1`、24MiB 总预算和 V3 隔离研究前置门禁，既有 RC 与 V2R/V2S stop 不变。
+
 - 2026-08-04（v1.1）：增加独立文档导入会话、同可执行文件转换 worker、版本化流协议、资源/取消边界、源 revision、原子另存和 Windows 关联处理器架构。
 
 - 2026-08-04：将结构化错误合同限定到会进入本地化 UI 的 IPC/MockFS，补全检索和内部诊断明确排除。

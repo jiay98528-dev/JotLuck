@@ -60,23 +60,28 @@ JotLuck 是本地优先、离线可用的 Markdown 笔记工具。数据以普�
 ## 离线文字补全要求（F-17）
 
 - 补全必须完全离线运行，只显示一条 ghost text，不提供候选菜单；只有无修饰键 `Tab` 可以接受，`Escape` 只拒绝，失焦、窗口切换和弹窗切换只清除提示。
-- 学习数据按工作区隔离。当前文档、notebook 派生模型、个人明确反馈与公共基线必须分层，关闭文档不得把全文写入个人模型。
-- 公共 L3 必须使用边界感知、可组合输出的只读模型；英文须保留前导空格、标点和完整单词边界。V2R 固定短语库 Transformer 因真实写作表示上限不足已停止；免费 Public V2S 使用中英文独立 Subword Modified Kneser-Ney 与极小型选择性门控，不引入 ONNX、通用推理运行时或第二公共模型。
-- 公共模型必须来自许可证明确、来源可追溯且通过隐私、样板、原始/残余重复、类别/来源占比和正式 holdout 重叠闸门的语料。训练池上限为 30MiB；canonical manifest 与其唯一内容寻址模型资产合计不得超过 6MiB，训练候选不得写入 public 目录。
-- 同一写作光标下所有满足完整词/短语边界的合法前缀都必须作为等价可接受目标参与训练与 Oracle 统计；selection、generator、训练数据、模型、bundle 和评测证据必须交叉绑定且可从原始文件重算，不能依赖报告自报字段放行。
-- 公共模型的静默训练必须来自明确的真实静默位置。短语库未覆盖用户仍可能需要的 continuation 属于表示能力缺口，只能影响覆盖率报告，不得被标成拒答样本或计入 false-trigger 分母。
+- 内核分为结构化与正文预测两个平面。Wiki-link、标签、路径、格式和列表在 IME composition 稳定后立即补全；正文预测只在 paragraph/list/quote 行尾运行并保持 40ms 防抖。结构化和强本地候选存在时不得调用公共生成器。
+- 所有接受操作使用精确 `CompletionTextEdit { from, to, insertText }`；ghost 的 `displayText` 不得充当正文写入。异步请求必须绑定 editor session、workspace scope、单调 document revision、UTF-16 cursor、上下文快照、deadline 和 `AbortSignal`，迟到结果不得替换已显示 ghost。
+- 学习数据按工作区隔离。当前文档、进程内 Session History、notebook 派生模型、Personal L2 与公共模型必须分层；关闭文档不得把全文写入 Personal L2。Session History 每工作区最多 100 条并在进程退出时清空。
+- 接受 `Tab` 只产生 `accepted`，不立即持久学习。只有插入内容在后续越过区间或保存/关闭时仍完整，转为 `retained` 后才写 Personal L2、accepted lexicon 和正向排序信号；立即撤销/修改分别记为 `reverted`/`modified`，继续输入、失焦或切文档记为 `abandoned` 且不作负反馈，`Escape` 才是 `explicitRejected`。结构化候选永不写入语料。
+- 学习准入固定为 `persist | memoryOnly | skip`：普通工作区正文可持久化，临时/外部会话仅内存；密钥、密码、token、代码和 frontmatter 跳过。用户笔记、反馈和本地指标不得上传或进入公共模型训练。
+- V2R 固定短语 Transformer 与 V2S Subword MKN 的 architecture-stop 继续有效。下一版本免费公共引擎必须使用新 ID `public-v2-free-decoder-v1`、新 manifest 和新缓存，不得修改旧停止记录或并行加载第二公共引擎。
+- 免费公共引擎固定比较 16M/24M/32M Q4 与 16M Q8 decoder-only，使用单一 8K Unigram + byte fallback 双语 tokenizer、最多 256 tokens 上下文；训练池清洗后上限 512MiB。模型、tokenizer、manifest 与新增推理宿主静态增量合计不超过 24MiB，增量峰值内存不超过 192MiB，模型推理 p90 不超过 80ms。
+- Windows/Tauri 通过同一签名可执行文件的隐藏常驻 completion worker 推理。长度帧、request ID、latest-only 取消、deadline、崩溃隔离和 Job Object 资源限制必须 fail closed；模型只能返回不可信文本，插入区间、来源、优先级与学习策略由宿主决定。
+- 公共模型必须来自许可证明确、来源可追溯且通过隐私、样板、原始/残余重复、类别/来源占比和正式 holdout 重叠闸门的语料。上下文胶囊仅含标题链、当前段落、前段尾部和至多一个无路径检索片段，不提供整篇正文、文件名或工作区清单。
+- Oracle 预检必须先达到 Oracle@8 ≥45%、Oracle@32 ≥55%、中英文 Oracle@8 各 ≥40%；失败即停止，不训练 visibility gate、不读取 final、不发布资产。旧已观察 holdout 只作回归。
 - Cold 与 workspace-conditioned 两套冻结 final 必须分别达到触发率 35%–42%、绝对可用率至少 35%、silence false trigger 不超过 3%、mixed 候选为 0、全请求与可见预测 p90 均不超过 140ms，才允许标记为可发布。每套 200 个 checkpoint 必须触发 70–84 次且至少 70 次可用；`usable/triggered` 只作条件精度诊断，不得冒充绝对可用率。
 - 正式证据分为 cold 与 workspace-conditioned 两套 validation/final。validation 可用于选择候选但不得进入训练；final 只能在模型、短语库和阈值冻结后消费一次。final 失败后该版本不可重跑，公共资产继续 fail-closed，Personal Learning 结果不得并入公共模型分数。
-- 未发布候选只能在显式评测构建中运行，必须保留 `qualityGatePassed/releaseEligible=false`；普通生产构建不得接受候选 URL 或把候选写入 public 目录。缺失四套独立人工冻结 V2S validation/final 时不得自动生成参考答案、启动正式选型或宣称达到质量指标。
+- 未发布候选只能由 dev/E2E flag 在隔离候选目录运行，必须保留 `qualityGatePassed/releaseEligible=false`；普通生产构建不得接受候选 URL、候选 manifest 或把候选写入 public。双 final 与真实 Windows 中文 IME GUI 闭环通过后，publisher 才能一次性切换默认并删除生产双引擎比较入口。
 - V1 只允许作为仓库内隔离评测快照存在。V1/V2 必须在同一冻结数据上报告 Top-1、Oracle@8、usable、安全与运行时指标；V1 源码、模型和观测补丁不得进入生产依赖图或构建产物。
 
-## 付费语义补全扩展（F-17.1，V2.1 规划）
+## 付费语义补全研究（F-17.1，V3 研究）
 
 - 免费 Completion Engine V2 必须独立、完整、离线可用；付费扩展不得成为基础补全依赖或降低免费路径质量。
-- V2.1 首版只对 V2 已通过硬门控的最多 8 条候选做语义重排，不生成新文本，不改变结构化 Wiki-link、标签、路径、格式和列表补全的优先级。
-- 插件未安装、未授权、损坏、超时或加载失败时无感退回免费 V2；已经显示的 ghost text 不得被迟到的插件结果替换。
-- V2.1 继续遵守单条 ghost、无候选菜单、Tab/Escape/IME/失焦语义、mixed 为 0 和完全离线；模型只接收截断上下文与候选，不获得文件系统或网络能力。
-- 只有免费 V2 的 oracle@8 证明存在足够排名差距，并且独立 holdout 显示可感知净收益时，才允许把 V2.1 从规划转为开发里程碑。
+- V3 只有在免费 V2.2 的 cold/workspace 双 final 通过后才能启动；首期只产出隔离研究候选，不实现 `.mlcompletion` 安装、授权、商店、支付、账号或生产默认切换。
+- 固定比较 48M/64M/80M、Q4/Q8，以及 C1/C2/C3 的 256/512/1024-token 上下文；不扩展到更大通用模型。实验宿主和候选目录不得写生产 public 或改变免费默认引擎。
+- V3 相对同集、精确哈希绑定的 V2，cold 与 workspace 绝对可用率必须分别提升至少 8 个百分点，false trigger ≤3%、mixed 为 0，结构化及强 Personal/Notebook 候选零回归；可见 p90 ≤140ms、峰值增量内存 ≤256MiB、模型与实验宿主 ≤96MiB。
+- 固定 60 任务中英本地 dogfood 的 retained characters/opportunity 必须比 V2 提升至少 15%，接受后撤销率不得恶化。任一质量、许可、体积或运行门禁失败即停止；只有研究通过后才另立付费产品化计划。
 
 ## 验收基线
 
@@ -95,6 +100,8 @@ JotLuck 是本地优先、离线可用的 Markdown 笔记工具。数据以普�
 - 切回 `paper` 后插件 DOM、CSS、事件监听和接管标记无残留。
 
 ## 变更记录
+
+- 2026-08-05：F-17 升级为 V2.2 双平面、精确 TextEdit、retained 学习和 `public-v2-free-decoder-v1`；24MiB 总静态预算与 V3 隔离研究门禁只属于下一版本，现有 RC 不变。
 
 - 2026-08-04（v1.1）：新增 F-19 Windows DOCX/PDF/Excel 隔离导入、渐进语义预览、源版本过期与双路径编辑；新增 F-20 八扩展名可选注册、专业编辑器调用和真实默认应用状态。
 

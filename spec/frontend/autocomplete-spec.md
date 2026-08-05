@@ -1,7 +1,7 @@
 # JotLuck 文字补全功能规格
 
-> 版本：v1.16 | 日期：2026-07-14 | 状态：⛔ Public V2R/V2S 均已停止；正式资产继续 fail-closed
-> 关联文档：`doc/PRD.md` §F-17/F-17.1、`doc/TAD.md` §3.11/§3.12、`spec/decisions.md` ADR-011/ADR-014/ADR-015/ADR-016、`plans/autocomplete-engine-v2.md`、`doc/autocomplete-model-training.md`
+> 版本：v2.2 | 日期：2026-08-05 | 状态：下一版本开发；当前 RC 与 Public V2R/V2S stop 保持不变
+> 关联文档：`doc/PRD.md` §F-17/F-17.1、`doc/TAD.md` §3.11/§3.12、`spec/decisions.md` ADR-011/014/015/016/021/022、`plans/autocomplete-engine-v2.2-v3.md`、`doc/autocomplete-model-training.md`
 
 ## 一、概述
 
@@ -11,10 +11,11 @@ JotLuck 编辑器内置的轻量级文字补全系统。通过统一幽灵文本
 
 ```
 GhostTextPlugin (CM6 ViewPlugin)  ← 渲染层
-    ↓ getGhostText()
+    ↓ CompletionDocumentContextField + plane scheduler
 MarkdownPredictor (工作区级服务) ← 融合决策；编辑器重建时复用
-    ├── CompletionContextBuilder  ← 语法/语言/行边界上下文
-    ├── CompletionProvider[]      ← 结构化/序列/短语/N-gram
+    ├── Structured Plane          ← Wiki/标签/路径/格式/列表；立即运行
+    ├── Predictive Plane          ← 正文预测；40ms 防抖
+    ├── CompletionProviderRegistry← 生命周期注册、预算和权限描述符
     ├── CompletionResolver        ← 排序、同一行、语言隔离、降噪
     └── NGramEngine (纯算法)      ← L1/Personal L2/Notebook N2 统计预测
 
@@ -29,6 +30,9 @@ CompletionTrainingService         ← notebook 文档贡献替换/撤销，不�
 | `packages/app/src/utils/ngram-engine.ts`                      | N-gram 纯算法：scan/predict/learn/merge/prune/serialize/deserialize |
 | `packages/app/src/services/MarkdownPredictor.ts`              | 兼容 facade：L1/L2/L3 管理、持久化、provider 调度                   |
 | `packages/app/src/services/completion/`                       | Context/Provider/Resolver/Metrics 核心实现                          |
+| `packages/app/src/services/completion/document-context.ts`    | CM6 增量 revision、语法节点路径、标题链与有界段落快照               |
+| `packages/app/src/services/completion/provider-registry.ts`   | 内部类型安全 Provider Registry、调度顺序与软预算                    |
+| `packages/app/src/services/completion/feedback-lifecycle.ts`  | shown/accepted/retained/modified/reverted/rejected/abandoned 状态机 |
 | `packages/app/src/services/completion/public-engine-types.ts` | 唯一公共 L3 插槽的模型无关契约与诊断                                |
 | `packages/app/src/utils/cm6-ghost-text.ts`                    | CM6 插件：GhostTextPlugin + Tab/Escape keymap                       |
 | `packages/app/src/assets/styles/editor.css`                   | Ghost text CSS 样式                                                 |
@@ -40,13 +44,14 @@ CompletionTrainingService         ← notebook 文档贡献替换/撤销，不�
 
 ### 分层缓存
 
-| 层  | 位置                | 来源                            |      大小      | 生命周期           |
-| --- | ------------------- | ------------------------------- | :------------: | ------------------ |
-| L0  | IndexStore (Pinia)  | .jotluck_index.json             |       —        | 应用启动→关闭      |
-| L1  | 内存                | scanDocument(当前文档)          |     ~300KB     | 文档打开→关闭      |
-| N2  | 内存                | 当前 notebook 的按文件贡献      | 受训练预算约束 | 工作区打开→关闭    |
-| L2  | scoped localStorage | 用户明确接受/拒绝形成的历史     |  ~500KB-3.5MB  | 按 notebook 持久化 |
-| L3  | 可选公共引擎插槽    | 当前未绑定；canonical v4 仅诊断 | ≤6MiB hard cap | 应用级只读实例     |
+| 层  | 位置                | 来源                               |       大小        | 生命周期           |
+| --- | ------------------- | ---------------------------------- | :---------------: | ------------------ |
+| L0  | IndexStore (Pinia)  | .jotluck_index.json                |         —         | 应用启动→关闭      |
+| L1  | 内存                | 当前文档段落增量贡献               |      ~300KB       | 文档打开→关闭      |
+| S1  | 内存                | 当前进程保留的 retained 历史       |   ≤100 条/scope   | 进程退出即清空     |
+| N2  | 内存                | 当前 notebook 的按文件贡献         |  受训练预算约束   | 工作区打开→关闭    |
+| L2  | scoped localStorage | retained 个人历史 + legacyAccepted |   ~500KB-3.5MB    | 按 notebook 持久化 |
+| L3  | 可选公共引擎插槽    | 当前未绑定；新 decoder 仅 dev/E2E  | ≤24MiB 总静态增量 | 应用级只读实例     |
 
 L1、N2、Personal L2 和 L3 必须使用独立表，并在推理阶段分别产生候选；禁止先合并原始计数再把胜者统一标记成 L2。保存文件时以路径为身份替换 N2 贡献，重复保存相同内容不得增加计数；编辑、删除、重命名和切换工作区必须分别撤销、迁移或重建对应贡献。关闭文档只清理 L1，整篇正文不得合并进 Personal L2。
 
@@ -69,11 +74,12 @@ N2 的单文件贡献以 `minCount=1` 保留，先按工作区聚合计数和文
 
 ```
 localStorage key prefix: "jotluck:scope:<notebook-root-hash>:autocomplete:"
-personal model: "ngram:v4"                # long/short2/short3 独立表
-signals:        "learning-signals:v2"
-metrics:        "metrics:v2"
-meta:           "meta:v4" → {
-  "schemaVersion": 4,
+personal model: "ngram:v5"                # retained long/short2/short3
+legacy:         "legacy-accepted:v5"      # v4 接受数据，固定 0.5 权重
+signals:        "learning-signals:v3"     # retained/reverted 分离
+metrics:        "metrics:v3"
+meta:           "meta:v5" → {
+  "schemaVersion": 5,
   "docs": N,
   "totalEntries": N,
   "lastSave": T,
@@ -82,7 +88,7 @@ meta:           "meta:v4" → {
 }
 ```
 
-所有读取必须校验 schema/字段/计数并捕获 JSON 错误；损坏数据降级为空状态，不得中断预测。旧聚合 N-gram 无法区分正文贡献和个人反馈，升级时丢弃并从工作区文件重建；accepted lexicon 与合法学习信号可迁移。写入按 scope 串行合并，可用时使用 Web Locks，并通过 BroadcastChannel/storage event 同步其他标签页。
+所有读取必须校验 schema/字段/计数并捕获 JSON 错误；损坏数据降级为空状态，不得中断预测。v4 已接受数据迁入 `legacyAccepted`，只以 0.5 权重参与排序且不伪造 retained；新 retained 逐项提升。旧聚合正文 N-gram 仍丢弃并从工作区文件重建。写入按 scope 串行合并，可用时使用 Web Locks，并通过 BroadcastChannel/storage event 同步其他标签页。
 
 ### 基准语料训练管道
 
@@ -133,17 +139,18 @@ N-gram Provider 必须用 `provideMany` 暴露 L1、Personal L2、N2、L3 各层
 
 ## 五、交互规范
 
-| 用户行为         | 系统响应                                              |
-| ---------------- | ----------------------------------------------------- |
-| 停止输入 150ms   | 出现 ghost text（如果存在高置信度预测）               |
-| 无修饰键 `Tab`   | 编辑区持焦、空选区、非 IME 且 ghost 可见时接受并学习  |
-| `Shift+Tab`      | 保持原生焦点/反向缩进导航，不接受 ghost               |
-| 继续输入任意字符 | ghost text 消失，150ms 后重新预测；不记录接受或拒绝   |
-| `Escape`         | 清除 ghost text；同段落同候选文本连续拒绝 2 次后静默  |
-| 切换笔记         | L1 切换为新文档，L2 保留                              |
-| 编辑器/窗口失焦  | 仅清除 ghost 和定时器，不改变正文、不记录接受         |
-| 清空本地学习数据 | 删除 L2 N-gram、短语词库、训练 meta；保留当前笔记内容 |
-| 首次启动         | fetch L3 baseline → 基础预测立即可用                  |
+| 用户行为         | 系统响应                                                     |
+| ---------------- | ------------------------------------------------------------ |
+| composition 稳定 | 结构化平面立即运行                                           |
+| 停止输入 40ms    | 预测平面出现 ghost text（如果存在高置信度预测）              |
+| 无修饰键 `Tab`   | 按精确 edit 插入并记 accepted；暂不持久学习                  |
+| `Shift+Tab`      | 保持原生焦点/反向缩进导航，不接受 ghost                      |
+| 继续输入任意字符 | ghost text 消失，40ms 后重新预测；记 abandoned，不作负反馈   |
+| `Escape`         | 清除 ghost text并记 explicitRejected                         |
+| 切换笔记         | L1 切换为新文档，L2 保留                                     |
+| 编辑器/窗口失焦  | 仅清除 ghost 和定时器，不改变正文、不记录接受                |
+| 清空本地学习数据 | 删除 L2 N-gram、短语词库、训练 meta；保留当前笔记内容        |
+| 首次启动         | 不 fetch 已停止 L3；结构化/L1/Session/Personal/Notebook 可用 |
 
 ### 快捷键
 
@@ -151,7 +158,7 @@ N-gram Provider 必须用 `provideMany` 暴露 L1、Personal L2、N2、L3 各层
 | -------- | ---------------------------------- | :----: |
 | `Tab`    | Ghost text 可见 → 接受补全         |  最高  |
 | `Tab`    | Ghost text 不可见 → 插入制表符缩进 |  默认  |
-| `Escape` | 清除 ghost text + 降低权重         |   高   |
+| `Escape` | 清除 ghost text + 显式拒绝         |   高   |
 
 ### 禁用区域
 
@@ -169,12 +176,16 @@ N-gram Provider 必须用 `provideMany` 暴露 L1、Personal L2、N2、L3 各层
 | 单次 predict          | < 1ms               |
 | Ghost text 渲染       | < 5ms               |
 | 结构化匹配            | < 1ms               |
-| Provider 计算 p90     | < 30ms              |
+| 本地同步 Provider     | 20ms 软预算         |
+| Hybrid                | 35ms 软预算         |
+| 桌面全请求硬截止      | 80ms                |
 | 用户可见 p90 (含防抖) | ≤ 140ms             |
 | L1 内存占用           | < 500KB             |
 | L2 localStorage       | < 5MB               |
 | 免费 V2 Bundle 增量   | 以实际构建报告核算  |
-| L3 web-local baseline | ≤ 6MB hard cap      |
+| 新公共模型总静态增量  | ≤24MiB              |
+| 新公共模型峰值内存    | ≤192MiB             |
+| 新公共模型推理 p90    | ≤80ms               |
 | L3 主线程单次任务     | < 50ms              |
 | 切换 20 篇笔记        | L3 只加载/解析 1 次 |
 
@@ -184,7 +195,7 @@ N-gram Provider 必须用 `provideMany` 暴露 L1、Personal L2、N2、L3 各层
 
 - [x] `**粗` 停顿 → ghost text `**` → Tab 接受 → 文本闭合
 - [x] 代码块内 `function` → 无 ghost text
-- [x] 首次启动 fetch L3 基准文件 → 有基础预测
+- [x] 历史 v4 曾支持首次 fetch；V2.2 已停止自动加载，测试只允许显式诊断注入
 - [x] Tab (无 ghost text) → 正常缩进
 - [x] `npm run generate-baseline` 正常运行
 - [x] NGramEngine 单元测试全部通过
@@ -430,3 +441,115 @@ V2R 的语料治理、盲测、训练与停止证据保留在 `scripts/`，但�
 - 每套分别报告 Public-off B0、V2S-only Top-1/Oracle@8/32、B0+V2S。最终合流不得低于 B0；cold 集还必须获得至少 8pp 新增可用覆盖。validation 只选一次候选；候选/阈值冻结后同时 claim 两套 final SHA，任一失败或中断都消费两套版本。
 - 训练器只写 `_web-cache/autocomplete-v2s/candidates`，评测只写隔离 dist。只有 `publish-autocomplete-v2s-final` 可写 public；先安装并验证内容寻址资产，最后原子切换 canonical manifest并删除旧 v4 pair。manifest+模型硬限制 6MiB。
 - RC 只读取 canonical v6 manifest并重算全部证据；旧新并存、孤儿资产、重复 hash 别名、已停止 V2R manifest、缺失 WebView smoke 或仅资格布尔为真都必须 code 10。失败时不得回退旧 v4/V2R。
+
+## 十五、Completion Engine V2.2 运行时合同
+
+> 本节取代前文中与 V2.2 冲突的运行时、学习、预算和发布口径；第十三、十四节继续作为 V2R/V2S 不可修改的历史停止记录。
+
+### 15.1 文档上下文与双平面
+
+`CompletionDocumentContextField` 必须随 CodeMirror transaction 增量维护：
+
+```typescript
+interface CompletionDocumentContextSnapshot {
+  documentRevision: number;
+  cursor: number;
+  nodePath: readonly string[];
+  blockType: CompletionBlockType;
+  headingTrail: readonly string[];
+  currentParagraph: BoundedTextSlice;
+  previousParagraph: BoundedTextSlice | null;
+  languageHint: CompletionLanguageHint;
+  compositionStable: boolean;
+}
+```
+
+revision 对每个 `docChanged` transaction 单调递增，不能由全文 hash 代替。当前/前段切片各自有固定字符上限，语法节点路径来自 CM6 syntax tree；标题链可在打开文档时完整初始化，后续只重建变更覆盖的结构区域。生产预测入口只能消费快照和必要 `Text` slice，不能获取全文字符串。
+
+结构化平面 `mode: "structured"` 在 composition 稳定后立即执行；预测平面 `mode: "predictive"` 仅接受 paragraph/list/quote、空选区和行尾，并在 40ms 后执行。结构化候选非空时结束该次调度；当前文档、Session、Personal、Notebook 或 Hybrid 候选的 `calibratedScore >= 0.68` 时视为强本地候选，不调用公共生成器。
+
+### 15.2 Provider Registry 与候选合同
+
+```typescript
+interface CompletionTextEdit {
+  from: number;
+  to: number;
+  insertText: string;
+}
+
+interface CompletionCandidate {
+  displayText: string;
+  edit: CompletionTextEdit;
+  mode: 'structured' | 'predictive';
+  kind: CompletionCandidateKind;
+  providerId: string;
+  contributors: readonly CompletionContributor[];
+  sourceLayer: CompletionSourceLayer;
+  priorityTier: CompletionPriorityTier;
+  rawScore: number;
+  calibratedScore: number;
+  feedbackPolicy: 'none' | 'session' | 'retained';
+}
+```
+
+兼容期可提供只读 `text/from/confidence/priority/learnable` 派生字段，但接受正文必须只使用 `edit`。规范化去重键至少包含 `from/to/insertText`；相同 edit 合流后保留所有 contributors，不能只保留胜出 Provider。语义 priority tier 先排序，同层才比较各 Provider 在 validation 上校准的分数和个人微调；原始 confidence 不得跨来源直比。
+
+Provider 描述符固定包含 `id/modes/contextCapabilities/priorityTier/maxCandidates/softBudgetMs/feedbackCapability/dataAccess`。Registry 构造后只读，重复 ID、非法预算、未声明数据权限或多个 generic fallback 必须注册失败。公共扩展是固定宿主下的数据/模型，不是任意可执行 Provider。
+
+### 15.3 请求与迟到结果
+
+```typescript
+interface CompletionRequestSnapshot {
+  requestId: string;
+  editorSessionId: string;
+  engineEpoch: number;
+  workspaceScope: string;
+  documentRevision: number;
+  cursor: number;
+  contextSnapshot: CompletionDocumentContextSnapshot;
+  deadlineAt: number;
+}
+```
+
+每次输入、selection、scope、document、composition 或 focus 边界变化都取消旧请求。响应只有在 session/scope/revision/cursor/epoch/focus/composition 全部仍匹配且尚未超过 deadline 时可显示。同步本地 Provider 20ms 为软预算，Hybrid 35ms 为软预算，桌面请求 80ms 为硬截止；某个 Provider 超预算只记录诊断并停止消费其更多结果，不能阻塞编辑器。
+
+### 15.4 反馈、准入与迁移
+
+反馈记录必须绑定精确 edit、插入后的 document revision、provider contributors 和 scope：
+
+```text
+shown
+  ├─ Tab → accepted ─┬─ 内容完整且编辑越过区间/保存/关闭 → retained
+  │                  ├─ 内容完整且失焦                    → retained
+  │                  ├─ 区间内容被改写                  → modified
+  │                  └─ 区间被撤销                      → reverted
+  ├─ Escape → explicitRejected
+  └─ 未接受 ghost 的 typing/blur/scope/document change → abandoned
+```
+
+accepted 只允许写内存 pending feedback；retained 才按准入结果写 Session/Personal。`explicitRejected` 可影响当前 scope 的排名抑制，但不能把结构化文本写入语料；abandoned 不产生负反馈。准入检查顺序固定为会话类型 → block → 敏感内容：普通 workspace prose 为 `persist`，临时/外部会话为 `memoryOnly`，code/frontmatter 或命中 secret/password/token/key 等模式为 `skip`。
+
+v5 migration 将 v4 personal 模型与 accepted lexicon 放入 `legacyAccepted`，固定权重 0.5；retained/modified/reverted 计数从 0 开始。旧 `accepted`/savedChars 指标只保留 diagnostics，不得迁成 retained。迁移必须幂等，损坏分区单独丢弃且不能破坏其他合法分区。
+
+### 15.5 免费公共生成器
+
+- ID：`public-v2-free-decoder-v1`；协议、manifest、缓存和候选目录全部新建。
+- 固定矩阵：16M/24M/32M Q4，16M Q8；8K Unigram + byte fallback；训练池 ≤512MiB。
+- 输入：标题链、当前段落、前一段尾部、最多一个无路径检索片段；总计 ≤256 tokens。
+- 输出：中文默认 ≤8 code points；英文 ≤12 code points且完整成词；单行、非 mixed、非循环、不得越过 Markdown 边界。
+- Windows/Tauri：同一签名 exe 的隐藏常驻 completion worker；长度帧、request ID、latest-only、取消、deadline、崩溃重启上限与 Job Object 资源约束必须测试。
+- 资源：模型+tokenizer+manifest+新增宿主静态增量 ≤24MiB；峰值增量内存 ≤192MiB；模型 p90 ≤80ms。
+- 预检：Oracle@8 ≥45%、Oracle@32 ≥55%、中英文 Oracle@8 各 ≥40%；任一失败即写新路线 stop，不训练 gate、不读取 final、不发布资产。
+- 候选身份：manifest、Oracle、cold/workspace final 和发布证据必须绑定同一 `candidateArtifactSha256`；该哈希由 candidate ID、参数档、量化档以及模型/tokenizer 的长度与 SHA-256 规范化计算。
+- 运行时身份：worker warmup 必须独立重算 `candidateArtifactSha256`，并校验 `JLFDQ02` magic、`jotluck.autocomplete.quantized-decoder.v2`、payload SHA-256、matrix 架构、group-size 64 的 Q4/Q8 F16 scales、F16 vectors 以及张量名/形状/offset/alias/完整覆盖；文件 SHA 正确但模型布局不可消费时不得返回 ready。
+- 候选生命周期固定为 `trained → oraclePassed → releaseEligible`：trainer 只能写 `trained`（Oracle 全零、evaluation only）；Oracle 通过后才可生成 `oraclePassed` 评测候选；只有双 final 与 Windows GUI/IME 证据齐备时，唯一 publisher 才可写 `releaseEligible`。
+- 发布身份：publisher 必须重算候选资产哈希、双 final 和 Windows GUI 证据 SHA-256，校验许可/体积/内存/Oracle 数值与 manifest 一致，再原子安装唯一 canonical 资产；任一不匹配都保留原引擎。
+- 当前仓库只提供 fail-closed 协议/宿主、训练与评测工具；在存在 Oracle 通过且哈希绑定的权重前，worker 不产生模型候选，不得由空响应推导质量结论。
+
+### 15.6 测试与放行
+
+单元测试覆盖旧/新上下文判定等价、UTF-16 edit、增量 L1 与完整重建一致、Registry 注册/预算/fallback、分数校准、反馈状态机、敏感准入和 v4→v5 幂等迁移。Rust 覆盖 worker 长度帧、损坏模型、取消、deadline、崩溃、内存限制、迟到响应与 TS/Rust 胶囊 golden parity。
+
+E2E 覆盖精确区间替换、立即撤销、保存 retained、修改后 modified、切文档/工作区/失焦陈旧结果、1MiB 文档热路径以及现有补全旅程。Playwright composition 模拟只作自动回归，不能替代真实 Windows/Tauri 中文 IME 人工闭环。
+
+cold 与 workspace final 各 200 checkpoint：150 complete、50 silence，中英文均衡。每套必须同时满足触发率 35%–42%、绝对可用率 ≥35%、中英文各 ≥32%、各类别 ≥30%、silence false trigger ≤3%、mixed/跨行/超长为 0、结构化结果与 edit 正确率 100%、全请求和可见 ghost p90 ≤140ms（目标 ≤100ms）、主线程无 >50ms 模型任务。两套 final 都通过且 Windows GUI 闭环完成前，公共生成器只允许 dev/E2E flag；切换默认只能由唯一 publisher 原子执行。

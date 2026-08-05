@@ -43,6 +43,10 @@
 ## Markdown 编辑与预览
 
 - `MarkdownEditor` 的 Live Preview 通过可选同步 `resolveImageSrc` 解析图片地址，并以 `imageRevision` 重建异步加载完成后的渲染块；未提供时保持原始 renderer 行为。
+- `MarkdownEditor` 必须安装工作区级稳定 Predictor 和编辑器会话级 `CompletionDocumentContextField`；输入热路径只传单调 document revision 与有界上下文快照，不把 `doc.toString()` 或全文 fingerprint 交给补全服务。
+- 补全调度分为 composition 稳定后立即运行的结构化平面，以及 40ms 防抖、仅 paragraph/list/quote 行尾运行的预测平面；两者共享单 ghost、无菜单、Tab/Escape 交互。
+- Tab 接受必须执行候选的精确 `CompletionTextEdit`。编辑器继续跟踪已插入区间：保存/关闭、编辑越过完整区间，或已接受内容仍完整时失焦，才上报 retained；立即撤销和区间改写分别上报 reverted、modified。未接受 ghost 的继续输入、失焦、切文档或切工作区才是 abandoned，不作负反馈。
+- 所有异步补全结果在 dispatch 前重新校验 editor session、workspace scope、document revision、UTF-16 cursor、focus 和 IME；迟到或不匹配结果只清理，不得重入 dispatch 或替换已显示 ghost。
 - 即时预览按 Escape 必须恢复刚编辑的精确块并将焦点交给该渲染块；Enter 或点击重新进入源码编辑，IME composition 期间不得消费 Escape。
 - 本地图片解析失败或越界时移除不可读取的 `src`、保留 alt 文本，不得把原始本地路径泄漏给 WebView，也不得阻断正文渲染或扩大文件权限；网络、data/blob 与锚点地址保持原有渲染语义。
 
@@ -105,6 +109,8 @@
 - 外部只读窗口不得挂载文件树、编辑器、导出、索引、监听、补全或更新检查；进入 workspace 后这些目录级组件才可异步初始化。
 
 ## 变更记录
+
+- 2026-08-05：补充 V2.2 CM6 增量上下文、双平面、精确 TextEdit、retained 反馈和异步身份边界。
 
 - 2026-08-04（v1.1）：定义文档导入渐进状态、唯一编辑入口双选模态、源过期重转、欢迎格式组和设置页真实关联状态控件。
 

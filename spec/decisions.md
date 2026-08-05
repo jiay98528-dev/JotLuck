@@ -1,6 +1,6 @@
 # Decisions
 
-版本：v1.1（2026-08-04）
+版本：v1.2（2026-08-05）
 
 ## 已确认决策
 
@@ -9,6 +9,29 @@
 3. 声明式主题通过 DSL 渲染；官方代码主题和本地可信代码主题可通过 `ThemeHostContext` 替换 Shell/主页/弹窗级 UX slot。
 4. P0 阶段不做权限审批、沙箱隔离、社区市场审核或远程购买接入。本地主题能力声明不作为安装/启用阻断条件。
 5. 商业化通过 `ThemeCommerceProvider` 适配，默认本地 mock。未来接入 Gumroad、Polar 或自建后端时只替换 provider 实现，不改变主题中心和 manifest 结构。
+
+## ADR-022：免费公共补全采用开放词表生成器与 24MiB 总预算
+
+- **状态**：已接受为下一版本开发方向（2026-08-05）；不得进入既有 Windows RC 候选。
+- **决策**：新公共引擎 ID 固定为 `public-v2-free-decoder-v1`，使用 8K Unigram + byte fallback 的双语 decoder-only 开放词表生成器。它不复用 V2R/V2S 的 engine ID、manifest、缓存、final 或停止记录；生产仍只允许一个公共生成引擎。
+- **有界矩阵**：只比较 16M/24M/32M Q4 与 16M Q8，最多 256 tokens 上下文；中文默认最多 8 code points，英文最多 12 code points 且必须完整成词。许可证通过的清洗训练池上限为 512MiB，不继续无界扩池。
+- **运行时**：Windows/Tauri 使用同一签名可执行文件的隐藏常驻 completion worker，采用长度帧、request ID、latest-only 取消和 Job Object 资源限制。模型输出是不可信文本，不能声明编辑区间、优先级、来源或学习策略，全部由宿主重新盖章和门控。
+- **量化与生命周期**：浮点权重导出为 `JLFDQ02`（group-size 64，Q4/Q8 分组 F16 scale、F16 vector）。候选只能按 `trained → oraclePassed → releaseEligible` 单向晋升；trainer 不得生成 Oracle 或 release 资格，publisher 不得接受缺少原始观察和双 final/GUI 哈希绑定的布尔声明。
+- **训练节点**：当前工作站保管 selection、evaluator 和 final，幻15只承担内容寻址的 CUDA job。Tailscale direct 优先，VPS Peer Relay 仅作加密转发；final、用户数据和凭据不得上传训练节点或 VPS。该分工不改变离线产品的数据边界。
+- **预算**：模型、tokenizer、manifest 与新增推理宿主静态增量合计不超过 24MiB，增量峰值内存不超过 192MiB，模型推理 p90 不超过 80ms。Web/PWA 不继承桌面模型承诺，只保留结构化、个人和工作区安全降级。
+- **停止与放行**：训练 visibility gate 前，Oracle@8 必须 ≥45%、Oracle@32 ≥55%、中英文 Oracle@8 各 ≥40%；不通过即停止该路线且不读取 final。通过预检后，cold/workspace 两套各 200 checkpoint 的独立 final 仍必须同时达到 35%–42% 触发率、绝对可用率 ≥35%、silence false trigger ≤3%、mixed/跨行/超长为 0 和双 p90 ≤140ms，才允许 publisher 原子安装唯一 canonical 公共引擎。
+- **后果**：ADR-014/016 的 architecture-stop 原样有效；旧观察 holdout 只用于回归，新的 validation/final 必须重新冻结且 final 每套只消费一次。新引擎在双 final 与真实 Windows GUI/IME 闭环前只能由 dev/E2E flag 显式启用。
+
+## ADR-021：补全内核采用双平面、精确编辑与保留后反馈
+
+- **状态**：已接受为 Completion Engine V2.2（2026-08-05）；保持单条 ghost、`Tab` 接受、`Escape` 拒绝和无候选菜单。
+- **双平面**：结构化平面处理 Wiki-link、标签、路径、格式和列表，composition 稳定后立即运行；预测平面只在 paragraph/list/quote 行尾运行并保持 40ms 防抖。强结构化、本地或个人候选存在时不调用公共生成器，迟到结果永不替换已显示 ghost。
+- **上下文**：CodeMirror 6 `CompletionDocumentContextField` 维护单调 revision、语法节点路径、block、标题链、当前/前段有界切片和语言提示。打开文档允许一次完整初始化；后续热路径禁止 `doc.toString()`、全文 fingerprint 和从文首重扫 fenced code/frontmatter，L1 按受影响段落增量撤销/重建。
+- **编辑合同**：候选的唯一正文写入是 `CompletionTextEdit { from, to, insertText }`；`displayText` 仅用于 ghost。请求身份由 editor session、workspace scope、document revision、UTF-16 cursor、上下文快照、deadline 与取消信号构成。
+- **Provider 合同**：内部类型安全 Registry 在 Predictor 生命周期内注册一次，描述 mode、上下文能力、优先层、候选上限、软预算、反馈能力和数据权限；不开放任意 JS/WASM/原生 Provider 插件。顺序固定为结构化 → 当前文档/Session → Personal/Notebook/Hybrid → 免费公共生成器 → 唯一 generic fallback。
+- **反馈合同**：事件状态为 `shown → accepted → retained | modified | reverted`，另有 `explicitRejected` 与无负反馈的 `abandoned`。只有 `retained` 才写入 Personal L2、accepted lexicon 和正向排序信号；结构化候选永不进入语料。学习准入只有 `persist | memoryOnly | skip`，密钥、密码、token、代码和 frontmatter 必须 skip。
+- **迁移**：持久化 schema 升级为 v5；v4 已接受数据进入 `legacyAccepted` 分区并以 0.5 权重参与排序，不伪造 retained。每工作区 Session History 最多 100 条且进程退出清空。
+- **预算**：同步本地 Provider 20ms 软预算，Hybrid 35ms 软预算，桌面请求 80ms 硬截止；包含防抖的可见 ghost 仍以 ≤140ms 为硬门禁、≤100ms 为目标。
 
 ## ADR-020：二进制文档采用隔离语义转换与双路径编辑
 
@@ -108,6 +131,8 @@
 - **后果**：测试机并行负载不会单独阻断 preview，但也不能用“环境抖动”豁免缺安装旅程、缺样本、缺 provenance、缺证据提交或产品功能失败。
 
 ## 变更记录
+
+- 2026-08-05（v1.2）：新增 ADR-021/022，确立 PowerShell 式双平面补全、精确编辑、retained 学习合同，以及下一版本免费开放词表公共生成器和 24MiB 总预算。
 
 - 2026-08-04（v1.1）：新增 ADR-020，确定 Office/PDF 隔离语义导入、可取消 worker、双路径编辑和 Windows 系统默认应用边界。
 
