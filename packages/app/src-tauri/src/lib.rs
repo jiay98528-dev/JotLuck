@@ -4,7 +4,10 @@
 // external-file sessions. A file association never replaces another window.
 
 mod command_error;
+mod completion_decoder;
+mod completion_decoder_runtime;
 mod completion_retrieval;
+mod completion_tokenizer;
 mod document_import;
 mod file_watcher;
 mod fs_ops;
@@ -38,7 +41,9 @@ fn is_supported_opened_file_extension(ext: &str) -> bool {
 }
 
 pub fn run_document_worker_if_requested() -> bool {
-    document_import::run_document_worker_if_requested()
+    completion_decoder::run_completion_parity_if_requested()
+        || completion_decoder::run_completion_worker_if_requested()
+        || document_import::run_document_worker_if_requested()
 }
 
 fn opened_file_path_from_arg(arg: &str, cwd: &Path) -> Option<PathBuf> {
@@ -268,6 +273,7 @@ pub fn run() {
         .manage(window_session::WindowSessionRegistry::new())
         .manage(document_import::DocumentImportState::new())
         .manage(file_watcher::FileWatcherState::new())
+        .manage(completion_decoder::CompletionDecoderState::new())
         .manage(completion_retrieval::CompletionRetrievalStates::new())
         .manage(indexer::SearchIndexState::new())
         .setup(move |app| {
@@ -339,6 +345,10 @@ pub fn run() {
             indexer::build_index,
             indexer::update_index_document,
             indexer::search_index,
+            completion_decoder::completion_decoder_warmup,
+            completion_decoder::completion_decoder_generate,
+            completion_decoder::completion_decoder_cancel,
+            completion_decoder::completion_decoder_dispose,
             completion_retrieval::completion_v2_set_scope,
             completion_retrieval::completion_v2_replace_document,
             completion_retrieval::completion_v2_remove_document,

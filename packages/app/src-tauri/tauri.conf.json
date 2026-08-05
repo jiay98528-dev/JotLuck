@@ -41,7 +41,8 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "icons/file-icon.ico": "file-icon.ico"
+      "icons/file-icon.ico": "file-icon.ico",
+      "resources/autocomplete": "autocomplete"
     },
     "windows": {
       "webviewInstallMode": {
