@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "1.0",
+  "recordId": "JOTLUCK-OBJECTIVES-CONFIRMATION-R2",
+  "actorId": "product-owner",
+  "decision": "CONFIRMED",
+  "documentId": "KOD-JOTLUCK",
+  "revision": 2,
+  "summary": "Confirmed JotLuck KEY_OBJECTIVES.md revision 2 with KO-001..KO-005, KF-001..KF-007, and NG-001..NG-006 for the Schema 3.2 control plane at releaseIntent=EXTERNAL_RELEASE and packageMode=DEVELOPMENT on vibe-control runtime 0.3.7, including read-only document import, eight Windows associations, installed Save As evidence, and fail-closed signing claims.",
+  "summarySha256": "2996e071f69312b97bb24cf20fe1429181d05a3265bd1fbda31742699eb48d18",
+  "confirmedAt": "2026-08-05T11:52:03+08:00",
+  "source": "User requested progression of the reviewed document-import candidate to signing-application release PASS."
+}

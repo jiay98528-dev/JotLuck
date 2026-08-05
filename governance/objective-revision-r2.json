@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "3.2",
+  "projectId": "jotluck",
+  "keyObjectives": {
+    "document": "KEY_OBJECTIVES.md",
+    "documentId": "KOD-JOTLUCK",
+    "revision": 2,
+    "status": "CONFIRMED",
+    "sourceDocuments": [
+      "PRODUCT.md",
+      "doc/PRD.md",
+      "doc/TAD.md",
+      "spec/decisions.md",
+      "spec/milestones.md",
+      "doc/release-rc-gate.md",
+      "SECURITY.md",
+      "KNOWN_LIMITATIONS.md",
+      "RELEASE_NOTES.md",
+      "spec/release/required-cases/installed-app-v2.json"
+    ],
+    "objectiveIds": ["KO-001", "KO-002", "KO-003", "KO-004", "KO-005"],
+    "failureModeIds": ["KF-001", "KF-002", "KF-003", "KF-004", "KF-005", "KF-006", "KF-007"],
+    "nonGoalIds": ["NG-001", "NG-002", "NG-003", "NG-004", "NG-005", "NG-006"],
+    "confirmation": {
+      "actorId": "product-owner",
+      "summary": "Confirmed JotLuck KEY_OBJECTIVES.md revision 2 with KO-001..KO-005, KF-001..KF-007, and NG-001..NG-006 for the Schema 3.2 control plane at releaseIntent=EXTERNAL_RELEASE and packageMode=DEVELOPMENT on vibe-control runtime 0.3.7, including read-only document import, eight Windows associations, installed Save As evidence, and fail-closed signing claims.",
+      "summarySha256": "2996e071f69312b97bb24cf20fe1429181d05a3265bd1fbda31742699eb48d18",
+      "record": "governance/confirmations/objectives-confirmation-r2.json"
+    }
+  }
+}

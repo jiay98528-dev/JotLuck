@@ -1,10 +1,10 @@
 # JotLuck Key Objectives
 
 - Document ID: `KOD-JOTLUCK`
-- Revision: `1`
+- Revision: `2`
 - Status: `CONFIRMED`
 - Confirmed actor: `product-owner`
-- Confirmed at: `2026-07-29T17:33:08+08:00`
+- Confirmed at: `2026-08-05T11:52:03+08:00`
 - Source documents: `PRODUCT.md`, `doc/PRD.md`, `doc/TAD.md`, `spec/decisions.md`, `spec/milestones.md`, `doc/release-rc-gate.md`, `SECURITY.md`, `KNOWN_LIMITATIONS.md`, `RELEASE_NOTES.md`, `spec/release/required-cases/installed-app-v2.json`
 
 ## North Star
@@ -13,20 +13,21 @@ JotLuck keeps user-owned plain-text notes safe and portable while making the com
 
 ## Key objectives
 
-- `KO-001`: Preserve plain-text data ownership and file-operation correctness through safe relative paths, atomic writes, explicit failure handling, and post-write readback.
-- `KO-002`: Close the user-visible writing, search, preview, export, restart recovery, and deletion journeys without stale note, bookmark, index, or asset state.
-- `KO-003`: Preserve local-first privacy and the locked Markdown, DOMPurify, export-formula, path, and trusted-code theme safety boundaries.
-- `KO-004`: Demonstrate real Windows x86_64 and ARM64 installation, WebView2 launch, four protected file associations, window isolation, restart, and uninstall quality without cross-architecture extrapolation.
+- `KO-001`: Preserve user-owned source data and file-operation correctness through safe relative paths, read-only document snapshots, atomic writes, explicit failure handling, source-revision checks, and post-write readback.
+- `KO-002`: Close the user-visible writing, search, Markdown preview, document-import preview, Save As, export, restart recovery, and deletion journeys without stale note, bookmark, index, conversion, source-revision, or asset state.
+- `KO-003`: Preserve local-first privacy and the locked Markdown escaping, DOMPurify, export-formula, path, conversion-worker, decompression-limit, and trusted-code theme safety boundaries.
+- `KO-004`: Demonstrate real Windows x86_64 and ARM64 installation, WebView2 launch, all eight registered file associations, per-extension default-app status, document-import window isolation, restart, and uninstall quality without cross-architecture extrapolation or default-app override claims.
 - `KO-005`: Keep candidate identity, signing, dual-channel assets, raw evidence, role separation, withdrawal state, and public claims in one content-addressed closure.
 
 ## Failure modes that must remain fail-closed
 
-- `KF-001`: Note bytes are corrupted, lost, partially written, or reported saved without matching readback.
+- `KF-001`: Note or converted Markdown bytes are corrupted, lost, partially written, or reported saved without matching readback.
 - `KF-002`: A file, asset, export, archive, or evidence path escapes its authorized project or notebook boundary.
 - `KF-003`: Markdown XSS, unsafe URL handling, or spreadsheet formula injection reaches an executable consumer.
-- `KF-004`: Installation or file association handling silently overrides an existing Windows default application.
+- `KF-004`: Installation, onboarding, or file association handling silently overrides an existing Windows default application or reports a choice that Windows did not apply.
 - `KF-005`: Trusted-code theme code executes without an understandable risk disclosure and explicit confirmation.
 - `KF-006`: Evidence drifts, crosses candidates or architectures, reuses incompatible roles, or produces a false PASS from zero execution, skip, stale transcript, unverifiable artifacts, or unsupported adapter claims.
+- `KF-007`: A document-import worker reads beyond its private snapshot, exceeds a declared resource boundary, writes the original, saves a stale conversion after the source changes, or commits a conflicting Markdown asset directory.
 
 ## Non-goals
 
@@ -35,12 +36,13 @@ JotLuck keeps user-owned plain-text notes safe and portable while making the com
 - `NG-003`: Stopped V2R/V2S architectures and Future V3 research cannot enter the current production candidate.
 - `NG-004`: Theme sandboxing and community review are not promised by the current trusted-code theme model.
 - `NG-005`: The threat model does not defend against the candidate, controller, verifier, and every trusted role acting maliciously together.
+- `NG-006`: Pixel-perfect Office/PDF layout fidelity, OCR, legacy `.doc` import, in-place Office/PDF editing, and automatic replacement of Windows defaults are outside the document-import boundary.
 
 ## Trust and threat boundary
 
 Trust is limited to the exact tracked candidate, the pinned control runtime, recomputed Git objects and SHA-256 references, independently observed artifacts, and explicitly separated actors at the release boundary. Note content, Markdown, paths, theme packs, downloaded assets, self-reported JSON, old transcripts, cross-candidate evidence, and architecture extrapolation are untrusted.
 
-Tauri remains an explicit investigation under vibe-control 0.3.6 because no formal Tauri adapter exists. Browser and generic-command evidence may prove only their descriptor-listed facts. Missing real ARM64 hardware evidence, signing identity, official website origin, or dual-channel closure must remain blocked rather than inferred.
+Tauri remains an explicit investigation under vibe-control 0.3.7 because no formal Tauri adapter exists. Browser and generic-command evidence may prove only their descriptor-listed facts. Missing real installed-app journeys, ARM64 hardware evidence, signing identity, official website origin, or dual-channel closure must remain blocked rather than inferred.
 
 The excluded joint-malicious threat model must be reopened if the project begins accepting unreviewed controller/runtime changes, untrusted signing infrastructure, or a release process in which all trusted roles can collude without an external trust anchor.
 
@@ -51,7 +53,7 @@ The excluded joint-malicious threat model must be reopened if the project begins
 - Required files are tracked ordinary files using safe project-relative paths, with byte counts and SHA-256 references rechecked from Git-visible content.
 - x86_64 and ARM64 are distinct target environments. Cross-compilation and browser execution are diagnostic only for native installation claims.
 - External R3 release work requires four distinct actors and Ed25519 public keys; private keys stay outside the project and Skill directories.
-- The installed 0.3.6 package is `DEVELOPMENT_DIAGNOSTIC`, keeps `formalClaimsAllowed=false`, and caps every claim at `DEVELOPMENT_CHECKED`.
+- The installed 0.3.7 package remains `DEVELOPMENT_DIAGNOSTIC`, keeps `formalClaimsAllowed=false`, and caps every claim at `DEVELOPMENT_CHECKED` until an externally audited sealed package is installed.
 
 ## Governance budget and audit rules
 
