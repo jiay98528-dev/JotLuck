@@ -61,17 +61,23 @@ pub fn get_document_editor_candidate(
 }
 
 #[tauri::command]
-pub fn open_document_source_in_editor(
+pub async fn open_document_source_in_editor(
     window: WebviewWindow,
     handler_id: Option<String>,
     imports: State<'_, DocumentImportState>,
 ) -> CommandResult<DocumentEditorLaunchResult> {
     let source = imports.fresh_source_for_window(window.label())?;
-    Ok(platform::open_source_in_editor(
-        &source.absolute_path,
-        source.kind,
-        handler_id.as_deref(),
-    )?)
+    let parent_window = platform::parent_window_handle(&window);
+    Ok(tauri::async_runtime::spawn_blocking(move || {
+        platform::open_source_in_editor(
+            &source.absolute_path,
+            source.kind,
+            handler_id.as_deref(),
+            parent_window,
+        )
+    })
+    .await
+    .map_err(|error| format!("Windows association task failed: {error}"))??)
 }
 
 #[tauri::command]
@@ -130,6 +136,32 @@ fn handler_id(extension: &str, system_name: &str) -> String {
     format!("{:x}", digest.finalize())
 }
 
+fn launch_with_system_fallback<T>(
+    selected: Result<Option<T>, String>,
+    invoke: impl FnOnce(&T) -> Result<(), String>,
+    open_with: impl FnOnce() -> Result<(), String>,
+) -> Result<(Option<T>, bool), String> {
+    let selected = match selected {
+        Ok(selected) => selected,
+        Err(error) => {
+            log::warn!("unable to enumerate preferred document editors; using Open With: {error}");
+            None
+        }
+    };
+    if let Some(handler) = selected.as_ref() {
+        match invoke(handler) {
+            Ok(()) => return Ok((selected, false)),
+            Err(error) => {
+                log::warn!(
+                    "unable to invoke the preferred document editor; using Open With: {error}"
+                );
+            }
+        }
+    }
+    open_with()?;
+    Ok((selected, true))
+}
+
 fn default_apps_settings_uri_for_build(build_number: Option<u32>) -> &'static str {
     if build_number.is_some_and(|build| build >= 22_000) {
         "ms-settings:defaultapps?registeredAppUser=JotLuck"
@@ -175,7 +207,8 @@ fn preferred_handler_rank(
 mod platform {
     use super::*;
     use std::ffi::c_void;
-    use windows::core::{HSTRING, PCWSTR, PWSTR};
+    use windows::core::{HRESULT, HSTRING, PCWSTR, PWSTR};
+    use windows::Win32::Foundation::{ERROR_CANCELLED, HWND};
     use windows::Win32::System::Com::{
         CoInitializeEx, CoTaskMemFree, CoUninitialize, IDataObject, COINIT_APARTMENTTHREADED,
     };
@@ -230,24 +263,55 @@ mod platform {
         rank: u8,
     }
 
+    pub(super) fn parent_window_handle(window: &WebviewWindow) -> Option<isize> {
+        window.hwnd().ok().map(|handle| handle.0 as isize)
+    }
+
+    pub(super) fn run_shell_sta<T, F>(operation: F) -> Result<T, String>
+    where
+        T: Send + 'static,
+        F: FnOnce() -> Result<T, String> + Send + 'static,
+    {
+        let thread = std::thread::Builder::new()
+            .name("jotluck-windows-shell-sta".to_string())
+            .spawn(move || {
+                let _apartment = ComApartment::enter()?;
+                operation()
+            })
+            .map_err(|error| format!("unable to start Windows association thread: {error}"))?;
+        thread
+            .join()
+            .map_err(|_| "Windows association thread terminated unexpectedly".to_string())?
+    }
+
     pub(super) fn editor_candidate(
         kind: ImportedDocumentKind,
     ) -> Result<DocumentEditorCandidate, String> {
-        let mut handlers = enumerate_handlers(kind)?;
-        handlers.sort_by_key(|handler| handler.rank);
-        Ok(match handlers.into_iter().next() {
-            Some(handler) => DocumentEditorCandidate {
-                handler_id: Some(handler.id),
-                display_name: handler.display_name,
-                available: true,
-                fallback_to_open_with: false,
-            },
-            None => DocumentEditorCandidate {
-                handler_id: None,
-                display_name: "Choose an app".to_string(),
-                available: false,
-                fallback_to_open_with: true,
-            },
+        run_shell_sta(move || {
+            let mut handlers = match enumerate_handlers_in_current_apartment(kind) {
+                Ok(handlers) => handlers,
+                Err(error) => {
+                    log::warn!(
+                        "unable to enumerate preferred document editors; exposing Open With: {error}"
+                    );
+                    Vec::new()
+                }
+            };
+            handlers.sort_by_key(|handler| handler.rank);
+            Ok(match handlers.into_iter().next() {
+                Some(handler) => DocumentEditorCandidate {
+                    handler_id: Some(handler.id),
+                    display_name: handler.display_name,
+                    available: true,
+                    fallback_to_open_with: false,
+                },
+                None => DocumentEditorCandidate {
+                    handler_id: None,
+                    display_name: "Choose an app".to_string(),
+                    available: false,
+                    fallback_to_open_with: true,
+                },
+            })
         })
     }
 
@@ -255,41 +319,33 @@ mod platform {
         path: &Path,
         kind: ImportedDocumentKind,
         requested_id: Option<&str>,
+        parent_window: Option<isize>,
     ) -> Result<DocumentEditorLaunchResult, String> {
-        let _apartment = ComApartment::enter()?;
-        let mut handlers = enumerate_handlers_in_current_apartment(kind)?;
-        handlers.sort_by_key(|handler| handler.rank);
-        let selected = requested_id
-            .and_then(|id| handlers.iter().position(|handler| handler.id == id))
-            .and_then(|index| (index < handlers.len()).then(|| handlers.remove(index)))
-            .or_else(|| handlers.into_iter().next());
-        if let Some(handler) = selected {
-            match invoke_handler(&handler.handler, path) {
-                Ok(()) => {
-                    return Ok(DocumentEditorLaunchResult {
-                        display_name: handler.display_name,
-                        used_open_with: false,
-                    })
-                }
-                Err(_) => {
-                    open_with_dialog(path)?;
-                    return Ok(DocumentEditorLaunchResult {
-                        display_name: "Choose an app".to_string(),
-                        used_open_with: true,
-                    });
-                }
-            }
-        }
-        open_with_dialog(path)?;
-        Ok(DocumentEditorLaunchResult {
-            display_name: "Choose an app".to_string(),
-            used_open_with: true,
+        let path = path.to_path_buf();
+        let requested_id = requested_id.map(str::to_owned);
+        run_shell_sta(move || {
+            let selected = enumerate_handlers_in_current_apartment(kind).map(|mut handlers| {
+                handlers.sort_by_key(|handler| handler.rank);
+                requested_id
+                    .as_deref()
+                    .and_then(|id| handlers.iter().position(|handler| handler.id == id))
+                    .map(|index| handlers.remove(index))
+                    .or_else(|| handlers.into_iter().next())
+            });
+            let (selected, used_open_with) = launch_with_system_fallback(
+                selected,
+                |handler| invoke_handler(&handler.handler, &path),
+                || open_with_dialog(&path, parent_window),
+            )?;
+            let display_name = selected
+                .filter(|_| !used_open_with)
+                .map(|handler| handler.display_name)
+                .unwrap_or_else(|| "Choose an app".to_string());
+            Ok(DocumentEditorLaunchResult {
+                display_name,
+                used_open_with,
+            })
         })
-    }
-
-    fn enumerate_handlers(kind: ImportedDocumentKind) -> Result<Vec<HandlerEntry>, String> {
-        let _apartment = ComApartment::enter()?;
-        enumerate_handlers_in_current_apartment(kind)
     }
 
     fn enumerate_handlers_in_current_apartment(
@@ -356,15 +412,21 @@ mod platform {
             .map_err(|error| format!("unable to launch selected document editor: {error}"))
     }
 
-    fn open_with_dialog(path: &Path) -> Result<(), String> {
+    fn open_with_dialog(path: &Path, parent_window: Option<isize>) -> Result<(), String> {
         let path = HSTRING::from(path.to_string_lossy().as_ref());
         let info = OPENASINFO {
             pcszFile: PCWSTR(path.as_ptr()),
             pcszClass: PCWSTR::null(),
             oaifInFlags: OAIF_EXEC,
         };
-        unsafe { SHOpenWithDialog(None, &info) }
-            .map_err(|error| format!("unable to open the Windows Open With dialog: {error}"))
+        let parent_window = parent_window.map(|handle| HWND(handle as *mut c_void));
+        match unsafe { SHOpenWithDialog(parent_window, &info) } {
+            Ok(()) => Ok(()),
+            Err(error) if error.code() == HRESULT::from_win32(ERROR_CANCELLED.0) => Ok(()),
+            Err(error) => Err(format!(
+                "unable to open the Windows Open With dialog: {error}"
+            )),
+        }
     }
 
     pub(super) fn association_status() -> Result<WindowsAssociationStatus, String> {
@@ -497,10 +559,15 @@ mod platform {
         })
     }
 
+    pub(super) fn parent_window_handle(_window: &WebviewWindow) -> Option<isize> {
+        None
+    }
+
     pub(super) fn open_source_in_editor(
         _path: &Path,
         _kind: ImportedDocumentKind,
         _requested_id: Option<&str>,
+        _parent_window: Option<isize>,
     ) -> Result<DocumentEditorLaunchResult, String> {
         Err("professional editor integration is available on Windows only".to_string())
     }
@@ -532,6 +599,7 @@ mod platform {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
 
     #[test]
     fn handler_priority_matches_the_product_order_and_excludes_jotluck() {
@@ -593,5 +661,75 @@ mod tests {
             Some("Legacy.Note".to_string())
         );
         assert_eq!(preferred_user_choice(None, None), None);
+    }
+
+    #[test]
+    fn failed_handler_invocation_uses_the_system_fallback() {
+        let fallback_calls = Cell::new(0_u8);
+        let (selected, used_open_with) = launch_with_system_fallback(
+            Ok(Some("Microsoft Excel")),
+            |_| Err("handler invocation failed".to_string()),
+            || {
+                fallback_calls.set(fallback_calls.get() + 1);
+                Ok(())
+            },
+        )
+        .expect("the Open With fallback should recover the launch");
+
+        assert_eq!(selected, Some("Microsoft Excel"));
+        assert!(used_open_with);
+        assert_eq!(fallback_calls.get(), 1);
+    }
+
+    #[test]
+    fn enumeration_failure_still_uses_the_system_fallback() {
+        let invoke_calls = Cell::new(0_u8);
+        let fallback_calls = Cell::new(0_u8);
+        let (selected, used_open_with) = launch_with_system_fallback::<&str>(
+            Err("association enumeration failed".to_string()),
+            |_| {
+                invoke_calls.set(invoke_calls.get() + 1);
+                Ok(())
+            },
+            || {
+                fallback_calls.set(fallback_calls.get() + 1);
+                Ok(())
+            },
+        )
+        .expect("the Open With fallback should recover enumeration failures");
+
+        assert_eq!(selected, None);
+        assert!(used_open_with);
+        assert_eq!(invoke_calls.get(), 0);
+        assert_eq!(fallback_calls.get(), 1);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn shell_operations_use_a_dedicated_sta_even_from_an_mta_caller() {
+        use windows::Win32::System::Com::{
+            CoGetApartmentType, CoInitializeEx, CoUninitialize, APTTYPE, APTTYPEQUALIFIER,
+            APTTYPE_MAINSTA, APTTYPE_STA, COINIT_MULTITHREADED,
+        };
+
+        let apartment = std::thread::spawn(|| {
+            unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
+                .ok()
+                .expect("the caller test thread should enter the MTA");
+            let observed = platform::run_shell_sta(|| {
+                let mut apartment = APTTYPE::default();
+                let mut qualifier = APTTYPEQUALIFIER::default();
+                unsafe { CoGetApartmentType(&mut apartment, &mut qualifier) }
+                    .map_err(|error| format!("unable to inspect COM apartment: {error}"))?;
+                Ok(apartment)
+            });
+            unsafe { CoUninitialize() };
+            observed
+        })
+        .join()
+        .expect("the MTA caller thread should not panic")
+        .expect("the dedicated shell thread should initialize");
+
+        assert!(apartment == APTTYPE_STA || apartment == APTTYPE_MAINSTA);
     }
 }
