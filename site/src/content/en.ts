@@ -16,7 +16,7 @@ export const en: SiteContent = {
     },
     pageDescriptions: {
       download:
-        'Download JotLuck for Windows x64 — a lightweight, local-first Markdown note tool. Every note is a plain-text file; every folder a notebook. First public build: August 15, 2026.',
+        'Download JotLuck for Windows x64, a lightweight local-first Markdown note tool. Notes stay plain-text files; folders stay notebooks. Public build: Aug 15, 2026.',
       themes:
         'JotLuck workspace themes — Paper, Halo Canvas and Lumen Field. A theme is more than a new coat of paint: it reshapes the workspace itself.',
       studio:

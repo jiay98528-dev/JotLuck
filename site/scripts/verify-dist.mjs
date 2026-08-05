@@ -27,7 +27,7 @@
  *       字符动画仅在水合后挂载
  *   (i) 20 个语言页（门页与 404 除外）：恰好 1 个 type="application/ld+json" <script>，
  *       可解析且实体语义正确（WebSite url/name/publisher 关联 + Organization 法律主体/alternateName）
- *   (j) title 非空含品牌名且全站唯一；meta description 长度 20–200；
+ *   (j) title 非空含品牌名且全站唯一；meta description 子页 70–160 / 首页与门页 20–200；
  *       og:image:alt / twitter:title / twitter:description 均存在
  *
  * 任一断言失败：打印 FAIL 明细，进程退出码非零。
@@ -296,10 +296,13 @@ for (const rel of expectedFiles) {
   titleSeen.push([rel, titleText]);
   const descMeta = metas.find((m) => m.name === 'description');
   const descLen = descMeta?.content?.length ?? 0;
+  // 子页（download/themes/studio）按契约 70–160；首页/门页单独定义 20–200（裁决 24/25）
+  const isSubpage = PAGES.includes(exp.pageKind);
+  const [lo, hi] = isSubpage ? [70, 160] : [20, 200];
   check(
-    descLen >= 20 && descLen <= 200,
-    `description 长度 20–200`,
-    `${descLen} 字符`,
+    descLen >= lo && descLen <= hi,
+    `description 长度 ${lo}–${hi}`,
+    `${descLen} 字符${descLen >= lo && descLen <= hi ? '' : '（越界）'}`,
   );
   const ogAlt = metas.find((m) => m.property === 'og:image:alt');
   check(Boolean(ogAlt?.content?.trim()), `og:image:alt 存在`, ogAlt?.content ? '有' : '缺失');
