@@ -67,17 +67,20 @@ pub async fn open_document_source_in_editor(
     imports: State<'_, DocumentImportState>,
 ) -> CommandResult<DocumentEditorLaunchResult> {
     let source = imports.fresh_source_for_window(window.label())?;
-    let parent_window = platform::parent_window_handle(&window);
     Ok(tauri::async_runtime::spawn_blocking(move || {
-        platform::open_source_in_editor(
+        let result = platform::open_source_in_editor(
+            &window,
             &source.absolute_path,
             source.kind,
             handler_id.as_deref(),
-            parent_window,
-        )
+        );
+        if let Err(error) = &result {
+            log::warn!("professional document editor launch failed: {error}");
+        }
+        result
     })
     .await
-    .map_err(|error| format!("Windows association task failed: {error}"))??)
+    .map_err(|error| format!("Windows association dispatcher failed: {error}"))??)
 }
 
 #[tauri::command]
@@ -136,32 +139,6 @@ fn handler_id(extension: &str, system_name: &str) -> String {
     format!("{:x}", digest.finalize())
 }
 
-fn launch_with_system_fallback<T>(
-    selected: Result<Option<T>, String>,
-    invoke: impl FnOnce(&T) -> Result<(), String>,
-    open_with: impl FnOnce() -> Result<(), String>,
-) -> Result<(Option<T>, bool), String> {
-    let selected = match selected {
-        Ok(selected) => selected,
-        Err(error) => {
-            log::warn!("unable to enumerate preferred document editors; using Open With: {error}");
-            None
-        }
-    };
-    if let Some(handler) = selected.as_ref() {
-        match invoke(handler) {
-            Ok(()) => return Ok((selected, false)),
-            Err(error) => {
-                log::warn!(
-                    "unable to invoke the preferred document editor; using Open With: {error}"
-                );
-            }
-        }
-    }
-    open_with()?;
-    Ok((selected, true))
-}
-
 fn default_apps_settings_uri_for_build(build_number: Option<u32>) -> &'static str {
     if build_number.is_some_and(|build| build >= 22_000) {
         "ms-settings:defaultapps?registeredAppUser=JotLuck"
@@ -207,15 +184,27 @@ fn preferred_handler_rank(
 mod platform {
     use super::*;
     use std::ffi::c_void;
-    use windows::core::{HRESULT, HSTRING, PCWSTR, PWSTR};
+    use std::mem::ManuallyDrop;
+    use std::path::PathBuf;
+    use std::process::{Command, Stdio};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{mpsc::TryRecvError, Arc};
+    use std::time::{Duration, Instant};
+    use windows::core::{Interface, HRESULT, HSTRING, PCWSTR, PWSTR};
     use windows::Win32::Foundation::{ERROR_CANCELLED, HWND};
-    use windows::Win32::System::Com::{
-        CoInitializeEx, CoTaskMemFree, CoUninitialize, IDataObject, COINIT_APARTMENTTHREADED,
+    use windows::Win32::System::Com::Marshal::{
+        CoMarshalInterThreadInterfaceInStream, CoReleaseMarshalData,
     };
+    use windows::Win32::System::Com::StructuredStorage::CoGetInterfaceAndReleaseStream;
+    use windows::Win32::System::Com::{CoTaskMemFree, IDataObject, IStream};
+    use windows::Win32::System::Ole::{OleInitialize, OleUninitialize};
     use windows::Win32::UI::Shell::{
-        BHID_DataObject, IAssocHandler, IShellItem, IShellItemArray, SHAssocEnumHandlers,
-        SHCreateItemFromParsingName, SHCreateShellItemArrayFromShellItem, SHOpenWithDialog,
-        ASSOC_FILTER_NONE, OAIF_EXEC, OPENASINFO,
+        BHID_DataObject, IAssocHandler, IShellItem, SHAssocEnumHandlers,
+        SHCreateItemFromParsingName, SHOpenWithDialog, ASSOC_FILTER_NONE, OAIF_EXEC, OPENASINFO,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{
+        DispatchMessageW, MsgWaitForMultipleObjectsEx, PeekMessageW, TranslateMessage, MSG,
+        MWMO_INPUTAVAILABLE, PM_REMOVE, QS_ALLINPUT,
     };
 
     #[repr(C)]
@@ -233,25 +222,21 @@ mod platform {
         fn RtlGetVersion(version: *mut RtlOsVersionInfoW) -> i32;
     }
 
-    struct ComApartment(bool);
+    struct OleApartment;
 
-    impl ComApartment {
+    impl OleApartment {
         fn enter() -> Result<Self, String> {
             unsafe {
-                CoInitializeEx(None, COINIT_APARTMENTTHREADED)
-                    .map(|| Self(true))
-                    .map_err(|error| {
-                        format!("unable to initialize Windows association APIs: {error}")
-                    })
+                OleInitialize(None).map(|_| Self).map_err(|error| {
+                    format!("unable to initialize Windows association APIs: {error}")
+                })
             }
         }
     }
 
-    impl Drop for ComApartment {
+    impl Drop for OleApartment {
         fn drop(&mut self) {
-            if self.0 {
-                unsafe { CoUninitialize() };
-            }
+            unsafe { OleUninitialize() };
         }
     }
 
@@ -263,7 +248,7 @@ mod platform {
         rank: u8,
     }
 
-    pub(super) fn parent_window_handle(window: &WebviewWindow) -> Option<isize> {
+    fn parent_window_handle(window: &WebviewWindow) -> Option<isize> {
         window.hwnd().ok().map(|handle| handle.0 as isize)
     }
 
@@ -275,7 +260,7 @@ mod platform {
         let thread = std::thread::Builder::new()
             .name("jotluck-windows-shell-sta".to_string())
             .spawn(move || {
-                let _apartment = ComApartment::enter()?;
+                let _apartment = OleApartment::enter()?;
                 operation()
             })
             .map_err(|error| format!("unable to start Windows association thread: {error}"))?;
@@ -316,36 +301,178 @@ mod platform {
     }
 
     pub(super) fn open_source_in_editor(
+        window: &WebviewWindow,
         path: &Path,
         kind: ImportedDocumentKind,
         requested_id: Option<&str>,
-        parent_window: Option<isize>,
     ) -> Result<DocumentEditorLaunchResult, String> {
-        let path = path.to_path_buf();
-        let requested_id = requested_id.map(str::to_owned);
-        run_shell_sta(move || {
-            let selected = enumerate_handlers_in_current_apartment(kind).map(|mut handlers| {
+        let _apartment = OleApartment::enter()?;
+        // `std::fs::canonicalize` returns a verbatim (`\\?\`) path on Windows.
+        // File APIs accept it, but Shell association APIs reject it with
+        // E_INVALIDARG, so normalize only at this Shell boundary.
+        let path = crate::path::without_windows_verbatim_prefix(path.to_path_buf());
+        let parent_window = parent_window_handle(window);
+        let selected = match enumerate_handlers_in_current_apartment(kind) {
+            Ok(mut handlers) => {
                 handlers.sort_by_key(|handler| handler.rank);
                 requested_id
-                    .as_deref()
                     .and_then(|id| handlers.iter().position(|handler| handler.id == id))
                     .map(|index| handlers.remove(index))
                     .or_else(|| handlers.into_iter().next())
-            });
-            let (selected, used_open_with) = launch_with_system_fallback(
-                selected,
-                |handler| invoke_handler(&handler.handler, &path),
-                || open_with_dialog(&path, parent_window),
-            )?;
-            let display_name = selected
-                .filter(|_| !used_open_with)
-                .map(|handler| handler.display_name)
-                .unwrap_or_else(|| "Choose an app".to_string());
-            Ok(DocumentEditorLaunchResult {
+            }
+            Err(error) => {
+                log::warn!(
+                    "unable to enumerate preferred document editors; using Open With: {error}"
+                );
+                None
+            }
+        };
+
+        let marshaled_stream = Arc::new(AtomicUsize::new(0));
+        let display_name = if let Some(handler) = selected {
+            match unsafe {
+                CoMarshalInterThreadInterfaceInStream(&IAssocHandler::IID, &handler.handler)
+            } {
+                Ok(stream) => {
+                    marshaled_stream.store(stream.into_raw() as usize, Ordering::Release);
+                    Some(handler.display_name)
+                }
+                Err(error) => {
+                    // Some Office association handlers do not register a COM proxy and
+                    // therefore cannot cross apartments (REGDB_E_IIDNOTREG). GetName is
+                    // defined by Windows as the handler's full executable path, so launch
+                    // that exact enumerated executable with the source as a distinct argv
+                    // item. This keeps the fallback independent of registry command text.
+                    log::warn!(
+                        "selected document editor cannot be marshaled; using its enumerated executable: {error}"
+                    );
+                    match launch_handler_executable(&handler.system_name, &path) {
+                        Ok(()) => {
+                            return Ok(DocumentEditorLaunchResult {
+                                display_name: handler.display_name,
+                                used_open_with: false,
+                            });
+                        }
+                        Err(launch_error) => {
+                            log::warn!(
+                                "unable to launch the enumerated document editor executable; using Open With: {launch_error}"
+                            );
+                            None
+                        }
+                    }
+                }
+            }
+        } else {
+            None
+        };
+
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        let main_stream = Arc::clone(&marshaled_stream);
+        let schedule_result = window.run_on_main_thread(move || {
+            let result = launch_marshaled_handler_on_main_thread(
+                main_stream,
+                &path,
+                parent_window,
                 display_name,
-                used_open_with,
-            })
+            );
+            if sender.send(result).is_err() {
+                log::warn!("document editor launch result receiver was dropped");
+            }
+        });
+        if let Err(error) = schedule_result {
+            release_unused_marshaled_stream(&marshaled_stream);
+            return Err(format!(
+                "unable to schedule Windows association task: {error}"
+            ));
+        }
+
+        let result = wait_for_main_thread_result(&receiver, Duration::from_secs(30));
+        release_unused_marshaled_stream(&marshaled_stream);
+        result?
+    }
+
+    fn launch_marshaled_handler_on_main_thread(
+        marshaled_stream: Arc<AtomicUsize>,
+        path: &Path,
+        parent_window: Option<isize>,
+        display_name: Option<String>,
+    ) -> Result<DocumentEditorLaunchResult, String> {
+        let _apartment = OleApartment::enter()?;
+        if let Some(display_name) = display_name {
+            let raw_stream = marshaled_stream.swap(0, Ordering::AcqRel);
+            if raw_stream == 0 {
+                return Err("selected document editor marshal stream was unavailable".to_string());
+            }
+            let stream = ManuallyDrop::new(unsafe { IStream::from_raw(raw_stream as *mut c_void) });
+            let handler: IAssocHandler = unsafe { CoGetInterfaceAndReleaseStream(&*stream) }
+                .map_err(|error| {
+                    format!("unable to unmarshal selected document editor: {error}")
+                })?;
+            match invoke_handler(&handler, path) {
+                Ok(()) => {
+                    return Ok(DocumentEditorLaunchResult {
+                        display_name,
+                        used_open_with: false,
+                    });
+                }
+                Err(error) => {
+                    log::warn!(
+                        "unable to invoke the preferred document editor; using Open With: {error}"
+                    );
+                }
+            }
+        }
+        open_with_dialog(path, parent_window)?;
+        Ok(DocumentEditorLaunchResult {
+            display_name: "Choose an app".to_string(),
+            used_open_with: true,
         })
+    }
+
+    fn wait_for_main_thread_result<T>(
+        receiver: &std::sync::mpsc::Receiver<T>,
+        timeout: Duration,
+    ) -> Result<T, String> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            match receiver.try_recv() {
+                Ok(result) => return Ok(result),
+                Err(TryRecvError::Disconnected) => {
+                    return Err("Windows association task ended without a result".to_string());
+                }
+                Err(TryRecvError::Empty) => {}
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err("Windows association task timed out".to_string());
+            }
+            pump_shell_messages(remaining.min(Duration::from_millis(50)));
+        }
+    }
+
+    fn pump_shell_messages(timeout: Duration) {
+        let timeout_ms = timeout.as_millis().min(u128::from(u32::MAX)) as u32;
+        unsafe {
+            MsgWaitForMultipleObjectsEx(None, timeout_ms, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        }
+        let mut message = MSG::default();
+        while unsafe { PeekMessageW(&mut message, None, 0, 0, PM_REMOVE) }.as_bool() {
+            unsafe {
+                let _ = TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+        }
+    }
+
+    fn release_unused_marshaled_stream(marshaled_stream: &AtomicUsize) {
+        let raw_stream = marshaled_stream.swap(0, Ordering::AcqRel);
+        if raw_stream == 0 {
+            return;
+        }
+        let stream = unsafe { IStream::from_raw(raw_stream as *mut c_void) };
+        if let Err(error) = unsafe { CoReleaseMarshalData(&stream) } {
+            log::warn!("unable to release unused document editor marshal data: {error}");
+        }
     }
 
     fn enumerate_handlers_in_current_apartment(
@@ -359,7 +486,10 @@ mod platform {
         loop {
             let mut fetched = 0_u32;
             let mut slot = [None];
-            if unsafe { enumeration.Next(&mut slot, Some(&mut fetched)) }.is_err() || fetched == 0 {
+            unsafe { enumeration.Next(&mut slot, Some(&mut fetched)) }.map_err(|error| {
+                format!("unable to advance Windows editor enumeration: {error}")
+            })?;
+            if fetched == 0 {
                 break;
             }
             let Some(handler) = slot[0].take() else {
@@ -404,12 +534,54 @@ mod platform {
         let path = HSTRING::from(path.to_string_lossy().as_ref());
         let item: IShellItem = unsafe { SHCreateItemFromParsingName(&path, None) }
             .map_err(|error| format!("unable to create Windows shell item: {error}"))?;
-        let array: IShellItemArray = unsafe { SHCreateShellItemArrayFromShellItem(&item) }
-            .map_err(|error| format!("unable to create Windows shell item array: {error}"))?;
-        let data: IDataObject = unsafe { array.BindToHandler(None, &BHID_DataObject) }
+        let data: IDataObject = unsafe { item.BindToHandler(None, &BHID_DataObject) }
             .map_err(|error| format!("unable to create Windows document data object: {error}"))?;
         unsafe { handler.Invoke(&data) }
             .map_err(|error| format!("unable to launch selected document editor: {error}"))
+    }
+
+    pub(super) fn validated_handler_executable(system_name: &str) -> Result<PathBuf, String> {
+        let executable = PathBuf::from(system_name);
+        if !executable.is_absolute() {
+            return Err("Windows association handler did not provide an absolute path".to_string());
+        }
+        if !executable
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+        {
+            return Err("Windows association handler path is not an executable".to_string());
+        }
+        let executable = std::fs::canonicalize(&executable).map_err(|error| {
+            format!(
+                "unable to resolve Windows association handler {}: {error}",
+                executable.display()
+            )
+        })?;
+        if !executable.is_file() {
+            return Err(format!(
+                "Windows association handler is not a file: {}",
+                executable.display()
+            ));
+        }
+        Ok(executable)
+    }
+
+    fn launch_handler_executable(system_name: &str, path: &Path) -> Result<(), String> {
+        let executable = validated_handler_executable(system_name)?;
+        Command::new(&executable)
+            .arg(path)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| {
+                format!(
+                    "unable to start Windows association handler {}: {error}",
+                    executable.display()
+                )
+            })
     }
 
     fn open_with_dialog(path: &Path, parent_window: Option<isize>) -> Result<(), String> {
@@ -559,15 +731,11 @@ mod platform {
         })
     }
 
-    pub(super) fn parent_window_handle(_window: &WebviewWindow) -> Option<isize> {
-        None
-    }
-
     pub(super) fn open_source_in_editor(
+        _window: &WebviewWindow,
         _path: &Path,
         _kind: ImportedDocumentKind,
         _requested_id: Option<&str>,
-        _parent_window: Option<isize>,
     ) -> Result<DocumentEditorLaunchResult, String> {
         Err("professional editor integration is available on Windows only".to_string())
     }
@@ -599,7 +767,6 @@ mod platform {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::Cell;
 
     #[test]
     fn handler_priority_matches_the_product_order_and_excludes_jotluck() {
@@ -663,45 +830,26 @@ mod tests {
         assert_eq!(preferred_user_choice(None, None), None);
     }
 
+    #[cfg(windows)]
     #[test]
-    fn failed_handler_invocation_uses_the_system_fallback() {
-        let fallback_calls = Cell::new(0_u8);
-        let (selected, used_open_with) = launch_with_system_fallback(
-            Ok(Some("Microsoft Excel")),
-            |_| Err("handler invocation failed".to_string()),
-            || {
-                fallback_calls.set(fallback_calls.get() + 1);
-                Ok(())
-            },
+    fn executable_fallback_accepts_only_existing_absolute_exe_paths() {
+        let current_executable = std::env::current_exe().expect("the test executable should exist");
+        let resolved =
+            platform::validated_handler_executable(current_executable.to_string_lossy().as_ref())
+                .expect("an existing absolute exe path should be accepted");
+        assert_eq!(
+            resolved,
+            std::fs::canonicalize(&current_executable)
+                .expect("the test executable should canonicalize")
+        );
+        assert!(platform::validated_handler_executable("EXCEL.EXE").is_err());
+        assert!(platform::validated_handler_executable(
+            current_executable
+                .with_extension("cmd")
+                .to_string_lossy()
+                .as_ref()
         )
-        .expect("the Open With fallback should recover the launch");
-
-        assert_eq!(selected, Some("Microsoft Excel"));
-        assert!(used_open_with);
-        assert_eq!(fallback_calls.get(), 1);
-    }
-
-    #[test]
-    fn enumeration_failure_still_uses_the_system_fallback() {
-        let invoke_calls = Cell::new(0_u8);
-        let fallback_calls = Cell::new(0_u8);
-        let (selected, used_open_with) = launch_with_system_fallback::<&str>(
-            Err("association enumeration failed".to_string()),
-            |_| {
-                invoke_calls.set(invoke_calls.get() + 1);
-                Ok(())
-            },
-            || {
-                fallback_calls.set(fallback_calls.get() + 1);
-                Ok(())
-            },
-        )
-        .expect("the Open With fallback should recover enumeration failures");
-
-        assert_eq!(selected, None);
-        assert!(used_open_with);
-        assert_eq!(invoke_calls.get(), 0);
-        assert_eq!(fallback_calls.get(), 1);
+        .is_err());
     }
 
     #[cfg(windows)]

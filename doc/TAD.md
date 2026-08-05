@@ -61,7 +61,7 @@ Vue 3 + Pinia + Vite
 - 转换 Markdown、警告和资产只存在窗口级注册表及私有临时目录。`read_document_conversion_asset` 按调用窗口、conversion ID 与 asset ID 返回原始字节；前端创建的 blob URL 在替换、取消和卸载时撤销。
 - 当前源文件通过单文件 `notify` watcher、窗口 focus 复核和另存前复核检测变化。revision 不一致时任务进入 `stale`，禁止旧转换另存；重新转换创建新 conversion ID 并清理旧注册表。
 - `save_converted_document_as` 只接受转换 ID 和本地化对话框请求，不接受任意源路径。后端强制 `.md`、选择唯一资产目录、在目标父目录创建同卷临时项并提交；成功后撤销文档源授权，将新 Markdown 建立现有可写外部 grant，并把窗口会话原子替换为 `external-edit`。
-- Windows 编辑器集成通过 `SHAssocEnumHandlers` 与 `IAssocHandler::Invoke`，handler ID 只引用当前窗口后端枚举缓存，不解析注册表命令。没有候选或 Invoke 失败时使用系统 Open With；默认应用状态通过实际 ProgID 查询，设置入口优先 `ms-settings:defaultapps?registeredAppUser=JotLuck`，旧系统回退总页。
+- Windows 编辑器集成通过 `SHAssocEnumHandlers` 枚举并优先使用 `IAssocHandler::Invoke`；对没有注册跨 apartment 代理的处理器，只使用同一 `IAssocHandler::GetName` 返回的完整可执行文件路径，验证为现存的绝对 `.exe` 后把源文件作为独立 argv 启动。handler ID 只引用当前窗口后端枚举缓存，任何路径都不解析注册表命令；没有候选或上述路径失败时使用系统 Open With。默认应用状态通过实际 ProgID 查询，设置入口优先 `ms-settings:defaultapps?registeredAppUser=JotLuck`，旧系统回退总页。
 
 ## 离线补全架构（3.11）
 
@@ -118,6 +118,7 @@ Vue 3 + Pinia + Vite
 
 ## 变更记录
 
+- 2026-08-05：Windows 专业编辑器启动增加不可跨 apartment 的关联处理器兼容路径；仍只使用系统枚举返回的完整可执行文件，不解析注册表命令，并保留 Open With 末级回退。
 - 2026-08-04（v1.1）：增加独立文档导入会话、同可执行文件转换 worker、版本化流协议、资源/取消边界、源 revision、原子另存和 Windows 关联处理器架构。
 
 - 2026-08-04：将结构化错误合同限定到会进入本地化 UI 的 IPC/MockFS，补全检索和内部诊断明确排除。

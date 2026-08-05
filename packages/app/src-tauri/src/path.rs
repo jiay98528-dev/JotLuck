@@ -67,7 +67,7 @@ fn nearest_existing_ancestor(path: &Path) -> Option<PathBuf> {
     }
 }
 
-fn without_windows_verbatim_prefix(path: PathBuf) -> PathBuf {
+pub(crate) fn without_windows_verbatim_prefix(path: PathBuf) -> PathBuf {
     #[cfg(windows)]
     {
         let value = path.to_string_lossy();
@@ -251,5 +251,18 @@ mod tests {
         }
         assert!(!is_ignored_notebook_directory_name(OsStr::new("notes")));
         assert!(!is_ignored_notebook_directory_name(OsStr::new("项目文档")));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_shell_paths_drop_verbatim_drive_and_unc_prefixes() {
+        assert_eq!(
+            without_windows_verbatim_prefix(PathBuf::from(r"\\?\C:\notes\preview.xlsx")),
+            PathBuf::from(r"C:\notes\preview.xlsx")
+        );
+        assert_eq!(
+            without_windows_verbatim_prefix(PathBuf::from(r"\\?\UNC\server\share\preview.xlsx")),
+            PathBuf::from(r"\\server\share\preview.xlsx")
+        );
     }
 }
