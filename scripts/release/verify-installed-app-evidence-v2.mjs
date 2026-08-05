@@ -39,6 +39,7 @@ const WEBDRIVER_CASE_COMMANDS = Object.freeze({
   'GUI-06-EXPORT-CONTENT': ['elementClick'],
   'GUI-07-IMAGE-ASSET': ['executeAsyncScript', 'executeScript'],
   'RF-01': ['getTitle', 'executeScript'],
+  'DOC-01-SAVE-AS-MARKDOWN': ['elementClick', 'executeScript', 'takeScreenshot'],
   'RF-02': ['getWindowHandles', 'switchToWindow', 'getTitle'],
   'RF-03': ['getWindowHandles'],
   'RF-04': ['elementClick', 'elementSendKeys'],
@@ -635,6 +636,9 @@ function validateCaseResult(
     );
     bindDriverObservation(observationContext, webdriverObservation, execution.caseId);
   }
+  if (execution.caseId === 'DOC-01-SAVE-AS-MARKDOWN') {
+    validateDocumentSaveEvidence(value.artifacts, execution, root);
+  }
   if (/^ASSOC-0[1-8]-/u.test(execution.caseId)) {
     const installedApplication = validateAssociationEvidence(
       value.artifacts,
@@ -655,6 +659,150 @@ function validateCaseResult(
       root,
     );
     bindInstalledApplication(observationContext, installedApplication, execution.caseId);
+  }
+}
+
+function validateDocumentSaveEvidence(artifacts, execution, root) {
+  const readbackArtifact = artifacts.find((artifact) => artifact.kind === 'document-save-readback');
+  const dialogArtifact = artifacts.find(
+    (artifact) => artifact.kind === 'native-dialog-observation',
+  );
+  if (!readbackArtifact || !dialogArtifact) {
+    throw new Error(`document Save As evidence is incomplete: ${execution.caseId}`);
+  }
+  const readback = readJson(root, readbackArtifact.path);
+  assertObject(readback, `document Save As readback ${execution.caseId}`);
+  assertExactKeys(
+    readback,
+    ['schema', 'marker', 'source', 'markdown', 'assets', 'transition'],
+    `document Save As readback ${execution.caseId}`,
+  );
+  if (
+    readback.schema !== 'jotluck.installed-app.document-save-readback.v1' ||
+    !nonEmpty(readback.marker)
+  ) {
+    throw new Error(`document Save As readback identity is invalid: ${execution.caseId}`);
+  }
+
+  assertObject(readback.source, `document Save As source ${execution.caseId}`);
+  assertExactKeys(
+    readback.source,
+    ['fileName', 'before', 'after', 'unchanged'],
+    `document Save As source ${execution.caseId}`,
+  );
+  assertFileReadback(readback.source.before, `document source before ${execution.caseId}`);
+  assertFileReadback(readback.source.after, `document source after ${execution.caseId}`);
+  if (
+    !/\.docx$/iu.test(String(readback.source.fileName)) ||
+    readback.source.unchanged !== true ||
+    canonicalJson(readback.source.before) !== canonicalJson(readback.source.after)
+  ) {
+    throw new Error(`document Save As changed its source: ${execution.caseId}`);
+  }
+
+  assertObject(readback.markdown, `saved Markdown ${execution.caseId}`);
+  assertExactKeys(
+    readback.markdown,
+    ['fileName', 'bytes', 'sha256', 'contentUtf8'],
+    `saved Markdown ${execution.caseId}`,
+  );
+  assertFileReadback(
+    { bytes: readback.markdown.bytes, sha256: readback.markdown.sha256 },
+    `saved Markdown ${execution.caseId}`,
+  );
+  const markdownBytes = Buffer.from(String(readback.markdown.contentUtf8), 'utf8');
+  if (
+    !/\.md$/iu.test(String(readback.markdown.fileName)) ||
+    markdownBytes.byteLength !== readback.markdown.bytes ||
+    createHash('sha256').update(markdownBytes).digest('hex') !== readback.markdown.sha256 ||
+    !readback.markdown.contentUtf8.includes(readback.marker)
+  ) {
+    throw new Error(`saved Markdown readback is invalid: ${execution.caseId}`);
+  }
+
+  assertObject(readback.assets, `document Save As assets ${execution.caseId}`);
+  assertExactKeys(
+    readback.assets,
+    ['directoryName', 'entries'],
+    `document Save As assets ${execution.caseId}`,
+  );
+  if (
+    !/\.assets$/iu.test(String(readback.assets.directoryName)) ||
+    !Array.isArray(readback.assets.entries) ||
+    readback.assets.entries.length === 0 ||
+    !readback.markdown.contentUtf8.includes(`${readback.assets.directoryName}/`)
+  ) {
+    throw new Error(`document Save As asset directory is invalid: ${execution.caseId}`);
+  }
+  const assetNames = new Set();
+  for (const entry of readback.assets.entries) {
+    assertObject(entry, `document Save As asset ${execution.caseId}`);
+    assertExactKeys(
+      entry,
+      ['fileName', 'bytes', 'sha256'],
+      `document Save As asset ${execution.caseId}`,
+    );
+    assertFileReadback(
+      { bytes: entry.bytes, sha256: entry.sha256 },
+      `document Save As asset ${execution.caseId}`,
+    );
+    if (!nonEmpty(entry.fileName) || assetNames.has(entry.fileName)) {
+      throw new Error(`document Save As asset names are invalid: ${execution.caseId}`);
+    }
+    assetNames.add(entry.fileName);
+  }
+
+  assertObject(readback.transition, `document Save As transition ${execution.caseId}`);
+  assertExactKeys(
+    readback.transition,
+    ['sessionMode', 'editorContainsMarker'],
+    `document Save As transition ${execution.caseId}`,
+  );
+  if (
+    readback.transition.sessionMode !== 'external-edit' ||
+    readback.transition.editorContainsMarker !== true
+  ) {
+    throw new Error(`document Save As did not enter external edit: ${execution.caseId}`);
+  }
+
+  const dialog = readJson(root, dialogArtifact.path);
+  assertObject(dialog, `native Save As dialog ${execution.caseId}`);
+  assertExactKeys(
+    dialog,
+    [
+      'schema',
+      'processId',
+      'dialogTitle',
+      'dialogAutomationId',
+      'fileNameAutomationId',
+      'saveButtonAutomationId',
+      'saveButtonName',
+      'targetFileName',
+      'usedValuePattern',
+      'usedInvokePattern',
+    ],
+    `native Save As dialog ${execution.caseId}`,
+  );
+  if (
+    dialog.schema !== 'jotluck.installed-app.native-save-dialog.v1' ||
+    !Number.isInteger(dialog.processId) ||
+    dialog.processId <= 0 ||
+    !nonEmpty(dialog.dialogTitle) ||
+    dialog.fileNameAutomationId !== '1001' ||
+    !nonEmpty(dialog.saveButtonName) ||
+    dialog.targetFileName !== readback.markdown.fileName ||
+    dialog.usedValuePattern !== true ||
+    dialog.usedInvokePattern !== true
+  ) {
+    throw new Error(`native Save As dialog observation is invalid: ${execution.caseId}`);
+  }
+}
+
+function assertFileReadback(value, label) {
+  assertObject(value, label);
+  assertExactKeys(value, ['bytes', 'sha256'], label);
+  if (!Number.isInteger(value.bytes) || value.bytes <= 0 || !SHA256.test(String(value.sha256))) {
+    throw new Error(`${label} metadata is invalid`);
   }
 }
 

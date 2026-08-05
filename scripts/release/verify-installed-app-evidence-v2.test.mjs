@@ -47,6 +47,40 @@ describe('installed-app evidence v2', () => {
     20_000,
   );
 
+  shardIt('1')(
+    'rejects a document Save As result whose source revision changed',
+    () => {
+      const fixture = makeFixture({
+        mutateArtifactFiles(root, base, results, attachments) {
+          const caseId = 'DOC-01-SAVE-AS-MARKDOWN';
+          rewriteCaseArtifact(
+            root,
+            base,
+            results,
+            attachments,
+            caseId,
+            'document-save-readback',
+            (content) => {
+              const value = JSON.parse(content);
+              value.source.after.sha256 = 'f'.repeat(64);
+              return `${JSON.stringify(value)}\n`;
+            },
+          );
+        },
+      });
+      expect(() =>
+        verifyInstalledAppEvidenceV2({
+          rootDir: fixture.root,
+          releaseId: fixture.releaseId,
+          installerPath: fixture.installerPath,
+          candidateApplicationPath: fixture.candidateApplicationPath,
+          executionEvidencePath: fixture.executionEvidencePath,
+        }),
+      ).toThrow(/changed its source/u);
+    },
+    20_000,
+  );
+
   shardIt('2')(
     'fails closed when a tracked raw output is altered after evidence commit',
     () => {
@@ -1141,6 +1175,64 @@ function makeObservedArtifactFixture(requiredCase, kind, now) {
       },
     );
     return { extension: 'ndjson', content: `${events.map(canonical).join('\n')}\n` };
+  }
+  if (requiredCase.id === 'DOC-01-SAVE-AS-MARKDOWN' && kind === 'native-dialog-observation') {
+    return {
+      extension: 'json',
+      content: `${JSON.stringify({
+        schema: 'jotluck.installed-app.native-save-dialog.v1',
+        processId: 73,
+        dialogTitle: 'Save Markdown copy',
+        dialogAutomationId: '',
+        fileNameAutomationId: '1001',
+        saveButtonAutomationId: '1',
+        saveButtonName: 'Save',
+        targetFileName: 'document-save-copy.md',
+        usedValuePattern: true,
+        usedInvokePattern: true,
+      })}\n`,
+    };
+  }
+  if (requiredCase.id === 'DOC-01-SAVE-AS-MARKDOWN' && kind === 'document-save-readback') {
+    const marker = 'document-save-fixture-marker';
+    const sourceBytes = Buffer.from('fixture-docx-bytes');
+    const markdownContent = `# ${marker}\n\n![image](document-save-copy.assets/image.png)\n`;
+    const markdownBytes = Buffer.from(markdownContent, 'utf8');
+    const assetBytes = Buffer.from('fixture-png-bytes');
+    const source = { bytes: sourceBytes.byteLength, sha256: hash(sourceBytes) };
+    return {
+      extension: 'json',
+      content: `${JSON.stringify({
+        schema: 'jotluck.installed-app.document-save-readback.v1',
+        marker,
+        source: {
+          fileName: 'document-save-source.docx',
+          before: source,
+          after: source,
+          unchanged: true,
+        },
+        markdown: {
+          fileName: 'document-save-copy.md',
+          bytes: markdownBytes.byteLength,
+          sha256: hash(markdownBytes),
+          contentUtf8: markdownContent,
+        },
+        assets: {
+          directoryName: 'document-save-copy.assets',
+          entries: [
+            {
+              fileName: 'image.png',
+              bytes: assetBytes.byteLength,
+              sha256: hash(assetBytes),
+            },
+          ],
+        },
+        transition: {
+          sessionMode: 'external-edit',
+          editorContainsMarker: true,
+        },
+      })}\n`,
+    };
   }
   if (requiredCase.id.startsWith('ASSOC-0') && kind === 'registry-snapshot') {
     const extension = associationExtension(requiredCase.id);

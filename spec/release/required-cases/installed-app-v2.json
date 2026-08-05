@@ -83,6 +83,18 @@
       ]
     },
     {
+      "id": "DOC-01-SAVE-AS-MARKDOWN",
+      "adapter": "document-import-save-as-markdown",
+      "requiredArtifactKinds": [
+        "execution-log",
+        "adapter-action-log",
+        "webdriver-trace",
+        "native-dialog-observation",
+        "document-save-readback",
+        "screenshot"
+      ]
+    },
+    {
       "id": "RF-02",
       "adapter": "rf-runtime-new-window",
       "requiredArtifactKinds": [

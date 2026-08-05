@@ -76,6 +76,18 @@ describe('fixed installed-app evidence adapters', () => {
       expect(fixture.binary).toBe(true);
       expect(readFileSync(target).subarray(0, 2).toString('hex')).toBe(signature);
     }
+    const imageDocx = path.join(root, 'fixture-with-image.docx');
+    const imageFixture = await __test.createSupportedFixture(
+      imageDocx,
+      '.docx',
+      'marker-image-docx',
+      { includeImage: true },
+    );
+    expect(imageFixture.binary).toBe(true);
+    expect(readFileSync(imageDocx).subarray(0, 2).toString('hex')).toBe('504b');
+    expect(readFileSync(imageDocx).byteLength).toBeGreaterThan(
+      readFileSync(path.join(root, 'fixture.docx')).byteLength,
+    );
   });
 
   it('accepts only a quoted JotLuck executable plus a quoted percent-one placeholder', () => {

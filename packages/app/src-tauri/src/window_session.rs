@@ -273,7 +273,7 @@ impl WindowSessionRegistry {
     }
 
     pub fn label_for_path(&self, path: &Path) -> Result<Option<String>, String> {
-        let key = canonical_path_key(path)?;
+        let key = canonical_path_key_for_lookup(path)?;
         let state = self
             .0
             .lock()
@@ -603,24 +603,54 @@ pub fn promote_external_file_to_notebook(
 }
 
 pub fn canonicalize_opened_file(path: &Path) -> Result<PathBuf, String> {
-    let absolute = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map_err(|error| format!("unable to resolve current directory: {error}"))?
-            .join(path)
-    };
+    let absolute = absolute_opened_path(path)?;
     absolute
         .canonicalize()
         .map_err(|error| format!("unable to resolve opened file: {error}"))
 }
 
+fn absolute_opened_path(path: &Path) -> Result<PathBuf, String> {
+    Ok(if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|error| format!("unable to resolve current directory: {error}"))?
+            .join(path)
+    })
+}
+
 pub fn canonical_path_key(path: &Path) -> Result<String, String> {
     let canonical = canonicalize_opened_file(path)?;
-    let key = path_to_slash(&canonical);
+    Ok(normalized_path_key(&canonical))
+}
+
+fn canonical_path_key_for_lookup(path: &Path) -> Result<String, String> {
+    let absolute = absolute_opened_path(path)?;
+    let canonical = match absolute.canonicalize() {
+        Ok(canonical) => canonical,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let parent = absolute
+                .parent()
+                .ok_or_else(|| "opened file has no parent directory".to_string())?
+                .canonicalize()
+                .map_err(|parent_error| {
+                    format!("unable to resolve opened file parent: {parent_error}")
+                })?;
+            let file_name = absolute
+                .file_name()
+                .ok_or_else(|| "opened file has no file name".to_string())?;
+            parent.join(file_name)
+        }
+        Err(error) => return Err(format!("unable to resolve opened file: {error}")),
+    };
+    Ok(normalized_path_key(&canonical))
+}
+
+fn normalized_path_key(canonical: &Path) -> String {
+    let key = path_to_slash(canonical);
     #[cfg(windows)]
     let key = key.to_lowercase();
-    Ok(key)
+    key
 }
 
 pub fn path_to_slash(path: &Path) -> String {
@@ -743,6 +773,37 @@ mod tests {
             registry.label_for_path(&second).unwrap().as_deref(),
             Some("second-window")
         );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn registry_path_lookup_accepts_a_missing_save_target_leaf() {
+        let root =
+            std::env::temp_dir().join(format!("JotLuck-save-target-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let missing = root.join("new-copy.md");
+        assert!(!missing.exists());
+
+        let registry = WindowSessionRegistry::new();
+        assert!(registry.label_for_path(&missing).unwrap().is_none());
+
+        let opened_then_deleted = root.join("open-copy.md");
+        std::fs::write(&opened_then_deleted, "# Open").unwrap();
+        registry
+            .register_external(
+                "open-copy-window",
+                handle(&opened_then_deleted, "open-copy-token"),
+            )
+            .unwrap();
+        std::fs::remove_file(&opened_then_deleted).unwrap();
+        assert_eq!(
+            registry
+                .label_for_path(&opened_then_deleted)
+                .unwrap()
+                .as_deref(),
+            Some("open-copy-window")
+        );
+
         std::fs::remove_dir_all(root).unwrap();
     }
 

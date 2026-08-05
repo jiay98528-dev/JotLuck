@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -504,9 +504,31 @@ pub fn save_converted_document_as(
                 .into(),
         );
     }
-    if let Some(existing) = sessions.label_for_path(&target)? {
-        if existing != window.label() {
-            return Err(format!("saved Markdown file is already open in window {existing}").into());
+    let handle = save_completed_document_to_target(
+        &job,
+        &target,
+        window.label(),
+        &sessions,
+        &access,
+        &coordinator,
+    )?;
+    imports.remove_job(&conversion_id, window.label());
+    Ok(Some(handle))
+}
+
+fn save_completed_document_to_target(
+    job: &ConversionJob,
+    target: &Path,
+    window_label: &str,
+    sessions: &WindowSessionRegistry,
+    access: &ExternalAccessGrants,
+    coordinator: &FileMutationCoordinator,
+) -> Result<ExternalFileHandle, String> {
+    if let Some(existing) = sessions.label_for_path(target)? {
+        if existing != window_label {
+            return Err(format!(
+                "saved Markdown file is already open in window {existing}"
+            ));
         }
     }
     let parent = target
@@ -524,7 +546,7 @@ pub fn save_converted_document_as(
             data.assets.values().cloned().collect::<Vec<_>>(),
         )
     };
-    let assets_destination = (!assets.is_empty()).then(|| unique_assets_destination(&target));
+    let assets_destination = (!assets.is_empty()).then(|| unique_assets_destination(target));
     let rendered_markdown =
         rewrite_asset_references(&markdown, assets_destination.as_deref(), &assets)?;
     let staged_assets = if let Some(destination) = assets_destination.as_deref() {
@@ -532,24 +554,24 @@ pub fn save_converted_document_as(
     } else {
         None
     };
-    let staged_markdown = match stage_text_file(&target, &rendered_markdown) {
+    let staged_markdown = match stage_text_file(target, &rendered_markdown) {
         Ok(path) => path,
         Err(error) => {
             if let Some(staged) = &staged_assets {
                 let _ = fs::remove_dir_all(staged);
             }
-            return Err(error.into());
+            return Err(error);
         }
     };
-    let mut coordinated_paths = vec![target.clone()];
+    let mut coordinated_paths = vec![target.to_path_buf()];
     if let Some(destination) = &assets_destination {
         coordinated_paths.push(destination.clone());
     }
     let commit_result = coordinator.with_paths(&coordinated_paths, || {
         commit_converted_document(
-            &job,
+            job,
             &staged_markdown,
-            &target,
+            target,
             staged_assets.as_deref(),
             assets_destination.as_deref(),
         )
@@ -559,18 +581,16 @@ pub fn save_converted_document_as(
         if let Some(staged) = &staged_assets {
             let _ = fs::remove_dir_all(staged);
         }
-        return Err(error.into());
+        return Err(error);
     }
 
     let path_text = target.to_string_lossy().to_string();
-    let handle = access.grant_for_saved_file(&path_text, window.label())?;
-    if let Err(error) = sessions.replace_document_with_external_edit(window.label(), handle.clone())
-    {
+    let handle = access.grant_for_saved_file(&path_text, window_label)?;
+    if let Err(error) = sessions.replace_document_with_external_edit(window_label, handle.clone()) {
         access.revoke(&handle.access_token);
-        return Err(error.into());
+        return Err(error);
     }
-    imports.remove_job(&conversion_id, window.label());
-    Ok(Some(handle))
+    Ok(handle)
 }
 
 fn commit_converted_document(
@@ -655,7 +675,9 @@ fn stage_converted_assets(
             let target = staging.join(name);
             fs::copy(&asset.path, &target)
                 .map_err(|error| format!("unable to stage converted asset: {error}"))?;
-            File::open(&target)
+            OpenOptions::new()
+                .write(true)
+                .open(&target)
                 .and_then(|file| file.sync_all())
                 .map_err(|error| format!("unable to sync converted asset: {error}"))?;
         }
@@ -3023,6 +3045,76 @@ mod tests {
             unique_assets_destination(&target),
             root.join("report-2.assets")
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn completed_document_save_creates_a_new_markdown_copy_with_assets() {
+        let root = temp_test_directory("save-new-target");
+        let source_path = root.join("source.docx");
+        fs::write(&source_path, b"source-remains-read-only").unwrap();
+        let source_bytes = fs::read(&source_path).unwrap();
+        let sessions = WindowSessionRegistry::new();
+        sessions
+            .register_document_import("document-window", &source_path)
+            .unwrap();
+        let source = sessions.document_source_for("document-window").unwrap();
+
+        let temp_dir = root.join("conversion-temp");
+        let asset_path = temp_dir.join("assets").join("image.png");
+        fs::create_dir_all(asset_path.parent().unwrap()).unwrap();
+        fs::write(&asset_path, b"converted-image").unwrap();
+        let asset = ConvertedAsset {
+            id: "asset-1".to_string(),
+            file_name: "image.png".to_string(),
+            media_type: "image/png".to_string(),
+            path: asset_path,
+            bytes: 15,
+        };
+        let job = ConversionJob {
+            id: "conversion-save-new-target".to_string(),
+            owner_window_label: "document-window".to_string(),
+            source: source.clone(),
+            temp_dir,
+            cancelled: AtomicBool::new(false),
+            terminal: AtomicBool::new(true),
+            child: Mutex::new(None),
+            windows_job: Mutex::new(None),
+            data: Mutex::new(ConversionData {
+                markdown: "# Imported\n\n![image](jotluck-asset://asset-1)\n".to_string(),
+                assets: HashMap::from([("asset-1".to_string(), asset)]),
+                revision: Some(source.revision),
+                completed: true,
+                stale: false,
+            }),
+            channel: Channel::new(|_| Ok(())),
+            watcher: Mutex::new(None),
+        };
+        let target = root.join("saved-copy.md");
+        assert!(!target.exists());
+        let access = ExternalAccessGrants::new();
+        let coordinator = FileMutationCoordinator::new();
+
+        let handle = save_completed_document_to_target(
+            &job,
+            &target,
+            "document-window",
+            &sessions,
+            &access,
+            &coordinator,
+        )
+        .unwrap();
+
+        let saved_markdown = fs::read_to_string(&target).unwrap();
+        assert!(saved_markdown.contains("saved-copy.assets/image.png"));
+        assert_eq!(
+            fs::read(root.join("saved-copy.assets").join("image.png")).unwrap(),
+            b"converted-image"
+        );
+        assert_eq!(fs::read(&source_path).unwrap(), source_bytes);
+        assert!(sessions
+            .assert_external_edit("document-window", &handle.access_token)
+            .is_ok());
         fs::remove_dir_all(root).unwrap();
     }
 

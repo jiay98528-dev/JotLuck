@@ -16,13 +16,17 @@ import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
-import { Document, Packer, Paragraph } from 'docx';
+import { Document, ImageRun, Packer, Paragraph } from 'docx';
 import { createTauriDriverHost } from './tauri-webdriver-host.mjs';
 
 const PROJECT_ROOT = path.resolve(import.meta.dirname, '../..');
 const NOTE_EXTENSIONS = ['.md', '.markdown', '.mdx', '.txt'];
 const DOCUMENT_EXTENSIONS = ['.docx', '.pdf', '.xlsx', '.xls'];
 const SUPPORTED_EXTENSIONS = [...NOTE_EXTENSIONS, ...DOCUMENT_EXTENSIONS];
+const PNG_FIXTURE_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlKQAAAAASUVORK5CYII=',
+  'base64',
+);
 const PERFORMANCE_SAMPLE_COUNTS = Object.freeze({ coldStart: 20, hotWindow: 30 });
 const state = {
   candidate: null,
@@ -51,6 +55,7 @@ const ADAPTERS = new Map([
   ['gui-export-content', guiExportContent],
   ['gui-image-asset', guiImageAsset],
   ['rf-cold-open-supported-files', rfColdOpenSupportedFiles],
+  ['document-import-save-as-markdown', documentImportSaveAsMarkdown],
   ['rf-runtime-new-window', rfRuntimeNewWindow],
   ['rf-path-deduplication', rfPathDeduplication],
   ['rf-external-edit', rfExternalEdit],
@@ -368,6 +373,93 @@ function runPowerShell(script, extraEnv = {}) {
     extraEnv,
   );
   return result.stdout.trim();
+}
+
+function completeNativeSaveDialog(targetPath) {
+  const installedApplication = state.installed?.application;
+  if (!installedApplication) throw new Error('installed application is unavailable');
+  const output = runPowerShell(
+    String.raw`
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName UIAutomationClient
+$application = [IO.Path]::GetFullPath($env:JOTLUCK_APPLICATION)
+$target = [IO.Path]::GetFullPath($env:JOTLUCK_SAVE_TARGET)
+$deadline = [DateTime]::UtcNow.AddSeconds(30)
+$root = [System.Windows.Automation.AutomationElement]::RootElement
+while ([DateTime]::UtcNow -lt $deadline) {
+  $processes = @(Get-CimInstance Win32_Process -Filter "Name = 'JotLuck.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ExecutablePath -and ([IO.Path]::GetFullPath($_.ExecutablePath) -ieq $application) })
+  foreach ($process in $processes) {
+    $condition = [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+      [int]$process.ProcessId
+    )
+    $windows = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $condition)
+    foreach ($window in $windows) {
+      $elements = $window.FindAll(
+        [System.Windows.Automation.TreeScope]::Descendants,
+        [System.Windows.Automation.Condition]::TrueCondition
+      )
+      $fileNameEdit = $null
+      $saveButton = $null
+      foreach ($element in $elements) {
+        try {
+          if (
+            -not $fileNameEdit -and
+            $element.Current.ControlType -eq [System.Windows.Automation.ControlType]::Edit -and
+            $element.Current.AutomationId -eq '1001'
+          ) {
+            $fileNameEdit = $element
+          }
+          if (
+            -not $saveButton -and
+            $element.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button -and
+            (
+              $element.Current.AutomationId -eq '1' -or
+              $element.Current.Name -match '^(Save|保存|保存する|저장|Enregistrer)'
+            )
+          ) {
+            $saveButton = $element
+          }
+        } catch {}
+      }
+      if ($fileNameEdit -and $saveButton) {
+        $valuePattern = [System.Windows.Automation.ValuePattern]$fileNameEdit.GetCurrentPattern(
+          [System.Windows.Automation.ValuePattern]::Pattern
+        )
+        $valuePattern.SetValue($target)
+        $invokePattern = [System.Windows.Automation.InvokePattern]$saveButton.GetCurrentPattern(
+          [System.Windows.Automation.InvokePattern]::Pattern
+        )
+        $observation = [pscustomobject]@{
+          schema = 'jotluck.installed-app.native-save-dialog.v1'
+          processId = [int]$process.ProcessId
+          dialogTitle = [string]$window.Current.Name
+          dialogAutomationId = [string]$window.Current.AutomationId
+          fileNameAutomationId = [string]$fileNameEdit.Current.AutomationId
+          saveButtonAutomationId = [string]$saveButton.Current.AutomationId
+          saveButtonName = [string]$saveButton.Current.Name
+          targetFileName = [IO.Path]::GetFileName($target)
+          usedValuePattern = $true
+          usedInvokePattern = $true
+        }
+        $invokePattern.Invoke()
+        $observation | ConvertTo-Json -Compress
+        return
+      }
+    }
+  }
+  Start-Sleep -Milliseconds 100
+}
+throw 'native Save As dialog did not expose filename and save controls'
+`,
+    {
+      JOTLUCK_APPLICATION: installedApplication,
+      JOTLUCK_SAVE_TARGET: targetPath,
+    },
+  );
+  if (!output) throw new Error('native Save As dialog produced no observation');
+  return JSON.parse(output);
 }
 
 function spawnSyncChecked(command, args, timeoutMs, extraEnv = {}) {
@@ -1109,7 +1201,7 @@ function pdfFixture(text) {
   return Buffer.concat([...chunks, Buffer.from(xref, 'ascii')]);
 }
 
-async function createSupportedFixture(target, extension, marker) {
+async function createSupportedFixture(target, extension, marker, options = {}) {
   if (extension === '.txt') {
     const content = `<b>${marker}</b>\n# must remain text\n[link](https://example.invalid)`;
     writeFileSync(target, content, 'utf8');
@@ -1120,8 +1212,22 @@ async function createSupportedFixture(target, extension, marker) {
     return { expectedText: marker, binary: false };
   }
   if (extension === '.docx') {
+    const children = [new Paragraph({ text: marker })];
+    if (options.includeImage === true) {
+      children.push(
+        new Paragraph({
+          children: [
+            new ImageRun({
+              data: PNG_FIXTURE_BYTES,
+              transformation: { width: 8, height: 8 },
+              type: 'png',
+            }),
+          ],
+        }),
+      );
+    }
     const document = new Document({
-      sections: [{ children: [new Paragraph({ text: marker })] }],
+      sections: [{ children }],
     });
     writeFileSync(target, await Packer.toBuffer(document));
     return { expectedText: marker, binary: true };
@@ -1184,6 +1290,115 @@ async function rfColdOpenSupportedFiles({ workRoot, trace }) {
     });
   }
   return [webdriverArtifact(workRoot), writeJsonArtifact(workRoot, 'file-readback', observations)];
+}
+
+async function documentImportSaveAsMarkdown({ workRoot, trace }) {
+  const marker = `document-save-${randomUUID()}`;
+  const source = path.join(workRoot, 'document-save-source.docx');
+  await createSupportedFixture(source, '.docx', marker, { includeImage: true });
+  const sourceBefore = textFileReadback(source, false);
+  const saveRoot = path.join(workRoot, 'saved');
+  mkdirSync(saveRoot, { recursive: true });
+  const markdownTarget = path.join(saveRoot, 'document-save-copy.md');
+  const assetDirectory = path.join(saveRoot, 'document-save-copy.assets');
+  const screenshot = artifact(workRoot, 'screenshot', 'png');
+  let nativeDialogObservation;
+  let editorText = '';
+
+  await withSession(trace, [source], async (browser) => {
+    await waitForReader(browser, marker, trace);
+    const editButton = await waitForSelector(
+      browser,
+      '[data-testid="document-edit-button"]',
+      trace,
+      30_000,
+    );
+    await browser.waitUntil(() => editButton.isEnabled(), {
+      timeout: 30_000,
+      interval: 100,
+      timeoutMsg: 'document edit action never became available',
+    });
+    trace.record('click', { selector: '[data-testid="document-edit-button"]' });
+    await editButton.click();
+    await waitForSelector(browser, '.document-edit-dialog__choices', trace);
+    const choices = await browser.$$('.document-edit-dialog__choice');
+    if (choices.length !== 2) throw new Error('document edit dialog did not expose two choices');
+    trace.record('click', { selector: '.document-edit-dialog__choice:nth-child(2)' });
+    await choices[1].click();
+    await waitForSelector(browser, '.document-edit-dialog__footer', trace);
+    trace.record('native-save-dialog-requested', {
+      targetFileName: path.basename(markdownTarget),
+    });
+    const clicked = await browser.execute(() => {
+      const buttons = document.querySelectorAll('.document-edit-dialog__footer button');
+      const confirm = buttons.item(buttons.length - 1);
+      if (!(confirm instanceof HTMLButtonElement)) return false;
+      confirm.click();
+      return true;
+    });
+    if (!clicked) throw new Error('document Save As confirmation button was not clickable');
+    nativeDialogObservation = completeNativeSaveDialog(markdownTarget);
+    trace.record('native-save-dialog-completed', nativeDialogObservation);
+    await waitForSelector(browser, '.cm-content', trace, 30_000);
+    editorText = await readVisibleEditor(browser);
+    if (!editorText.includes(marker)) {
+      throw new Error('saved Markdown did not open in the JotLuck editor');
+    }
+    await browser.saveScreenshot(screenshot.path);
+    trace.record('screenshot', { kind: screenshot.kind, bytes: statSync(screenshot.path).size });
+  });
+
+  const sourceAfter = textFileReadback(source, false);
+  if (sourceAfter.bytes !== sourceBefore.bytes || sourceAfter.sha256 !== sourceBefore.sha256) {
+    throw new Error('document Save As changed the source DOCX');
+  }
+  assertNonEmptyRegularFile(markdownTarget, 'saved Markdown');
+  const markdown = textFileReadback(markdownTarget, true);
+  if (!markdown.contentUtf8.includes(marker)) {
+    throw new Error('saved Markdown does not contain the converted source marker');
+  }
+  if (!markdown.contentUtf8.includes('document-save-copy.assets/')) {
+    throw new Error('saved Markdown does not reference its companion asset directory');
+  }
+  if (!existsSync(assetDirectory) || !statSync(assetDirectory).isDirectory()) {
+    throw new Error('document Save As did not create the companion asset directory');
+  }
+  const assets = readdirSync(assetDirectory)
+    .map((name) => ({ name, target: path.join(assetDirectory, name) }))
+    .filter(({ target }) => {
+      const info = lstatSync(target);
+      return !info.isSymbolicLink() && info.isFile();
+    })
+    .map(({ name, target }) => ({ fileName: name, ...textFileReadback(target, false) }));
+  if (assets.length === 0) throw new Error('document Save As created no image assets');
+
+  return [
+    webdriverArtifact(workRoot),
+    writeJsonArtifact(workRoot, 'native-dialog-observation', nativeDialogObservation),
+    writeJsonArtifact(workRoot, 'document-save-readback', {
+      schema: 'jotluck.installed-app.document-save-readback.v1',
+      marker,
+      source: {
+        fileName: path.basename(source),
+        before: sourceBefore,
+        after: sourceAfter,
+        unchanged: true,
+      },
+      markdown: {
+        fileName: path.basename(markdownTarget),
+        ...markdown,
+      },
+      assets: {
+        directoryName: path.basename(assetDirectory),
+        entries: assets,
+      },
+      transition: {
+        sessionMode: 'external-edit',
+        editorContainsMarker: editorText.includes(marker),
+      },
+    }),
+    screenshot,
+  ];
 }
 
 async function rfRuntimeNewWindow({ workRoot, trace }) {
