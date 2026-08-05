@@ -1,8 +1,7 @@
 /**
  * cm6-ghost-text — CodeMirror 6 Ghost Text 补全插件
  *
- * 统一幽灵文本管道：80ms 防抖触发预测 → Decoration.widget 渲染 → Tab 接受
- * 语法上下文检测内置于 MarkdownPredictor 服务层。
+ * 双平面幽灵文本管道：结构化立即触发，正文预测 40ms 防抖，Tab 执行精确 TextEdit。
  *
  * @see spec/frontend/autocomplete-spec.md
  */
@@ -17,13 +16,20 @@ import {
   type ViewUpdate,
 } from '@codemirror/view';
 import { Prec, StateEffect, StateField, type Extension } from '@codemirror/state';
+import { isolateHistory } from '@codemirror/commands';
 import type { MarkdownPredictor } from '@/services/MarkdownPredictor';
 import type { CompletionSettings } from '@/services/CompletionSettings';
+import {
+  completionDocumentContextField,
+  getCompletionDocumentContext,
+} from '@/services/completion/document-context';
+import type { CompletionMode, CompletionTextEdit } from '@/services/completion/types';
 import { isDesktopRuntime } from './runtime';
 
 // ---- Ghost Text Widget ----
 
 const setGhostDecorations = StateEffect.define<DecorationSet>();
+let editorSessionSequence = 0;
 
 const ghostDecorationField = StateField.define<DecorationSet>({
   create: () => Decoration.none,
@@ -72,12 +78,22 @@ interface DebounceState {
   timer: ReturnType<typeof setTimeout> | null;
 }
 
+interface PendingAcceptedCompletion {
+  token: string;
+  context: string;
+  text: string;
+  from: number;
+  to: number;
+  learn: boolean;
+}
+
 function isUnmodifiedTab(event: KeyboardEvent): boolean {
   return !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey;
 }
 
 interface GhostDebugHost extends HTMLElement {
   __jotluckClearGhostText?: () => void;
+  __jotluckSettlePendingAccepted?: () => void;
   __jotluckGetVisibleGhostPrediction?: () => ReturnType<MarkdownPredictor['getGhostText']>;
   __jotluckGetVisibleGhostDiagnostics?: () => {
     prediction: NonNullable<ReturnType<MarkdownPredictor['getGhostText']>>;
@@ -90,6 +106,7 @@ interface GhostDebugHost extends HTMLElement {
 // ---- ViewPlugin ----
 
 function createGhostTextPlugin(predictor: MarkdownPredictor, settings: CompletionSettings) {
+  void settings;
   const debounce: DebounceState = { timer: null };
 
   return ViewPlugin.fromClass(
@@ -101,21 +118,25 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
       private currentPredictionCursor: number | null = null;
       private currentFeedbackToken: string | null = null;
       private currentPredictionResult: ReturnType<MarkdownPredictor['getGhostText']> = null;
+      private currentPredictionEdit: CompletionTextEdit | null = null;
+      private pendingAcceptedCompletion: PendingAcceptedCompletion | null = null;
       private visiblePredictionDiagnostics: ReturnType<
         NonNullable<GhostDebugHost['__jotluckGetVisibleGhostDiagnostics']>
       > = null;
       private predictionScheduledAt: number | null = null;
       private acceptingGhost = false;
       private editorInteractionActive = false;
-      private suppressedGhostAt: { doc: string; cursor: number } | null = null;
+      private suppressedGhostAt: { revision: number; cursor: number } | null = null;
       private decorationClearQueued = false;
       /** True during IME composition — skip prediction scheduling */
       private isComposing = false;
       private editorView: EditorView | null = null;
       private compositionPredictTimer: ReturnType<typeof setTimeout> | null = null;
       private predictionAbortController: AbortController | null = null;
+      private activeRequestKey: string | null = null;
       private predictionEpoch = 0;
       private destroyed = false;
+      private readonly editorSessionId = `editor-${++editorSessionSequence}`;
       // IME listener refs for cleanup in destroy()
       private __compStart: ((e: Event) => void) | null = null;
       private __compEnd: ((e: Event) => void) | null = null;
@@ -133,6 +154,8 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           this.clearPendingTimers();
           this.clearGhost(view, true, true);
         };
+        (view.dom as GhostDebugHost).__jotluckSettlePendingAccepted = () =>
+          this.settlePendingAcceptedAtBoundary(view);
         (view.dom as GhostDebugHost).__jotluckGetVisibleGhostPrediction = () =>
           this.currentPredictionResult;
         (view.dom as GhostDebugHost).__jotluckGetVisibleGhostDiagnostics = () =>
@@ -140,6 +163,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
 
         // ── IME composition guard ────────────────────────────
         const onCompStart = () => {
+          this.settlePendingAcceptedAtBoundary(view);
           this.isComposing = true;
           this.clearPendingTimers();
           this.clearGhost(view, true, true);
@@ -159,6 +183,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           this.schedulePredict(view);
         };
         const onBlur = () => {
+          this.settlePendingAcceptedAtBoundary(view);
           this.editorInteractionActive = false;
           this.clearPendingTimers();
           this.clearGhost(view, true, true);
@@ -169,6 +194,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         this.__blur = onBlur;
 
         const onWindowBlur = () => {
+          this.settlePendingAcceptedAtBoundary(view);
           this.editorInteractionActive = false;
           this.clearPendingTimers();
           this.clearGhost(view, true, true);
@@ -203,6 +229,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         const onRootPointerDown = (event: Event) => {
           const target = event.target;
           if (target instanceof Node && view.dom.contains(target)) return;
+          this.settlePendingAcceptedAtBoundary(view);
           this.editorInteractionActive = false;
           this.clearPendingTimers();
           this.clearGhost(view, true, true);
@@ -237,6 +264,14 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
       }
 
       update(update: ViewUpdate) {
+        if (this.acceptingGhost && update.docChanged) {
+          this.clearPendingTimers();
+          this.clearGhost(update.view, false);
+          return;
+        }
+        if (update.docChanged && this.pendingAcceptedCompletion) {
+          this.settlePendingAcceptedAfterChange(update);
+        }
         // Skip during IME composition to avoid corrupting composition state
         if (this.isImeActive(update.view, update)) {
           this.clearPendingTimers();
@@ -244,15 +279,11 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           return;
         }
         if (update.focusChanged && !update.view.hasFocus) {
+          this.settlePendingAcceptedAtBoundary(update.view);
           this.editorInteractionActive = false;
           this.clearPendingTimers();
           this.clearGhost(update.view, false);
           this.deferClearGhostDecorations(update.view);
-          return;
-        }
-        if (this.acceptingGhost && update.docChanged) {
-          this.clearPendingTimers();
-          this.clearGhost(update.view, false);
           return;
         }
         const mainSelection = update.view.state.selection.main;
@@ -277,24 +308,34 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
 
       schedulePredict(view: EditorView) {
         if (this.isImeActive(view)) return;
+        if (!view.state.selection.main.empty) return;
+        const snapshot = getCompletionDocumentContext(view.state);
+        const requestKey = `structured:${snapshot.documentRevision}:${snapshot.cursor}`;
+        if (this.activeRequestKey === requestKey) return;
         if (debounce.timer) clearTimeout(debounce.timer);
         this.predictionScheduledAt = performance.now();
-        debounce.timer = setTimeout(
-          () => {
-            debounce.timer = null;
-            void this.doPredict(view);
-          },
-          settings.aggressiveness === 'balanced' ? 40 : 150,
-        );
+        void this.doPredict(view, 'structured', true);
       }
 
-      async doPredict(view: EditorView) {
+      private schedulePredictive(view: EditorView) {
+        if (this.isImeActive(view)) return;
+        if (debounce.timer) clearTimeout(debounce.timer);
+        debounce.timer = setTimeout(() => {
+          debounce.timer = null;
+          void this.doPredict(view, 'predictive');
+        }, 40);
+      }
+
+      async doPredict(view: EditorView, mode: CompletionMode, schedulePredictiveOnEmpty = false) {
         if (this.isImeActive(view)) {
           this.clearGhost(view);
           return;
         }
-        const doc = view.state.doc.toString();
-        const cursor = view.state.selection.main.head;
+        const snapshot = getCompletionDocumentContext(view.state);
+        const doc = snapshot.documentWindow.text;
+        const cursor = snapshot.cursor;
+        const documentRevision = snapshot.documentRevision;
+        const requestKey = `${mode}:${documentRevision}:${cursor}`;
         const scheduledAt = this.predictionScheduledAt ?? performance.now();
 
         // 只有光标在文档末尾或单光标无选区时预测
@@ -303,13 +344,17 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           return;
         }
 
-        if (this.suppressedGhostAt?.doc === doc && this.suppressedGhostAt.cursor === cursor) {
+        if (
+          this.suppressedGhostAt?.revision === documentRevision &&
+          this.suppressedGhostAt.cursor === cursor
+        ) {
           this.clearGhost(view);
           return;
         }
         this.predictionAbortController?.abort('superseded');
         const controller = new AbortController();
         this.predictionAbortController = controller;
+        this.activeRequestKey = requestKey;
         const requestEpoch = ++this.predictionEpoch;
         let result: ReturnType<MarkdownPredictor['getGhostText']>;
         try {
@@ -318,40 +363,66 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
               ? await predictor.requestGhostText(cursor, doc, {
                   signal: controller.signal,
                   deadlineMs: isDesktopRuntime() ? 80 : 110,
+                  documentRevision,
+                  documentVersion: `revision:${documentRevision}`,
+                  editorSessionId: this.editorSessionId,
+                  mode,
+                  contextSnapshot: snapshot,
                 })
-              : predictor.getGhostText(cursor, doc);
+              : predictor.getGhostText(cursor - snapshot.documentWindow.from, doc);
         } catch {
           if (this.predictionAbortController === controller) {
             this.predictionAbortController = null;
+            this.activeRequestKey = null;
           }
           return;
         }
+        // A synchronous structured provider may finish while CodeMirror is
+        // still executing this plugin's update() callback. Cross one microtask
+        // boundary before dispatching decorations, then re-check all stale
+        // guards below. This keeps the structural plane immediate without
+        // re-entering EditorView.update().
+        await Promise.resolve();
         if (
           this.destroyed ||
           controller.signal.aborted ||
           requestEpoch !== this.predictionEpoch ||
           this.editorView !== view ||
-          view.state.doc.toString() !== doc ||
+          getCompletionDocumentContext(view.state).documentRevision !== documentRevision ||
           view.state.selection.main.head !== cursor ||
           !view.state.selection.main.empty ||
           !view.hasFocus ||
           this.isImeActive(view)
         ) {
+          if (this.predictionAbortController === controller) {
+            this.predictionAbortController = null;
+            this.activeRequestKey = null;
+          }
           return;
         }
         if (this.predictionAbortController === controller) {
           this.predictionAbortController = null;
+          this.activeRequestKey = null;
         }
         if (result && result.text) {
           // BUG-030: 防止重复预测同一文本导致的预测级联
-          if (result.text === this.currentGhostText) {
+          if ((result.displayText ?? result.text) === this.currentGhostText) {
+            const nextFeedbackToken = result.feedbackToken ?? null;
+            if (this.currentFeedbackToken && this.currentFeedbackToken !== nextFeedbackToken) {
+              predictor.abandonCompletion?.(this.currentFeedbackToken);
+            }
             this.currentPredictionResult = result;
-            this.currentFeedbackToken = result.feedbackToken ?? null;
+            this.currentPredictionEdit = result.edit ?? {
+              from: result.from,
+              to: result.to ?? result.from,
+              insertText: result.insertText ?? result.text,
+            };
+            this.currentFeedbackToken = nextFeedbackToken;
             this.visiblePredictionDiagnostics = {
               prediction: result,
               elapsedMs: Math.max(0, performance.now() - scheduledAt),
               cursor,
-              documentLength: doc.length,
+              documentLength: view.state.doc.length,
             };
             return;
           }
@@ -362,21 +433,32 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           // Guard: mid-line only shows STRUCTURED completions (format closure,
           // Wiki-link close, etc.) which have deterministic correctness.
           // N-gram predictions mid-line are suppressed to avoid false positives.
-          const atEndOfLine = cursor === doc.length || doc[cursor] === '\n';
+          const atEndOfLine = snapshot.atEndOfLine;
           const isStructured = result.source === 'structured';
           if (!atEndOfLine && !isStructured) return;
 
-          this.currentGhostText = result.text;
+          const displayText = result.displayText ?? result.text;
+          const edit = result.edit ?? {
+            from: result.from,
+            to: result.to ?? result.from,
+            insertText: result.insertText ?? result.text,
+          };
+          const nextFeedbackToken = result.feedbackToken ?? null;
+          if (this.currentFeedbackToken && this.currentFeedbackToken !== nextFeedbackToken) {
+            predictor.abandonCompletion?.(this.currentFeedbackToken);
+          }
+          this.currentGhostText = displayText;
+          this.currentPredictionEdit = edit;
           this.currentPredictionLearnable = result.learnable ?? result.source !== 'structured';
-          this.currentContext = doc.slice(Math.max(0, cursor - 4), cursor);
+          this.currentContext = Array.from(snapshot.currentParagraph.text).slice(-4).join('');
           this.currentPredictionCursor = cursor;
-          this.currentFeedbackToken = result.feedbackToken ?? null;
+          this.currentFeedbackToken = nextFeedbackToken;
           this.currentPredictionResult = result;
           view.dispatch({
             effects: setGhostDecorations.of(
               Decoration.set([
                 Decoration.widget({
-                  widget: new GhostTextWidget(result.text),
+                  widget: new GhostTextWidget(displayText),
                   side: 1,
                 }).range(cursor),
               ]),
@@ -386,10 +468,13 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
             prediction: result,
             elapsedMs: Math.max(0, performance.now() - scheduledAt),
             cursor,
-            documentLength: doc.length,
+            documentLength: view.state.doc.length,
           };
         } else {
           this.clearGhost(view);
+          if (mode === 'structured' && schedulePredictiveOnEmpty) {
+            this.schedulePredictive(view);
+          }
         }
       }
 
@@ -398,18 +483,91 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         const hasRenderedGhost = Boolean(currentDecorations?.size);
         const shouldClearDecorations = forceDispatch || this.currentGhostText || hasRenderedGhost;
 
+        const feedbackToken = this.currentFeedbackToken;
         this.currentGhostText = '';
         this.currentPredictionLearnable = false;
         this.currentContext = '';
         this.currentPredictionCursor = null;
         this.currentFeedbackToken = null;
         this.currentPredictionResult = null;
+        this.currentPredictionEdit = null;
         this.visiblePredictionDiagnostics = null;
         this.predictionScheduledAt = null;
+        if (feedbackToken) predictor.abandonCompletion?.(feedbackToken);
 
         if (shouldDispatch && shouldClearDecorations) {
           view.dispatch({ effects: setGhostDecorations.of(Decoration.none) });
         }
+      }
+
+      private settlePendingAcceptedAfterChange(update: ViewUpdate): void {
+        const pending = this.pendingAcceptedCompletion;
+        if (!pending) return;
+        let overlapsAcceptedRange = false;
+        update.changes.iterChangedRanges((fromA, toA) => {
+          if (fromA === toA) {
+            if (fromA > pending.from && fromA < pending.to) overlapsAcceptedRange = true;
+            return;
+          }
+          if (fromA < pending.to && toA > pending.from) overlapsAcceptedRange = true;
+        });
+
+        const mappedFrom = update.changes.mapPos(pending.from, -1);
+        const mappedTo = update.changes.mapPos(pending.to, 1);
+        const exactTextRetained =
+          mappedFrom >= 0 &&
+          mappedFrom + pending.text.length <= update.state.doc.length &&
+          update.state.doc.sliceString(mappedFrom, mappedFrom + pending.text.length) ===
+            pending.text;
+        this.pendingAcceptedCompletion = null;
+
+        if (overlapsAcceptedRange) {
+          const wasUndo = update.transactions.some((transaction) =>
+            transaction.isUserEvent('undo'),
+          );
+          const remaining = update.state.doc.sliceString(
+            Math.max(0, mappedFrom),
+            Math.max(Math.max(0, mappedFrom), Math.min(update.state.doc.length, mappedTo)),
+          );
+          if (wasUndo || (!exactTextRetained && remaining.length === 0)) {
+            predictor.revertAcceptedCompletion?.(pending.token);
+          } else {
+            predictor.modifyAcceptedCompletion?.(pending.token);
+          }
+          return;
+        }
+
+        if (exactTextRetained) {
+          predictor.retainCompletion?.(pending.context, pending.text, {
+            learn: pending.learn,
+            feedbackToken: pending.token,
+          });
+        } else {
+          predictor.modifyAcceptedCompletion?.(pending.token);
+        }
+      }
+
+      private settlePendingAcceptedAtBoundary(view: EditorView): void {
+        const pending = this.pendingAcceptedCompletion;
+        if (!pending) return;
+        this.pendingAcceptedCompletion = null;
+        const exactTextRetained =
+          pending.from >= 0 &&
+          pending.to <= view.state.doc.length &&
+          view.state.doc.sliceString(pending.from, pending.to) === pending.text;
+        if (exactTextRetained) {
+          predictor.retainCompletion?.(pending.context, pending.text, {
+            learn: pending.learn,
+            feedbackToken: pending.token,
+          });
+          return;
+        }
+        const remaining = view.state.doc.sliceString(
+          Math.max(0, Math.min(pending.from, view.state.doc.length)),
+          Math.max(0, Math.min(pending.to, view.state.doc.length)),
+        );
+        if (remaining.length === 0) predictor.revertAcceptedCompletion?.(pending.token);
+        else predictor.modifyAcceptedCompletion?.(pending.token);
       }
 
       private isImeActive(view: EditorView, update?: ViewUpdate): boolean {
@@ -461,6 +619,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           this.predictionAbortController.abort('cancelled');
           this.predictionAbortController = null;
         }
+        this.activeRequestKey = null;
         if (debounce.timer) {
           clearTimeout(debounce.timer);
           debounce.timer = null;
@@ -496,11 +655,18 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         if (!this.canAcceptGhost(view, eventTarget)) return false;
 
         const cursor = view.state.selection.main.head;
-        const text = this.currentGhostText;
+        const edit = this.currentPredictionEdit ?? {
+          from: cursor,
+          to: cursor,
+          insertText: this.currentGhostText,
+        };
+        if (edit.from < 0 || edit.to < edit.from || edit.to > view.state.doc.length) return false;
+        const text = edit.insertText;
         const predictionLearnable = this.currentPredictionLearnable;
         const feedbackToken = this.currentFeedbackToken;
-        const doc = view.state.doc.toString();
-        const ctx = this.currentContext || doc.slice(Math.max(0, cursor - 4), cursor);
+        const snapshot = getCompletionDocumentContext(view.state);
+        const ctx =
+          this.currentContext || Array.from(snapshot.currentParagraph.text).slice(-4).join('');
 
         // Clear plugin state before dispatch: dispatch synchronously triggers
         // update(), and stale ghost state can otherwise re-enter prediction.
@@ -510,12 +676,17 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         this.currentGhostText = '';
         this.currentPredictionLearnable = false;
         this.currentContext = '';
+        this.currentPredictionCursor = null;
         this.currentFeedbackToken = null;
+        this.currentPredictionResult = null;
+        this.currentPredictionEdit = null;
+        this.visiblePredictionDiagnostics = null;
 
-        // 插入 ghost text
+        // V2.2: the edit is the sole authoritative body mutation.
         view.dispatch({
-          changes: { from: cursor, insert: text },
-          selection: { anchor: cursor + text.length },
+          changes: { from: edit.from, to: edit.to, insert: text },
+          selection: { anchor: edit.from + text.length },
+          annotations: isolateHistory.of('full'),
           effects: setGhostDecorations.of(Decoration.none),
         });
         this.acceptingGhost = false;
@@ -526,6 +697,16 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           learn: predictionLearnable,
           feedbackToken: feedbackToken ?? undefined,
         });
+        if (feedbackToken) {
+          this.pendingAcceptedCompletion = {
+            token: feedbackToken,
+            context: ctx,
+            text,
+            from: edit.from,
+            to: edit.from + text.length,
+            learn: predictionLearnable,
+          };
+        }
 
         return true;
       }
@@ -535,14 +716,16 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         if (!this.currentGhostText) return false;
 
         const cursor = view.state.selection.main.head;
-        const doc = view.state.doc.toString();
-        const ctx = this.currentContext || doc.slice(Math.max(0, cursor - 4), cursor);
+        const snapshot = getCompletionDocumentContext(view.state);
+        const ctx =
+          this.currentContext || Array.from(snapshot.currentParagraph.text).slice(-4).join('');
         const predictionLearnable = this.currentPredictionLearnable;
         const feedbackToken = this.currentFeedbackToken;
+        const rejectedText = this.currentPredictionEdit?.insertText ?? this.currentGhostText;
 
         this.clearPendingTimers();
-        this.suppressedGhostAt = { doc, cursor };
-        predictor.rejectCompletion(ctx, this.currentGhostText, {
+        this.suppressedGhostAt = { revision: snapshot.documentRevision, cursor };
+        predictor.rejectCompletion(ctx, rejectedText, {
           learn: predictionLearnable,
           feedbackToken: feedbackToken ?? undefined,
         });
@@ -554,6 +737,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         this.destroyed = true;
         this.clearPendingTimers();
         if (this.editorView) {
+          this.settlePendingAcceptedAtBoundary(this.editorView);
           // destroy() runs inside the transaction that removes this plugin.
           // Dispatching here re-enters CodeMirror while it is still updating.
           // The compartment removal already removes ghostDecorationField, so
@@ -561,6 +745,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           // dispose the decorations.
           this.clearGhost(this.editorView, false);
           delete (this.editorView.dom as GhostDebugHost).__jotluckClearGhostText;
+          delete (this.editorView.dom as GhostDebugHost).__jotluckSettlePendingAccepted;
           delete (this.editorView.dom as GhostDebugHost).__jotluckGetVisibleGhostPrediction;
           delete (this.editorView.dom as GhostDebugHost).__jotluckGetVisibleGhostDiagnostics;
           const dom = this.editorView.contentDOM;
@@ -652,6 +837,7 @@ export function ghostTextPlugin(
 ): Extension[] {
   const plugin = createGhostTextPlugin(predictor, settings);
   return [
+    completionDocumentContextField,
     ghostDecorationField,
     plugin,
     ghostTextKeymap(plugin),

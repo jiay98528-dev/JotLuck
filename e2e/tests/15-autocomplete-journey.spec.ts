@@ -31,6 +31,19 @@ async function replaceEditorTextByTyping(
   await page.keyboard.type(text, { delay: 1 });
 }
 
+async function readPersonalV5Storage(
+  page: import('@playwright/test').Page,
+): Promise<Record<string, string>> {
+  return page.evaluate(() =>
+    Object.fromEntries(
+      Object.keys(localStorage)
+        .filter((key) => /:autocomplete:(?:ngram:v5|meta:v5|acceptedLexicon:v2)$/u.test(key))
+        .sort()
+        .map((key) => [key, localStorage.getItem(key) ?? '']),
+    ),
+  );
+}
+
 test.describe('offline autocomplete user journeys', () => {
   async function seedAsciiProbe(page: import('@playwright/test').Page): Promise<void> {
     await page.evaluate(() => {
@@ -209,6 +222,62 @@ test.describe('offline autocomplete user journeys', () => {
 
     await page.keyboard.press('Tab');
     await expect.poll(() => getEditorContentFromBridge(page)).toContain(`${seed}第三条、第三天`);
+  });
+
+  test('structured completion applies one exact UTF-16 replacement edit', async ({ page }) => {
+    await replaceEditorText(page, '😀参见 [[快');
+
+    await expect
+      .poll(() =>
+        page.evaluate(() => (window as any).__jotluck_e2e?.editor?.getPrediction?.() ?? null),
+      )
+      .toMatchObject({
+        providerId: 'wiki-link',
+        mode: 'structured',
+        edit: {
+          insertText: '快速入门]]',
+        },
+      });
+
+    await page.keyboard.press('Tab');
+
+    await expect.poll(() => getEditorContentFromBridge(page)).toBe('😀参见 [[快速入门]]');
+  });
+
+  test('immediate undo reverts an accepted ghost without persisting Personal v5', async ({
+    page,
+  }) => {
+    const before = await readPersonalV5Storage(page);
+    await replaceEditorText(page, '测试文本');
+    await expect(page.locator('.cm-ghost-text')).toBeVisible({ timeout: 3000 });
+
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Control+z');
+
+    await expect.poll(() => getEditorContentFromBridge(page)).toBe('测试文本');
+    await expect.poll(() => readPersonalV5Storage(page)).toEqual(before);
+  });
+
+  test('an intact accepted ghost is persisted only after the editor loses focus', async ({
+    page,
+  }) => {
+    const before = await readPersonalV5Storage(page);
+    await replaceEditorText(page, '测试文本');
+    await expect(page.locator('.cm-ghost-text')).toBeVisible({ timeout: 3000 });
+
+    await page.keyboard.press('Tab');
+    expect(await readPersonalV5Storage(page)).toEqual(before);
+
+    await page.locator('.wing-settings-btn').focus();
+
+    await expect
+      .poll(async () => Object.keys(await readPersonalV5Storage(page)), { timeout: 3000 })
+      .toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/:autocomplete:ngram:v5$/u),
+          expect.stringMatching(/:autocomplete:meta:v5$/u),
+        ]),
+      );
   });
 
   test('V2 uses the real Web Worker notebook retrieval path', async ({ page }) => {

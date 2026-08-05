@@ -32,9 +32,9 @@ import {
 } from '../completion/public-engine-types';
 
 // ---- helpers ----
-const SCOPED_NGRAM_KEY = 'jotluck:scope:unscoped:autocomplete:ngram:v4';
-const SCOPED_NGRAM_META_KEY = 'jotluck:scope:unscoped:autocomplete:meta:v4';
-const SCOPED_ACCEPTED_LEXICON_KEY = 'jotluck:scope:unscoped:autocomplete:acceptedLexicon:v1';
+const SCOPED_NGRAM_KEY = 'jotluck:scope:unscoped:autocomplete:ngram:v5';
+const SCOPED_NGRAM_META_KEY = 'jotluck:scope:unscoped:autocomplete:meta:v5';
+const SCOPED_ACCEPTED_LEXICON_KEY = 'jotluck:scope:unscoped:autocomplete:acceptedLexicon:v2';
 const TEST_BASELINE_HASH = 'a'.repeat(64);
 const TEST_PUBLIC_ENGINE_ID = 'test-public-engine';
 
@@ -757,9 +757,11 @@ describe('MarkdownPredictor', () => {
 
       priv(p).l1 = new Map();
       priv(p).l2 = new Map([['o ', new Map([['y', 1]])]]);
+      priv(p).personalLongCache = null;
       expect(p.getGhostText(3, 'go ')?.sourceLayer).toBe('l2');
 
       priv(p).l2 = new Map();
+      priv(p).personalLongCache = null;
       priv(p).l3Word = new Map([['go', new Map([['z', 1]])]]);
       expect(p.getGhostText(3, 'go ')?.sourceLayer).toBe('l3');
     });
@@ -790,7 +792,7 @@ describe('MarkdownPredictor', () => {
       expect(result?.sourceLayer).toBe('l1');
     });
 
-    it('allows L3 to win when confidence is clearly higher than L1', () => {
+    it('keeps current-document L1 ahead of public L3 regardless of raw confidence', () => {
       const p = createPredictor(2);
       priv(p).l1 = new Map([
         [
@@ -812,8 +814,8 @@ describe('MarkdownPredictor', () => {
       ]);
 
       const result = p.getGhostText(3, 'go ');
-      expect(result?.text).toBe('z');
-      expect(result?.sourceLayer).toBe('l3');
+      expect(result?.text).toBe('x');
+      expect(result?.sourceLayer).toBe('l1');
     });
 
     it('marks short predictions and fixed fallbacks with sourceLayer', () => {
@@ -1201,13 +1203,19 @@ describe('MarkdownPredictor', () => {
       await flushCompletionStorageMutationsForTests();
 
       predictor.acceptCompletion('bbbb', ' second');
+      expect(priv(predictor).l2.has('bbbb')).toBe(true);
       expect(predictor.getGhostText(4, 'bbbb')).toMatchObject({
         text: ' second',
-        sourceLayer: 'l2',
+        sourceLayer: 'session',
       });
+      expect(priv(predictor).l2.has('bbbb')).toBe(true);
       await vi.waitFor(() => expect(releases).toHaveLength(1));
       releases.shift()?.();
       await flushCompletionStorageMutationsForTests();
+
+      const reloaded = createPredictor(4);
+      priv(reloaded).loadFromLocalStorage();
+      expect(priv(reloaded).l2.has('bbbb')).toBe(true);
     });
 
     it('initialize 在 L3 不可用时仍恢复 Personal L2', async () => {
@@ -1225,7 +1233,7 @@ describe('MarkdownPredictor', () => {
       setupLocalStorageMock();
     });
 
-    it('v4 migration discards aggregated n-gram but preserves the legal accepted lexicon', () => {
+    it('does not promote pre-v4 aggregate data into retained personal learning', () => {
       localStorage.setItem('jotluck:ngram:v2', 'legacy aggregated body');
       localStorage.setItem('jotluck:ngram:short:v1', 'legacy short body');
       localStorage.setItem('jotluck:ngram:meta', JSON.stringify({ schemaVersion: 2 }));
@@ -1238,11 +1246,11 @@ describe('MarkdownPredictor', () => {
       expect(priv(p).l2.size).toBe(0);
       expect(priv(p).personalShort2.size).toBe(0);
       expect(priv(p).personalShort3.size).toBe(0);
-      expect(priv(p).acceptedLexicon).toEqual(['owner review']);
+      expect(priv(p).acceptedLexicon).toEqual([]);
       expect(localStorage.getItem('jotluck:ngram:v2')).toBeNull();
       expect(localStorage.getItem(ACCEPTED_LEXICON_STORAGE_KEY)).toBeNull();
-      expect(localStorage.getItem('jotluck:scope:notebook-a:autocomplete:acceptedLexicon:v1')).toBe(
-        JSON.stringify(['owner review']),
+      expect(localStorage.getItem('jotluck:scope:notebook-a:autocomplete:acceptedLexicon:v2')).toBe(
+        null,
       );
     });
 
@@ -1887,6 +1895,57 @@ describe('MarkdownPredictor', () => {
       }
     });
 
+    it('caps Hybrid retrieval at its 35ms soft budget inside a longer request', async () => {
+      let now = 0;
+      const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => now);
+      try {
+        const backend: HybridRetrievalBackend = {
+          execute(request): Promise<HybridRetrievalResponse> {
+            if (request.operation === 'query') {
+              now = 36;
+              return Promise.resolve({
+                operation: 'query',
+                candidates: [
+                  {
+                    text: '不应越过预算。',
+                    confidence: 0.95,
+                    support: 3,
+                    documentSupport: 3,
+                    providerId: 'hybrid-retrieval-zh',
+                    sourceLayer: 'notebook',
+                  },
+                ],
+                committedRevision: 0,
+                pendingMutations: 0,
+                warming: false,
+              });
+            }
+            return Promise.resolve({
+              operation: request.operation,
+              changed: true,
+              documentCount: 0,
+              revision: 0,
+            });
+          },
+          dispose() {},
+        };
+        const predictor = new MarkdownPredictor(4, new HybridRetrievalService({ backend }));
+
+        const diagnostics = await predictor.requestGhostTextWithDiagnostics(
+          '下一步'.length,
+          '下一步',
+          { deadlineMs: 100 },
+        );
+
+        expect(diagnostics.hybrid).toMatchObject({ attempted: true, timedOut: true });
+        expect(diagnostics.rankedCandidates).not.toEqual(
+          expect.arrayContaining([expect.objectContaining({ providerId: 'hybrid-retrieval-zh' })]),
+        );
+      } finally {
+        nowSpy.mockRestore();
+      }
+    });
+
     it('keeps the single public engine slot unbound by default', async () => {
       const predictor = new MarkdownPredictor();
 
@@ -1964,6 +2023,50 @@ describe('MarkdownPredictor', () => {
       });
       expect(generate).toHaveBeenCalledOnce();
       await p.dispose();
+    });
+
+    it('does not invoke the public generator when a strong local candidate exists', async () => {
+      const generate = vi.fn<CompletionPublicEngine['generate']>(async () => {
+        throw new Error('public generator must remain suppressed');
+      });
+      const publicEngine: CompletionPublicEngine = {
+        id: TEST_PUBLIC_ENGINE_ID,
+        protocolVersion: PUBLIC_ENGINE_PROTOCOL_VERSION,
+        sourceKind: 'neural',
+        maxOutputCodePoints: PUBLIC_ENGINE_MAX_OUTPUT_CODE_POINTS,
+        warmup: async () => true,
+        generate,
+        diagnostics: () => ({
+          engineId: TEST_PUBLIC_ENGINE_ID,
+          backendKind: 'worker',
+          status: 'ready',
+          epoch: 1,
+          profile: 'evaluation',
+          lastError: null,
+          warmupDurationMs: 1,
+          lastInferenceDurationMs: 0,
+          visibleInferenceP90Ms: 0,
+          generateRequests: 0,
+          generatedCandidates: 0,
+          cancellations: 0,
+          deadlineExpirations: 0,
+          lateResponses: 0,
+          invalidResponses: 0,
+          workerErrors: 0,
+          assets: createEmptyPublicEngineAssetDiagnostics(),
+        }),
+        dispose: () => undefined,
+      };
+      const predictor = new MarkdownPredictor(4, undefined, publicEngine);
+      predictor.scanOpenedDocument('项目复盘需要记录转化成本。\n转化成本需要持续观察。');
+      await predictor.warmupPublicEngine();
+
+      const diagnostics = await predictor.requestGhostTextWithDiagnostics('转化'.length, '转化');
+
+      expect(diagnostics.result).toMatchObject({ providerId: 'lexicon', sourceLayer: 'l1' });
+      expect(diagnostics.publicEngine.attempted).toBe(false);
+      expect(generate).not.toHaveBeenCalled();
+      await predictor.dispose();
     });
 
     it('binds feedback to the shown prediction token instead of mutable last-prediction state', () => {

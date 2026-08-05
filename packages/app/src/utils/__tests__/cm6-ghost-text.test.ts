@@ -1,5 +1,6 @@
 import { Compartment, EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
+import { history, undo } from '@codemirror/commands';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_COMPLETION_SETTINGS } from '@/services/CompletionSettings';
 import type { MarkdownPredictor } from '@/services/MarkdownPredictor';
@@ -31,7 +32,7 @@ function mountGhostEditor(overrides: Record<string, unknown> = {}) {
     state: EditorState.create({
       doc,
       selection: { anchor: doc.length },
-      extensions: ghostTextPlugin(predictor, DEFAULT_COMPLETION_SETTINGS),
+      extensions: [history(), ghostTextPlugin(predictor, DEFAULT_COMPLETION_SETTINGS)],
     }),
     parent: host,
   });
@@ -130,6 +131,75 @@ describe('cm6 ghost text focus and Tab contract', () => {
     expect(view.state.doc.toString()).toBe('reason is because');
     expect(predictor.acceptCompletion).toHaveBeenCalledTimes(1);
     expect(predictor.acceptCompletion).toHaveBeenCalledWith(
+      'n is',
+      ' because',
+      expect.objectContaining({ feedbackToken: 'prediction-1' }),
+    );
+  });
+
+  it('uses the exact text edit as the sole mutation for structured completion', async () => {
+    const retainCompletion = vi.fn();
+    const { view, predictor } = mountGhostEditor({
+      getGhostText: vi.fn(() => ({
+        text: 'cause',
+        displayText: 'cause',
+        confidence: 0.95,
+        from: 7,
+        to: 9,
+        insertText: 'because',
+        edit: { from: 7, to: 9, insertText: 'because' },
+        mode: 'structured' as const,
+        source: 'structured' as const,
+        providerId: 'wiki-link',
+        learnable: false,
+        feedbackToken: 'structured-1',
+      })),
+      retainCompletion,
+    });
+    await waitForGhost(view);
+
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+    );
+
+    expect(view.state.doc.toString()).toBe('reason because');
+    expect(predictor.acceptCompletion).toHaveBeenCalledWith(
+      'n is',
+      'because',
+      expect.objectContaining({ learn: false, feedbackToken: 'structured-1' }),
+    );
+    expect(retainCompletion).not.toHaveBeenCalled();
+  });
+
+  it('settles an immediately undone accepted edit as reverted, without retaining it', async () => {
+    const retainCompletion = vi.fn();
+    const revertAcceptedCompletion = vi.fn();
+    const { view, doc } = mountGhostEditor({ retainCompletion, revertAcceptedCompletion });
+    await waitForGhost(view);
+
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+    );
+    expect(undo(view)).toBe(true);
+
+    expect(view.state.doc.toString()).toBe(doc);
+    expect(revertAcceptedCompletion).toHaveBeenCalledWith('prediction-1');
+    expect(retainCompletion).not.toHaveBeenCalled();
+  });
+
+  it('settles an intact accepted edit as retained when focus leaves the editor', async () => {
+    const retainCompletion = vi.fn();
+    const { view } = mountGhostEditor({ retainCompletion });
+    await waitForGhost(view);
+
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+    );
+    expect(retainCompletion).not.toHaveBeenCalled();
+
+    view.contentDOM.dispatchEvent(new FocusEvent('blur'));
+
+    expect(retainCompletion).toHaveBeenCalledWith(
       'n is',
       ' because',
       expect.objectContaining({ feedbackToken: 'prediction-1' }),

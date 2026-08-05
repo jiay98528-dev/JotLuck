@@ -17,21 +17,28 @@ const MAX_SIGNAL_ENTRIES = 800;
 export interface LearningSignalEntry {
   shown: number;
   accepted: number;
+  retained: number;
+  modified: number;
+  reverted: number;
+  explicitRejected: number;
+  abandoned: number;
+  legacyAccepted: number;
   rejected: number;
   savedChars: number;
   lastShown: number;
   lastAccepted: number;
+  lastRetained: number;
   lastRejected: number;
 }
 
 export interface LearningSignalStore {
-  version: 2;
+  version: 3;
   entries: Record<string, LearningSignalEntry>;
   updatedAt: number;
 }
 
 export function learningSignalsStorageKey(scope = 'unscoped'): string {
-  return scopedCompletionStorageKey(scope, 'learning-signals:v2');
+  return scopedCompletionStorageKey(scope, 'learning-signals:v3');
 }
 
 export function loadLearningSignals(scope = 'unscoped'): LearningSignalStore {
@@ -42,6 +49,7 @@ export function loadLearningSignals(scope = 'unscoped'): LearningSignalStore {
 
   const normalizedScope = normalizeCompletionScope(scope);
   const legacyKeys = [
+    scopedCompletionStorageKey(normalizedScope, 'learning-signals:v2'),
     scopedCompletionStorageKey(normalizedScope, 'learning-signals:v1'),
     LEARNING_SIGNALS_STORAGE_KEY,
   ];
@@ -62,18 +70,20 @@ export function saveLearningSignals(store: LearningSignalStore, scope = 'unscope
 export function persistLearningSignalEvent(
   scope: string,
   key: string,
-  event: 'shown' | 'accepted' | 'rejected',
+  event:
+    | 'shown'
+    | 'accepted'
+    | 'retained'
+    | 'modified'
+    | 'reverted'
+    | 'explicitRejected'
+    | 'abandoned',
   savedChars = 0,
 ): void {
   const normalizedScope = normalizeCompletionScope(scope);
   runCompletionStorageMutation(`signals:${normalizedScope}`, () => {
     let latest = loadLearningSignals(normalizedScope);
-    latest =
-      event === 'shown'
-        ? recordSignalShown(latest, key)
-        : event === 'accepted'
-          ? recordSignalAccepted(latest, key, savedChars)
-          : recordSignalRejected(latest, key);
+    latest = recordSignalEvent(latest, key, event, savedChars);
     saveLearningSignals(latest, normalizedScope);
   });
 }
@@ -83,6 +93,7 @@ export function clearLearningSignals(scope = 'unscoped'): void {
   runCompletionStorageMutation(`signals:${normalizedScope}`, () => {
     removeStorage(
       learningSignalsStorageKey(normalizedScope),
+      scopedCompletionStorageKey(normalizedScope, 'learning-signals:v2'),
       scopedCompletionStorageKey(normalizedScope, 'learning-signals:v1'),
       ...(normalizedScope === 'unscoped' ? [LEARNING_SIGNALS_STORAGE_KEY] : []),
     );
@@ -91,7 +102,7 @@ export function clearLearningSignals(scope = 'unscoped'): void {
 
 export function createLearningSignalStore(): LearningSignalStore {
   return {
-    version: 2,
+    version: 3,
     entries: {},
     updatedAt: 0,
   };
@@ -134,16 +145,75 @@ export function recordSignalAccepted(
 ): LearningSignalStore {
   return updateSignal(store, key, (entry, now) => {
     entry.accepted++;
-    entry.savedChars += Math.max(0, savedChars);
     entry.lastAccepted = now;
+    void savedChars;
   });
+}
+
+export function recordSignalRetained(
+  store: LearningSignalStore,
+  key: string,
+  savedChars: number,
+): LearningSignalStore {
+  return updateSignal(store, key, (entry, now) => {
+    entry.retained++;
+    entry.savedChars += Math.max(0, savedChars);
+    entry.lastRetained = now;
+  });
+}
+
+export function recordSignalModified(store: LearningSignalStore, key: string): LearningSignalStore {
+  return updateSignal(store, key, (entry) => entry.modified++);
+}
+
+export function recordSignalReverted(store: LearningSignalStore, key: string): LearningSignalStore {
+  return updateSignal(store, key, (entry) => entry.reverted++);
+}
+
+export function recordSignalAbandoned(
+  store: LearningSignalStore,
+  key: string,
+): LearningSignalStore {
+  return updateSignal(store, key, (entry) => entry.abandoned++);
 }
 
 export function recordSignalRejected(store: LearningSignalStore, key: string): LearningSignalStore {
   return updateSignal(store, key, (entry, now) => {
     entry.rejected++;
+    entry.explicitRejected++;
     entry.lastRejected = now;
   });
+}
+
+function recordSignalEvent(
+  store: LearningSignalStore,
+  key: string,
+  event:
+    | 'shown'
+    | 'accepted'
+    | 'retained'
+    | 'modified'
+    | 'reverted'
+    | 'explicitRejected'
+    | 'abandoned',
+  savedChars: number,
+): LearningSignalStore {
+  switch (event) {
+    case 'shown':
+      return recordSignalShown(store, key);
+    case 'accepted':
+      return recordSignalAccepted(store, key, savedChars);
+    case 'retained':
+      return recordSignalRetained(store, key, savedChars);
+    case 'modified':
+      return recordSignalModified(store, key);
+    case 'reverted':
+      return recordSignalReverted(store, key);
+    case 'explicitRejected':
+      return recordSignalRejected(store, key);
+    case 'abandoned':
+      return recordSignalAbandoned(store, key);
+  }
 }
 
 export function getLearningSignalAdjustment(
@@ -154,8 +224,8 @@ export function getLearningSignalAdjustment(
   const entry = store.entries[key];
   if (!entry || entry.shown < 2) return 0;
 
-  const accepted = entry.accepted;
-  const rejected = entry.rejected;
+  const accepted = entry.retained + entry.legacyAccepted * 0.5;
+  const rejected = entry.explicitRejected;
   const shown = Math.max(1, entry.shown);
   const acceptRate = accepted / shown;
   const rejectRate = rejected / shown;
@@ -182,7 +252,7 @@ function updateSignal(
 ): LearningSignalStore {
   const now = Date.now();
   const next: LearningSignalStore = {
-    version: 2,
+    version: 3,
     entries: { ...store.entries },
     updatedAt: now,
   };
@@ -204,18 +274,36 @@ function pruneLearningSignals(store: LearningSignalStore): LearningSignalStore {
 }
 
 function getEntryScore(entry: LearningSignalEntry): number {
-  const recent = Math.max(entry.lastShown, entry.lastAccepted, entry.lastRejected);
-  return entry.accepted * 8 + entry.rejected * 2 + entry.shown + recent / 1_000_000_000_000;
+  const recent = Math.max(
+    entry.lastShown,
+    entry.lastAccepted,
+    entry.lastRetained,
+    entry.lastRejected,
+  );
+  return (
+    entry.retained * 8 +
+    entry.legacyAccepted * 4 +
+    entry.explicitRejected * 2 +
+    entry.shown +
+    recent / 1_000_000_000_000
+  );
 }
 
 function createEntry(): LearningSignalEntry {
   return {
     shown: 0,
     accepted: 0,
+    retained: 0,
+    modified: 0,
+    reverted: 0,
+    explicitRejected: 0,
+    abandoned: 0,
+    legacyAccepted: 0,
     rejected: 0,
     savedChars: 0,
     lastShown: 0,
     lastAccepted: 0,
+    lastRetained: 0,
     lastRejected: 0,
   };
 }
@@ -229,10 +317,17 @@ function normalizeEntries(
     normalized[key] = {
       shown: normalizeCount(value.shown),
       accepted: normalizeCount(value.accepted),
+      retained: normalizeCount(value.retained),
+      modified: normalizeCount(value.modified),
+      reverted: normalizeCount(value.reverted),
+      explicitRejected: normalizeCount(value.explicitRejected ?? value.rejected),
+      abandoned: normalizeCount(value.abandoned),
+      legacyAccepted: normalizeCount(value.legacyAccepted),
       rejected: normalizeCount(value.rejected),
       savedChars: normalizeCount(value.savedChars),
       lastShown: normalizeCount(value.lastShown),
       lastAccepted: normalizeCount(value.lastAccepted),
+      lastRetained: normalizeCount(value.lastRetained),
       lastRejected: normalizeCount(value.lastRejected),
     };
   }
@@ -246,14 +341,24 @@ function normalizeCount(value: unknown): number {
 
 function normalizeStore(value: unknown, allowLegacy: boolean): LearningSignalStore | null {
   if (!value || typeof value !== 'object') return null;
-  const parsed = value as Partial<LearningSignalStore> & { version?: number };
-  if (parsed.version !== 2 && !(allowLegacy && parsed.version === 1)) return null;
+  const parsed = value as {
+    version?: number;
+    entries?: unknown;
+    updatedAt?: unknown;
+  };
+  if (parsed.version !== 3 && !(allowLegacy && (parsed.version === 1 || parsed.version === 2))) {
+    return null;
+  }
   if (!parsed.entries || typeof parsed.entries !== 'object' || Array.isArray(parsed.entries)) {
     return null;
   }
+  const entries = normalizeEntries(parsed.entries as Record<string, LearningSignalEntry>);
+  if (parsed.version === 1 || parsed.version === 2) {
+    for (const entry of Object.values(entries)) entry.legacyAccepted = entry.accepted;
+  }
   return {
-    version: 2,
-    entries: normalizeEntries(parsed.entries as Record<string, LearningSignalEntry>),
+    version: 3,
+    entries,
     updatedAt: normalizeCount(parsed.updatedAt),
   };
 }

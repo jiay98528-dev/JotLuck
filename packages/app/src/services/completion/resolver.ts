@@ -1,4 +1,9 @@
 import { getLocalLanguageHint } from './context';
+import {
+  completionEditKey,
+  mergeCandidateContributors,
+  normalizeCandidateContract,
+} from './candidate-contract';
 import type { CompletionCandidate, CompletionContext, CompletionProvider } from './types';
 
 export interface CompletionResolverResult {
@@ -97,10 +102,11 @@ export function resolveCompletionCandidates(
     const scored = {
       ...normalized,
       confidence: Math.max(0, Math.min(0.99, normalized.confidence + boost)),
+      calibratedScore: Math.max(0, Math.min(0.99, normalized.confidence + boost)),
       learningBoost: boost > 0 ? boost : normalized.learningBoost,
       learningPenalty: boost < 0 ? Math.abs(boost) : normalized.learningPenalty,
     };
-    const key = normalizeSuggestionKey(scored.text);
+    const key = completionEditKey(scored);
     const group = groupedCandidates.get(key) ?? [];
     group.push({ candidate: scored, rejectionCount });
     groupedCandidates.set(key, group);
@@ -119,7 +125,13 @@ export function resolveCompletionCandidates(
     }
     group.sort((a, b) => compareCandidates(a.candidate, b.candidate));
     const winner = group[0]?.candidate;
-    if (winner) candidates.push(winner);
+    if (winner)
+      candidates.push(
+        mergeCandidateContributors(
+          winner,
+          group.map((item) => item.candidate),
+        ),
+      );
   }
 
   if (candidates.length === 0) {
@@ -141,10 +153,6 @@ export function resolveCompletionCandidates(
   return { candidate: winner, providerCount, rankedCandidates: candidates };
 }
 
-function normalizeSuggestionKey(text: string): string {
-  return text.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase('en-US');
-}
-
 function compareCandidates(a: CompletionCandidate, b: CompletionCandidate): number {
   const tierDelta = getPriorityTier(b) - getPriorityTier(a);
   if (tierDelta !== 0) return tierDelta;
@@ -160,6 +168,18 @@ function compareCandidates(a: CompletionCandidate, b: CompletionCandidate): numb
 }
 
 function getPriorityTier(candidate: CompletionCandidate): number {
+  switch (candidate.priorityTier) {
+    case 'structured':
+      return 6;
+    case 'document-session':
+      return 5;
+    case 'personal-workspace':
+      return 4;
+    case 'public':
+      return 2;
+    case 'fallback':
+      return 1;
+  }
   if (candidate.source === 'structured') return 6;
   if (candidate.priority >= 80) return 5;
   if (candidate.priority >= 72) return 4;
@@ -195,13 +215,24 @@ function normalizeCandidate(
     return rejectedCandidate('low-confidence');
   }
 
-  return {
-    candidate: {
+  const normalized = normalizeCandidateContract(
+    {
       ...candidate,
-      text,
       informationScore,
       priority: candidate.priority,
     },
+    text,
+  );
+  if (
+    !normalized.edit ||
+    normalized.edit.from < 0 ||
+    normalized.edit.to < normalized.edit.from ||
+    normalized.edit.to > context.documentFrom + context.doc.length
+  ) {
+    return rejectedCandidate('empty');
+  }
+  return {
+    candidate: normalized,
     reason: null,
   };
 }

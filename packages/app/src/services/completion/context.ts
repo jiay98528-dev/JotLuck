@@ -3,6 +3,7 @@ import type {
   CompletionContext,
   CompletionLanguageHint,
   CompletionLine,
+  CompletionDocumentContextSnapshot,
   PredictorIndexData,
   SyntaxContext,
 } from './types';
@@ -38,7 +39,10 @@ export function buildCompletionContext(args: {
 
   return {
     doc: args.doc,
+    documentFrom: 0,
+    documentRevision: 0,
     cursorPos: args.cursorPos,
+    localCursorPos: args.cursorPos,
     line,
     syntax,
     settings: args.settings,
@@ -53,6 +57,48 @@ export function buildCompletionContext(args: {
     paragraphStart,
     sentencePrefix,
     recentTokens,
+  };
+}
+
+/**
+ * Build the provider context from the bounded CM6 state-field snapshot. This
+ * path never needs the complete document string and keeps absolute UTF-16
+ * edit coordinates separate from local window offsets.
+ */
+export function buildCompletionContextFromSnapshot(args: {
+  snapshot: CompletionDocumentContextSnapshot;
+  settings: CompletionSettings;
+  indexData: PredictorIndexData | null;
+  n: number;
+}): CompletionContext {
+  const { snapshot } = args;
+  const localCursorPos = snapshot.cursor - snapshot.documentWindow.from;
+  const paragraphBeforeCursor = snapshot.currentParagraph.text.slice(
+    0,
+    Math.max(0, snapshot.cursor - snapshot.currentParagraph.from),
+  );
+  const sentencePrefix = getSentencePrefix(snapshot.line?.beforeCursor ?? '');
+  return {
+    doc: snapshot.documentWindow.text,
+    documentFrom: snapshot.documentWindow.from,
+    documentRevision: snapshot.documentRevision,
+    cursorPos: snapshot.cursor,
+    localCursorPos,
+    line: snapshot.line,
+    syntax: snapshot.syntax,
+    settings: args.settings,
+    indexData: args.indexData,
+    n: args.n,
+    disabled: snapshot.disabled,
+    emptyLine: snapshot.emptyLine,
+    atEndOfLine: snapshot.atEndOfLine,
+    languageHint: snapshot.languageHint,
+    blockType: snapshot.blockType,
+    paragraphBeforeCursor,
+    paragraphStart: snapshot.currentParagraph.from,
+    sentencePrefix,
+    recentTokens: extractRecentTokens(paragraphBeforeCursor || snapshot.line?.beforeCursor || ''),
+    contextSnapshot: snapshot,
   };
 }
 
@@ -75,7 +121,7 @@ export function detectLanguageHint(text: string): CompletionLanguageHint {
 export function getLocalLanguageHint(context: CompletionContext): CompletionLanguageHint {
   if (context.languageHint !== 'mixed') return context.languageHint;
 
-  const beforeCursor = context.line?.beforeCursor ?? context.doc.slice(0, context.cursorPos);
+  const beforeCursor = context.line?.beforeCursor ?? context.doc.slice(0, context.localCursorPos);
   const fragments = beforeCursor.match(/[\u3400-\u9fff]+|[A-Za-z][A-Za-z'-]*/gu) ?? [];
   const nearest = fragments[fragments.length - 1];
   if (!nearest) return 'unknown';

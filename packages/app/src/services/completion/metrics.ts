@@ -16,13 +16,21 @@ const MAX_LATENCY_SAMPLES = 40;
 export interface ProviderMetrics {
   shown: number;
   accepted: number;
+  /** Acceptances imported from the pre-retained contract; ranking weight is 0.5. */
+  legacyAccepted: number;
+  retained: number;
+  modified: number;
+  reverted: number;
+  explicitRejected: number;
+  abandoned: number;
   rejected: number;
   savedChars: number;
+  retainedChars: number;
   latencies: number[];
 }
 
 export interface MetricsStore {
-  version: 3;
+  version: 4;
   providers: Record<string, ProviderMetrics>;
   layers: Record<string, ProviderMetrics>;
   syntaxTypes: Record<string, ProviderMetrics>;
@@ -30,7 +38,7 @@ export interface MetricsStore {
 }
 
 export function completionMetricsStorageKey(scope = 'unscoped'): string {
-  return scopedCompletionStorageKey(scope, 'metrics:v2');
+  return scopedCompletionStorageKey(scope, 'metrics:v3');
 }
 
 export function recordProviderShown(
@@ -63,8 +71,53 @@ export function recordProviderAccepted(
   if (!providerId) return;
   updateMetrics(providerId, sourceLayer, syntaxType, scope, (metrics) => {
     metrics.accepted++;
-    metrics.savedChars += Math.max(0, savedChars);
+    void savedChars;
   });
+}
+
+export function recordProviderRetained(
+  providerId: string | null,
+  sourceLayer: CompletionSourceLayer | undefined,
+  syntaxType: string | undefined,
+  retainedChars: number,
+  scope = 'unscoped',
+): void {
+  if (!providerId) return;
+  updateMetrics(providerId, sourceLayer, syntaxType, scope, (metrics) => {
+    metrics.retained++;
+    metrics.retainedChars += Math.max(0, retainedChars);
+    metrics.savedChars += Math.max(0, retainedChars);
+  });
+}
+
+export function recordProviderModified(
+  providerId: string | null,
+  sourceLayer: CompletionSourceLayer | undefined,
+  syntaxType: string | undefined,
+  scope = 'unscoped',
+): void {
+  if (!providerId) return;
+  updateMetrics(providerId, sourceLayer, syntaxType, scope, (metrics) => metrics.modified++);
+}
+
+export function recordProviderReverted(
+  providerId: string | null,
+  sourceLayer: CompletionSourceLayer | undefined,
+  syntaxType: string | undefined,
+  scope = 'unscoped',
+): void {
+  if (!providerId) return;
+  updateMetrics(providerId, sourceLayer, syntaxType, scope, (metrics) => metrics.reverted++);
+}
+
+export function recordProviderAbandoned(
+  providerId: string | null,
+  sourceLayer: CompletionSourceLayer | undefined,
+  syntaxType: string | undefined,
+  scope = 'unscoped',
+): void {
+  if (!providerId) return;
+  updateMetrics(providerId, sourceLayer, syntaxType, scope, (metrics) => metrics.abandoned++);
 }
 
 export function recordProviderRejected(
@@ -76,6 +129,7 @@ export function recordProviderRejected(
   if (!providerId) return;
   updateMetrics(providerId, sourceLayer, syntaxType, scope, (metrics) => {
     metrics.rejected++;
+    metrics.explicitRejected++;
   });
 }
 
@@ -88,6 +142,7 @@ export function clearCompletionMetrics(scope = 'unscoped'): void {
   runCompletionStorageMutation(`metrics:${normalizedScope}`, () => {
     removeStorage(
       completionMetricsStorageKey(normalizedScope),
+      scopedCompletionStorageKey(normalizedScope, 'metrics:v2'),
       ...(normalizedScope === 'unscoped' ? [GLOBAL_METRICS_KEY, LEGACY_METRICS_KEY] : []),
     );
   });
@@ -125,6 +180,7 @@ function loadMetrics(scope: string): MetricsStore {
 
   const normalizedScope = normalizeCompletionScope(scope);
   const legacyKeys = [
+    scopedCompletionStorageKey(normalizedScope, 'metrics:v2'),
     scopedCompletionStorageKey(normalizedScope, 'providerMetrics:v2'),
     GLOBAL_METRICS_KEY,
     LEGACY_METRICS_KEY,
@@ -142,7 +198,10 @@ function loadMetrics(scope: string): MetricsStore {
 function normalizeMetricsStore(value: unknown, allowLegacy: boolean): MetricsStore | null {
   if (!value || typeof value !== 'object') return null;
   const parsed = value as Partial<MetricsStore> & { version?: number };
-  if (parsed.version !== 3 && !(allowLegacy && (parsed.version === 1 || parsed.version === 2))) {
+  if (
+    parsed.version !== 4 &&
+    !(allowLegacy && (parsed.version === 1 || parsed.version === 2 || parsed.version === 3))
+  ) {
     return null;
   }
   if (
@@ -152,16 +211,20 @@ function normalizeMetricsStore(value: unknown, allowLegacy: boolean): MetricsSto
   ) {
     return null;
   }
+  const migratingLegacy = parsed.version !== 4;
   return {
-    version: 3,
-    providers: normalizeMetricsMap(parsed.providers),
-    layers: normalizeMetricsMap(parsed.layers),
-    syntaxTypes: normalizeMetricsMap(parsed.syntaxTypes),
+    version: 4,
+    providers: normalizeMetricsMap(parsed.providers, migratingLegacy),
+    layers: normalizeMetricsMap(parsed.layers, migratingLegacy),
+    syntaxTypes: normalizeMetricsMap(parsed.syntaxTypes, migratingLegacy),
     updatedAt: normalizeNonNegativeInteger(parsed.updatedAt),
   };
 }
 
-function normalizeMetricsMap(value: unknown): Record<string, ProviderMetrics> {
+function normalizeMetricsMap(
+  value: unknown,
+  migratingLegacy = false,
+): Record<string, ProviderMetrics> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const normalized: Record<string, ProviderMetrics> = {};
   for (const [key, entry] of Object.entries(value)) {
@@ -172,8 +235,17 @@ function normalizeMetricsMap(value: unknown): Record<string, ProviderMetrics> {
     normalized[key] = {
       shown: normalizeNonNegativeInteger(source.shown),
       accepted: normalizeNonNegativeInteger(source.accepted),
+      legacyAccepted: migratingLegacy
+        ? normalizeNonNegativeInteger(source.accepted)
+        : normalizeNonNegativeInteger(source.legacyAccepted),
+      retained: normalizeNonNegativeInteger(source.retained),
+      modified: normalizeNonNegativeInteger(source.modified),
+      reverted: normalizeNonNegativeInteger(source.reverted),
+      explicitRejected: normalizeNonNegativeInteger(source.explicitRejected ?? source.rejected),
+      abandoned: normalizeNonNegativeInteger(source.abandoned),
       rejected: normalizeNonNegativeInteger(source.rejected),
       savedChars: normalizeNonNegativeInteger(source.savedChars),
+      retainedChars: normalizeNonNegativeInteger(source.retainedChars),
       latencies: Array.isArray(source.latencies)
         ? source.latencies
             .filter((sample): sample is number => Number.isFinite(sample) && sample >= 0)
@@ -192,7 +264,7 @@ function normalizeNonNegativeInteger(value: unknown): number {
 
 function createMetricsStore(): MetricsStore {
   return {
-    version: 3,
+    version: 4,
     providers: {},
     layers: {},
     syntaxTypes: {},
@@ -204,8 +276,15 @@ function createProviderMetrics(): ProviderMetrics {
   return {
     shown: 0,
     accepted: 0,
+    legacyAccepted: 0,
+    retained: 0,
+    modified: 0,
+    reverted: 0,
+    explicitRejected: 0,
+    abandoned: 0,
     rejected: 0,
     savedChars: 0,
+    retainedChars: 0,
     latencies: [],
   };
 }

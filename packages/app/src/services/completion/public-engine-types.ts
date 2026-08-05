@@ -27,6 +27,17 @@ export type PublicEngineHealthStatus =
   | 'disabled'
   | 'disposed';
 
+export interface PublicEngineContextCapsule {
+  schemaVersion: 1;
+  maxTokens: 256;
+  languageHint: CompletionLanguageHint;
+  headingTrail: readonly string[];
+  currentParagraph: string;
+  previousParagraphTail: string;
+  /** Content only. No file path or workspace identity is permitted. */
+  retrievalSnippet: string;
+}
+
 export interface PublicEngineGenerateRequest {
   engineEpoch: number;
   workspaceScope: string;
@@ -35,6 +46,8 @@ export interface PublicEngineGenerateRequest {
   /** Host-trimmed UTF-8 suffix. It must never contain the full document by default. */
   contextTail: string;
   contextTailUtf8Bytes: number;
+  /** Optional V2.2 bounded capsule. Legacy public engines ignore this field. */
+  contextCapsule?: PublicEngineContextCapsule;
   languageHint: CompletionLanguageHint;
   blockType: CompletionBlockType;
   cursorBoundary: PublicEngineCursorBoundary;

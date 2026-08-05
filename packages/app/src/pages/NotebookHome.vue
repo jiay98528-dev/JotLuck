@@ -851,6 +851,7 @@ import {
   type CompletionTrainingMeta,
 } from '@/services/CompletionTrainingService';
 import { MarkdownPredictor } from '@/services/MarkdownPredictor';
+import { createFlaggedPublicFreeDecoderEngine } from '@/services/completion/public-free-decoder-factory';
 import {
   applyParagraphPreset,
   clearMarkdownFormatting,
@@ -1040,6 +1041,7 @@ let unsubscribeTrainingMeta: (() => void) | null = null;
 let completionTrainer: CompletionTrainingService | null = null;
 let unlistenWindowClose: (() => void) | null = null;
 let componentUnmounted = false;
+let flaggedPublicDecoderSetup: Promise<void> | null = null;
 let externalSessionGeneration = 0;
 let allowWindowClose = false;
 let unwatchNotebook: UnwatchFn | null = null;
@@ -1514,6 +1516,7 @@ const pendingFormatAction = ref<FormatAction | null>(null);
 interface MarkdownEditorExposed {
   getEditorView(): EditorView | null;
   focus(): void;
+  settlePendingAutocompleteFeedback(): Promise<void>;
 }
 
 const editorRef = ref<MarkdownEditorExposed | null>(null);
@@ -3990,7 +3993,12 @@ async function debouncedSave(
       const elapsed = Date.now() - start;
       if (elapsed < 500) await new Promise((r) => setTimeout(r, 500 - elapsed));
       if (gen !== saveGeneration) return true;
-      if (activePath.value === path && contentRevision === revision) isDirty.value = false;
+      if (activePath.value === path && contentRevision === revision) {
+        await editorRef.value?.settlePendingAutocompleteFeedback();
+        if (gen === saveGeneration && activePath.value === path && contentRevision === revision) {
+          isDirty.value = false;
+        }
+      }
       return true;
     } catch (e) {
       if (gen === saveGeneration) {
@@ -4505,8 +4513,11 @@ function onGlobalKeydown(e: KeyboardEvent): void {
 
 /** Wire predictor to IndexStore for structured completions ([[/#/path). */
 function connectPredictor(): void {
-  if (isExternalSession.value) return;
   const pred = completionPredictor;
+  pred.setSessionKind(
+    isExternalSession.value ? 'external' : isScratchSession.value ? 'temporary' : 'workspace',
+  );
+  if (isExternalSession.value) return;
   pred.setStorageScope(completionStorageScope.value);
   completionTrainingMeta.value = loadTrainingMeta(completionStorageScope.value);
   const svc = indexStore.getIndexService();
@@ -4525,6 +4536,18 @@ function connectPredictor(): void {
   pred.ingestExcerpts(titles);
   ensureCompletionTrainer(pred);
   scheduleBackgroundTraining();
+}
+
+function setupFlaggedPublicDecoderOnce(): Promise<void> {
+  flaggedPublicDecoderSetup ??= createFlaggedPublicFreeDecoderEngine().then(async (engine) => {
+    if (!engine) return;
+    if (componentUnmounted) {
+      await engine.dispose();
+      return;
+    }
+    await completionPredictor.installPublicEngineForEvaluation(engine);
+  });
+  return flaggedPublicDecoderSetup;
 }
 
 function scheduleBackgroundTraining(): void {
@@ -4595,6 +4618,7 @@ function onBeforeUnload(e: BeforeUnloadEvent): void {
 }
 
 async function closeCurrentWindow(): Promise<boolean> {
+  await editorRef.value?.settlePendingAutocompleteFeedback();
   allowWindowClose = true;
   try {
     if (isDesktopRuntime()) {
@@ -4762,7 +4786,7 @@ async function saveUnsavedAsCopy(): Promise<void> {
 }
 
 // Reconnect predictor when editor remounts due to :key changes (view-mode / note switch).
-watch([activePath, viewMode], async () => {
+watch([activePath, viewMode, isScratchSession, isExternalSession], async () => {
   await nextTick();
   connectPredictor();
 });
@@ -4813,6 +4837,9 @@ onMounted(async () => {
 
   await nextTick();
   connectPredictor();
+  // The evaluation engine is constructed at most once per workspace page.
+  // Its factory rejects production modes and missing/ineligible manifests.
+  void setupFlaggedPublicDecoderOnce();
   unsubscribeCompletionSettings = subscribeCompletionSettings((settings) => {
     completionSettings.value = settings;
     completionPredictor.configure(settings);

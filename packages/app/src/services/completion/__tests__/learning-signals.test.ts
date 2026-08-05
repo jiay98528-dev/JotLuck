@@ -8,6 +8,7 @@ import {
   loadLearningSignals,
   recordSignalAccepted,
   recordSignalRejected,
+  recordSignalRetained,
   recordSignalShown,
   saveLearningSignals,
 } from '../learning-signals';
@@ -48,7 +49,10 @@ function candidate(overrides: Partial<CompletionCandidate> = {}): CompletionCand
 function context(overrides: Partial<CompletionContext> = {}): CompletionContext {
   return {
     doc: 'Release risk is',
+    documentFrom: 0,
+    documentRevision: 0,
     cursorPos: 'Release risk is'.length,
+    localCursorPos: 'Release risk is'.length,
     line: {
       text: 'Release risk is',
       from: 0,
@@ -97,6 +101,7 @@ describe('learning signals', () => {
     let store = loadLearningSignals();
     store = recordSignalShown(store, key);
     store = recordSignalAccepted(store, key, 6);
+    store = recordSignalRetained(store, key, 6);
     store = recordSignalRejected(store, key);
     saveLearningSignals(store);
 
@@ -104,6 +109,7 @@ describe('learning signals', () => {
     expect(loaded.entries[key]).toMatchObject({
       shown: 1,
       accepted: 1,
+      retained: 1,
       rejected: 1,
       savedChars: 6,
     });
@@ -124,6 +130,8 @@ describe('learning signals', () => {
     store = recordSignalShown(store, strongKey);
     store = recordSignalAccepted(store, strongKey, 12);
     store = recordSignalAccepted(store, strongKey, 10);
+    store = recordSignalRetained(store, strongKey, 12);
+    store = recordSignalRetained(store, strongKey, 10);
 
     store = recordSignalShown(store, weakKey);
     store = recordSignalShown(store, weakKey);
@@ -185,10 +193,11 @@ describe('learning signals', () => {
     );
 
     const migrated = loadLearningSignals('notebook-a');
-    expect(migrated.version).toBe(2);
+    expect(migrated.version).toBe(3);
     expect(migrated.entries.valid).toMatchObject({
       shown: 3,
       accepted: 1,
+      legacyAccepted: 1,
       rejected: 0,
       savedChars: 0,
     });

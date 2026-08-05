@@ -1,4 +1,11 @@
-import type { CompletionBlockType, CompletionCandidate, CompletionLanguageHint } from './types';
+import type {
+  CompletionBlockType,
+  CompletionCandidate,
+  CompletionDocumentContextSnapshot,
+  CompletionLanguageHint,
+  CompletionMode,
+  CompletionTextEdit,
+} from './types';
 import type {
   CompletionPublicEngine,
   PublicCompletionCandidate,
@@ -18,10 +25,14 @@ export const COMPLETION_RANK_CONTEXT_LIMIT = 256;
 
 export interface CompletionRequestSnapshot {
   requestId: string;
+  editorSessionId: string;
   engineEpoch: number;
   workspaceScope: string;
+  documentRevision: number;
   documentVersion: string;
+  cursor: number;
   cursorPos: number;
+  contextSnapshot: CompletionDocumentContextSnapshot | null;
   contextTail: string;
   languageHint: CompletionLanguageHint;
   blockType: CompletionBlockType;
@@ -31,12 +42,20 @@ export interface CompletionRequestSnapshot {
 export interface CompletionCandidateSnapshot {
   candidateId: string;
   text: string;
+  displayText: string;
+  edit: CompletionTextEdit;
   from: number;
+  mode: CompletionMode;
   providerId: string;
   sourceLayer?: string;
   syntaxType: string;
   confidence: number;
   learnable: boolean;
+  contributors: CompletionCandidate['contributors'];
+  priorityTier: CompletionCandidate['priorityTier'];
+  rawScore: number;
+  calibratedScore: number;
+  feedbackPolicy: CompletionCandidate['feedbackPolicy'];
 }
 
 export interface CompletionCandidateBatch {
@@ -68,11 +87,14 @@ export interface CompletionRanker {
 
 export interface CreateCompletionCandidateBatchOptions {
   requestId: string;
+  editorSessionId?: string;
   engineEpoch: number;
   workspaceScope: string;
+  documentRevision?: number;
   documentVersion: string;
   cursorPos: number;
   contextBeforeCursor: string;
+  contextSnapshot?: CompletionDocumentContextSnapshot;
   languageHint: CompletionLanguageHint;
   blockType: CompletionBlockType;
   deadlineAt: number;
@@ -108,10 +130,14 @@ export function createCompletionCandidateBatch(
   return {
     request: {
       requestId: options.requestId,
+      editorSessionId: options.editorSessionId ?? 'legacy-editor-session',
       engineEpoch: options.engineEpoch,
       workspaceScope: options.workspaceScope,
+      documentRevision: options.documentRevision ?? 0,
       documentVersion: options.documentVersion,
+      cursor: options.cursorPos,
       cursorPos: options.cursorPos,
+      contextSnapshot: options.contextSnapshot ?? null,
       contextTail: takeLastCodePoints(options.contextBeforeCursor, COMPLETION_RANK_CONTEXT_LIMIT),
       languageHint: options.languageHint,
       blockType: options.blockType,
@@ -387,22 +413,41 @@ function toCandidateSnapshot(
   candidate: CompletionCandidate,
   index: number,
 ): CompletionCandidateSnapshot {
+  const edit = candidate.edit ?? {
+    from: candidate.from,
+    to: candidate.from,
+    insertText: candidate.text,
+  };
   return {
     candidateId: `${index}:${stableCandidateKey(candidate)}`,
     text: candidate.text,
-    from: candidate.from,
+    displayText: candidate.displayText ?? candidate.text,
+    edit,
+    from: edit.from,
+    mode: candidate.mode ?? (candidate.source === 'structured' ? 'structured' : 'predictive'),
     providerId: candidate.providerId,
     sourceLayer: candidate.sourceLayer,
     syntaxType: candidate.syntaxType,
     confidence: candidate.confidence,
     learnable: candidate.learnable,
+    contributors: candidate.contributors,
+    priorityTier: candidate.priorityTier,
+    rawScore: candidate.rawScore ?? candidate.confidence,
+    calibratedScore: candidate.calibratedScore ?? candidate.confidence,
+    feedbackPolicy: candidate.feedbackPolicy,
   };
 }
 
 function stableCandidateKey(candidate: CompletionCandidate): string {
+  const edit = candidate.edit ?? {
+    from: candidate.from,
+    to: candidate.from,
+    insertText: candidate.text,
+  };
   const raw = [
-    candidate.text.normalize('NFKC'),
-    candidate.from,
+    edit.insertText.normalize('NFKC'),
+    edit.from,
+    edit.to,
     candidate.providerId,
     candidate.sourceLayer ?? '',
     candidate.syntaxType,

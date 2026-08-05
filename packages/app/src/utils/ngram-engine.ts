@@ -8,12 +8,29 @@ export const NGRAM_OTHER_MASS = '\u0000';
 
 export interface PredictionResult {
   text: string;
+  /** Ghost-only text. The authoritative mutation is edit when present. */
+  displayText?: string;
   confidence: number;
   /** Count supporting the first emitted code point. */
   support?: number;
   /** Total count observed for the first resolved context. */
   totalSupport?: number;
   from: number;
+  to?: number;
+  insertText?: string;
+  edit?: { from: number; to: number; insertText: string };
+  mode?: 'structured' | 'predictive';
+  kind?: string;
+  contributors?: readonly {
+    providerId: string;
+    sourceLayer?: string;
+    rawScore: number;
+    calibratedScore: number;
+  }[];
+  priorityTier?: string;
+  rawScore?: number;
+  calibratedScore?: number;
+  feedbackPolicy?: 'none' | 'session' | 'retained';
   source?: 'ngram' | 'structured' | 'recent' | 'neural';
   sourceLayer?: string;
   syntaxType?: string;
@@ -239,6 +256,20 @@ export function mergeInto(target: NGramTable, source: NGramTable): void {
     for (const [ch, cnt] of preds) {
       tPreds.set(ch, (tPreds.get(ch) ?? 0) + cnt);
     }
+  }
+}
+
+/** Remove one previously merged contribution without rebuilding unrelated text. */
+export function subtractFrom(target: NGramTable, source: NGramTable): void {
+  for (const [ctx, predictions] of source) {
+    const targetPredictions = target.get(ctx);
+    if (!targetPredictions) continue;
+    for (const [next, count] of predictions) {
+      const remaining = (targetPredictions.get(next) ?? 0) - count;
+      if (remaining > 0) targetPredictions.set(next, remaining);
+      else targetPredictions.delete(next);
+    }
+    if (targetPredictions.size === 0) target.delete(ctx);
   }
 }
 

@@ -4,10 +4,11 @@ import {
   type PredictionResult,
   createParseDiagnostics,
   scanDocument,
+  scanText,
   learn as ngramLearn,
-  rejectPrediction,
   mergeInto,
   mergeTables,
+  subtractFrom,
   serialize,
   deserialize,
 } from '@/utils/ngram-engine';
@@ -20,6 +21,7 @@ import type { CompletionSettings } from './CompletionSettings';
 import { DEFAULT_COMPLETION_SETTINGS } from './CompletionSettings';
 import {
   buildCompletionContext,
+  buildCompletionContextFromSnapshot,
   detectOpenFormat,
   detectSyntaxContext,
   getLocalLanguageHint,
@@ -28,6 +30,10 @@ import {
   isInFencedCode,
   isInFrontmatter,
 } from './completion/context';
+import type {
+  OpenedDocumentParagraphChange,
+  OpenedDocumentParagraphSlice,
+} from './completion/document-context';
 import {
   FilePathProvider,
   FormatClosureProvider,
@@ -49,7 +55,11 @@ import {
   loadCompletionMetrics,
   type MetricsStore,
   recordProviderAccepted,
+  recordProviderAbandoned,
+  recordProviderModified,
   recordProviderRejected,
+  recordProviderRetained,
+  recordProviderReverted,
   recordProviderShown,
 } from './completion/metrics';
 import { evaluatePredictionQualityGate } from './completion/quality-gate';
@@ -64,16 +74,28 @@ import {
   persistLearningSignalEvent,
   type LearningSignalStore,
   recordSignalAccepted,
+  recordSignalAbandoned,
+  recordSignalModified,
   recordSignalRejected,
+  recordSignalRetained,
+  recordSignalReverted,
   recordSignalShown,
 } from './completion/learning-signals';
 import {
-  collectProviderCandidates,
   createCompletionResolverTrace,
-  resolveCompletion,
   resolveCompletionCandidates,
   type CompletionResolverTrace,
 } from './completion/resolver';
+import {
+  CompletionProviderRegistry,
+  createProviderDescriptor,
+} from './completion/provider-registry';
+import { CompletionSessionHistory, SessionHistoryProvider } from './completion/session-history';
+import { CompletionFeedbackLifecycle } from './completion/feedback-lifecycle';
+import {
+  decideCompletionLearningAdmission,
+  type CompletionSessionKind,
+} from './completion/learning-admission';
 import {
   CompletionEngineRouter,
   createCompletionCandidateBatch,
@@ -92,10 +114,13 @@ import {
   type PublicEngineDiagnostics,
   type PublicEngineCursorBoundary,
 } from './completion/public-engine-types';
+import { createPublicFreeContextCapsule } from './completion/public-free-context-capsule';
 import type {
   CompletionAblationMode,
   CompletionCandidate,
   CompletionContext,
+  CompletionDocumentContextSnapshot,
+  CompletionMode,
   CompletionProvider,
   CompletionSourceLayer,
   PredictorIndexData,
@@ -119,7 +144,11 @@ const LEGACY_L2_STORAGE_KEY = 'jotluck:ngram:v2';
 const LEGACY_L2_META_KEY = 'jotluck:ngram:meta';
 const LEGACY_SHORT_L2_STORAGE_KEY = 'jotluck:ngram:short:v1';
 export const ACCEPTED_LEXICON_STORAGE_KEY = 'jotluck:autocomplete:acceptedLexicon:v1';
-const PERSONAL_MODEL_HEADER = '# jotluck-personal-ngram-v4';
+const PERSONAL_MODEL_HEADER = '# jotluck-personal-ngram-v5';
+const LEGACY_PERSONAL_MODEL_HEADER = '# jotluck-personal-ngram-v4';
+const STRONG_LOCAL_PUBLIC_SUPPRESSION_SCORE = 0.68;
+const HYBRID_RETRIEVAL_SOFT_BUDGET_MS = 35;
+const LEGACY_ACCEPTED_WEIGHT = 0.5;
 const PERSONAL_MODEL_MAX_BYTES = 4.5 * 1024 * 1024;
 const PERSONAL_MODEL_TARGET_BYTES = 3.5 * 1024 * 1024;
 const UTF8_ENCODER = new TextEncoder();
@@ -134,6 +163,16 @@ interface L2Meta {
   lastSave: number;
   lastError?: string;
   migratedFrom?: number;
+  legacyAcceptedEntries?: number;
+}
+
+interface PersonalModelPartitions {
+  long: NGramTable;
+  short2: NGramTable;
+  short3: NGramTable;
+  legacyLong: NGramTable;
+  legacyShort2: NGramTable;
+  legacyShort3: NGramTable;
 }
 
 interface DocumentContribution {
@@ -146,7 +185,16 @@ interface DocumentContribution {
   buildMs: number;
 }
 
+interface OpenedParagraphContribution {
+  from: number;
+  to: number;
+  long: NGramTable;
+  short: NGramTable;
+  lexiconTerms: readonly string[];
+}
+
 const MAX_NOTEBOOK_DOCUMENT_BYTES = 64 * 1024;
+const OPENED_PARAGRAPH_SAMPLE_LIMIT = 16 * 1024;
 const MAX_NOTEBOOK_DOCUMENTS = 2_000;
 const MAX_NOTEBOOK_INPUT_BYTES = 16 * 1024 * 1024;
 const MAX_NOTEBOOK_ENTRIES = 300_000;
@@ -236,12 +284,17 @@ export function resetBaselineLoaderForTests(): void {
 interface CompletionFeedbackOptions {
   learn?: boolean;
   feedbackToken?: string;
+  sessionKind?: CompletionSessionKind;
 }
 
 export interface CompletionRequestOptions {
   signal?: AbortSignal;
   deadlineMs?: number;
   documentVersion?: string;
+  documentRevision?: number;
+  editorSessionId?: string;
+  mode?: CompletionMode;
+  contextSnapshot?: CompletionDocumentContextSnapshot;
 }
 
 export interface CompletionRequestDiagnostics {
@@ -280,15 +333,20 @@ interface PredictionFeedbackSnapshot {
   rejectionKey: string | null;
   learningKey: string | null;
   storageScope: string;
+  mode: CompletionMode;
+  blockType: CompletionContext['blockType'];
+  feedbackPolicy: CompletionCandidate['feedbackPolicy'];
+  sessionKind: CompletionSessionKind;
 }
 
 function normalizeL2Meta(meta: Partial<L2Meta>): L2Meta {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     docs: normalizeNonNegativeInteger(meta.docs),
     totalEntries: normalizeNonNegativeInteger(meta.totalEntries),
     lastSave: normalizeNonNegativeInteger(meta.lastSave),
     migratedFrom: normalizeOptionalPositiveInteger(meta.migratedFrom),
+    legacyAcceptedEntries: normalizeNonNegativeInteger(meta.legacyAcceptedEntries),
     lastError: typeof meta.lastError === 'string' ? meta.lastError : undefined,
   };
 }
@@ -302,18 +360,13 @@ function removeLegacyLearningStorage(): void {
   );
 }
 
-function migrateLegacyAcceptedLexicon(targetKey: string): void {
-  if (readStorage(targetKey) === null) {
-    const legacy = readStorage(ACCEPTED_LEXICON_STORAGE_KEY);
-    if (isValidAcceptedLexiconJson(legacy)) writeStorage(targetKey, legacy!);
-  }
-  removeLegacyLearningStorage();
-}
-
 export class MarkdownPredictor {
   private l1: NGramTable = new Map();
-  /** Personal L2: only explicit accept/reject feedback, persisted per notebook. */
+  private openedParagraphContributions: OpenedParagraphContribution[] = [];
+  private documentLexiconCounts = new Map<string, number>();
+  /** Personal L2: only retained prose, persisted per notebook. */
   private l2: NGramTable = new Map();
+  private legacyAcceptedL2: NGramTable = new Map();
   private l3: NGramTable = new Map();
   private l3Word: WordNGramTable = new Map();
   private l3CountScale = 1;
@@ -322,6 +375,9 @@ export class MarkdownPredictor {
   private shortL2: NGramTable = new Map();
   private personalShort2: NGramTable = new Map();
   private personalShort3: NGramTable = new Map();
+  private legacyAcceptedShort2: NGramTable = new Map();
+  private legacyAcceptedShort3: NGramTable = new Map();
+  private personalLongCache: NGramTable | null = null;
   private documentContributions = new Map<string, DocumentContribution>();
   private notebookLong: NGramTable = new Map();
   private notebookShort2: NGramTable = new Map();
@@ -337,7 +393,13 @@ export class MarkdownPredictor {
   private notebookTotalBuildMs = 0;
   private notebookLongTasksOver50Ms = 0;
   private notebookBudgetRejections = 0;
-  private l2Meta: L2Meta = { schemaVersion: 4, docs: 0, totalEntries: 0, lastSave: 0 };
+  private l2Meta: L2Meta = {
+    schemaVersion: 5,
+    docs: 0,
+    totalEntries: 0,
+    lastSave: 0,
+    legacyAcceptedEntries: 0,
+  };
   private indexData: PredictorIndexData | null = null;
   private accessTimestamps = new Map<string, number>();
   private entryFlags = new Map<string, 'b' | 'u'>();
@@ -358,14 +420,23 @@ export class MarkdownPredictor {
   private lastPredictionFeedbackKey: string | null = null;
   private lastPredictionRejectionKey: string | null = null;
   private lastPredictionLearningKey: string | null = null;
+  private lastPredictionMode: CompletionMode = 'predictive';
+  private lastPredictionBlockType: CompletionContext['blockType'] = 'paragraph';
+  private lastPredictionFeedbackPolicy: CompletionCandidate['feedbackPolicy'] = 'retained';
+  private lastPredictionToken: string | null = null;
   private predictionSequence = 0;
-  private predictionFeedback = new Map<string, PredictionFeedbackSnapshot>();
+  private readonly feedbackLifecycle = new CompletionFeedbackLifecycle<PredictionFeedbackSnapshot>(
+    64,
+  );
+  private readonly sessionHistory = new CompletionSessionHistory();
   private engineRequestSequence = 0;
   private readonly engineRouter = new CompletionEngineRouter();
   private readonly retrievalService: HybridRetrievalService;
+  private providerRegistry: CompletionProviderRegistry | null = null;
   private readonly initialPublicEngine: CompletionPublicEngine | null;
   private publicEngineWarmup: Promise<boolean> | null = null;
   private storageScope = 'unscoped';
+  private sessionKind: CompletionSessionKind = 'workspace';
   private observedStorageRevisions = new Map<string, number>();
 
   constructor(
@@ -408,7 +479,7 @@ export class MarkdownPredictor {
     this.excerptLexicon = [];
     this.rejectionCounts.clear();
     this.acceptedBoosts.clear();
-    this.predictionFeedback.clear();
+    this.feedbackLifecycle.clear();
     this.resetLastPredictionFeedback();
     this.engineRouter.bumpEpoch();
     this.captureStorageRevisions();
@@ -416,6 +487,10 @@ export class MarkdownPredictor {
 
   getStorageScope(): string {
     return this.storageScope;
+  }
+
+  setSessionKind(kind: CompletionSessionKind): void {
+    this.sessionKind = kind;
   }
 
   getNotebookModelDiagnostics(): NotebookModelDiagnostics {
@@ -471,6 +546,12 @@ export class MarkdownPredictor {
     return this.publicEngineWarmup;
   }
 
+  /** Explicit dev/E2E seam; canonical production activation remains publisher-owned. */
+  async installPublicEngineForEvaluation(engine: CompletionPublicEngine): Promise<boolean> {
+    this.publicEngineWarmup = null;
+    return this.engineRouter.installPublicEngine(engine);
+  }
+
   private async installInitialPublicEngine(): Promise<boolean> {
     const engine = this.initialPublicEngine;
     return engine ? this.engineRouter.installPublicEngine(engine) : false;
@@ -509,21 +590,31 @@ export class MarkdownPredictor {
     }
 
     const metrics = loadCompletionMetrics(this.storageScope);
-    const { candidate } = resolveCompletion(context, this.createProviders(), {
-      getRejectionCount: (item, itemContext) =>
-        this.rejectionCounts.get(this.getRejectionKey(item, itemContext)) ?? 0,
-      getBoost: (item, itemContext) =>
-        Math.min(
-          0.12,
-          (this.acceptedBoosts.get(this.getFeedbackKey(item, itemContext)) ?? 0) * 0.04,
-        ) +
-        this.getMetricAdjustment(item, metrics) +
-        getLearningSignalAdjustment(
-          this.learningSignals,
-          getLearningSignalKey(item, itemContext),
-          item,
-        ),
-    });
+    const providerCollection = this.getProviderRegistry().collect(
+      context,
+      undefined,
+      (providerId) => this.isProviderEnabledForAblation(providerId),
+    );
+    const { candidate } = resolveCompletionCandidates(
+      context,
+      providerCollection.candidates,
+      {
+        getRejectionCount: (item, itemContext) =>
+          this.rejectionCounts.get(this.getRejectionKey(item, itemContext)) ?? 0,
+        getBoost: (item, itemContext) =>
+          Math.min(
+            0.12,
+            (this.acceptedBoosts.get(this.getFeedbackKey(item, itemContext)) ?? 0) * 0.04,
+          ) +
+          this.getMetricAdjustment(item, metrics) +
+          getLearningSignalAdjustment(
+            this.learningSignals,
+            getLearningSignalKey(item, itemContext),
+            item,
+          ),
+      },
+      providerCollection.providerCount,
+    );
     return this.commitPrediction(candidate, context, start);
   }
 
@@ -535,13 +626,20 @@ export class MarkdownPredictor {
     const diagnostics = await this.requestGhostTextWithDiagnostics(cursorPos, doc, options);
     const candidate = diagnostics.rankedCandidates[0] ?? null;
     if (!candidate || !diagnostics.result) return null;
-    const context = buildCompletionContext({
-      doc,
-      cursorPos,
-      settings: this.settings,
-      indexData: this.indexData,
-      n: this.n,
-    });
+    const context = options.contextSnapshot
+      ? buildCompletionContextFromSnapshot({
+          snapshot: options.contextSnapshot,
+          settings: this.settings,
+          indexData: this.indexData,
+          n: this.n,
+        })
+      : buildCompletionContext({
+          doc,
+          cursorPos,
+          settings: this.settings,
+          indexData: this.indexData,
+          n: this.n,
+        });
     return this.commitPrediction(
       candidate,
       context,
@@ -596,17 +694,24 @@ export class MarkdownPredictor {
     const engineEpoch = this.engineRouter.getEpoch();
     const retrievalEpoch = this.retrievalService.getEpoch();
     this.refreshExternalLearningState();
-    const context = buildCompletionContext({
-      doc,
-      cursorPos,
-      settings: this.settings,
-      indexData: this.indexData,
-      n: this.n,
-    });
+    const context = options.contextSnapshot
+      ? buildCompletionContextFromSnapshot({
+          snapshot: options.contextSnapshot,
+          settings: this.settings,
+          indexData: this.indexData,
+          n: this.n,
+        })
+      : buildCompletionContext({
+          doc,
+          cursorPos,
+          settings: this.settings,
+          indexData: this.indexData,
+          n: this.n,
+        });
     if (context.disabled) return finish(null);
     if (
       !context.emptyLine &&
-      this.extractContext(cursorPos, doc).length < 2 &&
+      this.extractContext(context.localCursorPos, context.doc).length < 2 &&
       context.syntax.type === 'general'
     ) {
       return finish(null);
@@ -614,61 +719,39 @@ export class MarkdownPredictor {
 
     const deadlineAt = start + Math.max(0, options.deadlineMs ?? 110);
     const metrics = loadCompletionMetrics(this.storageScope);
-    const providers = this.createProviders();
-    const rawCandidates = collectProviderCandidates(context, providers);
+    const providerCollection = this.getProviderRegistry().collect(
+      context,
+      options.mode,
+      (providerId) => this.isProviderEnabledForAblation(providerId),
+    );
+    const rawCandidates = providerCollection.candidates;
     const hasStructuredCandidate = rawCandidates.some(
       (candidate) => candidate.source === 'structured',
     );
-    hybridAttempted = this.isHybridRetrievalEnabled(context) && !hasStructuredCandidate;
-    publicEngineAttempted =
-      this.isPublicEngineEnabled(context) &&
-      !hasStructuredCandidate &&
-      this.engineRouter.getActivePublicEngineId() !== null;
+    hybridAttempted =
+      options.mode !== 'structured' &&
+      this.isHybridRetrievalEnabled(context) &&
+      !hasStructuredCandidate;
 
-    const documentVersion = options.documentVersion ?? fingerprintText(doc);
-    const publicDeadlineAt = Date.now() + Math.max(0, deadlineAt - performance.now());
-    const [retrieval, publicGeneration] = await Promise.all([
-      hybridAttempted
-        ? this.retrieveCandidates(context, deadlineAt, options.signal)
-        : Promise.resolve({
-            candidates: [] as HybridRetrievalCandidate[],
-            timedOut: false,
-            fellBack: false,
-          }),
-      publicEngineAttempted
-        ? this.engineRouter.generatePublic(
-            {
-              workspaceScope: requestScope,
-              documentVersion,
-              cursorPos,
-              contextTail: takeLastUtf8Bytes(
-                doc.slice(0, cursorPos),
-                PUBLIC_ENGINE_CONTEXT_MAX_UTF8_BYTES,
-              ),
-              languageHint: context.languageHint,
-              blockType: context.blockType,
-              cursorBoundary: detectPublicCursorBoundary(doc, cursorPos),
-              maxCandidates: PUBLIC_ENGINE_MAX_CANDIDATES,
-              deadlineAt: publicDeadlineAt,
-            },
-            engineEpoch,
-            deadlineAt,
-            options.signal,
-          )
-        : Promise.resolve({
-            candidates: [],
-            usedEngineId: null,
-            fellBack: false,
-            timedOut: false,
-          }),
-    ]);
+    const documentVersion =
+      options.documentVersion ??
+      (options.documentRevision === undefined
+        ? fingerprintText(doc)
+        : `revision:${options.documentRevision}`);
+    const hybridDeadlineAt = Math.min(
+      deadlineAt,
+      performance.now() + HYBRID_RETRIEVAL_SOFT_BUDGET_MS,
+    );
+    const retrieval = hybridAttempted
+      ? await this.retrieveCandidates(context, hybridDeadlineAt, options.signal)
+      : {
+          candidates: [] as HybridRetrievalCandidate[],
+          timedOut: false,
+          fellBack: false,
+        };
 
     hybridTimedOut = retrieval.timedOut;
     hybridFellBack = retrieval.fellBack;
-    publicEngineTimedOut = publicGeneration.timedOut;
-    publicEngineFellBack = publicGeneration.fellBack;
-    usedPublicEngineId = publicGeneration.usedEngineId;
-    publicEngineCandidates = [...publicGeneration.candidates];
     if (
       options.signal?.aborted ||
       requestScope !== this.storageScope ||
@@ -682,6 +765,57 @@ export class MarkdownPredictor {
         ...retrieval.candidates.map((candidate) => this.toRetrievalCandidate(candidate, cursorPos)),
       );
     }
+    const hasStrongLocalCandidate = rawCandidates.some(
+      (candidate) =>
+        (candidate.sourceLayer === 'l1' ||
+          candidate.sourceLayer === 'short-l1' ||
+          candidate.sourceLayer === 'session' ||
+          candidate.sourceLayer === 'l2' ||
+          candidate.sourceLayer === 'short-l2' ||
+          candidate.sourceLayer === 'notebook' ||
+          candidate.sourceLayer === 'short-notebook' ||
+          candidate.sourceLayer === 'provider') &&
+        (candidate.calibratedScore ?? candidate.confidence) >=
+          STRONG_LOCAL_PUBLIC_SUPPRESSION_SCORE,
+    );
+    publicEngineAttempted =
+      options.mode !== 'structured' &&
+      this.isPublicEngineEnabled(context) &&
+      !hasStructuredCandidate &&
+      !hasStrongLocalCandidate &&
+      this.engineRouter.getActivePublicEngineId() !== null;
+    const publicDeadlineAt = Date.now() + Math.max(0, deadlineAt - performance.now());
+    const publicGeneration = publicEngineAttempted
+      ? await this.engineRouter.generatePublic(
+          {
+            workspaceScope: requestScope,
+            documentVersion,
+            cursorPos,
+            contextTail: takeLastUtf8Bytes(
+              context.doc.slice(0, context.localCursorPos),
+              PUBLIC_ENGINE_CONTEXT_MAX_UTF8_BYTES,
+            ),
+            contextCapsule: createPublicFreeContextCapsule(context),
+            languageHint: context.languageHint,
+            blockType: context.blockType,
+            cursorBoundary: detectPublicCursorBoundary(context.doc, context.localCursorPos),
+            maxCandidates: PUBLIC_ENGINE_MAX_CANDIDATES,
+            deadlineAt: publicDeadlineAt,
+          },
+          engineEpoch,
+          deadlineAt,
+          options.signal,
+        )
+      : {
+          candidates: [] as PublicCompletionCandidate[],
+          usedEngineId: null,
+          fellBack: false,
+          timedOut: false,
+        };
+    publicEngineTimedOut = publicGeneration.timedOut;
+    publicEngineFellBack = publicGeneration.fellBack;
+    usedPublicEngineId = publicGeneration.usedEngineId;
+    publicEngineCandidates = [...publicGeneration.candidates];
     if (publicEngineAttempted) rawCandidates.push(...publicGeneration.candidates);
     if (options.signal?.aborted) return finish(null);
     const resolved = resolveCompletionCandidates(
@@ -703,7 +837,7 @@ export class MarkdownPredictor {
           ),
         trace: resolverTrace,
       },
-      providers.length,
+      providerCollection.providerCount,
     );
     if (options.signal?.aborted || resolved.rankedCandidates.length === 0) {
       return finish(null);
@@ -711,11 +845,14 @@ export class MarkdownPredictor {
 
     const batch = createCompletionCandidateBatch({
       requestId: `${this.storageScope}:${++this.engineRequestSequence}`,
+      editorSessionId: options.editorSessionId,
       engineEpoch,
       workspaceScope: requestScope,
+      documentRevision: options.documentRevision ?? context.documentRevision,
       documentVersion,
       cursorPos,
-      contextBeforeCursor: doc.slice(0, cursorPos),
+      contextBeforeCursor: context.doc.slice(0, context.localCursorPos),
+      contextSnapshot: options.contextSnapshot,
       languageHint: context.languageHint,
       blockType: context.blockType,
       deadlineAt,
@@ -747,54 +884,89 @@ export class MarkdownPredictor {
     acceptedText: string,
     options: CompletionFeedbackOptions = {},
   ): void {
-    const feedback = this.consumePredictionFeedback(options.feedbackToken);
-    const feedbackValid = feedback.storageScope === this.storageScope;
-    const shouldLearn = (options.learn ?? true) && feedbackValid;
-    const shouldWriteNgram = shouldLearn && this.shouldWriteAcceptedNgram(feedback);
-    if (shouldLearn) {
-      const now = Date.now();
-      this.accessTimestamps.set(ctx, now);
-      this.entryFlags.set(ctx, 'u');
-      this.rememberAcceptedLexicon(acceptedText);
+    const lifecycleRecord = options.feedbackToken
+      ? this.feedbackLifecycle.accept(options.feedbackToken)
+      : null;
+    if (options.feedbackToken && !lifecycleRecord) return;
+    const feedback = lifecycleRecord?.binding ?? this.currentPredictionFeedback();
+    if (feedback.storageScope !== this.storageScope) return;
+
+    recordProviderAccepted(
+      feedback.providerId,
+      feedback.sourceLayer,
+      feedback.syntaxType,
+      acceptedText.length,
+      feedback.storageScope,
+    );
+    this.recordLearningSignalAccepted(acceptedText.length, feedback);
+
+    // A token identifies the real editor lifecycle: Tab only means inserted.
+    // Positive learning is deferred until retainCompletion() settles the edit.
+    if (options.feedbackToken) return;
+
+    // Compatibility path used by explicit training calls and existing tests.
+    // Calls without a shown-token are treated as already retained.
+    if (this.lastPredictionToken) {
+      this.feedbackLifecycle.accept(this.lastPredictionToken);
+      this.feedbackLifecycle.settleAccepted(this.lastPredictionToken, 'retained');
+      this.lastPredictionToken = null;
     }
-    if (shouldWriteNgram) {
-      ngramLearn(this.l1, ctx, acceptedText, this.n);
-      ngramLearn(this.l2, ctx, acceptedText, this.n);
-      const short2Context = takeLastCodePoints(ctx, 2);
-      const short3Context = takeLastCodePoints(ctx, 3);
-      const shortAccepted = takeFirstCodePoints(acceptedText, 6);
-      if (codePointLength(short2Context) === 2) {
-        ngramLearn(this.personalShort2, short2Context, shortAccepted, 2);
-      }
-      if (codePointLength(short3Context) === 3) {
-        ngramLearn(this.personalShort3, short3Context, shortAccepted, 3);
-      }
-      this.rebuildPersonalShortTable();
-      this.invalidatePredictionCaches();
-      this.rememberRecentPhrase(ctx + acceptedText);
-      this.markPersonalContextsAccessed(ctx, acceptedText, Date.now());
-      this.maybeEliminate();
-    }
-    if (shouldLearn) this.persistPersonalFeedback(ctx, acceptedText, 'accepted', shouldWriteNgram);
-    if (feedback.rejectionKey) {
-      this.rejectionCounts.delete(feedback.rejectionKey);
-    }
-    if (feedback.feedbackKey) {
-      this.acceptedBoosts.set(
-        feedback.feedbackKey,
-        (this.acceptedBoosts.get(feedback.feedbackKey) ?? 0) + 1,
-      );
-    }
-    if (feedbackValid) {
-      recordProviderAccepted(
-        feedback.providerId,
-        feedback.sourceLayer,
-        feedback.syntaxType,
-        acceptedText.length,
-        feedback.storageScope,
-      );
-      this.recordLearningSignalAccepted(acceptedText.length, feedback);
-    }
+    this.commitRetainedCompletion(ctx, acceptedText, feedback, {
+      ...options,
+      sessionKind: options.sessionKind ?? 'workspace',
+    });
+  }
+
+  retainCompletion(ctx: string, retainedText: string, options: CompletionFeedbackOptions): boolean {
+    const token = options.feedbackToken;
+    if (!token) return false;
+    const record = this.feedbackLifecycle.settleAccepted(token, 'retained');
+    if (!record || record.binding.storageScope !== this.storageScope) return false;
+    if (this.lastPredictionToken === token) this.lastPredictionToken = null;
+    this.commitRetainedCompletion(ctx, retainedText, record.binding, options);
+    return true;
+  }
+
+  modifyAcceptedCompletion(feedbackToken: string): boolean {
+    const record = this.feedbackLifecycle.settleAccepted(feedbackToken, 'modified');
+    if (!record || record.binding.storageScope !== this.storageScope) return false;
+    if (this.lastPredictionToken === feedbackToken) this.lastPredictionToken = null;
+    recordProviderModified(
+      record.binding.providerId,
+      record.binding.sourceLayer,
+      record.binding.syntaxType,
+      record.binding.storageScope,
+    );
+    this.recordLearningSignalModified(record.binding);
+    return true;
+  }
+
+  revertAcceptedCompletion(feedbackToken: string): boolean {
+    const record = this.feedbackLifecycle.settleAccepted(feedbackToken, 'reverted');
+    if (!record || record.binding.storageScope !== this.storageScope) return false;
+    if (this.lastPredictionToken === feedbackToken) this.lastPredictionToken = null;
+    recordProviderReverted(
+      record.binding.providerId,
+      record.binding.sourceLayer,
+      record.binding.syntaxType,
+      record.binding.storageScope,
+    );
+    this.recordLearningSignalReverted(record.binding);
+    return true;
+  }
+
+  abandonCompletion(feedbackToken: string): boolean {
+    const record = this.feedbackLifecycle.settleShown(feedbackToken, 'abandoned');
+    if (!record || record.binding.storageScope !== this.storageScope) return false;
+    if (this.lastPredictionToken === feedbackToken) this.lastPredictionToken = null;
+    recordProviderAbandoned(
+      record.binding.providerId,
+      record.binding.sourceLayer,
+      record.binding.syntaxType,
+      record.binding.storageScope,
+    );
+    this.recordLearningSignalAbandoned(record.binding);
+    return true;
   }
 
   rejectCompletion(
@@ -802,38 +974,90 @@ export class MarkdownPredictor {
     rejectedText: string,
     options: CompletionFeedbackOptions = {},
   ): void {
-    const feedback = this.consumePredictionFeedback(options.feedbackToken);
+    const lifecycleRecord = options.feedbackToken
+      ? this.feedbackLifecycle.settleShown(options.feedbackToken, 'explicitRejected')
+      : null;
+    if (options.feedbackToken && !lifecycleRecord) return;
+    const feedback = lifecycleRecord?.binding ?? this.currentPredictionFeedback();
     const feedbackValid = feedback.storageScope === this.storageScope;
-    if ((options.learn ?? true) && feedbackValid) {
-      rejectPrediction(this.l1, ctx, rejectedText);
-      rejectPrediction(this.l2, ctx, rejectedText);
-      rejectPrediction(this.personalShort2, takeLastCodePoints(ctx, 2), rejectedText);
-      rejectPrediction(this.personalShort3, takeLastCodePoints(ctx, 3), rejectedText);
-      this.rebuildPersonalShortTable();
-      this.invalidatePredictionCaches();
-      this.persistPersonalFeedback(ctx, rejectedText, 'rejected', true);
-    }
-    if (feedback.rejectionKey) {
+    if (!feedbackValid) return;
+    if (this.lastPredictionToken === options.feedbackToken) this.lastPredictionToken = null;
+    const admission = decideCompletionLearningAdmission({
+      sessionKind: options.sessionKind ?? feedback.sessionKind,
+      blockType: feedback.blockType,
+      mode: feedback.mode,
+      contextText: ctx,
+      insertedText: rejectedText,
+    });
+    if ((options.learn ?? true) && admission.admission !== 'skip' && feedback.rejectionKey) {
       this.rejectionCounts.set(
         feedback.rejectionKey,
         (this.rejectionCounts.get(feedback.rejectionKey) ?? 0) + 1,
       );
     }
-    if (feedbackValid) {
-      recordProviderRejected(
-        feedback.providerId,
-        feedback.sourceLayer,
-        feedback.syntaxType,
-        feedback.storageScope,
-      );
-      this.recordLearningSignalRejected(feedback);
+    recordProviderRejected(
+      feedback.providerId,
+      feedback.sourceLayer,
+      feedback.syntaxType,
+      feedback.storageScope,
+    );
+    if ((options.learn ?? true) && admission.admission !== 'skip') {
+      this.recordLearningSignalRejected(feedback, admission.admission === 'persist');
     }
   }
 
   scanOpenedDocument(text: string): void {
-    this.l1 = scanDocument(text, this.n);
-    this.shortL1 = this.scanShortDocument(text);
-    this.documentLexicon = extractLexiconTerms(text);
+    this.l1 = new Map();
+    this.shortL1 = new Map();
+    this.documentLexiconCounts.clear();
+    this.openedParagraphContributions = collectOpenedParagraphSlices(text).map((paragraph) => {
+      const contribution = this.createOpenedParagraphContribution(paragraph);
+      this.addOpenedParagraphContribution(contribution);
+      return contribution;
+    });
+    this.refreshDocumentLexiconFromCounts();
+  }
+
+  /** Apply a bounded CM6 paragraph delta without scanning unrelated document text. */
+  applyOpenedDocumentParagraphChange(change: OpenedDocumentParagraphChange): boolean {
+    if (
+      !Number.isInteger(change.oldFrom) ||
+      !Number.isInteger(change.oldTo) ||
+      !Number.isInteger(change.newFrom) ||
+      !Number.isInteger(change.newTo) ||
+      change.oldFrom < 0 ||
+      change.oldTo < change.oldFrom ||
+      change.newFrom < 0 ||
+      change.newTo < change.newFrom
+    ) {
+      return false;
+    }
+    const retained: OpenedParagraphContribution[] = [];
+    for (const contribution of this.openedParagraphContributions) {
+      const intersects = contribution.to > change.oldFrom && contribution.from < change.oldTo;
+      if (intersects) {
+        this.subtractOpenedParagraphContribution(contribution);
+        continue;
+      }
+      retained.push(
+        contribution.from >= change.oldTo
+          ? {
+              ...contribution,
+              from: contribution.from + change.documentDelta,
+              to: contribution.to + change.documentDelta,
+            }
+          : contribution,
+      );
+    }
+    const inserted = change.paragraphs.map((paragraph) =>
+      this.createOpenedParagraphContribution(paragraph),
+    );
+    for (const contribution of inserted) this.addOpenedParagraphContribution(contribution);
+    this.openedParagraphContributions = [...retained, ...inserted].sort(
+      (left, right) => left.from - right.from,
+    );
+    this.refreshDocumentLexiconFromCounts();
+    return true;
   }
 
   ingestDocument(path: string, text: string, _persist = true): void {
@@ -936,11 +1160,15 @@ export class MarkdownPredictor {
   closeDocument(): void {
     this.l1.clear();
     this.shortL1.clear();
+    this.openedParagraphContributions = [];
+    this.documentLexiconCounts.clear();
     this.documentLexicon = [];
   }
 
   async dispose(): Promise<void> {
     this.closeDocument();
+    this.sessionHistory.clear();
+    this.feedbackLifecycle.clear();
     await Promise.all([this.retrievalService.dispose(), this.engineRouter.dispose()]);
   }
 
@@ -951,11 +1179,19 @@ export class MarkdownPredictor {
     this.acceptedBoosts.clear();
     this.accessTimestamps.clear();
     this.resetLastPredictionFeedback();
-    this.predictionFeedback.clear();
+    this.feedbackLifecycle.clear();
     const keys = this.storageKeys();
     const scope = this.storageScope;
     runCompletionStorageMutation(`personal:${scope}`, () => {
-      removeStorage(keys.model, keys.meta, keys.acceptedLexicon, ...keys.legacyScoped);
+      removeStorage(
+        keys.model,
+        keys.meta,
+        keys.acceptedLexicon,
+        keys.legacyV4Model,
+        keys.legacyV4Meta,
+        keys.legacyV4AcceptedLexicon,
+        ...keys.legacyScoped,
+      );
     });
     removeLegacyLearningStorage();
     clearCompletionMetrics(this.storageScope);
@@ -991,12 +1227,18 @@ export class MarkdownPredictor {
     model: string;
     meta: string;
     acceptedLexicon: string;
+    legacyV4Model: string;
+    legacyV4Meta: string;
+    legacyV4AcceptedLexicon: string;
     legacyScoped: string[];
   } {
     return {
-      model: scopedCompletionStorageKey(this.storageScope, 'ngram:v4'),
-      meta: scopedCompletionStorageKey(this.storageScope, 'meta:v4'),
-      acceptedLexicon: scopedCompletionStorageKey(this.storageScope, 'acceptedLexicon:v1'),
+      model: scopedCompletionStorageKey(this.storageScope, 'ngram:v5'),
+      meta: scopedCompletionStorageKey(this.storageScope, 'meta:v5'),
+      acceptedLexicon: scopedCompletionStorageKey(this.storageScope, 'acceptedLexicon:v2'),
+      legacyV4Model: scopedCompletionStorageKey(this.storageScope, 'ngram:v4'),
+      legacyV4Meta: scopedCompletionStorageKey(this.storageScope, 'meta:v4'),
+      legacyV4AcceptedLexicon: scopedCompletionStorageKey(this.storageScope, 'acceptedLexicon:v1'),
       legacyScoped: [
         `jotluck:scope:${this.storageScope}:ngram:v2`,
         `jotluck:scope:${this.storageScope}:ngram:short:v1`,
@@ -1037,47 +1279,80 @@ export class MarkdownPredictor {
 
   private resetPersistentLearningState(): void {
     this.l2 = new Map();
+    this.legacyAcceptedL2 = new Map();
     this.personalShort2 = new Map();
     this.personalShort3 = new Map();
+    this.legacyAcceptedShort2 = new Map();
+    this.legacyAcceptedShort3 = new Map();
+    this.personalLongCache = null;
     this.shortL2 = new Map();
     this.acceptedLexicon = [];
     this.accessTimestamps.clear();
     this.entryFlags.clear();
     this.invalidatePredictionCaches();
-    this.l2Meta = { schemaVersion: 4, docs: 0, totalEntries: 0, lastSave: Date.now() };
+    this.l2Meta = {
+      schemaVersion: 5,
+      docs: 0,
+      totalEntries: 0,
+      lastSave: Date.now(),
+      legacyAcceptedEntries: 0,
+    };
   }
 
-  private createProviders(): CompletionProvider[] {
-    return [
+  private getProviderRegistry(): CompletionProviderRegistry {
+    if (this.providerRegistry) return this.providerRegistry;
+    const registry = new CompletionProviderRegistry();
+    const providers: CompletionProvider[] = [
       new FormatClosureProvider(),
       new MarkdownStructureProvider(),
       new WikiLinkProvider(),
       new TagProvider(),
       new FilePathProvider(),
-      ...(this.ablationMode === 'full-stack' || this.ablationMode === 'provider-only'
-        ? [
-            new SequencePatternProvider(),
-            new LineEchoProvider(),
-            new LexiconProvider(() => this.getNgramProviderState()),
-            new PhraseSlotProvider(),
-            new RecentPhraseProvider(() => this.getNgramProviderState()),
-          ]
-        : []),
-      ...(this.ablationMode === 'provider-only'
-        ? [new ShortEnglishProvider()]
-        : [
-            new ShortChineseProvider(() => this.getNgramProviderState()),
-            ...(this.ablationMode === 'full-stack' ? [new ShortEnglishProvider()] : []),
-            new NgramProvider(() => this.getNgramProviderState()),
-          ]),
+      new SequencePatternProvider(),
+      new LineEchoProvider(),
+      new SessionHistoryProvider(this.sessionHistory, () => this.storageScope),
+      new LexiconProvider(() => this.getNgramProviderState()),
+      new PhraseSlotProvider(),
+      new RecentPhraseProvider(() => this.getNgramProviderState()),
+      new ShortChineseProvider(() => this.getNgramProviderState()),
+      new ShortEnglishProvider(),
+      new NgramProvider(() => this.getNgramProviderState()),
     ];
+    for (const provider of providers) {
+      registry.register(provider, createProviderDescriptor(provider));
+    }
+    this.providerRegistry = registry.seal();
+    return this.providerRegistry;
+  }
+
+  private isProviderEnabledForAblation(providerId: string): boolean {
+    const always = new Set([
+      'format-closure',
+      'markdown-structure',
+      'wiki-link',
+      'tag',
+      'file-path',
+    ]);
+    if (always.has(providerId)) return true;
+    const providerOnly = new Set([
+      'sequence-pattern',
+      'line-echo',
+      'session-history',
+      'lexicon',
+      'phrase-slot',
+      'recent-phrase',
+      'short-english',
+    ]);
+    if (this.ablationMode === 'provider-only') return providerOnly.has(providerId);
+    if (this.ablationMode === 'full-stack') return true;
+    return providerId === 'short-chinese' || providerId === 'ngram';
   }
 
   private getNgramProviderState(): NgramProviderState {
     return {
       n: this.n,
       l1: this.l1,
-      personalL2: this.l2,
+      personalL2: this.getPersonalLongTable(),
       notebook: this.getNotebookLongTable(),
       l3: this.l3,
       wordL3: this.l3Word,
@@ -1087,6 +1362,9 @@ export class MarkdownPredictor {
       shortNotebook: this.getNotebookShortTable(),
       ablationMode: this.ablationMode,
       recentPhrases: this.recentPhrases,
+      documentLexiconTerms: this.documentLexicon,
+      personalLexiconTerms: this.acceptedLexicon,
+      workspaceLexiconTerms: this.excerptLexicon,
       lexiconTerms: [...this.documentLexicon, ...this.excerptLexicon, ...this.acceptedLexicon],
       qualityGate: (result, cursorPos, doc) => this.applyQualityGate(result, cursorPos, doc),
     };
@@ -1115,7 +1393,7 @@ export class MarkdownPredictor {
     }, remaining);
     try {
       const candidates = await this.retrievalService.query(
-        context.doc.slice(0, context.cursorPos),
+        context.doc.slice(0, context.localCursorPos),
         getLocalLanguageHint(context),
         8,
         controller.signal,
@@ -1177,6 +1455,9 @@ export class MarkdownPredictor {
     this.lastPredictionFeedbackKey = candidate ? this.getFeedbackKey(candidate, context) : null;
     this.lastPredictionRejectionKey = candidate ? this.getRejectionKey(candidate, context) : null;
     this.lastPredictionLearningKey = candidate ? getLearningSignalKey(candidate, context) : null;
+    this.lastPredictionMode = candidate?.mode ?? 'predictive';
+    this.lastPredictionBlockType = context.blockType;
+    this.lastPredictionFeedbackPolicy = candidate?.feedbackPolicy ?? 'retained';
     if (!candidate) return null;
 
     const feedbackToken = this.capturePredictionFeedback(candidate, context);
@@ -1190,10 +1471,26 @@ export class MarkdownPredictor {
     candidate: CompletionCandidate,
     feedbackToken?: string,
   ): PredictionResult {
+    const edit = candidate.edit ?? {
+      from: candidate.from,
+      to: candidate.from,
+      insertText: candidate.text,
+    };
     return {
       text: candidate.text,
+      displayText: candidate.displayText ?? candidate.text,
       confidence: candidate.confidence,
-      from: candidate.from,
+      from: edit.from,
+      to: edit.to,
+      insertText: edit.insertText,
+      edit,
+      mode: candidate.mode,
+      kind: candidate.kind,
+      contributors: candidate.contributors,
+      priorityTier: candidate.priorityTier,
+      rawScore: candidate.rawScore,
+      calibratedScore: candidate.calibratedScore,
+      feedbackPolicy: candidate.feedbackPolicy,
       source: candidate.source === 'recent' ? 'ngram' : candidate.source,
       sourceLayer: candidate.sourceLayer,
       syntaxType: candidate.syntaxType,
@@ -1229,12 +1526,78 @@ export class MarkdownPredictor {
     return !(isWeakLearningSource(candidate) && (feedback.informationScore ?? 0) < 0.5);
   }
 
+  private commitRetainedCompletion(
+    ctx: string,
+    retainedText: string,
+    feedback: PredictionFeedbackSnapshot,
+    options: CompletionFeedbackOptions,
+  ): void {
+    if (feedback.storageScope !== this.storageScope) return;
+    const decision = decideCompletionLearningAdmission({
+      sessionKind: options.sessionKind ?? feedback.sessionKind,
+      blockType: feedback.blockType,
+      mode: feedback.mode,
+      contextText: ctx,
+      insertedText: retainedText,
+    });
+    const admission =
+      (options.learn ?? true) && feedback.feedbackPolicy !== 'none' ? decision.admission : 'skip';
+
+    recordProviderRetained(
+      feedback.providerId,
+      feedback.sourceLayer,
+      feedback.syntaxType,
+      retainedText.length,
+      feedback.storageScope,
+    );
+    if (admission === 'skip') return;
+
+    const shouldWriteNgram = this.shouldWriteAcceptedNgram(feedback);
+    if (feedback.rejectionKey) this.rejectionCounts.delete(feedback.rejectionKey);
+    if (feedback.feedbackKey) {
+      this.acceptedBoosts.set(
+        feedback.feedbackKey,
+        (this.acceptedBoosts.get(feedback.feedbackKey) ?? 0) + 1,
+      );
+    }
+    this.sessionHistory.record(feedback.storageScope, ctx, retainedText);
+    this.rememberAcceptedLexicon(retainedText);
+    this.recordLearningSignalRetained(retainedText.length, feedback, admission === 'persist');
+
+    if (shouldWriteNgram) {
+      ngramLearn(this.l1, ctx, retainedText, this.n);
+      this.rememberRecentPhrase(ctx + retainedText);
+    }
+    if (admission !== 'persist') return;
+
+    const now = Date.now();
+    this.accessTimestamps.set(ctx, now);
+    this.entryFlags.set(ctx, 'u');
+    if (shouldWriteNgram) {
+      ngramLearn(this.l2, ctx, retainedText, this.n);
+      const short2Context = takeLastCodePoints(ctx, 2);
+      const short3Context = takeLastCodePoints(ctx, 3);
+      const shortAccepted = takeFirstCodePoints(retainedText, 6);
+      if (codePointLength(short2Context) === 2) {
+        ngramLearn(this.personalShort2, short2Context, shortAccepted, 2);
+      }
+      if (codePointLength(short3Context) === 3) {
+        ngramLearn(this.personalShort3, short3Context, shortAccepted, 3);
+      }
+      this.rebuildPersonalShortTable();
+      this.invalidatePredictionCaches();
+      this.markPersonalContextsAccessed(ctx, retainedText, now);
+      this.maybeEliminate();
+    }
+    this.persistRetainedPersonalFeedback(ctx, retainedText, shouldWriteNgram);
+  }
+
   private capturePredictionFeedback(
     candidate: CompletionCandidate,
     context: CompletionContext,
   ): string {
     const token = `${this.storageScope}:${++this.predictionSequence}`;
-    this.predictionFeedback.set(token, {
+    this.feedbackLifecycle.shown(token, {
       providerId: candidate.providerId,
       sourceLayer: candidate.sourceLayer,
       syntaxType: candidate.syntaxType,
@@ -1243,36 +1606,13 @@ export class MarkdownPredictor {
       rejectionKey: this.getRejectionKey(candidate, context),
       learningKey: getLearningSignalKey(candidate, context),
       storageScope: this.storageScope,
+      mode: candidate.mode ?? (candidate.source === 'structured' ? 'structured' : 'predictive'),
+      blockType: context.blockType,
+      feedbackPolicy: candidate.feedbackPolicy,
+      sessionKind: this.sessionKind,
     });
-    while (this.predictionFeedback.size > 32) {
-      const oldest = this.predictionFeedback.keys().next().value as string | undefined;
-      if (!oldest) break;
-      this.predictionFeedback.delete(oldest);
-    }
+    this.lastPredictionToken = token;
     return token;
-  }
-
-  private consumePredictionFeedback(token?: string): PredictionFeedbackSnapshot {
-    if (token) {
-      const snapshot = this.predictionFeedback.get(token);
-      this.predictionFeedback.delete(token);
-      if (snapshot && snapshot.storageScope === this.storageScope) return snapshot;
-      return this.emptyPredictionFeedback();
-    }
-    return this.currentPredictionFeedback();
-  }
-
-  private emptyPredictionFeedback(): PredictionFeedbackSnapshot {
-    return {
-      providerId: null,
-      sourceLayer: undefined,
-      syntaxType: undefined,
-      informationScore: undefined,
-      feedbackKey: null,
-      rejectionKey: null,
-      learningKey: null,
-      storageScope: '',
-    };
   }
 
   private resetLastPredictionFeedback(): void {
@@ -1283,6 +1623,10 @@ export class MarkdownPredictor {
     this.lastPredictionFeedbackKey = null;
     this.lastPredictionRejectionKey = null;
     this.lastPredictionLearningKey = null;
+    this.lastPredictionMode = 'predictive';
+    this.lastPredictionBlockType = 'paragraph';
+    this.lastPredictionFeedbackPolicy = 'retained';
+    this.lastPredictionToken = null;
   }
 
   private currentPredictionFeedback(): PredictionFeedbackSnapshot {
@@ -1295,6 +1639,10 @@ export class MarkdownPredictor {
       rejectionKey: this.lastPredictionRejectionKey,
       learningKey: this.lastPredictionLearningKey,
       storageScope: this.storageScope,
+      mode: this.lastPredictionMode,
+      blockType: this.lastPredictionBlockType,
+      feedbackPolicy: this.lastPredictionFeedbackPolicy,
+      sessionKind: this.sessionKind,
     };
   }
 
@@ -1302,28 +1650,89 @@ export class MarkdownPredictor {
     candidate: CompletionCandidate,
     context: CompletionContext,
   ): void {
+    if (candidate.feedbackPolicy === 'none' || candidate.source === 'structured') return;
     const key = getLearningSignalKey(candidate, context);
     this.learningSignals = recordSignalShown(this.learningSignals, key);
-    persistLearningSignalEvent(this.storageScope, key, 'shown');
+    if (this.sessionKind === 'workspace') {
+      persistLearningSignalEvent(this.storageScope, key, 'shown');
+    }
   }
 
   private recordLearningSignalAccepted(
     savedChars: number,
     feedback = this.currentPredictionFeedback(),
   ): void {
-    if (!feedback.learningKey || feedback.storageScope !== this.storageScope) return;
+    if (
+      !feedback.learningKey ||
+      feedback.storageScope !== this.storageScope ||
+      feedback.feedbackPolicy === 'none'
+    ) {
+      return;
+    }
     this.learningSignals = recordSignalAccepted(
       this.learningSignals,
       feedback.learningKey,
       savedChars,
     );
-    persistLearningSignalEvent(feedback.storageScope, feedback.learningKey, 'accepted', savedChars);
+    if (feedback.sessionKind === 'workspace') {
+      persistLearningSignalEvent(feedback.storageScope, feedback.learningKey, 'accepted');
+    }
   }
 
-  private recordLearningSignalRejected(feedback = this.currentPredictionFeedback()): void {
+  private recordLearningSignalRetained(
+    retainedChars: number,
+    feedback: PredictionFeedbackSnapshot,
+    persist: boolean,
+  ): void {
+    if (!feedback.learningKey || feedback.feedbackPolicy === 'none') return;
+    this.learningSignals = recordSignalRetained(
+      this.learningSignals,
+      feedback.learningKey,
+      retainedChars,
+    );
+    if (persist) {
+      persistLearningSignalEvent(
+        feedback.storageScope,
+        feedback.learningKey,
+        'retained',
+        retainedChars,
+      );
+    }
+  }
+
+  private recordLearningSignalModified(feedback: PredictionFeedbackSnapshot): void {
+    if (!feedback.learningKey || feedback.feedbackPolicy === 'none') return;
+    this.learningSignals = recordSignalModified(this.learningSignals, feedback.learningKey);
+    if (feedback.sessionKind === 'workspace') {
+      persistLearningSignalEvent(feedback.storageScope, feedback.learningKey, 'modified');
+    }
+  }
+
+  private recordLearningSignalReverted(feedback: PredictionFeedbackSnapshot): void {
+    if (!feedback.learningKey || feedback.feedbackPolicy === 'none') return;
+    this.learningSignals = recordSignalReverted(this.learningSignals, feedback.learningKey);
+    if (feedback.sessionKind === 'workspace') {
+      persistLearningSignalEvent(feedback.storageScope, feedback.learningKey, 'reverted');
+    }
+  }
+
+  private recordLearningSignalAbandoned(feedback: PredictionFeedbackSnapshot): void {
+    if (!feedback.learningKey || feedback.feedbackPolicy === 'none') return;
+    this.learningSignals = recordSignalAbandoned(this.learningSignals, feedback.learningKey);
+    if (feedback.sessionKind === 'workspace') {
+      persistLearningSignalEvent(feedback.storageScope, feedback.learningKey, 'abandoned');
+    }
+  }
+
+  private recordLearningSignalRejected(
+    feedback = this.currentPredictionFeedback(),
+    persist = feedback.sessionKind === 'workspace',
+  ): void {
     if (!feedback.learningKey || feedback.storageScope !== this.storageScope) return;
     this.learningSignals = recordSignalRejected(this.learningSignals, feedback.learningKey);
-    persistLearningSignalEvent(feedback.storageScope, feedback.learningKey, 'rejected');
+    if (persist) {
+      persistLearningSignalEvent(feedback.storageScope, feedback.learningKey, 'explicitRejected');
+    }
   }
 
   private rememberRecentPhrase(text: string): void {
@@ -1369,8 +1778,11 @@ export class MarkdownPredictor {
 
     const shown = entries.reduce((sum, item) => sum + item.shown, 0);
     if (shown < 6) return 0;
-    const accepted = entries.reduce((sum, item) => sum + item.accepted, 0);
-    const rejected = entries.reduce((sum, item) => sum + item.rejected, 0);
+    const accepted = entries.reduce(
+      (sum, item) => sum + item.retained + item.legacyAccepted * 0.5,
+      0,
+    );
+    const rejected = entries.reduce((sum, item) => sum + item.explicitRejected, 0);
     const acceptRate = accepted / shown;
     const rejectRate = rejected / shown;
     const weakSource =
@@ -1394,78 +1806,139 @@ export class MarkdownPredictor {
       .result;
   }
 
-  private scanShortDocument(text: string): NGramTable {
-    const { short2, short3 } = scanShortTables(text);
-    return mergeTables(short2, short3);
+  private createOpenedParagraphContribution(
+    paragraph: OpenedDocumentParagraphSlice,
+  ): OpenedParagraphContribution {
+    return {
+      from: paragraph.from,
+      to: paragraph.to,
+      long: scanText(paragraph.text, this.n),
+      short: mergeTables(scanText(paragraph.text, 2), scanText(paragraph.text, 3)),
+      lexiconTerms: extractLexiconTerms(paragraph.text),
+    };
   }
 
-  private persistPersonalFeedback(
-    ctx: string,
-    text: string,
-    event: 'accepted' | 'rejected',
-    writeNgram: boolean,
-  ): void {
+  private addOpenedParagraphContribution(contribution: OpenedParagraphContribution): void {
+    mergeInto(this.l1, contribution.long);
+    mergeInto(this.shortL1, contribution.short);
+    for (const term of contribution.lexiconTerms) {
+      this.documentLexiconCounts.set(term, (this.documentLexiconCounts.get(term) ?? 0) + 1);
+    }
+  }
+
+  private subtractOpenedParagraphContribution(contribution: OpenedParagraphContribution): void {
+    subtractFrom(this.l1, contribution.long);
+    subtractFrom(this.shortL1, contribution.short);
+    for (const term of contribution.lexiconTerms) {
+      const remaining = (this.documentLexiconCounts.get(term) ?? 0) - 1;
+      if (remaining > 0) this.documentLexiconCounts.set(term, remaining);
+      else this.documentLexiconCounts.delete(term);
+    }
+  }
+
+  private refreshDocumentLexiconFromCounts(): void {
+    this.documentLexicon = [...this.documentLexiconCounts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 512)
+      .map(([term]) => term);
+  }
+
+  private persistRetainedPersonalFeedback(ctx: string, text: string, writeNgram: boolean): void {
     const scope = this.storageScope;
     const keys = this.storageKeys();
     const n = this.n;
-    const acceptedTerms = event === 'accepted' ? extractLexiconTerms(text) : [];
+    const acceptedTerms = extractLexiconTerms(text);
     runCompletionStorageMutation(`personal:${scope}`, () => {
-      const stored = deserializePersonalModel(readStorage(keys.model), n) ?? {
-        long: new Map(),
-        short2: new Map(),
-        short3: new Map(),
-      };
+      const stored =
+        deserializePersonalModel(readStorage(keys.model), n) ?? createEmptyPersonalModel();
 
       if (writeNgram) {
         const short2Context = takeLastCodePoints(ctx, 2);
         const short3Context = takeLastCodePoints(ctx, 3);
-        if (event === 'accepted') {
-          ngramLearn(stored.long, ctx, text, n);
-          const shortAccepted = takeFirstCodePoints(text, 6);
-          if (codePointLength(short2Context) === 2) {
-            ngramLearn(stored.short2, short2Context, shortAccepted, 2);
-          }
-          if (codePointLength(short3Context) === 3) {
-            ngramLearn(stored.short3, short3Context, shortAccepted, 3);
-          }
-        } else {
-          rejectPrediction(stored.long, ctx, text);
-          rejectPrediction(stored.short2, short2Context, text);
-          rejectPrediction(stored.short3, short3Context, text);
+        ngramLearn(stored.long, ctx, text, n);
+        const shortAccepted = takeFirstCodePoints(text, 6);
+        if (codePointLength(short2Context) === 2) {
+          ngramLearn(stored.short2, short2Context, shortAccepted, 2);
+        }
+        if (codePointLength(short3Context) === 3) {
+          ngramLearn(stored.short3, short3Context, shortAccepted, 3);
         }
       }
 
-      prunePersonalTablesToBudget(stored.long, stored.short2, stored.short3);
+      prunePersonalTablesToBudget(stored);
       const acceptedLexicon = mergeAcceptedLexicon(
         parseAcceptedLexicon(readStorage(keys.acceptedLexicon)) ?? [],
         acceptedTerms,
       );
       const previousMeta = parseL2Meta(readStorage(keys.meta));
       const nextMeta: L2Meta = {
-        schemaVersion: 4,
+        schemaVersion: 5,
         docs: previousMeta?.docs ?? 0,
         totalEntries: personalEntryCount(stored.long, stored.short2, stored.short3),
         lastSave: Date.now(),
         migratedFrom: previousMeta?.migratedFrom,
+        legacyAcceptedEntries: personalEntryCount(
+          stored.legacyLong,
+          stored.legacyShort2,
+          stored.legacyShort3,
+        ),
       };
-      writeStorage(keys.model, serializePersonalModel(stored.long, stored.short2, stored.short3));
+      writeStorage(keys.model, serializePersonalModel(stored));
       writeStorage(keys.acceptedLexicon, JSON.stringify(acceptedLexicon));
       writeStorage(keys.meta, JSON.stringify(nextMeta));
-      removeStorage(...keys.legacyScoped);
+      removeStorage(
+        keys.legacyV4Model,
+        keys.legacyV4Meta,
+        keys.legacyV4AcceptedLexicon,
+        ...keys.legacyScoped,
+      );
     });
   }
 
   private loadFromLocalStorage(): void {
     const keys = this.storageKeys();
     this.resetPersistentLearningState();
-    migrateLegacyAcceptedLexicon(keys.acceptedLexicon);
     removeStorage(...keys.legacyScoped);
+    removeLegacyLearningStorage();
 
-    const model = deserializePersonalModel(readStorage(keys.model), this.n);
+    let model = deserializePersonalModel(readStorage(keys.model), this.n);
+    let migratedMeta: L2Meta | null = null;
+    if (!model && readStorage(keys.model) === null) {
+      const legacyModel = deserializeLegacyPersonalModel(readStorage(keys.legacyV4Model), this.n);
+      if (legacyModel) {
+        model = {
+          ...createEmptyPersonalModel(),
+          legacyLong: legacyModel.long,
+          legacyShort2: legacyModel.short2,
+          legacyShort3: legacyModel.short3,
+        };
+        const legacyMeta = parseLegacyL2Meta(readStorage(keys.legacyV4Meta));
+        migratedMeta = {
+          schemaVersion: 5,
+          docs: legacyMeta?.docs ?? 0,
+          totalEntries: 0,
+          lastSave: Date.now(),
+          migratedFrom: 4,
+          legacyAcceptedEntries: personalEntryCount(
+            model.legacyLong,
+            model.legacyShort2,
+            model.legacyShort3,
+          ),
+        };
+        runCompletionStorageMutation(`personal:${this.storageScope}`, () => {
+          writeStorage(keys.model, serializePersonalModel(model!));
+          writeStorage(keys.meta, JSON.stringify(migratedMeta));
+          removeStorage(keys.legacyV4Model, keys.legacyV4Meta, keys.legacyV4AcceptedLexicon);
+        });
+      }
+    }
     if (model) {
       this.l2 = model.long;
       this.personalShort2 = model.short2;
       this.personalShort3 = model.short3;
+      this.legacyAcceptedL2 = model.legacyLong;
+      this.legacyAcceptedShort2 = model.legacyShort2;
+      this.legacyAcceptedShort3 = model.legacyShort3;
       this.rebuildPersonalShortTable();
       for (const ctx of this.l2.keys()) this.entryFlags.set(ctx, 'u');
     } else if (readStorage(keys.model) !== null) {
@@ -1473,7 +1946,7 @@ export class MarkdownPredictor {
       this.l2Meta.lastError = 'storage-read-failed';
     }
 
-    const meta = parseL2Meta(readStorage(keys.meta));
+    const meta = migratedMeta ?? parseL2Meta(readStorage(keys.meta));
     if (meta) this.l2Meta = meta;
     else if (readStorage(keys.meta) !== null) removeStorage(keys.meta);
 
@@ -1487,12 +1960,17 @@ export class MarkdownPredictor {
       this.personalShort2,
       this.personalShort3,
     );
+    this.l2Meta.legacyAcceptedEntries = personalEntryCount(
+      this.legacyAcceptedL2,
+      this.legacyAcceptedShort2,
+      this.legacyAcceptedShort3,
+    );
     this.invalidatePredictionCaches();
     this.captureStorageRevisions();
   }
 
   private maybeEliminate(): void {
-    const model = serializePersonalModel(this.l2, this.personalShort2, this.personalShort3);
+    const model = serializePersonalModel(this.createPersonalModelSnapshot());
     const size = utf8ByteLength(model);
     if (size > PERSONAL_MODEL_MAX_BYTES) this.forceEliminate(PERSONAL_MODEL_TARGET_BYTES, size);
   }
@@ -1500,8 +1978,7 @@ export class MarkdownPredictor {
   private forceEliminate(targetSize?: number, currentSize?: number): void {
     const target = targetSize ?? PERSONAL_MODEL_TARGET_BYTES;
     let projectedSize =
-      currentSize ??
-      utf8ByteLength(serializePersonalModel(this.l2, this.personalShort2, this.personalShort3));
+      currentSize ?? utf8ByteLength(serializePersonalModel(this.createPersonalModelSnapshot()));
     if (projectedSize <= target) return;
     const scored: Array<{
       table: NGramTable;
@@ -1511,7 +1988,15 @@ export class MarkdownPredictor {
     }> = [];
     const now = Date.now();
 
-    for (const table of [this.l2, this.personalShort2, this.personalShort3]) {
+    const tables = [
+      { table: this.legacyAcceptedL2, weight: LEGACY_ACCEPTED_WEIGHT },
+      { table: this.legacyAcceptedShort2, weight: LEGACY_ACCEPTED_WEIGHT },
+      { table: this.legacyAcceptedShort3, weight: LEGACY_ACCEPTED_WEIGHT },
+      { table: this.l2, weight: 1 },
+      { table: this.personalShort2, weight: 1 },
+      { table: this.personalShort3, weight: 1 },
+    ];
+    for (const { table, weight } of tables) {
       for (const [ctx, preds] of table) {
         const totalFreq = [...preds.values()].reduce((a, b) => a + b, 0);
         const lastAccess = this.accessTimestamps.get(ctx) ?? 0;
@@ -1520,7 +2005,7 @@ export class MarkdownPredictor {
         scored.push({
           table,
           ctx,
-          score: totalFreq * recencyDecay,
+          score: totalFreq * recencyDecay * weight,
           estimatedBytes: estimateSerializedEntryBytes(ctx, preds),
         });
       }
@@ -1586,6 +2071,29 @@ export class MarkdownPredictor {
 
   private rebuildPersonalShortTable(): void {
     this.shortL2 = mergeTables(this.personalShort2, this.personalShort3);
+    mergeWeightedInto(this.shortL2, this.legacyAcceptedShort2, LEGACY_ACCEPTED_WEIGHT);
+    mergeWeightedInto(this.shortL2, this.legacyAcceptedShort3, LEGACY_ACCEPTED_WEIGHT);
+    this.personalLongCache = null;
+  }
+
+  private getPersonalLongTable(): NGramTable {
+    if (!this.personalLongCache) {
+      this.personalLongCache = new Map();
+      mergeInto(this.personalLongCache, this.l2);
+      mergeWeightedInto(this.personalLongCache, this.legacyAcceptedL2, LEGACY_ACCEPTED_WEIGHT);
+    }
+    return this.personalLongCache;
+  }
+
+  private createPersonalModelSnapshot(): PersonalModelPartitions {
+    return {
+      long: this.l2,
+      short2: this.personalShort2,
+      short3: this.personalShort3,
+      legacyLong: this.legacyAcceptedL2,
+      legacyShort2: this.legacyAcceptedShort2,
+      legacyShort3: this.legacyAcceptedShort3,
+    };
   }
 
   private getNotebookLongTable(): NGramTable {
@@ -1608,6 +2116,7 @@ export class MarkdownPredictor {
   private invalidatePredictionCaches(): void {
     this.notebookLongCache = null;
     this.notebookShortCache = null;
+    this.personalLongCache = null;
   }
 
   private markPersonalContextsAccessed(ctx: string, acceptedText: string, timestamp: number): void {
@@ -1975,51 +2484,146 @@ async function sha256Text(text: string): Promise<string> {
     .join('');
 }
 
-function serializePersonalModel(long: NGramTable, short2: NGramTable, short3: NGramTable): string {
+function serializePersonalModel(model: PersonalModelPartitions): string {
   return [
     PERSONAL_MODEL_HEADER,
-    '[long]',
-    serialize(long),
-    '[short2]',
-    serialize(short2),
-    '[short3]',
-    serialize(short3),
+    '[retained-long]',
+    serialize(model.long),
+    '[retained-short2]',
+    serialize(model.short2),
+    '[retained-short3]',
+    serialize(model.short3),
+    '[legacy-long]',
+    serialize(model.legacyLong),
+    '[legacy-short2]',
+    serialize(model.legacyShort2),
+    '[legacy-short3]',
+    serialize(model.legacyShort3),
   ].join('\n');
 }
 
-function deserializePersonalModel(
+function deserializePersonalModel(raw: string | null, n: number): PersonalModelPartitions | null {
+  const sections = deserializeModelSections(raw, PERSONAL_MODEL_HEADER, [
+    'retained-long',
+    'retained-short2',
+    'retained-short3',
+    'legacy-long',
+    'legacy-short2',
+    'legacy-short3',
+  ]);
+  if (!sections) return null;
+  const model: PersonalModelPartitions = {
+    long: sections['retained-long']!,
+    short2: sections['retained-short2']!,
+    short3: sections['retained-short3']!,
+    legacyLong: sections['legacy-long']!,
+    legacyShort2: sections['legacy-short2']!,
+    legacyShort3: sections['legacy-short3']!,
+  };
+  return isValidPersonalModel(model, n) ? model : null;
+}
+
+function deserializeLegacyPersonalModel(
   raw: string | null,
   n: number,
-): { long: NGramTable; short2: NGramTable; short3: NGramTable } | null {
-  if (!raw || !raw.startsWith(`${PERSONAL_MODEL_HEADER}\n`)) return null;
-  const longStart = raw.indexOf('[long]\n');
-  const short2Start = raw.indexOf('\n[short2]\n');
-  const short3Start = raw.indexOf('\n[short3]\n');
-  if (
-    longStart !== PERSONAL_MODEL_HEADER.length + 1 ||
-    short2Start < 0 ||
-    short3Start < short2Start
-  ) {
-    return null;
+): Pick<PersonalModelPartitions, 'long' | 'short2' | 'short3'> | null {
+  const sections = deserializeModelSections(raw, LEGACY_PERSONAL_MODEL_HEADER, [
+    'long',
+    'short2',
+    'short3',
+  ]);
+  if (!sections) return null;
+  const model = {
+    long: sections.long!,
+    short2: sections.short2!,
+    short3: sections.short3!,
+  };
+  return isValidPersonalTables(model.long, model.short2, model.short3, n) ? model : null;
+}
+
+function deserializeModelSections(
+  raw: string | null,
+  header: string,
+  sectionNames: readonly string[],
+): Record<string, NGramTable> | null {
+  if (!raw) return null;
+  const lines = raw.split('\n');
+  if (lines.shift() !== header) return null;
+  const serializedBySection = new Map<string, string[]>();
+  let current: string | null = null;
+  for (const line of lines) {
+    const match = /^\[([^\]]+)\]$/u.exec(line);
+    if (match) {
+      const name = match[1]!;
+      if (!sectionNames.includes(name) || serializedBySection.has(name)) return null;
+      current = name;
+      serializedBySection.set(name, []);
+      continue;
+    }
+    if (!current) return null;
+    serializedBySection.get(current)!.push(line);
   }
-  const long = deserialize(raw.slice(longStart + '[long]\n'.length, short2Start));
-  const short2 = deserialize(raw.slice(short2Start + '\n[short2]\n'.length, short3Start));
-  const short3 = deserialize(raw.slice(short3Start + '\n[short3]\n'.length));
-  if (
+  if (sectionNames.some((name) => !serializedBySection.has(name))) return null;
+  return Object.fromEntries(
+    sectionNames.map((name) => [name, deserialize(serializedBySection.get(name)!.join('\n'))]),
+  );
+}
+
+function createEmptyPersonalModel(): PersonalModelPartitions {
+  return {
+    long: new Map(),
+    short2: new Map(),
+    short3: new Map(),
+    legacyLong: new Map(),
+    legacyShort2: new Map(),
+    legacyShort3: new Map(),
+  };
+}
+
+function isValidPersonalModel(model: PersonalModelPartitions, n: number): boolean {
+  return (
+    isValidPersonalTables(model.long, model.short2, model.short3, n) &&
+    isValidPersonalTables(model.legacyLong, model.legacyShort2, model.legacyShort3, n)
+  );
+}
+
+function isValidPersonalTables(
+  long: NGramTable,
+  short2: NGramTable,
+  short3: NGramTable,
+  n: number,
+): boolean {
+  return !(
     [...long.keys()].some((ctx) => codePointLength(ctx) !== n) ||
     [...short2.keys()].some((ctx) => codePointLength(ctx) !== 2) ||
     [...short3.keys()].some((ctx) => codePointLength(ctx) !== 3)
-  ) {
-    return null;
-  }
-  return { long, short2, short3 };
+  );
 }
 
 function parseL2Meta(raw: string | null): L2Meta | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Partial<L2Meta>;
-    return parsed.schemaVersion === 4 ? normalizeL2Meta(parsed) : null;
+    return parsed.schemaVersion === 5 ? normalizeL2Meta(parsed) : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseLegacyL2Meta(raw: string | null): L2Meta | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<L2Meta>;
+    if (parsed.schemaVersion !== 4) return null;
+    return {
+      schemaVersion: 5,
+      docs: normalizeNonNegativeInteger(parsed.docs),
+      totalEntries: 0,
+      lastSave: normalizeNonNegativeInteger(parsed.lastSave),
+      migratedFrom: 4,
+      legacyAcceptedEntries: normalizeNonNegativeInteger(parsed.totalEntries),
+      lastError: typeof parsed.lastError === 'string' ? parsed.lastError : undefined,
+    };
   } catch {
     return null;
   }
@@ -2038,25 +2642,42 @@ function parseAcceptedLexicon(raw: string | null): string[] | null {
   }
 }
 
-function isValidAcceptedLexiconJson(raw: string | null): boolean {
-  return raw !== null && parseAcceptedLexicon(raw) !== null;
-}
-
 function scanShortTables(text: string): { short2: NGramTable; short3: NGramTable } {
   return { short2: scanDocument(text, 2), short3: scanDocument(text, 3) };
 }
 
-function subtractFrom(target: NGramTable, source: NGramTable): void {
-  for (const [ctx, sourcePredictions] of source) {
-    const targetPredictions = target.get(ctx);
-    if (!targetPredictions) continue;
-    for (const [next, count] of sourcePredictions) {
-      const remaining = (targetPredictions.get(next) ?? 0) - count;
-      if (remaining > 0) targetPredictions.set(next, remaining);
-      else targetPredictions.delete(next);
+function collectOpenedParagraphSlices(text: string): OpenedDocumentParagraphSlice[] {
+  const paragraphs: OpenedDocumentParagraphSlice[] = [];
+  const lines = text.split('\n');
+  let offset = 0;
+  let paragraphFrom: number | null = null;
+  let paragraphTo = 0;
+  const flush = () => {
+    if (paragraphFrom === null) return;
+    const length = paragraphTo - paragraphFrom;
+    const paragraphText =
+      length <= OPENED_PARAGRAPH_SAMPLE_LIMIT
+        ? text.slice(paragraphFrom, paragraphTo)
+        : `${text.slice(
+            paragraphFrom,
+            paragraphFrom + OPENED_PARAGRAPH_SAMPLE_LIMIT / 2,
+          )}\n${text.slice(paragraphTo - OPENED_PARAGRAPH_SAMPLE_LIMIT / 2, paragraphTo)}`;
+    paragraphs.push({ from: paragraphFrom, to: paragraphTo, text: paragraphText });
+    paragraphFrom = null;
+  };
+  for (const line of lines) {
+    const lineFrom = offset;
+    const lineTo = lineFrom + line.length;
+    if (line.trim().length === 0) {
+      flush();
+    } else {
+      if (paragraphFrom === null) paragraphFrom = lineFrom;
+      paragraphTo = lineTo;
     }
-    if (targetPredictions.size === 0) target.delete(ctx);
+    offset = lineTo + 1;
   }
+  flush();
+  return paragraphs;
 }
 
 function mergePresenceInto(target: NGramTable, source: NGramTable): void {
@@ -2068,6 +2689,20 @@ function mergePresenceInto(target: NGramTable, source: NGramTable): void {
     }
     for (const next of sourcePredictions.keys()) {
       targetPredictions.set(next, (targetPredictions.get(next) ?? 0) + 1);
+    }
+  }
+}
+
+function mergeWeightedInto(target: NGramTable, source: NGramTable, weight: number): void {
+  if (!Number.isFinite(weight) || weight <= 0) return;
+  for (const [ctx, sourcePredictions] of source) {
+    let targetPredictions = target.get(ctx);
+    if (!targetPredictions) {
+      targetPredictions = new Map();
+      target.set(ctx, targetPredictions);
+    }
+    for (const [next, count] of sourcePredictions) {
+      targetPredictions.set(next, (targetPredictions.get(next) ?? 0) + count * weight);
     }
   }
 }
@@ -2137,12 +2772,8 @@ function mergeAcceptedLexicon(existing: string[], additions: string[]): string[]
   return merged;
 }
 
-function prunePersonalTablesToBudget(
-  long: NGramTable,
-  short2: NGramTable,
-  short3: NGramTable,
-): void {
-  const initial = serializePersonalModel(long, short2, short3);
+function prunePersonalTablesToBudget(model: PersonalModelPartitions): void {
+  const initial = serializePersonalModel(model);
   let projectedSize = utf8ByteLength(initial);
   if (projectedSize <= PERSONAL_MODEL_MAX_BYTES) return;
 
@@ -2152,12 +2783,20 @@ function prunePersonalTablesToBudget(
     score: number;
     bytes: number;
   }> = [];
-  for (const table of [long, short2, short3]) {
+  const tables = [
+    { table: model.legacyLong, weight: LEGACY_ACCEPTED_WEIGHT },
+    { table: model.legacyShort2, weight: LEGACY_ACCEPTED_WEIGHT },
+    { table: model.legacyShort3, weight: LEGACY_ACCEPTED_WEIGHT },
+    { table: model.long, weight: 1 },
+    { table: model.short2, weight: 1 },
+    { table: model.short3, weight: 1 },
+  ];
+  for (const { table, weight } of tables) {
     for (const [ctx, predictions] of table) {
       entries.push({
         table,
         ctx,
-        score: [...predictions.values()].reduce((sum, count) => sum + count, 0),
+        score: [...predictions.values()].reduce((sum, count) => sum + count, 0) * weight,
         bytes: estimateSerializedEntryBytes(ctx, predictions),
       });
     }

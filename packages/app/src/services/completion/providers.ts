@@ -145,6 +145,13 @@ export interface NgramProviderState {
   shortL2?: NGramTable;
   ablationMode: CompletionAblationMode;
   recentPhrases: readonly string[];
+  /** Terms observed in the currently opened document. */
+  documentLexiconTerms?: readonly string[];
+  /** Terms retained from personal feedback. */
+  personalLexiconTerms?: readonly string[];
+  /** Terms supplied by the active notebook/workspace. */
+  workspaceLexiconTerms?: readonly string[];
+  /** @deprecated Compatibility aggregate for callers that cannot expose origin. */
   lexiconTerms: readonly string[];
   qualityGate: QualityGate;
 }
@@ -273,6 +280,11 @@ export class WikiLinkProvider implements CompletionProvider {
       context,
       providerId: this.id,
       text: best.slice(prefix.length) + ']]',
+      edit: {
+        from: context.cursorPos - prefix.length,
+        to: context.cursorPos,
+        insertText: `${best}]]`,
+      },
       confidence: matches.length === 1 ? 0.95 : 0.75,
       syntaxType: 'wiki-link',
       priority: this.priority,
@@ -300,6 +312,11 @@ export class TagProvider implements CompletionProvider {
       context,
       providerId: this.id,
       text: best.slice(prefix.length) + ' ',
+      edit: {
+        from: context.cursorPos - prefix.length,
+        to: context.cursorPos,
+        insertText: `${best} `,
+      },
       confidence: prefix.length > 0 ? 0.9 : 0.7,
       syntaxType: 'tag',
       priority: this.priority,
@@ -328,6 +345,11 @@ export class FilePathProvider implements CompletionProvider {
       context,
       providerId: this.id,
       text: best.slice(prefix.length) + ')',
+      edit: {
+        from: context.cursorPos - prefix.length,
+        to: context.cursorPos,
+        insertText: `${best})`,
+      },
       confidence: paths.length === 1 ? 0.9 : 0.65,
       syntaxType: 'file-path',
       priority: this.priority,
@@ -436,15 +458,9 @@ export class LexiconProvider implements CompletionProvider {
     const state = this.getState();
     const prefix = getLexiconPrefix(context);
     const prefixKey = context.languageHint === 'en' ? prefix.toLocaleLowerCase('en-US') : prefix;
-    const terms = uniqueTerms([
-      ...state.lexiconTerms,
-      ...(context.indexData?.getAllNoteTitles() ?? []),
-      ...(context.indexData?.getRecentNoteTitles?.() ?? []),
-      ...(context.indexData?.getAllTags() ?? []),
-      ...context.recentTokens,
-    ])
-      .filter((term) => passesLexiconLanguage(term, context))
-      .filter((term) => {
+    const terms = collectLexiconTermsByOrigin(state, context)
+      .filter(({ term }) => passesLexiconLanguage(term, context))
+      .filter(({ term }) => {
         if (!prefix) return true;
         const termKey = context.languageHint === 'en' ? term.toLocaleLowerCase('en-US') : term;
         return termKey.startsWith(prefixKey) && term.length > prefix.length;
@@ -453,13 +469,20 @@ export class LexiconProvider implements CompletionProvider {
     if (terms.length === 0) return [];
 
     const candidates: CompletionCandidate[] = [];
-    for (const term of terms) {
+    for (const { term, sourceLayer, confidence } of terms) {
       if (prefix) {
         candidates.push(
-          lexiconCandidate(term.slice(prefix.length, prefix.length + 8), context, 0.73),
+          lexiconCandidate(
+            term.slice(prefix.length, prefix.length + 8),
+            context,
+            confidence,
+            sourceLayer,
+          ),
         );
       } else if (!prefix && /(?:关于|这个|本次|当前|整个)$/u.test(context.sentencePrefix)) {
-        candidates.push(lexiconCandidate(term.slice(0, 8), context, 0.58));
+        candidates.push(
+          lexiconCandidate(term.slice(0, 8), context, confidence - 0.15, sourceLayer),
+        );
       }
     }
 
@@ -533,7 +556,7 @@ export class RecentPhraseProvider implements CompletionProvider {
 
   provide(context: CompletionContext): CompletionCandidate | null {
     const state = this.getState();
-    const beforeCursor = context.doc.slice(0, context.cursorPos);
+    const beforeCursor = context.doc.slice(0, context.localCursorPos);
     const match = findRecentPhraseMatch(state.recentPhrases, beforeCursor, context.languageHint);
     if (!match) return null;
     return {
@@ -576,9 +599,12 @@ export class ShortChineseProvider implements CompletionProvider {
 
   provideMany(context: CompletionContext): CompletionCandidate[] {
     const state = this.getState();
-    const beforeCursor = context.doc.slice(Math.max(0, context.cursorPos - 8), context.cursorPos);
-    const ctx2 = context.doc.slice(Math.max(0, context.cursorPos - 2), context.cursorPos);
-    const ctx3 = context.doc.slice(Math.max(0, context.cursorPos - 3), context.cursorPos);
+    const beforeCursor = context.doc.slice(
+      Math.max(0, context.localCursorPos - 8),
+      context.localCursorPos,
+    );
+    const ctx2 = context.doc.slice(Math.max(0, context.localCursorPos - 2), context.localCursorPos);
+    const ctx3 = context.doc.slice(Math.max(0, context.localCursorPos - 3), context.localCursorPos);
     if (!/[\u3400-\u9fff]/.test(ctx2 + ctx3)) return [];
 
     const personalTable = state.shortPersonalL2 ?? state.shortL2;
@@ -593,10 +619,12 @@ export class ShortChineseProvider implements CompletionProvider {
         (item): item is { layer: ShortNgramLayer; table: NGramTable } => item.table !== undefined,
       )
       .flatMap(({ layer, table }) =>
-        ngramPredictMany(table, context.cursorPos, context.doc, 2, 6, 0.55, 2, 2).map((result) => ({
-          layer,
-          result,
-        })),
+        ngramPredictMany(table, context.localCursorPos, context.doc, 2, 6, 0.55, 2, 2).map(
+          (result) => ({
+            layer,
+            result,
+          }),
+        ),
       )
       .filter((item): item is { layer: ShortNgramLayer; result: PredictionResult } =>
         Boolean(item.result),
@@ -611,7 +639,7 @@ export class ShortChineseProvider implements CompletionProvider {
       }))
       .map(({ layer, result }) => ({
         layer,
-        result: state.qualityGate(result, context.cursorPos, context.doc),
+        result: state.qualityGate(result, context.localCursorPos, context.doc),
       }))
       .filter((item): item is { layer: ShortNgramLayer; result: PredictionResult } =>
         Boolean(item.result),
@@ -646,7 +674,7 @@ export class ShortChineseProvider implements CompletionProvider {
     return {
       text: result.text,
       confidence: result.confidence,
-      from: result.from || context.cursorPos,
+      from: result.from ? result.from + context.documentFrom : context.cursorPos,
       providerId: this.id,
       source: 'ngram',
       sourceLayer,
@@ -672,7 +700,10 @@ export class ShortEnglishProvider implements CompletionProvider {
   }
 
   provide(context: CompletionContext): CompletionCandidate | null {
-    const beforeCursor = context.doc.slice(Math.max(0, context.cursorPos - 16), context.cursorPos);
+    const beforeCursor = context.doc.slice(
+      Math.max(0, context.localCursorPos - 16),
+      context.localCursorPos,
+    );
     const lower = beforeCursor.toLowerCase();
     const fixed = findLongestSuffixFallback(SHORT_EN_FALLBACKS, lower);
     if (!fixed) return null;
@@ -715,10 +746,10 @@ export class NgramProvider implements CompletionProvider {
     const state = this.getState();
     const languageHint = getLocalLanguageHint(context);
     const insideEnglishWord =
-      languageHint === 'en' && isInsideUnfinishedEnglishWord(context.doc, context.cursorPos);
+      languageHint === 'en' && isInsideUnfinishedEnglishWord(context.doc, context.localCursorPos);
     const minimumContextLength = languageHint === 'zh' ? 2 : state.n;
     const hasCharacterContext =
-      Array.from(context.doc.slice(0, context.cursorPos)).slice(-state.n).length >=
+      Array.from(context.doc.slice(0, context.localCursorPos)).slice(-state.n).length >=
       minimumContextLength;
 
     const personalTable = state.personalL2 ?? state.l2;
@@ -737,7 +768,7 @@ export class NgramProvider implements CompletionProvider {
       .flatMap(({ layer, table }) =>
         ngramPredictMany(
           table,
-          context.cursorPos,
+          context.localCursorPos,
           context.doc,
           state.n,
           context.settings.maxSuggestionLength,
@@ -759,7 +790,7 @@ export class NgramProvider implements CompletionProvider {
       )
       .map(({ layer, result }) => ({
         layer,
-        result: state.qualityGate(result, context.cursorPos, context.doc),
+        result: state.qualityGate(result, context.localCursorPos, context.doc),
       }))
       .filter((item): item is { layer: LongNgramLayer; result: PredictionResult } =>
         Boolean(item.result),
@@ -767,7 +798,7 @@ export class NgramProvider implements CompletionProvider {
       .map(({ layer, result }) => ({
         text: result.text,
         confidence: result.confidence,
-        from: result.from || context.cursorPos,
+        from: result.from ? result.from + context.documentFrom : context.cursorPos,
         providerId: this.id,
         source: 'ngram' as const,
         sourceLayer: layer,
@@ -789,7 +820,7 @@ export class NgramProvider implements CompletionProvider {
     if (!state.wordL3 || !isLayerEnabled('l3', state.ablationMode)) return [];
     return predictWordCompletions(
       state.wordL3,
-      context.cursorPos,
+      context.localCursorPos,
       context.doc,
       3,
       context.settings.minConfidence,
@@ -797,13 +828,17 @@ export class NgramProvider implements CompletionProvider {
       state.l3CountScale ?? 1,
     )
       .map((result) =>
-        state.qualityGate({ ...result, syntaxType: 'word-en' }, context.cursorPos, context.doc),
+        state.qualityGate(
+          { ...result, syntaxType: 'word-en' },
+          context.localCursorPos,
+          context.doc,
+        ),
       )
       .filter((result): result is PredictionResult => Boolean(result))
       .map((result) => ({
         text: result.text,
         confidence: result.confidence,
-        from: result.from,
+        from: result.from + context.documentFrom,
         providerId: this.id,
         source: 'ngram' as const,
         sourceLayer: 'l3' as const,
@@ -908,7 +943,7 @@ const CHINESE_SEQUENCE_SERIES_RE = new RegExp(
 const ORDERED_LIST_PREFIX_RE = /^\s*(\d+)([.)、．])\s*/u;
 
 function getImmediatePreviousLines(context: CompletionContext, maxLines = 4): string[] {
-  const beforeCursor = context.doc.slice(0, context.cursorPos);
+  const beforeCursor = context.doc.slice(0, context.localCursorPos);
   const lines = beforeCursor.split('\n').map((line) => line.replace(/\r$/, ''));
   lines.pop();
 
@@ -1261,6 +1296,7 @@ function lexiconCandidate(
   text: string,
   context: CompletionContext,
   confidence: number,
+  sourceLayer: CompletionSourceLayer,
 ): CompletionCandidate {
   return {
     text,
@@ -1268,11 +1304,44 @@ function lexiconCandidate(
     from: context.cursorPos,
     providerId: 'lexicon',
     source: 'recent',
-    sourceLayer: 'provider',
+    sourceLayer,
     syntaxType: 'lexicon',
     learnable: true,
     priority: LEXICON_PRIORITY,
   };
+}
+
+function collectLexiconTermsByOrigin(
+  state: NgramProviderState,
+  context: CompletionContext,
+): Array<{
+  term: string;
+  sourceLayer: CompletionSourceLayer;
+  confidence: number;
+}> {
+  const terms = new Map<
+    string,
+    { term: string; sourceLayer: CompletionSourceLayer; confidence: number }
+  >();
+  const append = (
+    values: readonly string[],
+    sourceLayer: CompletionSourceLayer,
+    confidence: number,
+  ): void => {
+    for (const term of uniqueTerms(values)) {
+      if (!terms.has(term)) terms.set(term, { term, sourceLayer, confidence });
+    }
+  };
+
+  append(state.documentLexiconTerms ?? [], 'l1', 0.78);
+  append(context.recentTokens, 'session', 0.77);
+  append(state.personalLexiconTerms ?? [], 'l2', 0.75);
+  append(state.workspaceLexiconTerms ?? [], 'notebook', 0.73);
+  append(context.indexData?.getRecentNoteTitles?.() ?? [], 'notebook', 0.74);
+  append(context.indexData?.getAllNoteTitles() ?? [], 'notebook', 0.72);
+  append(context.indexData?.getAllTags() ?? [], 'notebook', 0.71);
+  append(state.lexiconTerms, 'provider', 0.7);
+  return [...terms.values()];
 }
 
 function structuredCandidate(args: {
@@ -1282,6 +1351,7 @@ function structuredCandidate(args: {
   confidence: number;
   syntaxType: string;
   priority: number;
+  edit?: CompletionCandidate['edit'];
 }): CompletionCandidate {
   return {
     text: args.text,
@@ -1293,5 +1363,7 @@ function structuredCandidate(args: {
     syntaxType: args.syntaxType,
     learnable: false,
     priority: args.priority,
+    edit: args.edit,
+    displayText: args.text,
   };
 }

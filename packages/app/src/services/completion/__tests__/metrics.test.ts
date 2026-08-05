@@ -5,6 +5,7 @@ import {
   loadCompletionMetrics,
   recordProviderAccepted,
   recordProviderRejected,
+  recordProviderRetained,
   recordProviderShown,
 } from '../metrics';
 import type { CompletionCandidate } from '../types';
@@ -45,19 +46,21 @@ describe('completion metrics', () => {
   it('falls back to an empty store and removes malformed JSON', () => {
     localStorage.setItem(completionMetricsStorageKey('a'), '{bad json');
 
-    expect(loadCompletionMetrics('a')).toMatchObject({ version: 3, providers: {} });
+    expect(loadCompletionMetrics('a')).toMatchObject({ version: 4, providers: {} });
     expect(localStorage.getItem(completionMetricsStorageKey('a'))).toBeNull();
   });
 
   it('records provider, layer and syntax metrics in one scope only', () => {
     recordProviderShown(candidate(), 12.4, 'a');
     recordProviderAccepted('ngram', 'l2', 'general', 8, 'a');
+    recordProviderRetained('ngram', 'l2', 'general', 8, 'a');
     recordProviderRejected('ngram', 'l2', 'general', 'a');
 
     const metrics = loadCompletionMetrics('a');
     expect(metrics.providers.ngram).toMatchObject({
       shown: 1,
       accepted: 1,
+      retained: 1,
       rejected: 1,
       savedChars: 8,
       latencies: [12],
@@ -92,10 +95,11 @@ describe('completion metrics', () => {
     );
 
     const migrated = loadCompletionMetrics('notebook-a');
-    expect(migrated.version).toBe(3);
+    expect(migrated.version).toBe(4);
     expect(migrated.providers.ngram).toMatchObject({
       shown: 2,
       accepted: 0,
+      legacyAccepted: 0,
       rejected: 0,
       savedChars: 5,
       latencies: [1, 3],

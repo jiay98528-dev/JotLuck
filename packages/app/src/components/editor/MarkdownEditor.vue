@@ -7,7 +7,7 @@
  * MarkdownEditor.vue — CodeMirror 6 编辑器封装
  *
  * 纸张主题。支持 v-model、块解析、拖放/粘贴回调。
- * 暴露 getEditorView() 和 focus() 供父组件调用。
+ * 暴露编辑器访问、聚焦与保存边界反馈结算供父组件调用。
  *
  * @see migration-map.md §1.2
  */
@@ -27,6 +27,7 @@ import {
 } from '@/utils/markdown-formatting';
 import { getJotLuckE2EBridge } from '@/utils/e2e-bridge';
 import { flushCompletionStorageMutations } from '@/services/completion/learning-repository';
+import { createOpenedDocumentParagraphChange } from '@/services/completion/document-context';
 import type { RendererOptions } from '@jotluck/renderer';
 import { currentLocale, translate } from '@/i18n';
 
@@ -104,8 +105,6 @@ const internallyEmittedValues = new Set<string>();
 let activePendingAction: FormatAction | null = null;
 let pendingInlineMarkers: readonly [string, string] | null = null;
 let deferredPendingAction: FormatAction | null = null;
-let scanOpenedDocumentTimer: ReturnType<typeof setTimeout> | null = null;
-let scanPausedForComposition = false;
 
 function currentCompletionSettings(): CompletionSettings {
   return props.completionSettings ?? getCompletionSettings();
@@ -116,26 +115,9 @@ function isAutocompleteScanEnabled(): boolean {
   return props.enableAutocomplete !== false && settings.enabled;
 }
 
-function clearOpenedDocumentScanTimer(): void {
-  if (!scanOpenedDocumentTimer) return;
-  clearTimeout(scanOpenedDocumentTimer);
-  scanOpenedDocumentTimer = null;
-}
-
-function refreshOpenedDocumentScan(text?: string): void {
+function refreshOpenedDocumentScan(text: string): void {
   if (!isAutocompleteScanEnabled()) return;
-  predictor.scanOpenedDocument(text ?? view?.state.doc.toString() ?? '');
-}
-
-function scheduleOpenedDocumentScan(editorView: EditorView | null = view): void {
-  if (!editorView || !isAutocompleteScanEnabled()) return;
-  if (scanPausedForComposition || editorView.composing || editorView.compositionStarted) return;
-  clearOpenedDocumentScanTimer();
-  scanOpenedDocumentTimer = setTimeout(() => {
-    scanOpenedDocumentTimer = null;
-    if (!view || scanPausedForComposition || view.composing || view.compositionStarted) return;
-    refreshOpenedDocumentScan(view.state.doc.toString());
-  }, 400);
+  predictor.scanOpenedDocument(text);
 }
 
 function autocompleteExtensions() {
@@ -168,7 +150,6 @@ function registerE2EEditorBridge(): void {
         selection: { anchor: content.length },
       });
       emit('update:modelValue', view.state.doc.toString());
-      refreshOpenedDocumentScan(content);
       view.focus();
     },
     getCursor: () => view?.state.selection.main.head ?? 0,
@@ -267,6 +248,14 @@ function createState(doc: string) {
         },
       ]),
       EditorView.updateListener.of((update) => {
+        if (update.docChanged && isAutocompleteScanEnabled()) {
+          const change = createOpenedDocumentParagraphChange(
+            update.startState.doc,
+            update.state.doc,
+            update.changes,
+          );
+          if (change) predictor.applyOpenedDocumentParagraphChange(change);
+        }
         if (update.docChanged && !suppressSync) {
           const value = update.state.doc.toString();
           internallyEmittedValues.add(value);
@@ -275,7 +264,6 @@ function createState(doc: string) {
             if (oldest !== undefined) internallyEmittedValues.delete(oldest);
           }
           emit('update:modelValue', value);
-          scheduleOpenedDocumentScan(update.view);
         }
       }),
     ],
@@ -435,6 +423,7 @@ watch(
   () => [props.enableAutocomplete, props.completionSettings] as const,
   () => {
     if (!view) return;
+    if (isAutocompleteScanEnabled()) refreshOpenedDocumentScan(view.state.doc.toString());
     view.dispatch({ effects: autocompleteCompartment.reconfigure(autocompleteExtensions()) });
   },
   { deep: true },
@@ -456,6 +445,14 @@ watch([() => props.placeholder, currentLocale], ([placeholder]) => {
 
 onMounted(() => {
   if (!editorHost.value) return;
+
+  const settings = currentCompletionSettings();
+  predictor.configure(settings);
+  if (props.enableAutocomplete !== false && settings.enabled) {
+    // One complete initialization is allowed when the document opens. Every
+    // subsequent edit is applied as a bounded CM6 paragraph contribution delta.
+    refreshOpenedDocumentScan(props.modelValue);
+  }
 
   // Ensure CM6 does NOT use Chrome's EditContext API on Windows.
   // EditContext causes IME composition bugs on Chrome 126+:
@@ -489,15 +486,10 @@ onMounted(() => {
   view.dom.addEventListener('mousedown', registerE2EEditorBridge);
   view.contentDOM.addEventListener('focus', registerE2EEditorBridge);
 
-  // Fire-and-forget predictor init (BUG-027 fix: 消除 async onMounted 导致的 view=null 窗口期).
-  // predict.initialize() 下载 429KB baseline 文件可能耗时 200-500ms，
-  // 这段延迟不能阻塞 EditorView 创建，否则 E2E waitForEditorReady 轮询时 view 为 null。
-  const settings = currentCompletionSettings();
-  predictor.configure(settings);
+  // Fire-and-forget predictor init. Public L3 remains fail-closed unless an
+  // evidence-gated engine is explicitly injected by a dev/E2E build.
   if (props.enableAutocomplete !== false && settings.enabled) {
-    predictor.initialize().then(() => {
-      predictor.scanOpenedDocument(view?.state.doc.toString() ?? props.modelValue);
-    });
+    void predictor.initialize();
   }
 
   // Stable wrappers read the latest props, so a transition can disable uploads without remounting.
@@ -512,8 +504,6 @@ onMounted(() => {
   // marker insertion until after compositionend so the dispatch
   // doesn't corrupt CM6's composition transaction.
   view.contentDOM.addEventListener('compositionend', onCompositionEndApplyDeferred);
-  view.contentDOM.addEventListener('compositionstart', onCompositionStartRefreshScan);
-  view.contentDOM.addEventListener('compositionend', onCompositionEndRefreshScan);
 });
 
 onUnmounted(() => {
@@ -525,15 +515,12 @@ onUnmounted(() => {
   editorHost.value?.removeEventListener('paste', onEditorHostPaste);
   if (view) {
     view.contentDOM.removeEventListener('compositionend', onCompositionEndApplyDeferred);
-    view.contentDOM.removeEventListener('compositionstart', onCompositionStartRefreshScan);
-    view.contentDOM.removeEventListener('compositionend', onCompositionEndRefreshScan);
     view.dom.removeEventListener('mousedown', registerE2EEditorBridge);
     view.contentDOM.removeEventListener('focus', registerE2EEditorBridge);
     suppressSync = true;
     view.destroy();
     view = null;
   }
-  clearOpenedDocumentScanTimer();
   // A workspace-owned predictor survives keyed editor remounts. Only an
   // isolated component instance owns (and therefore disposes) its fallback,
   // including the V2 Worker and pending async requests.
@@ -554,7 +541,6 @@ watch(
         changes: { from: 0, to: view.state.doc.length, insert: val },
       });
       suppressSync = false;
-      refreshOpenedDocumentScan(val);
     }
   },
 );
@@ -579,19 +565,6 @@ function onCompositionEndApplyDeferred(): void {
   }, 0);
 }
 
-function onCompositionStartRefreshScan(): void {
-  scanPausedForComposition = true;
-  clearOpenedDocumentScanTimer();
-}
-
-function onCompositionEndRefreshScan(): void {
-  scanPausedForComposition = false;
-  setTimeout(() => {
-    if (!view || view.composing || view.compositionStarted) return;
-    refreshOpenedDocumentScan(view.state.doc.toString());
-  }, 0);
-}
-
 function getEditorView(): EditorView | null {
   return view;
 }
@@ -600,7 +573,18 @@ function focus(): void {
   view?.focus();
 }
 
-defineExpose({ getEditorView, focus, predictor });
+async function settlePendingAutocompleteFeedback(): Promise<void> {
+  if (view) {
+    (
+      view.dom as HTMLElement & {
+        __jotluckSettlePendingAccepted?: () => void;
+      }
+    ).__jotluckSettlePendingAccepted?.();
+  }
+  await flushCompletionStorageMutations();
+}
+
+defineExpose({ getEditorView, focus, predictor, settlePendingAutocompleteFeedback });
 </script>
 
 <style scoped>
