@@ -1,3 +1,5 @@
+import type { SupportedLocale, TranslationArgs } from './i18n';
+
 export type ThemeRuntime = 'declarative' | 'official-code' | 'trusted-code';
 
 export type ThemePermission =
@@ -530,6 +532,15 @@ export interface ThemeHostToastApi {
   show: (message: string) => void;
 }
 
+export interface ThemeHostI18nApi {
+  readonly locale: SupportedLocale;
+  getLocale: () => SupportedLocale;
+  t: (key: string, args?: TranslationArgs) => string;
+  formatDate: (value: Date | number, options?: Intl.DateTimeFormatOptions) => string;
+  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string;
+  onChange: (listener: (locale: SupportedLocale) => void) => () => void;
+}
+
 export interface ThemeHostContext {
   readonly themeId: string;
   readonly manifest?: ThemePackManifest;
@@ -542,6 +553,7 @@ export interface ThemeHostContext {
   readonly editor: ThemeHostEditorApi;
   readonly dialogs: ThemeHostDialogApi;
   readonly toast: ThemeHostToastApi;
+  readonly i18n: ThemeHostI18nApi;
   readonly commerce: ThemeCommerceProvider;
   readonly appState: Record<string, unknown>;
   readonly ui: Record<string, unknown>;

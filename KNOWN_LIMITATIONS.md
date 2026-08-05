@@ -1,13 +1,13 @@
 # Known Limitations
 
-This document describes limitations for JotLuck `v0.10.0-rc.1`. These are not
+This document describes limitations for JotLuck `v0.11.0`. These are not
 marketing claims; they are the remaining release constraints and expected
 behavior boundaries.
 
-## Internal Preview Candidate Status
+## Signing Candidate Status
 
-- `v0.10.0-rc.1` is an unpublished, unsigned internal candidate. It is not a
-  formal RC or stable release, and no official public installer is currently available.
+- `v0.11.0` is an unpublished, unsigned signing candidate. It is not a formal
+  public or stable release, and no official public installer is currently available.
 - This candidate does not claim complete installed-app release evidence, final
   Rust audit evidence, signing, notarization, or host-specific validation for
   every supported platform.
@@ -52,9 +52,17 @@ behavior boundaries.
 - This preview records that upstream risk instead of attempting a high-risk
   Tantivy upgrade during release hardening. A successful audit process exit
   must therefore not be described as a zero-warning dependency result.
-- Opening `.md/.markdown/.mdx/.txt` from Windows starts a single-file read-only
+- Opening `.md` / `.markdown` / `.mdx` / `.txt` from Windows starts a single-file read-only
   session. It intentionally does not scan the parent directory as a notebook.
   Editing must be explicitly enabled and saves only the current file.
+- Opening `.docx` / `.pdf` / `.xlsx` / `.xls` starts an isolated read-only import
+  session. The preview maps recoverable document semantics to Markdown; it does
+  not reproduce Office or PDF layout pixel-for-pixel, perform PDF OCR, or edit
+  the source document in place. Scanned, encrypted, or textless PDFs cannot be
+  previewed as text. Unsupported document structures produce explicit warnings.
+- Saving an imported document creates a new `.md` file and, when needed, a new
+  assets directory. JotLuck never overwrites the source document. A stale source
+  revision disables saving until the document is converted again.
 
 ## Theme Import Limits
 
@@ -67,9 +75,10 @@ behavior boundaries.
 
 ## Data And Asset Behavior
 
-- Notes are plain text note files. The app opens `.md`, `.markdown`, `.mdx`,
-  and `.txt`; the Windows installer registers JotLuck as an optional Open With handler
-  for all four extensions and does not replace the user's current default app.
+- Notes are plain text note files. The app edits `.md`, `.markdown`, `.mdx`, and
+  `.txt`, and imports `.docx`, `.pdf`, `.xlsx`, and `.xls` read-only. The Windows
+  installer registers JotLuck as an optional Open With handler for all eight
+  extensions and does not replace the user's current default app.
 - Images are written into `assets/` and referenced by relative Markdown paths.
 - Deleting a note does not automatically delete assets because assets may be
   shared by multiple notes.

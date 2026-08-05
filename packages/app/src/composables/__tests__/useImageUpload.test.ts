@@ -218,7 +218,9 @@ describe('useImageUpload', () => {
     const writtenPath = writeBinary.mock.calls[0]?.[0] as string;
     expect(cleanupFailures).toHaveLength(1);
     expect(cleanupFailures[0]).toMatchObject({ path: writtenPath });
-    expect(cleanupFailures[0]?.message).toContain('文件被占用');
+    expect(cleanupFailures[0]?.cause).toBeInstanceOf(Error);
+    expect(cleanupFailures[0]?.message).not.toContain('文件被占用');
+    expect(cleanupFailures[0]?.message).toContain('操作失败');
     expect(upload.uploadError.value).toContain(writtenPath);
     expect(upload.uploadError.value).toContain('无法清理');
   });

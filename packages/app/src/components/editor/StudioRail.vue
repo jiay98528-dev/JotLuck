@@ -1,6 +1,6 @@
 <template>
-  <aside class="studio-rail" data-testid="studio-rail" aria-label="生产工具轨">
-    <div class="studio-rail__label">生产</div>
+  <aside class="studio-rail" data-testid="studio-rail" :aria-label="t('editor.studioRail.aria')">
+    <div class="studio-rail__label">{{ t('editor.studioRail.label') }}</div>
     <div class="studio-rail__actions">
       <ShellActionButton
         v-for="action in actions"
@@ -23,9 +23,12 @@
 
 <script setup lang="ts">
 import FormatToolbar from './FormatToolbar.vue';
+import { useI18n } from 'vue-i18n';
 import ShellActionButton from '@/components/layout/ShellActionButton.vue';
 import type { FormatAction, ParagraphPreset } from '@/types';
 import type { ShellAction } from '@/types/theme-pack';
+
+const { t } = useI18n();
 
 withDefaults(
   defineProps<{

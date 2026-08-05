@@ -10,6 +10,15 @@ const hooks = readFileSync(
   path.join(projectRoot, 'packages/app/src-tauri/installer-assets/hooks.nsh'),
   'utf8',
 );
+const installerLanguages = ['SimpChinese', 'English', 'Japanese', 'Korean', 'French'].map(
+  (language) => ({
+    language,
+    source: readFileSync(
+      path.join(projectRoot, `packages/app/src-tauri/installer-assets/${language}.nsh`),
+      'utf8',
+    ),
+  }),
+);
 
 describe('Windows optional file association contract', () => {
   it('does not use Tauri APP_ASSOCIATE, which overwrites the current default ProgID', () => {
@@ -17,9 +26,16 @@ describe('Windows optional file association contract', () => {
     const optionalMacro = hooks.match(
       /!macro _JotLuck_REGISTER_OPTIONAL_ASSOC[\s\S]*?!macroend/u,
     )?.[0];
+    const documentMacro = hooks.match(
+      /!macro _JotLuck_REGISTER_DOCUMENT_ASSOC[\s\S]*?!macroend/u,
+    )?.[0];
     expect(optionalMacro).toContain('OpenWithProgids');
     expect(optionalMacro).toContain('SupportedTypes');
     expect(optionalMacro).not.toContain('Software\\Classes\\${EXT}" ""');
+    expect(documentMacro).toContain('OpenWithProgids');
+    expect(documentMacro).toContain('SupportedTypes');
+    expect(documentMacro).not.toContain('Software\\Classes\\${EXT}" ""');
+    expect(hooks).not.toContain('\\UserChoice');
   });
 
   it.each(['.md', '.markdown', '.mdx', '.txt'])(
@@ -27,6 +43,51 @@ describe('Windows optional file association contract', () => {
     (extension) => {
       expect(hooks).toContain(`_JotLuck_REGISTER_OPTIONAL_ASSOC "${extension}"`);
       expect(hooks).toContain(`_JotLuck_REMOVE_OPTIONAL_ASSOC "${extension}"`);
+    },
+  );
+
+  it.each(['.docx', '.pdf', '.xlsx', '.xls'])(
+    'registers and removes %s through the isolated document-import ProgID',
+    (extension) => {
+      expect(hooks).toContain(`_JotLuck_REGISTER_DOCUMENT_ASSOC "${extension}"`);
+      expect(hooks).toContain(`_JotLuck_REMOVE_DOCUMENT_ASSOC "${extension}"`);
+      expect(hooks).toContain(
+        `Capabilities\\FileAssociations" "${extension}" "JotLuck.DocumentImport"`,
+      );
+    },
+  );
+
+  it('registers all eight capabilities without writing an extension default value', () => {
+    const postInstall = hooks.match(/!macro NSIS_HOOK_POSTINSTALL[\s\S]*?!macroend/u)?.[0];
+    expect(postInstall).toContain('WriteRegStr SHCTX "Software\\RegisteredApplications" "JotLuck"');
+    expect(postInstall).toContain('Software\\Classes\\JotLuck.Note\\shell\\open\\command');
+    expect(postInstall).toContain(
+      'Software\\Classes\\JotLuck.DocumentImport\\shell\\open\\command',
+    );
+    expect(postInstall).not.toMatch(
+      /WriteRegStr SHCTX "Software\\Classes\\\.(?:md|markdown|mdx|txt|docx|pdf|xlsx|xls)" ""/u,
+    );
+  });
+
+  it('prevents candidate ProgIDs from silently becoming public file type defaults', () => {
+    const preventionMacro = hooks.match(
+      /!macro _JotLuck_PREVENT_SILENT_DEFAULT[\s\S]*?!macroend/u,
+    )?.[0];
+    const postInstall = hooks.match(/!macro NSIS_HOOK_POSTINSTALL[\s\S]*?!macroend/u)?.[0];
+
+    expect(preventionMacro).toContain('AllowSilentDefaultTakeOver');
+    expect(preventionMacro).toContain('RegSetValueExW');
+    expect(preventionMacro).toContain('i 0, p 0, i 0');
+    expect(preventionMacro).toContain('${If} $8 == 0');
+    expect(postInstall).toContain('_JotLuck_PREVENT_SILENT_DEFAULT "JotLuck.Note"');
+    expect(postInstall).toContain('_JotLuck_PREVENT_SILENT_DEFAULT "JotLuck.DocumentImport"');
+  });
+
+  it.each(installerLanguages)(
+    'defines both ProgID descriptions in the $language installer language table',
+    ({ source }) => {
+      expect(source).toContain('LangString JotLuckFileType');
+      expect(source).toContain('LangString JotLuckDocumentType');
     },
   );
 

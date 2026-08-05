@@ -24,6 +24,8 @@ import {
   removeInstalledThemePack,
   validateThemePackage,
 } from '@/services/ThemePackInstaller';
+import { onLocaleChange, translate } from '@/i18n';
+import { createUserMessageError, localizeUserError } from '@/services/command-errors';
 
 const THEME_STATE_KEY = 'jotluck:theme-state:v2';
 export const THEME_CENTER_SHOW_DEV_THEMES_KEY = 'jotluck:theme-center:show-dev-themes';
@@ -173,6 +175,11 @@ export const useThemeStore = defineStore('theme', () => {
   const entitlements = ref<Record<string, ThemeEntitlementDescriptor>>({});
   const commerceError = ref<string | null>(null);
   const showDeveloperThemesInCatalog = ref(readShowDeveloperThemes());
+  const stopLocaleSync = onLocaleChange(() => {
+    registryThemes.value = getAllRegistryThemePacks();
+    if (initialized.value) apply();
+  });
+  void stopLocaleSync;
 
   const themes = computed(() => uniqueThemes([...registryThemes.value, ...installedThemes.value]));
   const commerce = createMockThemeCommerceProvider(() => themes.value);
@@ -224,7 +231,7 @@ export const useThemeStore = defineStore('theme', () => {
       entitlements.value = await commerce.refreshEntitlements();
       commerceError.value = null;
     } catch (error) {
-      commerceError.value = error instanceof Error ? error.message : String(error);
+      commerceError.value = localizeUserError(error, 'theme.center.entitlementRefreshFailed');
       entitlements.value = Object.fromEntries(
         themes.value.map((pack) => [
           pack.manifest.id,
@@ -232,7 +239,7 @@ export const useThemeStore = defineStore('theme', () => {
             state: 'offline-unknown',
             checkedAt: new Date().toISOString(),
             provider: commerce.id,
-            note: 'Entitlement refresh failed; installed themes remain usable offline.',
+            note: translate('theme.center.entitlementRefreshFailed'),
           } satisfies ThemeEntitlementDescriptor,
         ]),
       );
@@ -297,7 +304,7 @@ export const useThemeStore = defineStore('theme', () => {
 
   function activateTheme(themeId: string): void {
     const pack = themes.value.find((item) => item.manifest.id === themeId);
-    if (!pack) throw new Error(`主题不存在: ${themeId}`);
+    if (!pack) throw createUserMessageError('theme.center.unknownTheme', { id: themeId });
     activeThemeId.value = themeId;
     previewThemeId.value = null;
     persistThemeId(themeId);
@@ -310,7 +317,7 @@ export const useThemeStore = defineStore('theme', () => {
 
   function previewThemeById(themeId: string): void {
     if (!themes.value.some((pack) => pack.manifest.id === themeId)) {
-      throw new Error(`主题不存在: ${themeId}`);
+      throw createUserMessageError('theme.center.unknownTheme', { id: themeId });
     }
     previewThemeId.value = themeId;
     apply();
@@ -340,7 +347,9 @@ export const useThemeStore = defineStore('theme', () => {
   function uninstallTheme(themeId: string): void {
     const pack = themes.value.find((item) => item.manifest.id === themeId);
     if (!pack) return;
-    if (pack.readonly) throw new Error(`内置主题不可卸载: ${themeId}`);
+    if (pack.readonly) {
+      throw createUserMessageError('theme.center.builtinCannotRemove', { id: themeId });
+    }
     removeInstalledThemePack(themeId);
     refreshRegistry();
     if (activeThemeId.value === themeId) {

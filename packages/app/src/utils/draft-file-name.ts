@@ -1,4 +1,5 @@
-const FALLBACK_DRAFT_BASENAME = '新MD文档';
+import { translate } from '@/i18n';
+
 const INVALID_FILE_NAME_CHARS = /[<>:"/\\|?*\u0000-\u001f]/g;
 
 function cleanHeadingText(value: string): string {
@@ -37,6 +38,6 @@ export function getDraftMarkdownFileName(content: string): string {
     }
   }
 
-  const basename = sanitizeFileBasename(bestTitle) || FALLBACK_DRAFT_BASENAME;
+  const basename = sanitizeFileBasename(bestTitle) || translate('common.newMarkdownDocument');
   return `${basename}.md`;
 }

@@ -16,15 +16,15 @@
       >
         <header class="theme-center__header">
           <div>
-            <span class="theme-center__eyebrow">外观</span>
-            <h2 id="theme-center-title">选择主题</h2>
-            <p>为写作环境选择合适的界面风格。预览不会改变当前设置，使用后会自动记住。</p>
+            <span class="theme-center__eyebrow">{{ t('theme.center.appearance') }}</span>
+            <h2 id="theme-center-title">{{ t('theme.center.title') }}</h2>
+            <p>{{ t('theme.center.description') }}</p>
           </div>
           <button
             class="theme-center__close"
             type="button"
             data-dialog-initial-focus
-            aria-label="关闭主题中心"
+            :aria-label="t('theme.center.close')"
             @click="close"
           >
             ×
@@ -33,19 +33,19 @@
 
         <section class="theme-center__status">
           <div>
-            <span>当前使用</span>
+            <span>{{ t('theme.center.current') }}</span>
             <strong>{{ theme.activeThemeLabel }}</strong>
           </div>
-          <small v-if="theme.previewThemeId">正在预览，关闭窗口后会恢复当前主题</small>
-          <small v-else>所有主题都可以离线使用</small>
+          <small v-if="theme.previewThemeId">{{ t('theme.center.previewing') }}</small>
+          <small v-else>{{ t('theme.center.offline') }}</small>
         </section>
 
         <div class="theme-center__body">
           <main class="theme-center__main">
             <section class="theme-section">
               <div class="theme-section__head">
-                <h3>内置主题</h3>
-                <p>这些主题随 JotLuck 一起提供，适合日常写作和整理。</p>
+                <h3>{{ t('theme.center.builtin') }}</h3>
+                <p>{{ t('theme.center.builtinDescription') }}</p>
               </div>
 
               <div class="theme-grid">
@@ -61,13 +61,13 @@
                   <button
                     class="theme-card__preview"
                     type="button"
-                    :aria-label="`查看 ${pack.manifest.name}`"
+                    :aria-label="t('theme.center.view', { name: pack.manifest.name })"
                     @click="select(pack.manifest.id)"
                   >
                     <img
                       v-if="previewImage(pack)"
                       :src="previewImage(pack)"
-                      :alt="`${pack.manifest.name} 首页预览`"
+                      :alt="t('theme.center.previewAlt', { name: pack.manifest.name })"
                     />
                     <span v-else class="theme-card__fallback" aria-hidden="true">
                       <span />
@@ -80,7 +80,7 @@
                     <div class="theme-card__title-row">
                       <h4>{{ pack.manifest.name }}</h4>
                       <span v-if="pack.manifest.id === theme.activeThemeId" class="theme-pill">
-                        使用中
+                        {{ t('theme.center.inUse') }}
                       </span>
                     </div>
                     <p>{{ themeSummary(pack) }}</p>
@@ -94,7 +94,7 @@
 
                   <div class="theme-card__actions">
                     <button class="theme-action" type="button" @click="preview(pack.manifest.id)">
-                      预览
+                      {{ t('theme.center.preview') }}
                     </button>
                     <button
                       v-if="theme.previewThemeId === pack.manifest.id"
@@ -102,7 +102,7 @@
                       type="button"
                       @click="theme.clearPreview()"
                     >
-                      结束预览
+                      {{ t('theme.center.endPreview') }}
                     </button>
                     <button
                       class="theme-action theme-action--primary"
@@ -110,7 +110,11 @@
                       :disabled="pack.manifest.id === theme.activeThemeId"
                       @click="activate(pack.manifest.id)"
                     >
-                      {{ pack.manifest.id === theme.activeThemeId ? '已使用' : '使用' }}
+                      {{
+                        pack.manifest.id === theme.activeThemeId
+                          ? t('theme.center.used')
+                          : t('theme.center.use')
+                      }}
                     </button>
                   </div>
                 </article>
@@ -119,8 +123,8 @@
 
             <section v-if="showDeveloperThemes" class="theme-section theme-section--developer">
               <div class="theme-section__head">
-                <h3>开发主题</h3>
-                <p>仅在本机开发开关启用时显示，用于内部检查主题能力。</p>
+                <h3>{{ t('theme.center.developer') }}</h3>
+                <p>{{ t('theme.center.developerDescription') }}</p>
               </div>
 
               <div class="theme-grid theme-grid--compact">
@@ -135,7 +139,7 @@
                   </div>
                   <div class="theme-card__actions">
                     <button class="theme-action" type="button" @click="preview(pack.manifest.id)">
-                      预览
+                      {{ t('theme.center.preview') }}
                     </button>
                     <button
                       class="theme-action theme-action--primary"
@@ -143,7 +147,11 @@
                       :disabled="pack.manifest.id === theme.activeThemeId"
                       @click="activate(pack.manifest.id)"
                     >
-                      {{ pack.manifest.id === theme.activeThemeId ? '已使用' : '使用' }}
+                      {{
+                        pack.manifest.id === theme.activeThemeId
+                          ? t('theme.center.used')
+                          : t('theme.center.use')
+                      }}
                     </button>
                   </div>
                 </article>
@@ -158,11 +166,11 @@
                   v-if="previewImage(selectedTheme)"
                   class="theme-detail__image"
                   :src="previewImage(selectedTheme)"
-                  :alt="`${selectedTheme.manifest.name} 首页预览`"
+                  :alt="t('theme.center.previewAlt', { name: selectedTheme.manifest.name })"
                 />
 
                 <div class="theme-detail__head">
-                  <span class="theme-center__eyebrow">主题说明</span>
+                  <span class="theme-center__eyebrow">{{ t('theme.center.details') }}</span>
                   <h3>{{ selectedTheme.manifest.name }}</h3>
                   <p>
                     {{ selectedTheme.officialProfile?.headline || themeSummary(selectedTheme) }}
@@ -170,7 +178,7 @@
                 </div>
 
                 <div class="theme-detail__group">
-                  <h4>适合</h4>
+                  <h4>{{ t('theme.center.suitable') }}</h4>
                   <div class="theme-token-list">
                     <span v-for="item in selectedTheme.officialProfile?.bestFor ?? []" :key="item">
                       {{ item }}
@@ -179,7 +187,7 @@
                 </div>
 
                 <div class="theme-detail__group">
-                  <h4>界面特点</h4>
+                  <h4>{{ t('theme.center.features') }}</h4>
                   <ul>
                     <li
                       v-for="item in selectedTheme.officialProfile?.visualFeatures ?? []"
@@ -192,36 +200,34 @@
 
                 <div class="theme-detail__facts">
                   <div>
-                    <span>阅读宽度</span>
+                    <span>{{ t('theme.center.readingWidth') }}</span>
                     <strong>{{ readingWidthLabel(selectedTheme) }}</strong>
                   </div>
                   <div>
-                    <span>动效</span>
+                    <span>{{ t('theme.center.motion') }}</span>
                     <strong>{{ motionLabel(selectedTheme) }}</strong>
                   </div>
                   <div>
-                    <span>性能</span>
+                    <span>{{ t('theme.center.performance') }}</span>
                     <strong>{{ performanceLabel(selectedTheme) }}</strong>
                   </div>
                 </div>
               </div>
-              <div v-else class="theme-empty">选择一个主题查看说明。</div>
+              <div v-else class="theme-empty">{{ t('theme.center.selectHint') }}</div>
             </section>
 
             <section class="theme-import">
               <div>
-                <h3>导入主题文件</h3>
-                <p>开发者实验功能。只导入你信任来源的 `.mltheme` 或 `.zip` 主题包。</p>
+                <h3>{{ t('theme.center.importTitle') }}</h3>
+                <p>{{ t('theme.center.importDescription') }}</p>
               </div>
               <div class="theme-import__risk" role="note">
-                <strong>本地代码主题可执行主题作者提供的代码。</strong>
-                <span>
-                  JotLuck 不会把它当作社区市场内容审核；导入后主题可接管已暴露的 UX 插槽。
-                </span>
+                <strong>{{ t('theme.center.riskTitle') }}</strong>
+                <span>{{ t('theme.center.riskBody') }}</span>
               </div>
               <label class="theme-import__confirm">
                 <input v-model="importTrustAccepted" type="checkbox" />
-                <span>我确认该主题包来自可信来源，并理解这是开发者实验功能。</span>
+                <span>{{ t('theme.center.trust') }}</span>
               </label>
               <input
                 ref="fileInput"
@@ -236,7 +242,7 @@
                 :disabled="!importTrustAccepted"
                 @click="openImportPicker"
               >
-                选择主题包
+                {{ t('theme.center.choosePackage') }}
               </button>
               <p v-if="importMessage" class="theme-center__message">{{ importMessage }}</p>
               <p v-if="importError" class="theme-center__message theme-center__message--error">
@@ -251,14 +257,14 @@
                 >
                   <div>
                     <strong>{{ pack.manifest.name }}</strong>
-                    <span>已安装</span>
+                    <span>{{ t('theme.center.installed') }}</span>
                   </div>
                   <button
                     class="theme-action"
                     type="button"
                     @click="theme.uninstallTheme(pack.manifest.id)"
                   >
-                    移除
+                    {{ t('theme.center.remove') }}
                   </button>
                 </article>
               </div>
@@ -275,10 +281,13 @@ import { computed, ref, watch } from 'vue';
 import { useThemeStore } from '@/stores/theme';
 import type { InstalledThemePack } from '@/types/theme-pack';
 import { useDialogFocus } from '@/composables/useDialogFocus';
+import { localizeUserError } from '@/services/command-errors';
+import { useI18n } from 'vue-i18n';
 
 const props = defineProps<{
   visible: boolean;
 }>();
+const { t } = useI18n();
 
 const emit = defineEmits<{
   'update:visible': [visible: boolean];
@@ -293,8 +302,17 @@ useDialogFocus({
 
 const theme = useThemeStore();
 const fileInput = ref<HTMLInputElement | null>(null);
-const importMessage = ref('');
-const importError = ref('');
+const importedThemeName = ref('');
+const importErrorRaw = ref('');
+const trustError = ref(false);
+const importMessage = computed(() =>
+  importedThemeName.value
+    ? t('theme.center.installedMessage', { name: importedThemeName.value })
+    : '',
+);
+const importError = computed(() =>
+  trustError.value ? t('theme.center.trustRequired') : importErrorRaw.value,
+);
 const importTrustAccepted = ref(false);
 const selectedThemeId = ref<string | null>(null);
 
@@ -333,32 +351,32 @@ function previewImage(pack: InstalledThemePack): string | undefined {
 
 function themeSummary(pack: InstalledThemePack): string {
   return (
-    pack.officialProfile?.story ?? pack.manifest.description ?? '为当前写作环境应用新的界面风格。'
+    pack.officialProfile?.story ?? pack.manifest.description ?? t('theme.center.summaryFallback')
   );
 }
 
 function readingWidthLabel(pack: InstalledThemePack): string {
   const width = pack.officialProfile?.uiProfile.readingWidth;
-  if (width === 'immersive') return '沉浸版心';
-  if (width === 'wide') return '宽版心';
-  if (width === 'compact') return '紧凑版心';
-  return '标准版心';
+  if (width === 'immersive') return t('theme.center.widthImmersive');
+  if (width === 'wide') return t('theme.center.widthWide');
+  if (width === 'compact') return t('theme.center.widthCompact');
+  return t('theme.center.widthStandard');
 }
 
 function motionLabel(pack: InstalledThemePack): string {
   const motion = pack.officialProfile?.uiProfile.motionIntensity;
-  if (motion === 'none') return '无动效';
-  if (motion === 'low') return '轻动效';
-  if (motion === 'high') return '强动效';
-  return '适中动效';
+  if (motion === 'none') return t('theme.center.motionNone');
+  if (motion === 'low') return t('theme.center.motionLow');
+  if (motion === 'high') return t('theme.center.motionHigh');
+  return t('theme.center.motionMedium');
 }
 
 function performanceLabel(pack: InstalledThemePack): string {
   const level = pack.officialProfile?.performanceLevel ?? 1;
-  if (level <= 1) return '轻量';
-  if (level <= 3) return '标准';
-  if (level === 4) return '沉浸';
-  return '重载';
+  if (level <= 1) return t('theme.center.performanceLight');
+  if (level <= 3) return t('theme.center.performanceStandard');
+  if (level === 4) return t('theme.center.performanceImmersive');
+  return t('theme.center.performanceHeavy');
 }
 
 function preview(themeId: string): void {
@@ -373,7 +391,7 @@ function activate(themeId: string): void {
 
 function openImportPicker(): void {
   if (!importTrustAccepted.value) {
-    importError.value = '请先确认主题包来自可信来源。';
+    trustError.value = true;
     return;
   }
   fileInput.value?.click();
@@ -383,19 +401,20 @@ async function onImportFile(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   input.value = '';
-  importError.value = '';
-  importMessage.value = '';
+  importErrorRaw.value = '';
+  importedThemeName.value = '';
+  trustError.value = false;
   if (!file) return;
   if (!importTrustAccepted.value) {
-    importError.value = '请先确认主题包来自可信来源。';
+    trustError.value = true;
     return;
   }
   try {
     const pack = await theme.importThemePack(file);
-    importMessage.value = `已安装：${pack.manifest.name}`;
+    importedThemeName.value = pack.manifest.name;
     selectedThemeId.value = pack.manifest.id;
   } catch (error) {
-    importError.value = error instanceof Error ? error.message : String(error);
+    importErrorRaw.value = localizeUserError(error);
   }
 }
 </script>

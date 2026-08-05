@@ -125,14 +125,52 @@ export async function ensureEditorReady(page: Page, noteLabel: string = '快速�
   await page.waitForTimeout(300);
 }
 
-/** 创建一篇空白笔记，并等待编辑器可交互。 */
-export async function createBlankNote(page: Page): Promise<void> {
+/** 创建一篇空白笔记，并等待新文件与编辑器所有权完成切换。 */
+export async function createBlankNote(page: Page): Promise<string> {
+  const beforePaths = await page.evaluate(() => {
+    const raw = localStorage.getItem('jotluck-mockfs');
+    if (!raw) return [];
+    const data = JSON.parse(raw) as { files?: Record<string, unknown> };
+    return Object.keys(data.files ?? {});
+  });
   await page.locator('.wing-new-btn').click();
   await expect(page.locator('.tpl-card.blank-card')).toBeVisible({ timeout: 5000 });
   await page.locator('.tpl-card.blank-card').click();
+  await expect(page.locator('.tpl-card.blank-card')).toHaveCount(0);
   await expect(page.locator('.cm-editor')).toBeVisible({ timeout: 10000 });
   await expect(page.locator('.cm-content')).toBeVisible({ timeout: 10000 });
-  await page.waitForTimeout(300);
+
+  let createdPath = '';
+  await expect
+    .poll(
+      async () => {
+        const next = await page.evaluate(() => {
+          const raw = localStorage.getItem('jotluck-mockfs');
+          if (!raw) return { paths: [], files: {} };
+          const data = JSON.parse(raw) as {
+            files?: Record<string, { content?: string }>;
+          };
+          return { paths: Object.keys(data.files ?? {}), files: data.files ?? {} };
+        });
+        createdPath =
+          next.paths.find(
+            (path) => !beforePaths.includes(path) && /\.(?:md|markdown|mdx|txt)$/iu.test(path),
+          ) ?? '';
+        if (!createdPath) return false;
+        const state = await page.evaluate(() => window.__jotluck_e2e?.debugState?.());
+        const normalize = (path: string): string => path.replace(/\\/gu, '/').toLowerCase();
+        return (
+          normalize(state?.activePath ?? '') === normalize(createdPath) &&
+          state?.isNoteSwitching === false &&
+          (state?.currentContent ?? '').trimEnd() ===
+            (next.files[createdPath]?.content ?? '').trimEnd()
+        );
+      },
+      { timeout: 10000 },
+    )
+    .toBe(true);
+
+  return createdPath;
 }
 
 /** 等待笔记索引完成，确保搜索结果源已准备好。 */
@@ -205,6 +243,9 @@ export async function waitForAppReady(page: Page): Promise<void> {
   // Without this, the welcome overlay intercepts all pointer events in tests.
   await page.addInitScript(() => {
     localStorage.setItem('jotluck:welcome:completed', '1');
+    if (!localStorage.getItem('jotluck:locale:v1')) {
+      localStorage.setItem('jotluck:locale:v1', 'zh-CN');
+    }
   });
   try {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -256,6 +297,7 @@ export async function waitForCleanAppReady(page: Page): Promise<void> {
     sessionStorage.clear();
     sessionStorage.setItem(cleanBootMarker, '1');
     localStorage.setItem('jotluck:welcome:completed', '1');
+    localStorage.setItem('jotluck:locale:v1', 'zh-CN');
   });
   await waitForAppReady(page);
 }
@@ -301,6 +343,7 @@ export async function resetAppState(page: Page): Promise<void> {
     keysToRemove.forEach((k) => localStorage.removeItem(k));
     sessionStorage.clear();
     localStorage.setItem('jotluck:welcome:completed', '1');
+    localStorage.setItem('jotluck:locale:v1', 'zh-CN');
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForShellReady(page);

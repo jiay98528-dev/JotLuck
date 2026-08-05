@@ -11,6 +11,7 @@ import {
   getEditorContentFromBridge,
   clearEditor,
   appendInEditor,
+  createBlankNote,
   waitForAutoSave,
 } from '../helpers/test-utils';
 
@@ -45,19 +46,7 @@ test.describe('边界与压力测试', () => {
   // 1. Empty note creation
   // ----------------------------------------------------------
   test('should handle empty note creation', async ({ page }) => {
-    // Click the new-note button in the left wing
-    await page.locator('.wing-new-btn').click();
-
-    // Template dialog should appear
-    await expect(page.locator('.modal-overlay')).toBeVisible({ timeout: 3000 });
-    await expect(page.locator('.tpl-card.blank-card')).toBeVisible();
-
-    // Select the blank note option
-    await page.locator('.tpl-card.blank-card').click();
-
-    // Dialog should close and editor should be active
-    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 3000 });
-    await expect(page.locator('.cm-content')).toBeVisible({ timeout: 5000 });
+    await createBlankNote(page);
 
     // Verify editor contains the default blank-note content (not empty,
     // the blank template seeds '# 新笔记')

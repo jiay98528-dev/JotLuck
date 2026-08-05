@@ -157,7 +157,7 @@ describe('Exporter PDF terminal states', () => {
 
     await expect(resultPromise).resolves.toMatchObject({
       success: false,
-      error: '无法打开 PDF 打印对话框：print unavailable',
+      error: '无法打开 PDF 打印对话框',
     });
     iframe.dispatchEvent(new Event('load'));
     expect(print).toHaveBeenCalledTimes(1);

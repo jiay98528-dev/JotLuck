@@ -15,7 +15,7 @@
 
 - Node.js 20+
 - pnpm 9+，仓库当前锁定 pnpm 11.x
-- Rust 1.77.2+，仅桌面开发与打包需要
+- Rust 1.88+，仅桌面开发与打包需要
 
 ```powershell
 pnpm.cmd install

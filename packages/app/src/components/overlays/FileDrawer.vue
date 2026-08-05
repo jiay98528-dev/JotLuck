@@ -13,7 +13,7 @@
         <aside
           class="file-drawer"
           role="dialog"
-          aria-label="文件浏览器"
+          :aria-label="t('fileDrawer.aria')"
           aria-modal="true"
           @click="closeContextMenu"
         >
@@ -23,7 +23,7 @@
             <div class="drawer-breadcrumb">
               <button
                 class="breadcrumb-item breadcrumb-root"
-                title="返回根目录"
+                :title="t('fileDrawer.backToRoot')"
                 @click="$emit('navigate-dir', rootDir)"
               >
                 <svg
@@ -66,8 +66,8 @@
                   v-model="searchQuery"
                   class="search-input"
                   type="text"
-                  placeholder="筛选文件..."
-                  aria-label="筛选文件"
+                  :placeholder="t('fileDrawer.filterPlaceholder')"
+                  :aria-label="t('fileDrawer.filterAria')"
                   autocomplete="off"
                   spellcheck="false"
                   @input="onSearchInput"
@@ -75,7 +75,7 @@
                 <button
                   v-if="searchQuery.length > 0"
                   class="search-clear"
-                  aria-label="清除筛选"
+                  :aria-label="t('fileDrawer.clearFilter')"
                   @click="searchQuery = ''"
                 >
                   <svg
@@ -95,7 +95,7 @@
               <button
                 class="switch-notebook-btn"
                 :disabled="switchingNotebook"
-                title="切换笔记本"
+                :title="t('fileDrawer.switchNotebook')"
                 @click="requestOpenNotebook"
               >
                 <svg
@@ -113,10 +113,18 @@
                   <path d="M12 11v5" stroke-linecap="round" />
                   <path d="m10 14 2 2 2-2" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
-                <span>{{ switchingNotebook ? '切换中…' : '切换笔记本' }}</span>
+                <span>
+                  {{
+                    switchingNotebook ? t('fileDrawer.switching') : t('fileDrawer.switchNotebook')
+                  }}
+                </span>
               </button>
 
-              <button class="new-note-btn" title="新建笔记" @click="$emit('create-file')">
+              <button
+                class="new-note-btn"
+                :title="t('fileDrawer.newNote')"
+                @click="$emit('create-file')"
+              >
                 <svg
                   width="14"
                   height="14"
@@ -129,7 +137,7 @@
                   <line x1="12" y1="5" x2="12" y2="19" stroke-linecap="round" />
                   <line x1="5" y1="12" x2="19" y2="12" stroke-linecap="round" />
                 </svg>
-                <span>新建笔记</span>
+                <span>{{ t('fileDrawer.newNote') }}</span>
               </button>
             </div>
           </div>
@@ -140,7 +148,12 @@
           <!-- ===== Body: States ===== -->
           <div class="drawer-body">
             <!-- Loading: Skeleton -->
-            <div v-if="loading" class="drawer-skeleton" role="status" aria-label="加载中">
+            <div
+              v-if="loading"
+              class="drawer-skeleton"
+              role="status"
+              :aria-label="t('fileDrawer.loading')"
+            >
               <div
                 v-for="i in 8"
                 :key="i"
@@ -193,7 +206,7 @@
                     stroke-linejoin="round"
                   />
                 </svg>
-                <span>重试</span>
+                <span>{{ t('fileDrawer.retry') }}</span>
               </button>
             </div>
 
@@ -218,8 +231,8 @@
                 <line x1="12" y1="18" x2="12" y2="12" stroke-linecap="round" />
                 <line x1="9" y1="15" x2="15" y2="15" stroke-linecap="round" />
               </svg>
-              <p class="state-text">还没有笔记</p>
-              <p class="state-hint">创建你的第一篇笔记，开始记录</p>
+              <p class="state-text">{{ t('fileDrawer.empty') }}</p>
+              <p class="state-hint">{{ t('fileDrawer.emptyHint') }}</p>
               <button class="state-action" @click="$emit('create-file')">
                 <svg
                   width="14"
@@ -233,7 +246,7 @@
                   <line x1="12" y1="5" x2="12" y2="19" stroke-linecap="round" />
                   <line x1="5" y1="12" x2="19" y2="12" stroke-linecap="round" />
                 </svg>
-                <span>新建笔记</span>
+                <span>{{ t('fileDrawer.newNote') }}</span>
               </button>
             </div>
 
@@ -243,7 +256,7 @@
               ref="treeContainerRef"
               class="drawer-tree"
               role="tree"
-              aria-label="文件列表"
+              :aria-label="t('fileDrawer.fileList')"
             >
               <template v-if="displayNodes.length > 0">
                 <div
@@ -421,8 +434,8 @@
                 v-if="searchQuery.length > 0 && displayNodes.length === 0"
                 class="drawer-state drawer-state-search"
               >
-                <p class="state-text">无匹配文件</p>
-                <p class="state-hint">尝试其他关键词</p>
+                <p class="state-text">{{ t('fileDrawer.noMatch') }}</p>
+                <p class="state-hint">{{ t('fileDrawer.noMatchHint') }}</p>
               </div>
             </div>
           </div>
@@ -435,7 +448,7 @@
             class="context-menu"
             :style="contextMenuStyle"
             role="menu"
-            aria-label="文件操作"
+            :aria-label="t('fileDrawer.fileActions')"
             @click.stop
           >
             <button class="context-menu-item" role="menuitem" @click="handleContextMenuRename">
@@ -454,7 +467,7 @@
                   stroke-linejoin="round"
                 />
               </svg>
-              <span>重命名</span>
+              <span>{{ t('fileDrawer.rename') }}</span>
             </button>
             <button
               class="context-menu-item context-menu-item--danger"
@@ -477,7 +490,7 @@
                   stroke-linejoin="round"
                 />
               </svg>
-              <span>删除</span>
+              <span>{{ t('fileDrawer.delete') }}</span>
             </button>
           </div>
         </Teleport>
@@ -506,6 +519,8 @@ import {
   stripSupportedNoteExtension,
 } from '@/utils/note-files';
 import { useDialogFocus } from '@/composables/useDialogFocus';
+import { createLocaleCollator, currentLocale } from '@/i18n';
+import { useI18n } from 'vue-i18n';
 
 // ============================================================
 // Props & Emits
@@ -529,6 +544,7 @@ const props = withDefaults(
     switchingNotebook: false,
   },
 );
+const { t } = useI18n();
 
 const emit = defineEmits<{
   'update:visible': [value: boolean];
@@ -586,9 +602,9 @@ const contextMenu = ref<{
 // ============================================================
 
 const notebookName = computed(() => {
-  if (!props.rootDir) return '笔记本';
+  if (!props.rootDir) return t('fileDrawer.root');
   const segments = props.rootDir.replace(/\\/g, '/').split('/').filter(Boolean);
-  return segments[segments.length - 1] || props.rootDir || '笔记本';
+  return segments[segments.length - 1] || props.rootDir || t('fileDrawer.root');
 });
 
 const contextMenuStyle = computed(() => ({
@@ -602,6 +618,7 @@ const contextMenuStyle = computed(() => ({
  * Only expanded directories' children are included in the output.
  */
 const flatTree = computed<FlatNode[]>(() => {
+  const collator = createLocaleCollator({ sensitivity: 'base' }, currentLocale.value);
   const files = props.files.filter(isVisibleDrawerEntry);
   if (files.length === 0) return [];
 
@@ -619,7 +636,7 @@ const flatTree = computed<FlatNode[]>(() => {
   for (const [, entries] of byParent) {
     entries.sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-      return a.name.localeCompare(b.name, 'zh-Hans', { sensitivity: 'base' });
+      return collator.compare(a.name, b.name);
     });
   }
 

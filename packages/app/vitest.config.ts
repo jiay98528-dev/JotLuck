@@ -6,6 +6,7 @@ export default mergeConfig(
   defineConfig({
     test: {
       environment: 'jsdom',
+      setupFiles: ['./src/test/setup-i18n.ts'],
       include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
       // Official themes inject CSS strings through ThemeRegistry. Keep the Halo
       // asset real in Vitest so fallback and accessibility contracts are tested.

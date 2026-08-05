@@ -1619,7 +1619,7 @@ fn is_atx_heading(line: &str) -> bool {
         return false;
     };
     let hashes = line.chars().take_while(|point| *point == '#').count();
-    (1..=6).contains(&hashes) && line.chars().nth(hashes).map_or(true, char::is_whitespace)
+    (1..=6).contains(&hashes) && line.chars().nth(hashes).is_none_or(char::is_whitespace)
 }
 
 fn is_setext_underline(line: &str) -> bool {

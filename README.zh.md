@@ -36,9 +36,9 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 适合所有与文字打交道的人，也适合与 AI 协作的你。
 
-当前状态：`v0.10.0-rc.1`，Windows 候选发布版。经过完整测试，尚未签名。
+当前状态：`v0.11.0`，尚未公开、未签名的签名申请候选，仅面向 Windows x64。只有精确安装包完成签名并验证签名后，才能成为公开版本。
 
-> **下载提示：** 官方安装包只会出现在 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases)。当前还没有上架，`v0.10.0-rc.1` 未签名。请勿从其他任何渠道下载 JotLuck。
+> **下载提示：** 官方安装包只会出现在 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases)。当前还没有上架，`v0.11.0` 签名申请候选在完成签名前不得分发。请勿从其他任何渠道下载 JotLuck。
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck 工作区，左侧是最近笔记，中间是 Markdown 编辑器，右侧是大纲与反向链接">
@@ -60,15 +60,16 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 ## 三步开始使用
 
-1. **获取应用。** 第一个公开安装包将在 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases) 上架，那是唯一官方来源。开发者可按下方说明从源码构建。
-2. **打开一个文件夹。** 任何文件夹都行，它就是你的笔记本。`Ctrl/Cmd+O` 随时切换。
-3. **开始写作。** 笔记随输入直接保存进这个文件夹。
+1. **获取应用。** 第一个已签名公开安装包将在 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases) 上架，那是唯一官方来源。开发者可按下方说明从源码构建。
+2. **在欢迎页选择文件打开方式。** 默认只建议 Markdown；纯文本、Word、PDF、Excel 均不预选。Windows 只应用你在“默认应用”系统界面中确认的选择。
+3. **打开一个文件夹。** 通过“打开笔记本”门页把任意文件夹作为笔记本，`Ctrl/Cmd+O` 可随时切换；笔记直接保存在该文件夹中。
 
-安装器会把 `.md`、`.markdown`、`.mdx` 和 `.txt` 注册为可选“打开方式”。你已有的默认应用不受影响。
+安装器会把 `.md`、`.markdown`、`.mdx`、`.txt`、`.docx`、`.pdf`、`.xlsx` 和 `.xls` 注册为可选“打开方式”。安装和升级都不会替换你在 Windows 中已有的默认应用选择。
 
 ## 在 JotLuck 里写作是什么感觉
 
 - **第一秒就就绪。** 双击 Markdown 文件，即刻看到干净的渲染效果。编辑可选，工作区随你布置。
+- **文档可带入，但不会被锁住。** `.docx`、`.pdf`、`.xlsx`、`.xls` 以只读 Markdown 语义预览打开；你可以继续用检测到的专业软件编辑原件，也可以另存 Markdown 副本后在 JotLuck 编辑。原文件绝不覆盖。
 - **专注的编辑器。** CodeMirror 6、实时预览、块级编辑，键盘优先。
 - **彼此认识的笔记。** `[[Wiki-link]]`、别名、反向链接、标签、大纲。
 - **什么都找得到。** 本地搜索，支持关键词、正则、标签、日期、文件夹。
@@ -92,15 +93,16 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 ## 当前发行范围
 
-| 项目       | 当前范围                                              |
-| ---------- | ----------------------------------------------------- |
-| 当前版本   | `v0.10.0-rc.1`                                        |
-| 发行阶段   | 公开候选版本；不是稳定版                              |
-| 已验证平台 | Windows x64                                           |
-| 桌面运行时 | Tauri 2 与 Microsoft Edge WebView2                    |
-| 数据格式   | `.md`、`.markdown`、`.mdx`、`.txt`                    |
-| 文件关联   | 四种扩展名均为可选“打开方式”，不改写 Windows 默认应用 |
-| 许可证     | MIT                                                   |
+| 项目         | 当前范围                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------ |
+| 当前版本     | `v0.11.0`                                                                                  |
+| 发行阶段     | 尚未公开、未签名的签名申请候选；不是稳定版                                                 |
+| 候选平台     | Windows x64                                                                                |
+| 桌面运行时   | Tauri 2 与 Microsoft Edge WebView2                                                         |
+| 可编辑格式   | `.md`、`.markdown`、`.mdx`、`.txt`                                                         |
+| 只读导入格式 | `.docx`、`.pdf`、`.xlsx`、`.xls`；提供 Markdown 语义预览，不承诺 Office/PDF 像素级版式复刻 |
+| 文件关联     | 八种扩展名均为可选“打开方式”；安装和升级都不替换用户在 Windows 中的默认选择                |
+| 许可证       | MIT                                                                                        |
 
 macOS 和 Linux 版本尚未完成对应主机的打包、签名与发行验证。完整边界请阅读 [已知限制](./KNOWN_LIMITATIONS.md) 和每次发布附带的说明。
 
@@ -149,7 +151,7 @@ macOS 和 Linux 版本尚未完成对应主机的打包、签名与发行验证�
 
 - Node.js 20+
 - pnpm 9+，仓库当前锁定 pnpm 11.x
-- Rust 1.77.2+，仅桌面开发与打包需要
+- Rust 1.88+，仅桌面开发与打包需要
 - Windows 上的 Tauri 与 WebView2 构建依赖
 
 ### 启动 Web 开发环境

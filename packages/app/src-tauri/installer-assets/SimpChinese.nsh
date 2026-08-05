@@ -1,4 +1,6 @@
 LangString addOrReinstall ${LANG_SIMPCHINESE} "添加/重新安装组件"
+LangString JotLuckFileType ${LANG_SIMPCHINESE} "Markdown 或文本笔记"
+LangString JotLuckDocumentType ${LANG_SIMPCHINESE} "可导入的 Word、PDF 或 Excel 文档"
 LangString alreadyInstalled ${LANG_SIMPCHINESE} "已安装"
 LangString alreadyInstalledLong ${LANG_SIMPCHINESE} "${PRODUCTNAME} ${VERSION} 已经安装。请选择要执行的操作，然后点击下一步继续。"
 LangString appRunning ${LANG_SIMPCHINESE} "{{product_name}} 正在运行。请关闭后重试。"

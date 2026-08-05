@@ -16,6 +16,7 @@ import {
   waitForAutoSave,
   expectEditorContains,
   expectToast,
+  createBlankNote,
 } from '../../e2e/helpers/test-utils';
 
 test.describe('文件操作', () => {
@@ -89,18 +90,8 @@ test.describe('文件操作', () => {
   // ──────────────────────────────────────────────────────────────
 
   test('should create new blank note', async ({ page }) => {
-    // V5: 点击新建笔记按钮
-    await page.locator('.wing-new-btn').click();
-
-    // V1: 指标1 — 模板对话框应出现
-    await expect(page.locator('.modal-overlay')).toBeVisible({ timeout: 3000 });
-    await expect(page.locator('.blank-card')).toBeVisible();
-
-    // 选择空白笔记 → 触发 createBlank
-    await page.locator('.blank-card').click();
-
-    // V1: 指标2 — 编辑器应加载新笔记
-    await expect(page.locator('.cm-content')).toBeVisible({ timeout: 5000 });
+    const createdPath = await createBlankNote(page);
+    expect(createdPath).toMatch(/\.(?:md|markdown|mdx|txt)$/iu);
 
     // 输入内容
     await typeInEditor(page, '# 空白笔记测试\n\n这是一篇 E2E 测试创建的笔记。');

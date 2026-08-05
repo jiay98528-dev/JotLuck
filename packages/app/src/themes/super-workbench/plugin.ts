@@ -2,8 +2,15 @@
 import { defineComponent, h, type PropType, type VNode, type VNodeChild } from 'vue';
 import type { BacklinkEntry, HeadingItem, TagEntry } from '@/types';
 import type { ShellAction, ThemePluginModule, ThemeSlotProps } from '@/types/theme-pack';
+import { currentLocale, translate } from '@/i18n';
 
 type SlotBag = { default?: () => VNodeChild };
+
+function tr(key: string, args?: Record<string, string | number>): string {
+  void currentLocale.value;
+  // i18n-dynamic-key: this theme helper is called only with literal theme.plugin keys.
+  return translate(key, args);
+}
 
 function actionButton(action: ShellAction, compact = false): VNode {
   return h(
@@ -41,7 +48,7 @@ const SuperTopBar = defineComponent({
         h('div', { class: 'super-topbar__launch' }, actionStrip(props.leftActions, true)),
         h('div', { class: 'super-topbar__title' }, [
           h('span', { class: 'super-kicker' }, props.notebookName || 'JotLuck'),
-          h('strong', props.noteTitle || '未命名工作台'),
+          h('strong', props.noteTitle || tr('theme.plugin.untitledWorkbench')),
         ]),
         h('div', { class: 'super-topbar__center' }, actionStrip(props.centerActions)),
         h('div', { class: 'super-topbar__right' }, actionStrip(props.rightActions, true)),
@@ -105,9 +112,12 @@ const SuperRightWing = defineComponent({
       ]);
     return () =>
       h('aside', { class: 'super-atlas', 'data-theme-plugin-slot': 'right-wing' }, [
-        h('div', { class: 'super-atlas__header' }, [h('span', 'Atlas'), h('strong', '知识导航')]),
+        h('div', { class: 'super-atlas__header' }, [
+          h('span', 'Atlas'),
+          h('strong', tr('theme.plugin.knowledgeNavigation')),
+        ]),
         section(
-          '大纲',
+          tr('theme.plugin.outline'),
           props.headings.length,
           props.headings.map((heading) =>
             h(
@@ -121,7 +131,7 @@ const SuperRightWing = defineComponent({
           ),
         ),
         section(
-          '反链',
+          tr('theme.plugin.backlinks'),
           props.backlinks.length,
           props.backlinks
             .slice(0, 5)
@@ -134,7 +144,7 @@ const SuperRightWing = defineComponent({
             ),
         ),
         section(
-          '标签',
+          tr('theme.plugin.tags'),
           props.tags.length,
           props.tags
             .slice(0, 12)
@@ -169,7 +179,7 @@ const SuperStatusBar = defineComponent({
           { class: ['super-status__state', props.saveError && 'is-error'], title: props.saveError },
           props.saveError || props.statusText,
         ),
-        h('span', `${props.wordCount} 词 / ${props.charCount} 字`),
+        h('span', tr('theme.plugin.counts', { words: props.wordCount, chars: props.charCount })),
         props.saveError
           ? h('div', { class: 'super-action-strip' }, [
               h(
@@ -177,20 +187,20 @@ const SuperStatusBar = defineComponent({
                 {
                   class: ['super-action', 'super-action--compact'],
                   type: 'button',
-                  'aria-label': '重新保存当前笔记',
+                  'aria-label': tr('theme.plugin.retrySaveAria'),
                   onClick: () => props.retrySave?.(),
                 },
-                '重新保存',
+                tr('theme.plugin.retrySave'),
               ),
               h(
                 'button',
                 {
                   class: ['super-action', 'super-action--compact'],
                   type: 'button',
-                  'aria-label': '另存当前笔记副本',
+                  'aria-label': tr('theme.plugin.saveCopyAria'),
                   onClick: () => props.saveCopy?.(),
                 },
-                '另存副本',
+                tr('theme.plugin.saveCopy'),
               ),
             ])
           : actionStrip(props.actions, true),
@@ -244,7 +254,7 @@ const SuperThemeDialog = defineComponent({
   setup(props, { slots }: { slots: SlotBag }) {
     return () => [
       props.visible
-        ? h('div', { class: 'super-dialog-beacon' }, '超级主题已接管主题中心入口')
+        ? h('div', { class: 'super-dialog-beacon' }, tr('theme.plugin.takeover'))
         : null,
       slots.default?.(),
     ];

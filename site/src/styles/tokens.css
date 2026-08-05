@@ -1,0 +1,61 @@
+/**
+ * The Winged Press · 设计 Token（权威 OKLCH）
+ * 契约源：.worktrees/site-winged-press/DESIGN.md（装订四色 + 活字诗刊 + 纸张物理）
+ * 本工程五语：zh/en/ja/ko/fr（zh-hant 已按用户裁决移除）
+ */
+
+/* ---------- 装订四色 ---------- */
+:root {
+  --paper: oklch(
+    0.9723 0.0175 81.3
+  ); /* 校样纸 Proof Paper — 全站阅读底色（含工作室页，批注批次 3 统一） */
+  --ink: oklch(0.3346 0.0037 308.3); /* 炭墨 Carbon Ink — 正文/边界/深结构 */
+  --teal: oklch(0.4898 0.0412 193.7); /* 装订深青 Binding Teal — 结构面/主动作 */
+  --orange: oklch(0.6307 0.1806 41.1); /* 套准橙 Registration Orange — 印面/焦点/定位 */
+  --bookmark: oklch(0.805 0.157 79.7); /* 书签黄 — 状态/书签标记 */
+  --olive: oklch(0.6387 0.0915 108); /* 索引橄榄 — 次级状态 */
+
+  /* 墨色弱化只允许降不透明度（契约：禁止引入无品牌灰阶） */
+  --ink-70: oklch(0.3346 0.0037 308.3 / 0.7);
+  --ink-50: oklch(0.3346 0.0037 308.3 / 0.5);
+  --ink-30: oklch(0.3346 0.0037 308.3 / 0.3);
+  --ink-14: oklch(0.3346 0.0037 308.3 / 0.14);
+
+  /* ---------- 命名不对称轮廓（禁止统一对称圆角） ---------- */
+  --r-control: 12px 16px 14px 10px;
+  --r-compact: 8px 12px 7px 10px;
+  --r-sheet: 18px 24px 16px 22px;
+  --r-proof: 8px 14px 10px 12px;
+  --r-cta: 12px 18px 10px 15px;
+  --r-full: 9999px;
+
+  /* ---------- 纸张阴影（每道阴影必须回答"哪张纸在谁上面"） ---------- */
+  --shadow-sheet:
+    0 0 0 1px oklch(0.15 0.003 85 / 0.03), 0 1px 2px oklch(0.15 0.003 85 / 0.04),
+    0 2px 4px oklch(0.15 0.003 85 / 0.02);
+  --shadow-stack:
+    0 0 0 1px oklch(0.15 0.003 85 / 0.04), 0 2px 4px oklch(0.15 0.003 85 / 0.06),
+    0 4px 12px oklch(0.15 0.003 85 / 0.04);
+  --shadow-float:
+    0 0 0 1px oklch(0.15 0.003 85 / 0.05), 0 4px 8px oklch(0.15 0.003 85 / 0.08),
+    0 8px 24px oklch(0.15 0.003 85 / 0.06), 0 16px 32px oklch(0.15 0.003 85 / 0.02);
+
+  /* ---------- 动效（80–400ms，禁 bounce/elastic/持续呼吸） ---------- */
+  --ease-press: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-press: 80ms;
+  --dur-micro: 130ms;
+  --dur-release: 200ms;
+  --dur-spatial: 300ms;
+  --dur-narrative: 400ms;
+
+  /* ---------- 材质 ---------- */
+  --site-paper-texture: url('/assets/brand/textures/paper-fiber-mask-seamless-v1.webp');
+  --site-hero-ink-ground: url('/assets/brand/textures/hero-ink-ground-approved-v1.webp');
+
+  /* ---------- 字体角色（按 locale 绑定具体字族，见 site.css） ---------- */
+  --font-display: serif;
+  --font-body: system-ui, sans-serif;
+  --font-mono: 'JL Mono', ui-monospace, monospace;
+
+  font-synthesis: none;
+}

@@ -1197,20 +1197,28 @@ function associationExtension(caseId) {
     'ASSOC-02-MARKDOWN': '.markdown',
     'ASSOC-03-MDX': '.mdx',
     'ASSOC-04-TXT': '.txt',
+    'ASSOC-05-DOCX': '.docx',
+    'ASSOC-06-PDF': '.pdf',
+    'ASSOC-07-XLSX': '.xlsx',
+    'ASSOC-08-XLS': '.xls',
   }[caseId];
 }
 
 function associationRegistry(extension) {
+  const progId = ['.docx', '.pdf', '.xlsx', '.xls'].includes(extension)
+    ? 'JotLuck.DocumentImport'
+    : 'JotLuck.Note';
   return {
     extension,
     openWithListExists: false,
     defaultProgId: null,
     userChoiceProgId: null,
+    userChoiceLatestProgId: null,
     mruList: null,
     openWithSlots: {},
     openWithExecutables: [],
-    classOpenWithProgIds: ['JotLuck.Note'],
-    explorerOpenWithProgIds: ['JotLuck.Note'],
+    classOpenWithProgIds: [progId],
+    explorerOpenWithProgIds: [progId],
     supportedType: true,
     openCommand: '"C:\\Program Files\\JotLuck\\JotLuck.exe" "%1"',
     progIdOpenCommand: '"C:\\Program Files\\JotLuck\\JotLuck.exe" "%1"',
@@ -1228,6 +1236,8 @@ function associationLaunch(extension) {
   const marker = `association-marker-${extension.slice(1)}`;
   const contentUtf8 = extension === '.txt' ? marker : `# ${marker}\n`;
   const content = Buffer.from(contentUtf8, 'utf8');
+  const binaryTarget = ['.docx', '.pdf', '.xlsx', '.xls'].includes(extension);
+  const progId = binaryTarget ? 'JotLuck.DocumentImport' : 'JotLuck.Note';
   const targetPath = `C:\\runner temp\\association evidence${extension}`;
   return {
     schema: 'jotluck.installed-app.association-launch.v2',
@@ -1238,9 +1248,11 @@ function associationLaunch(extension) {
       marker,
       markerSha256: hash(Buffer.from(marker, 'utf8')),
       before: { bytes: content.byteLength, sha256: hash(content) },
-      after: { bytes: content.byteLength, sha256: hash(content), contentUtf8 },
+      after: binaryTarget
+        ? { bytes: content.byteLength, sha256: hash(content) }
+        : { bytes: content.byteLength, sha256: hash(content), contentUtf8 },
     },
-    shell: { method: 'ShellExecuteExW', className: 'JotLuck.Note', processId: 42 },
+    shell: { method: 'ShellExecuteExW', className: progId, processId: 42 },
     processObserved: {
       target: targetPath,
       process: {

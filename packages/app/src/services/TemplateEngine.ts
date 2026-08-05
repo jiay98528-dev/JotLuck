@@ -7,7 +7,9 @@
  *
  * @see migration-map.md §4
  */
-import type { IFileSystemService, TemplateItem } from '@/types';
+import type { IFileSystemService, SupportedLocale, TemplateItem } from '@/types';
+import { createLocaleCollator, getCurrentLocale, translate, translateForLocale } from '@/i18n';
+import { createUserMessageError } from './command-errors';
 
 const CUSTOM_TEMPLATES_KEY = 'jotluck-custom-templates';
 export const CUSTOM_TEMPLATE_DIR = '/.jotluck/templates';
@@ -16,8 +18,12 @@ export const CUSTOM_TEMPLATE_DIR = '/.jotluck/templates';
 
 const PADDED = (n: number): string => String(n).padStart(2, '0');
 
-export function renderTemplate(template: string, date: Date = new Date()): string {
-  const dayNames = ['日', '一', '二', '三', '四', '五', '六'];
+export function renderTemplate(
+  template: string,
+  date: Date = new Date(),
+  locale: SupportedLocale = getCurrentLocale(),
+): string {
+  const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
   const weekStart = new Date(date);
   weekStart.setDate(date.getDate() - date.getDay());
   const weekEnd = new Date(weekStart);
@@ -30,125 +36,146 @@ export function renderTemplate(template: string, date: Date = new Date()): strin
     .replace(/\{\{year\}\}/g, String(date.getFullYear()))
     .replace(/\{\{month\}\}/g, PADDED(date.getMonth() + 1))
     .replace(/\{\{day\}\}/g, PADDED(date.getDate()))
-    .replace(/\{\{week\}\}/g, `第${Math.ceil(date.getDate() / 7)}周`)
-    .replace(/\{\{weekday\}\}/g, `星期${dayNames[date.getDay()]}`)
+    .replace(
+      /\{\{week\}\}/g,
+      translateForLocale(locale, 'templates.weekLabel', {
+        week: Math.ceil(date.getDate() / 7),
+      }),
+    )
+    .replace(
+      /\{\{weekday\}\}/g,
+      // i18n-dynamic-key: dayKeys is a closed tuple matching templates.weekdays.
+      translateForLocale(locale, `templates.weekdays.${dayKeys[date.getDay()]}`),
+    )
     .replace(
       /\{\{weekRange\}\}/g,
       `${weekStart.toISOString().slice(0, 10)} ~ ${weekEnd.toISOString().slice(0, 10)}`,
     );
 }
 
-export function previewTemplate(template: string): string {
-  return renderTemplate(template, new Date());
+export function previewTemplate(
+  template: string,
+  locale: SupportedLocale = getCurrentLocale(),
+): string {
+  return renderTemplate(template, new Date(), locale);
 }
 
 // === Built-in Templates ===
 
-const BUILTIN_TEMPLATES: TemplateItem[] = [
-  {
-    id: 'diary',
-    name: '日记',
-    description: '每日日记模板，包含日期和待办列表',
-    content: `---
-title: {{date}} 日记
-tags: [日记]
+function tr(locale: SupportedLocale, key: string): string {
+  // i18n-dynamic-key: callers construct keys from the closed built-in template families below.
+  return translateForLocale(locale, key);
+}
+
+export function getBuiltInTemplates(locale: SupportedLocale = getCurrentLocale()): TemplateItem[] {
+  const diary = (key: string): string => tr(locale, `templates.diary.${key}`);
+  const meeting = (key: string): string => tr(locale, `templates.meeting.${key}`);
+  const weekly = (key: string): string => tr(locale, `templates.weekly.${key}`);
+  return [
+    {
+      id: 'diary',
+      name: diary('name'),
+      description: diary('description'),
+      content: `---
+title: ${diary('title').replace('{date}', '{{date}}')}
+tags: [${diary('tag')}]
 created: {{date}}
 ---
 
-# {{date}} 日记
+# ${diary('title').replace('{date}', '{{date}}')}
 
-## 今日概要
+## ${diary('summary')}
 
 
-## 待办事项
+## ${diary('todos')}
 
 - [ ]
 - [ ]
 - [ ]
 
-## 笔记
+## ${diary('notes')}
 
 
-## 总结
+## ${diary('conclusion')}
 
 `,
-    isBuiltin: true,
-  },
-  {
-    id: 'meeting',
-    name: '会议纪要',
-    description: '会议记录模板，包含参会人、议题和行动项',
-    content: `---
-title: 会议纪要 — {{date}}
-tags: [会议]
+      isBuiltin: true,
+    },
+    {
+      id: 'meeting',
+      name: meeting('name'),
+      description: meeting('description'),
+      content: `---
+title: ${meeting('title')} — {{date}}
+tags: [${meeting('tag')}]
 created: {{date}}
 ---
 
-# 会议纪要
+# ${meeting('title')}
 
-**日期**: {{date}}
-**时间**: {{time}}
-**参会人**:
+**${meeting('date')}**: {{date}}
+**${meeting('time')}**: {{time}}
+**${meeting('attendees')}**:
 
 ---
 
-## 议题
+## ${meeting('agenda')}
 
 1.
 
-## 讨论要点
+## ${meeting('discussion')}
 
 
-## 决议
+## ${meeting('decisions')}
 
 
-## 行动项
+## ${meeting('actions')}
 
-- [ ]  负责人:  截止日期:
-- [ ]  负责人:  截止日期:
+- [ ]  ${meeting('owner')}:  ${meeting('due')}:
+- [ ]  ${meeting('owner')}:  ${meeting('due')}:
 
-## 下次会议
+## ${meeting('next')}
 
 `,
-    isBuiltin: true,
-  },
-  {
-    id: 'weekly',
-    name: '周报',
-    description: '每周工作总结模板',
-    content: `---
-title: 周报 — {{weekRange}}
-tags: [周报]
+      isBuiltin: true,
+    },
+    {
+      id: 'weekly',
+      name: weekly('name'),
+      description: weekly('description'),
+      content: `---
+title: ${weekly('title')} — {{weekRange}}
+tags: [${weekly('tag')}]
 created: {{date}}
 ---
 
-# 周报 ({{weekRange}})
+# ${weekly('title')} ({{weekRange}})
 
-## 本周完成
-
-
-## 进行中
+## ${weekly('completed')}
 
 
-## 遇到的问题
+## ${weekly('inProgress')}
 
 
-## 下周计划
+## ${weekly('problems')}
 
 
-## 需要协调
+## ${weekly('nextWeek')}
+
+
+## ${weekly('coordination')}
 
 `,
-    isBuiltin: true,
-  },
-];
-
-export function getBuiltInTemplates(): TemplateItem[] {
-  return BUILTIN_TEMPLATES;
+      isBuiltin: true,
+    },
+  ];
 }
 
-export function getBuiltInTemplateContent(templatePath: string): string {
-  const tpl = BUILTIN_TEMPLATES.find((t) => t.id === templatePath);
+export function getBuiltInTemplateContent(
+  templatePath: string,
+  locale: SupportedLocale = getCurrentLocale(),
+): string {
+  const tpl = getBuiltInTemplates(locale).find((t) => t.id === templatePath);
   return tpl?.content ?? '';
 }
 
@@ -160,7 +187,7 @@ function sanitizeTemplateFileName(name: string): string {
     .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, '-')
     .replace(/\s+/g, ' ')
     .slice(0, 80);
-  return `${safe || '自定义模板'}.md`;
+  return `${safe || translate('templates.customFallback')}.md`;
 }
 
 function customTemplatePath(name: string): string {
@@ -180,7 +207,7 @@ function parseCustomTemplateFile(path: string, raw: string): TemplateItem {
     path
       .split('/')
       .pop()
-      ?.replace(/\.(md|markdown|mdx|txt)$/i, '') || '自定义模板';
+      ?.replace(/\.(md|markdown|mdx|txt)$/i, '') || translate('templates.customFallback');
   let description = '';
   const match = firstLine.match(/^<!-- jotluck-template (.+) -->$/);
   if (match) {
@@ -226,7 +253,8 @@ export async function loadCustomTemplatesFromFiles(
       const raw = await fs.readFile(entry.path);
       templates.push(parseCustomTemplateFile(entry.path, raw));
     }
-    return templates.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+    const collator = createLocaleCollator();
+    return templates.sort((a, b) => collator.compare(a.name, b.name));
   } catch {
     return [];
   }
@@ -269,7 +297,7 @@ export async function deleteCustomTemplateFile(
   templatePath: string,
 ): Promise<void> {
   if (!templatePath.startsWith(`${CUSTOM_TEMPLATE_DIR}/`)) {
-    throw new Error('模板路径不在受控目录内');
+    throw createUserMessageError('templates.invalidPath');
   }
   await fs.deleteFile(templatePath);
 }

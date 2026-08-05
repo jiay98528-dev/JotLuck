@@ -1,0 +1,234 @@
+@import './tokens.css';
+@import './controls.css';
+
+/* ---------- 自托管字体（按语言裁切，仅声明使用到的字重；OFL 见 /assets/fonts/licenses） ----------
+   全部 swap：弱网先用系统回退字体渲染，fonts-ready 门控保证 hero 入场动画不受交换影响 */
+@font-face {
+  font-family: 'JL Display EN';
+  src: url('/assets/fonts/files/display-en.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JL Display FR';
+  src: url('/assets/fonts/files/display-fr.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JL Display ZH';
+  src: url('/assets/fonts/files/display-zh-hans.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JL Display JA';
+  src: url('/assets/fonts/files/display-ja.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JL Display KO';
+  src: url('/assets/fonts/files/display-ko.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JL Body EN';
+  src: url('/assets/fonts/files/body-en-400.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JL Body EN';
+  src: url('/assets/fonts/files/body-en-700.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JL Body FR';
+  src: url('/assets/fonts/files/body-fr-400.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JL Body FR';
+  src: url('/assets/fonts/files/body-fr-700.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JL Body ZH';
+  src: url('/assets/fonts/files/body-zh-hans-400.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JL Body ZH';
+  src: url('/assets/fonts/files/body-zh-hans-700.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JL Body JA';
+  src: url('/assets/fonts/files/body-ja-400.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JL Body JA';
+  src: url('/assets/fonts/files/body-ja-700.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JL Body KO';
+  src: url('/assets/fonts/files/body-ko-400.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JL Body KO';
+  src: url('/assets/fonts/files/body-ko-700.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JL Mono';
+  src: url('/assets/fonts/files/mono-400.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+
+/* ---------- 字体角色按 locale 绑定（单一语言页面只请求本语言字体） ---------- */
+html[lang='zh-CN'] {
+  --font-display: 'JL Display ZH', 'Songti SC', serif;
+  --font-body: 'JL Body ZH', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+}
+html[lang='en'] {
+  --font-display: 'JL Display EN', Georgia, serif;
+  --font-body: 'JL Body EN', system-ui, sans-serif;
+}
+html[lang='fr'] {
+  --font-display: 'JL Display FR', Georgia, serif;
+  --font-body: 'JL Body FR', system-ui, sans-serif;
+}
+html[lang='ja'] {
+  --font-display: 'JL Display JA', 'Yu Mincho', serif;
+  --font-body: 'JL Body JA', 'Hiragino Sans', 'Yu Gothic', system-ui, sans-serif;
+}
+html[lang='ko'] {
+  --font-display: 'JL Display KO', 'Batang', serif;
+  --font-body: 'JL Body KO', 'Malgun Gothic', system-ui, sans-serif;
+}
+
+/* ---------- 基座 ---------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html {
+  background: var(--paper);
+  color: var(--ink);
+  font-synthesis: none;
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: clamp(1rem, 0.95rem + 0.2vw, 1.125rem);
+  line-height: 1.75;
+  /* 纸纤维蒙版：正文纸面 0.24–0.32 层不透明度，627px 平铺参考；
+     底色必须在 body（纹理层 multiply 会盖过 html 底色），全站暖纸色调由此生效 */
+  background-color: var(--paper);
+  background-image: var(--site-paper-texture);
+  background-size: 627px;
+  background-blend-mode: multiply;
+}
+::selection {
+  background: var(--orange);
+  color: var(--paper);
+}
+a {
+  color: inherit;
+  text-underline-offset: 0.18em;
+}
+:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
+
+/* ---------- 子页面共享：页流容器 + 页首（眉题/主标题/导语） ---------- */
+.page-flow {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding-left: clamp(24px, 4vw, 72px);
+  padding-right: clamp(24px, 4vw, 72px);
+}
+.page-head {
+  padding: clamp(48px, 7vw, 96px) 0 clamp(32px, 4vw, 56px);
+}
+.page-head .head-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-50);
+}
+.page-head .head-eyebrow::before {
+  content: '';
+  width: 14px;
+  height: 2px;
+  background: var(--orange);
+  flex: none;
+}
+.page-head h1 {
+  margin-top: 18px;
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, 4.5vw, 3.75rem);
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+.page-head .head-lead {
+  margin-top: 18px;
+  max-width: 40em;
+  color: var(--ink-70);
+}
+h1,
+h2,
+h3,
+p,
+ol,
+ul,
+figure {
+  margin: 0;
+  padding: 0;
+}
+li {
+  list-style: none;
+}
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+/* ---------- 动效纪律：reduced-motion 全静态化 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

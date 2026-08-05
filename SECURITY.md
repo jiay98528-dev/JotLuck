@@ -3,7 +3,7 @@
 ## Supported Versions
 
 JotLuck is not currently distributed as a public installer. The unsigned
-`v0.10.0-rc.1` remains an internal candidate; it is not a stable release or
+`v0.11.0` remains an unpublished signing candidate; it is not a stable release or
 an RC support line. Security reports for the source tree are handled on a
 best-effort basis.
 

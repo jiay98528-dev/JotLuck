@@ -1,6 +1,6 @@
 {
   "name": "@jotluck/app",
-  "version": "0.10.2",
+  "version": "0.11.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -48,6 +48,7 @@
     "marked": "^18.0.4",
     "pinia": "^2.2.0",
     "vue": "^3.5.0",
+    "vue-i18n": "11.4.4",
     "vue-router": "^4.4.0",
     "write-excel-file": "4.1.1"
   },

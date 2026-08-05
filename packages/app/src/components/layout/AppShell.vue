@@ -221,8 +221,10 @@ import type {
   RightWingRegion,
 } from '@/types/theme-pack';
 import { computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 const theme = useThemeStore();
+const { t } = useI18n();
 
 const props = defineProps<{
   recentNotes: Array<{ path: string; title: string; colorIndex: number }>;
@@ -283,10 +285,10 @@ const rightWingRegion = computed<RightWingRegion>(() => ({
 }));
 
 const statusText = computed(() => {
-  if (props.isSaving) return '保存中';
-  if (props.saveError) return '保存失败';
-  if (props.isDirty) return '未保存';
-  return `${props.wordCount} 词 · ${props.charCount} 字`;
+  if (props.isSaving) return t('shell.saving');
+  if (props.saveError) return t('shell.saveFailed');
+  if (props.isDirty) return t('shell.unsaved');
+  return t('shell.wordCharCount', { words: props.wordCount, chars: props.charCount });
 });
 
 const actionGroups = computed(() => {

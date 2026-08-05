@@ -7,14 +7,16 @@
     data-testid="notebook-open-gate"
   >
     <div class="notebook-open-gate__content">
-      <span class="notebook-open-gate__kicker">本地优先 · 文件夹就是笔记本</span>
+      <span class="notebook-open-gate__kicker">{{ t('workspace.gate.kicker') }}</span>
       <h1 id="notebook-open-gate-title" class="notebook-open-gate__title">
-        打开一个文件夹开始写作
+        {{ t('workspace.gate.title') }}
       </h1>
       <p class="notebook-open-gate__description">
-        JotLuck 会直接读写你选择的文件夹，不会把笔记锁进专有数据库。
+        {{ t('workspace.gate.description') }}
       </p>
-      <p class="notebook-open-gate__formats">支持 {{ formatsLabel }}</p>
+      <p class="notebook-open-gate__formats">
+        {{ t('workspace.gate.formats', { formats: formatsLabel }) }}
+      </p>
 
       <p v-if="status === 'error' && errorMessage" class="notebook-open-gate__error" role="alert">
         {{ errorMessage }}
@@ -27,11 +29,11 @@
         data-testid="open-notebook-button"
         @click="$emit('open-notebook')"
       >
-        {{ status === 'opening' ? '正在打开…' : '选择笔记本文件夹' }}
+        {{ status === 'opening' ? t('workspace.gate.opening') : t('workspace.gate.choose') }}
       </Button>
 
       <p class="notebook-open-gate__shortcut">
-        已有工作区也可随时按 <kbd>Ctrl/Cmd</kbd> + <kbd>O</kbd> 切换
+        {{ t('workspace.gate.shortcut') }}
       </p>
     </div>
   </section>
@@ -39,7 +41,10 @@
 
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Button from '@/components/common/Button.vue';
+
+const { t } = useI18n();
 
 export type NotebookOpenGateStatus = 'idle' | 'opening' | 'error';
 

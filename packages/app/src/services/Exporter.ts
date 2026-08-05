@@ -25,6 +25,7 @@ import {
 import { marked } from 'marked';
 import type { Token, Tokens } from 'marked';
 import writeXlsxFile, { type Sheet, type SheetData } from 'write-excel-file/browser';
+import { getCurrentLocale, getLocaleDocumentFont, getLocaleFontStack, translate } from '@/i18n';
 
 // ============================================================================
 // Internal Options — aligned with ExportOptions type
@@ -38,7 +39,7 @@ interface InternalExportOptions {
 }
 
 function createExportAbortError(): DOMException {
-  return new DOMException('导出已取消', 'AbortError');
+  return new DOMException(translate('export.aborted'), 'AbortError');
 }
 
 function throwIfExportAborted(signal?: AbortSignal): void {
@@ -152,11 +153,11 @@ function exportPDF(
   const opts = buildInternalOpts(options);
   const bodyHtml = renderToStyledHtml(md, opts);
   const printableHtml = `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="${getCurrentLocale()}">
 <head>
   <meta charset="UTF-8">
   <title>${escapeHtml(fileName)}</title>
-  <style>${EMBEDDED_CSS}</style>
+  <style>${embeddedCss()}</style>
   <style>
     @media print {
       @page { margin: 20mm; size: A4; }
@@ -180,7 +181,7 @@ function exportPDF(
       'position:fixed;top:0;left:0;width:100%;height:100%;border:none;z-index:99999;';
     // Hidden until print dialog appears — use opacity to keep printing working
     iframe.style.opacity = '0';
-    iframe.title = 'PDF 打印预览';
+    iframe.title = translate('export.pdfPreview');
 
     let settled = false;
     let preparationTimer: number | undefined;
@@ -219,7 +220,7 @@ function exportPDF(
       }
       const printWindow = iframe.contentWindow;
       if (!printWindow) {
-        fail('PDF 打印页面不可用，请重试');
+        fail(translate('export.pdfUnavailable'));
         return;
       }
 
@@ -239,9 +240,8 @@ function exportPDF(
         // print() blocks while the native dialog is open. Guard preparation,
         // not the time the user spends interacting with that dialog.
         printWindow.print();
-      } catch (error) {
-        const detail = error instanceof Error && error.message ? `：${error.message}` : '';
-        fail(`无法打开 PDF 打印对话框${detail}`);
+      } catch {
+        fail(translate('export.pdfOpenFailed'));
         return;
       }
 
@@ -249,21 +249,20 @@ function exportPDF(
         success: true,
         format: ExportFormat.PDF,
         fileName: `${fileName}.pdf`,
-        message: '打印对话框已关闭，请确认 PDF 已保存到所选位置。',
+        message: translate('export.pdfClosed'),
       });
     };
 
-    iframe.onerror = () => fail('PDF 打印页面加载失败，请重试');
+    iframe.onerror = () => fail(translate('export.pdfLoadFailed'));
 
     try {
       signal?.addEventListener('abort', abort, { once: true });
       throwIfExportAborted(signal);
       iframe.srcdoc = printableHtml;
-      preparationTimer = window.setTimeout(() => fail('PDF 打印页面准备超时，请重试'), 5000);
+      preparationTimer = window.setTimeout(() => fail(translate('export.pdfTimeout')), 5000);
       document.body.appendChild(iframe);
-    } catch (error) {
-      const detail = error instanceof Error && error.message ? `：${error.message}` : '';
-      fail(`无法创建 PDF 打印页面${detail}`);
+    } catch {
+      fail(translate('export.pdfCreateFailed'));
     }
   });
 }
@@ -297,14 +296,15 @@ interface InlineFormat {
 }
 
 /** Heading format by depth: size in half-points, universal black, bold */
-const HEADING_FMT: Record<number, InlineFormat> = {
-  1: { size: 36, bold: true, color: '000000', font: 'PingFang SC' },
-  2: { size: 32, bold: true, color: '000000', font: 'PingFang SC' },
-  3: { size: 28, bold: true, color: '000000', font: 'PingFang SC' },
-  4: { size: 24, bold: true, color: '000000', font: 'PingFang SC' },
-  5: { size: 24, bold: true, color: '000000', font: 'PingFang SC' },
-  6: { size: 24, bold: true, color: '000000', font: 'PingFang SC' },
-};
+function headingFormat(depth: number): InlineFormat {
+  const sizes: Record<number, number> = { 1: 36, 2: 32, 3: 28, 4: 24, 5: 24, 6: 24 };
+  return {
+    size: sizes[depth] ?? sizes[1],
+    bold: true,
+    color: '000000',
+    font: getLocaleDocumentFont(),
+  };
+}
 
 /** Build docx TextRun array from marked inline tokens, with cascading format context */
 function buildTextRuns(tokens: Token[] | undefined, fmt: InlineFormat = {}): TextRun[] {
@@ -426,7 +426,7 @@ function buildDocxChildren(blocks: Token[], _opts: InternalExportOptions): (Para
       // ── Heading ──
       case 'heading': {
         const t = token as Tokens.Heading;
-        const fmt = HEADING_FMT[t.depth] ?? HEADING_FMT[1];
+        const fmt = headingFormat(t.depth);
         children.push(
           new Paragraph({
             heading: mapHeadingLevel(t.depth),
@@ -653,7 +653,7 @@ async function exportDocx(
       default: {
         document: {
           run: {
-            font: 'PingFang SC',
+            font: getLocaleDocumentFont(),
             size: 24, // 12pt = 24 half-points
           },
         },
@@ -851,7 +851,9 @@ function exportTxt(md: string, fileName: string, options?: Partial<ExportOptions
     // Links: [text](url) → text
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     // Images: ![alt](url) → [Image: alt]
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, (_m, alt: string) => (alt ? `[图片: ${alt}]` : '[图片]'))
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, (_m, alt: string) =>
+      alt ? translate('export.imageWithAlt', { alt }) : translate('export.image'),
+    )
     // Blockquote prefix
     .replace(/^>\s?/gm, '')
     // Unordered list markers
@@ -884,12 +886,12 @@ function exportHtml(md: string, fileName: string, options?: Partial<ExportOption
   const bodyHtml = renderToStyledHtml(md, opts);
 
   const html = `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="${getCurrentLocale()}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(fileName)}</title>
-  <style>${EMBEDDED_CSS}</style>
+  <style>${embeddedCss()}</style>
 </head>
 <body>
   <article class="markdown-body">
@@ -915,6 +917,10 @@ function exportHtml(md: string, fileName: string, options?: Partial<ExportOption
  *
  * @see packages/app/src/assets/styles/themes/paper.css — OKLCH Token 权威定义
  */
+function embeddedCss(): string {
+  return EMBEDDED_CSS.replace('__JOTLUCK_FONT_STACK__', getLocaleFontStack());
+}
+
 const EMBEDDED_CSS = /* css */ `
 /* ── Paper Token (self-contained, synced with paper.css light) ── */
 :root {
@@ -939,7 +945,7 @@ const EMBEDDED_CSS = /* css */ `
 body {
   margin: 0;
   padding: 40px 24px;
-  font-family: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif;
+  font-family: __JOTLUCK_FONT_STACK__;
   font-size: 16px;
   line-height: 1.8;
   color: var(--ink-primary);
@@ -1060,7 +1066,11 @@ export async function exportNote(
 ): Promise<ExportResult> {
   throwIfExportAborted(options?.signal);
   if (!markdown && markdown !== '') {
-    return { success: false, format: options?.format ?? ExportFormat.PDF, error: '笔记内容为空' };
+    return {
+      success: false,
+      format: options?.format ?? ExportFormat.PDF,
+      error: translate('export.empty'),
+    };
   }
 
   const fmt = options?.format ?? ExportFormat.PDF;
@@ -1079,6 +1089,10 @@ export async function exportNote(
     case ExportFormat.HTML:
       return exportHtml(markdown, fileName, options);
     default:
-      return { success: false, format: fmt, error: `不支持的导出格式: ${fmt}` };
+      return {
+        success: false,
+        format: fmt,
+        error: translate('export.unsupported', { format: fmt }),
+      };
   }
 }

@@ -22,6 +22,17 @@ import type {
   UnwatchFn,
 } from '@/types';
 import { isMarkdownLikeFile } from '@/utils/note-files';
+import { translate } from '@/i18n';
+import { normalizeCommandError } from './command-errors';
+import { createSampleNotebookSeed } from './SampleSeed';
+
+async function invokeCommand<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  try {
+    return args ? await invoke<T>(command, args) : await invoke<T>(command);
+  } catch (error) {
+    throw normalizeCommandError(error);
+  }
+}
 
 // ── Rust DirEntry wire format ──
 
@@ -86,7 +97,7 @@ export class TauriIPCService implements IFileSystemService {
     const selected = await open({
       directory: true,
       multiple: false,
-      title: '选择笔记本文件夹',
+      title: translate('workspace.gate.choose'),
     });
     if (!selected) return null;
     return { rootPath: selected, name: this.displayNameFromPath(selected) };
@@ -99,7 +110,7 @@ export class TauriIPCService implements IFileSystemService {
 
   async openNotebookAt(path: string): Promise<NotebookHandle> {
     try {
-      const root = await invoke<string>('open_notebook', { path });
+      const root = await invokeCommand<string>('open_notebook', { path });
       this.saveRecent(root);
       return { rootPath: root, name: this.displayNameFromPath(root) };
     } catch (error) {
@@ -109,13 +120,15 @@ export class TauriIPCService implements IFileSystemService {
   }
 
   async openNotebookFromExternalGrant(accessToken: string): Promise<NotebookHandle> {
-    const root = await invoke<string>('open_external_notebook', { accessToken });
+    const root = await invokeCommand<string>('open_external_notebook', { accessToken });
     this.saveRecent(root);
     return { rootPath: root, name: this.displayNameFromPath(root) };
   }
 
   async openDefaultNotebook(): Promise<NotebookHandle> {
-    const root = await invoke<string>('open_sample_notebook');
+    const root = await invokeCommand<string>('open_sample_notebook', {
+      seed: createSampleNotebookSeed(),
+    });
     this.saveRecent(root);
     return { rootPath: root, name: this.displayNameFromPath(root) };
   }
@@ -178,15 +191,15 @@ export class TauriIPCService implements IFileSystemService {
   // ====================================================================
 
   async readFile(path: string): Promise<string> {
-    return invoke<string>('read_file', { relativePath: path });
+    return invokeCommand<string>('read_file', { relativePath: path });
   }
 
   async writeFile(path: string, content: string): Promise<void> {
-    return invoke('write_file', { relativePath: path, content });
+    return invokeCommand('write_file', { relativePath: path, content });
   }
 
   async readFileSnapshot(path: string): Promise<TextFileSnapshot> {
-    return invoke<TextFileSnapshot>('read_file_snapshot', { relativePath: path });
+    return invokeCommand<TextFileSnapshot>('read_file_snapshot', { relativePath: path });
   }
 
   async writeFileIfUnchanged(
@@ -194,7 +207,7 @@ export class TauriIPCService implements IFileSystemService {
     content: string,
     expectedRevision: string | null,
   ): Promise<ConditionalWriteResult> {
-    return invoke<ConditionalWriteResult>('write_file_if_unchanged', {
+    return invokeCommand<ConditionalWriteResult>('write_file_if_unchanged', {
       relativePath: path,
       content,
       expectedRevision,
@@ -202,11 +215,11 @@ export class TauriIPCService implements IFileSystemService {
   }
 
   async writeBinary(path: string, base64: string): Promise<void> {
-    return invoke('write_binary_file', { relativePath: path, base64 });
+    return invokeCommand('write_binary_file', { relativePath: path, base64 });
   }
 
   async readBinary(path: string): Promise<string> {
-    return invoke<string>('read_binary_file', { relativePath: path });
+    return invokeCommand<string>('read_binary_file', { relativePath: path });
   }
 
   isBinaryPath(path: string): boolean {
@@ -217,18 +230,18 @@ export class TauriIPCService implements IFileSystemService {
   }
 
   async deleteFile(path: string): Promise<void> {
-    return invoke('delete_file', { relativePath: path });
+    return invokeCommand('delete_file', { relativePath: path });
   }
 
   async renameFile(oldPath: string, newPath: string): Promise<void> {
-    return invoke('rename_file', {
+    return invokeCommand('rename_file', {
       oldRelativePath: oldPath,
       newRelativePath: newPath,
     });
   }
 
   async createDirectory(path: string): Promise<void> {
-    return invoke('create_directory', { relativePath: path });
+    return invokeCommand('create_directory', { relativePath: path });
   }
 
   // ====================================================================
@@ -236,7 +249,7 @@ export class TauriIPCService implements IFileSystemService {
   // ====================================================================
 
   async listDirectory(path: string): Promise<DirEntry[]> {
-    const entries = await invoke<RustDirEntry[]>('list_directory', { relativePath: path });
+    const entries = await invokeCommand<RustDirEntry[]>('list_directory', { relativePath: path });
     return entries.map((e) => ({
       name: e.name,
       path: e.path,
@@ -260,7 +273,7 @@ export class TauriIPCService implements IFileSystemService {
   // ====================================================================
 
   async statFile(path: string): Promise<FileStat> {
-    const meta = await invoke<RustDirEntry>('get_file_meta', { relativePath: path });
+    const meta = await invokeCommand<RustDirEntry>('get_file_meta', { relativePath: path });
     return {
       size: meta.size,
       mtime: meta.modified_at * 1000,
@@ -324,7 +337,7 @@ export class TauriIPCService implements IFileSystemService {
     });
     this.unwatchFns.push(unlisten);
     try {
-      this.activeWatchGeneration = await invoke<number>('start_file_watcher', {
+      this.activeWatchGeneration = await invokeCommand<number>('start_file_watcher', {
         rootPath,
         accessToken: null,
         relativePath: null,
@@ -351,7 +364,7 @@ export class TauriIPCService implements IFileSystemService {
     }
     if (this.activeWatchRoot) {
       this.activeWatchRoot = null;
-      await invoke('stop_file_watcher').catch((error) => {
+      await invokeCommand('stop_file_watcher').catch((error) => {
         // eslint-disable-next-line no-console
         console.warn('[TauriIPCService] stop_file_watcher failed:', error);
       });

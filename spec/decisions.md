@@ -1,6 +1,6 @@
 # Decisions
 
-版本：2026-07-27
+版本：v1.1（2026-08-04）
 
 ## 已确认决策
 
@@ -9,6 +9,26 @@
 3. 声明式主题通过 DSL 渲染；官方代码主题和本地可信代码主题可通过 `ThemeHostContext` 替换 Shell/主页/弹窗级 UX slot。
 4. P0 阶段不做权限审批、沙箱隔离、社区市场审核或远程购买接入。本地主题能力声明不作为安装/启用阻断条件。
 5. 商业化通过 `ThemeCommerceProvider` 适配，默认本地 mock。未来接入 Gumroad、Polar 或自建后端时只替换 provider 实现，不改变主题中心和 manifest 结构。
+
+## ADR-020：二进制文档采用隔离语义转换与双路径编辑
+
+- **状态**：已接受（2026-08-04）。
+- **决策**：Windows 只读导入 DOCX、PDF、XLSX、XLS；以 Markdown 语义映射渐进预览，不承诺 Office/PDF 像素级复刻。原件始终只读，编辑由专业软件处理；JotLuck 只编辑用户明确另存的 Markdown 副本。
+- **隔离**：Rust MSRV 提升到 1.88；同一可执行文件增加隐藏 worker 模式，主进程先快照和哈希，worker 只读快照。最多两个低优先级 worker，Windows Job Object 限制 768 MiB，任务可硬取消。解析依赖固定为最小 feature 的 docx-rs 0.4.22、calamine 0.36.1、lopdf 0.44。
+- **会话**：新增 `document-import-readonly`，不复用普通外部笔记 grant；转换、资产、警告、编辑器候选和源 revision 都按窗口/conversion ID 隔离。旧 conversion 在源变化后失效，不能另存。
+- **编辑**：单一“启动编辑”弹窗提供专业软件编辑原件或另存 Markdown。专业软件使用 Shell 关联处理器 API；Markdown 另存强制新文件和唯一资产目录，成功才原子切换到 `external-edit`。
+- **系统关联**：`JotLuck.Note` 与 `JotLuck.DocumentImport` 只注册候选，并设置 `AllowSilentDefaultTakeOver`。默认应用必须由 Windows 系统 UI 确认；欢迎页和设置页以 `UserChoiceLatest` 优先、`UserChoice` 回退读取用户明确选择的实际 ProgID，不把无显式选择时的 Shell 候选推导结果当成已应用，也不持久化伪成功。
+- **后果**：转换器增加有限原生依赖和约 3 MiB 安装包预算；若最小 feature、LTO、strip 后安装器仍不低于 10 MiB，则本功能停止交付，不能放宽产品体积上限。
+
+## ADR-019：界面本地化采用类型化目录与结构化原生错误
+
+- **状态**：已接受（2026-08-03）。
+- **决策**：支持 `zh-CN`、`en`、`ja`、`ko`、`fr`，以 `zh-CN` 作为类型主 Schema 和最终回退。使用 Vue I18n Composition API；非中文目录作为离线动态 chunk，在应用挂载前完成首选目录加载。
+- **偏好语义**：没有 `jotluck:locale:v1` 时按系统语言检测并立即保存；之后只响应用户显式切换，不持续跟随系统。语言切换不重建路由、编辑器、主题、弹窗或补全引擎。
+- **内容边界**：只翻译应用拥有的 UI、错误、官方主题、内置模板/示例和导出包装。用户笔记、自定义模板、既有示例及第三方主题作者文字不迁移、不改写。
+- **原生边界**：Rust 与 MockFS 共享稳定错误码；自然语言翻译只发生在前端。NSIS 使用五份安装器语言资源，原生对话框显示字符串由当前界面目录提供。
+- **主题边界**：Theme API v2 以加法方式提供只读 i18n Host API，不改变 `.mltheme` 包结构。新增第三方主题语言包协议必须另行升级标准。
+- **后果**：新增语言只需注册 locale、补齐完整消息/内容目录、安装器资源和契约测试；页面组件不再增加语言分支。
 
 ## ADR-011：离线补全采用可撤销分层学习与可验证基线
 
@@ -88,6 +108,10 @@
 - **后果**：测试机并行负载不会单独阻断 preview，但也不能用“环境抖动”豁免缺安装旅程、缺样本、缺 provenance、缺证据提交或产品功能失败。
 
 ## 变更记录
+
+- 2026-08-04（v1.1）：新增 ADR-020，确定 Office/PDF 隔离语义导入、可取消 worker、双路径编辑和 Windows 系统默认应用边界。
+
+- 2026-08-03：新增 ADR-019，确定五语言类型化目录、首次系统检测、内容保护、结构化原生错误和 Theme Host i18n 边界。
 
 - 2026-07-27：新增 ADR-018，确立固定 adapter、REST 同源解析、独立物化及性能参考警告语义。
 - 2026-07-27：ADR-018 补充 Shell/ProgID 关联启动、驱动事实与 adapter 旁白分离、verifier 语义解析及冷启动零进程边界。

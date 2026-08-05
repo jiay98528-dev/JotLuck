@@ -1,6 +1,6 @@
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ThemeDialog from '../ThemeDialog.vue';
 import { THEME_CENTER_SHOW_DEV_THEMES_KEY, useThemeStore } from '@/stores/theme';
 
@@ -80,5 +80,28 @@ describe('ThemeDialog', () => {
     expect(text).toContain('开发主题');
     expect(text).toContain('能力验证台');
     expect(text).toContain('超级工作台');
+  });
+
+  it('shows a localized fallback without exposing theme parser diagnostics', async () => {
+    const { theme } = mountDialog();
+    vi.spyOn(theme, 'importThemePack').mockRejectedValue(
+      new Error('C:\\private\\broken.mltheme: invalid central directory'),
+    );
+    const trustInput = document.body.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    trustInput.checked = true;
+    trustInput.dispatchEvent(new Event('change', { bubbles: true }));
+    await flushPromises();
+    const input = document.body.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: [new File(['broken'], 'broken.mltheme')],
+    });
+
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await flushPromises();
+
+    expect(document.body.textContent).toContain('操作失败，请重试');
+    expect(document.body.textContent).not.toContain('private');
+    expect(document.body.textContent).not.toContain('central directory');
   });
 });

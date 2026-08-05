@@ -1,7 +1,7 @@
 <template>
   <main class="bootstrap-page" aria-busy="true" aria-live="polite">
     <span class="bootstrap-page__mark" aria-hidden="true" />
-    <span>正在打开 JotLuck...</span>
+    <span>{{ t('notebook.startup.opening') }}</span>
   </main>
 </template>
 
@@ -9,10 +9,12 @@
 import { onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import type { WindowBootstrapPayload } from '@/types';
 import { isDesktopRuntime } from '@/utils/runtime';
 
 const router = useRouter();
+const { t } = useI18n();
 
 onMounted(async () => {
   if (!isDesktopRuntime()) {
@@ -22,7 +24,11 @@ onMounted(async () => {
 
   try {
     const bootstrap = await invoke<WindowBootstrapPayload>('get_window_bootstrap');
-    await router.replace(bootstrap.mode === 'external-readonly' ? '/reader' : '/workspace');
+    await router.replace(
+      bootstrap.mode === 'external-readonly' || bootstrap.mode === 'document-import-readonly'
+        ? '/reader'
+        : '/workspace',
+    );
   } catch {
     // A failed bootstrap must still leave users with the normal workspace.
     await router.replace('/workspace');

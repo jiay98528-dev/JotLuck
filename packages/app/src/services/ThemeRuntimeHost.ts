@@ -15,6 +15,8 @@ import type {
   ThemeSlotId,
 } from '@/types/theme-pack';
 import { findUnscopedCssSelector } from './theme-css-scope';
+import { formatDate, formatNumber, getCurrentLocale, onLocaleChange, translate } from '@/i18n';
+import { createUserMessageError } from './command-errors';
 
 export interface ThemeHostApi extends ThemeHostContext {
   getStorage: (key: string) => string | null;
@@ -48,7 +50,7 @@ function installScopedThemeCss(themeId: string, css?: string): HTMLStyleElement 
   if (!css?.trim()) return undefined;
   const unscoped = findUnscopedCssSelector(css, themeId);
   if (unscoped) {
-    throw new Error(`主题 CSS 未限定在当前主题根节点：${unscoped}`);
+    throw createUserMessageError('theme.validation.runtimeCssUnscoped', { selector: unscoped });
   }
   if (typeof document === 'undefined') return undefined;
   const style = document.createElement('style');
@@ -208,6 +210,16 @@ export function createThemeHostApi(
     toast: {
       show: () => undefined,
       ...uiApi.toast,
+    },
+    i18n: {
+      get locale() {
+        return getCurrentLocale();
+      },
+      getLocale: getCurrentLocale,
+      t: translate,
+      formatDate,
+      formatNumber,
+      onChange: onLocaleChange,
     },
     commerce: uiApi.commerce ?? commerce,
     appState: uiApi.appState ?? {},

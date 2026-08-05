@@ -14,7 +14,7 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { EditorView, lineNumbers, keymap } from '@codemirror/view';
 import { EditorState, Compartment } from '@codemirror/state';
-import { jotluckExtensions } from '@/utils/cm6-extensions';
+import { jotluckExtensions, jotluckPlaceholder } from '@/utils/cm6-extensions';
 import { exitLivePreviewOnEscape, livePreviewExtension } from '@/utils/cm6-live-preview';
 import { ghostTextPlugin } from '@/utils/cm6-ghost-text';
 import { MarkdownPredictor } from '@/services/MarkdownPredictor';
@@ -28,6 +28,7 @@ import {
 import { getJotLuckE2EBridge } from '@/utils/e2e-bridge';
 import { flushCompletionStorageMutations } from '@/services/completion/learning-repository';
 import type { RendererOptions } from '@jotluck/renderer';
+import { currentLocale, translate } from '@/i18n';
 
 const props = withDefaults(
   defineProps<{
@@ -61,7 +62,7 @@ const props = withDefaults(
     livePreview: false,
     sourceOnly: false,
     pendingFormat: null,
-    placeholder: '开始书写…',
+    placeholder: undefined,
     enableAutocomplete: true,
     completionSettings: undefined,
     predictor: undefined,
@@ -82,6 +83,7 @@ const lineNumberCompartment = new Compartment();
 const livePreviewCompartment = new Compartment();
 const autocompleteCompartment = new Compartment();
 const readOnlyCompartment = new Compartment();
+const placeholderCompartment = new Compartment();
 
 // NotebookHome owns the predictor in the product path. The fallback keeps the
 // component independently mountable in unit tests and isolated previews.
@@ -240,7 +242,10 @@ function createState(doc: string) {
         EditorView.editable.of(!props.readOnly),
       ]),
       keymap.of([{ key: 'Enter', run: handlePendingFormatEnter }]),
-      ...jotluckExtensions(props.placeholder, props.sourceOnly),
+      ...jotluckExtensions(props.sourceOnly),
+      placeholderCompartment.of(
+        jotluckPlaceholder(props.placeholder ?? translate('editor.placeholder')),
+      ),
       lineNumberCompartment.of(props.showLineNumbers ? lineNumbers() : []),
       livePreviewCompartment.of(
         props.livePreview
@@ -405,7 +410,8 @@ function onEditorHostPaste(event: ClipboardEvent): void {
 
 // Dynamic live preview toggle
 watch(
-  () => [props.livePreview, props.wikiLinkRevision, props.imageRevision] as const,
+  () =>
+    [props.livePreview, props.wikiLinkRevision, props.imageRevision, currentLocale.value] as const,
   ([active]) => {
     if (!view) return;
     view.dispatch({
@@ -438,6 +444,15 @@ watch(
   () => props.pendingFormat,
   (action) => applyPendingFormat(action),
 );
+
+watch([() => props.placeholder, currentLocale], ([placeholder]) => {
+  if (!view) return;
+  view.dispatch({
+    effects: placeholderCompartment.reconfigure(
+      jotluckPlaceholder(placeholder ?? translate('editor.placeholder')),
+    ),
+  });
+});
 
 onMounted(() => {
   if (!editorHost.value) return;

@@ -10,7 +10,7 @@
     :data-layout="region.layout"
     data-theme-part="status"
     role="status"
-    aria-label="编辑器状态栏"
+    :aria-label="t('editor.status.aria')"
   >
     <template v-if="region.layout === 'save-only'">
       <span class="status-reader-save" data-theme-part="status-save">
@@ -23,31 +23,35 @@
             <button
               class="status-error-action"
               type="button"
-              aria-label="重新保存当前笔记"
+              :aria-label="t('editor.status.retrySaveAria')"
               @click="emit('retry-save')"
             >
-              重新保存
+              {{ t('editor.status.retrySave') }}
             </button>
             <button
               class="status-error-action status-error-action--secondary"
               type="button"
-              aria-label="另存当前笔记副本"
+              :aria-label="t('editor.status.saveCopyAria')"
               @click="emit('save-copy')"
             >
-              另存副本
+              {{ t('editor.status.saveCopy') }}
             </button>
           </span>
         </span>
-        <span v-else-if="isSaving" class="status-saving">&#9203; 保存中...</span>
-        <span v-else-if="isDirty" class="status-dirty">&#9679; 未保存</span>
-        <span v-else class="status-saved" :class="{ ripple: showRipple }">&#10003; 已保存</span>
+        <span v-else-if="isSaving" class="status-saving"
+          >&#9203; {{ t('editor.status.saving') }}</span
+        >
+        <span v-else-if="isDirty" class="status-dirty">&#9679; {{ t('editor.status.dirty') }}</span>
+        <span v-else class="status-saved" :class="{ ripple: showRipple }"
+          >&#10003; {{ t('editor.status.saved') }}</span
+        >
       </span>
     </template>
 
     <template v-else-if="region.layout === 'dashboard'">
       <span class="status-left status-left--dashboard" data-theme-part="status-metrics">
-        <strong>{{ lineCount }} 行</strong>
-        <span>{{ charCount }} 字 &middot; {{ wordCount }} 词</span>
+        <strong>{{ t('editor.status.lines', { count: lineCount }) }}</strong>
+        <span>{{ t('editor.status.counts', { chars: charCount, words: wordCount }) }}</span>
       </span>
       <span class="status-center status-center--dashboard" data-theme-part="status-position">
         <template v-if="cursorLine !== null">Ln {{ cursorLine }}, Col {{ cursorCol }}</template>
@@ -71,24 +75,30 @@
               <button
                 class="status-error-action"
                 type="button"
-                aria-label="重新保存当前笔记"
+                :aria-label="t('editor.status.retrySaveAria')"
                 @click="emit('retry-save')"
               >
-                重新保存
+                {{ t('editor.status.retrySave') }}
               </button>
               <button
                 class="status-error-action status-error-action--secondary"
                 type="button"
-                aria-label="另存当前笔记副本"
+                :aria-label="t('editor.status.saveCopyAria')"
                 @click="emit('save-copy')"
               >
-                另存副本
+                {{ t('editor.status.saveCopy') }}
               </button>
             </span>
           </span>
-          <span v-else-if="isSaving" class="status-saving">&#9203; 保存中...</span>
-          <span v-else-if="isDirty" class="status-dirty">&#9679; 未保存</span>
-          <span v-else class="status-saved" :class="{ ripple: showRipple }">&#10003; 已保存</span>
+          <span v-else-if="isSaving" class="status-saving"
+            >&#9203; {{ t('editor.status.saving') }}</span
+          >
+          <span v-else-if="isDirty" class="status-dirty"
+            >&#9679; {{ t('editor.status.dirty') }}</span
+          >
+          <span v-else class="status-saved" :class="{ ripple: showRipple }"
+            >&#10003; {{ t('editor.status.saved') }}</span
+          >
         </span>
       </span>
     </template>
@@ -99,9 +109,9 @@
         <template v-else>&mdash;</template>
       </span>
       <span class="status-center" data-theme-part="status-metrics">
-        {{ charCount }} 字 &middot; {{ wordCount }} 词
+        {{ t('editor.status.counts', { chars: charCount, words: wordCount }) }}
         <span v-if="region.layout !== 'compact'" class="status-hint">
-          &middot; 选中文字以格式化 &middot; Ctrl+点击固定区块
+          &middot; {{ t('editor.status.selectionHint') }}
         </span>
       </span>
       <span class="status-right" data-theme-part="status-save">
@@ -114,24 +124,28 @@
             <button
               class="status-error-action"
               type="button"
-              aria-label="重新保存当前笔记"
+              :aria-label="t('editor.status.retrySaveAria')"
               @click="emit('retry-save')"
             >
-              重新保存
+              {{ t('editor.status.retrySave') }}
             </button>
             <button
               class="status-error-action status-error-action--secondary"
               type="button"
-              aria-label="另存当前笔记副本"
+              :aria-label="t('editor.status.saveCopyAria')"
               @click="emit('save-copy')"
             >
-              另存副本
+              {{ t('editor.status.saveCopy') }}
             </button>
           </span>
         </span>
-        <span v-else-if="isSaving" class="status-saving">&#9203; 保存中...</span>
-        <span v-else-if="isDirty" class="status-dirty">&#9679; 未保存</span>
-        <span v-else class="status-saved" :class="{ ripple: showRipple }">&#10003; 已保存</span>
+        <span v-else-if="isSaving" class="status-saving"
+          >&#9203; {{ t('editor.status.saving') }}</span
+        >
+        <span v-else-if="isDirty" class="status-dirty">&#9679; {{ t('editor.status.dirty') }}</span>
+        <span v-else class="status-saved" :class="{ ripple: showRipple }"
+          >&#10003; {{ t('editor.status.saved') }}</span
+        >
       </span>
     </template>
   </footer>
@@ -139,8 +153,11 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import ShellActionButton from '@/components/layout/ShellActionButton.vue';
 import type { ShellAction, StatusBarRegion } from '@/types/theme-pack';
+
+const { t } = useI18n();
 
 const props = withDefaults(
   defineProps<{

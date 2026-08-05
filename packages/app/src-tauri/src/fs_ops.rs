@@ -3,6 +3,7 @@
 // Tauri IPC commands for reading, writing, deleting, and listing note files.
 // All operations go through path::resolve_safe_path for security.
 
+use crate::command_error::CommandResult;
 use crate::path::{is_ignored_notebook_directory_name, resolve_safe_path};
 use crate::window_session::WindowSessionRegistry;
 use base64::{engine::general_purpose, Engine as _};
@@ -31,7 +32,7 @@ impl FileMutationCoordinator {
         Self(Mutex::new(HashMap::new()))
     }
 
-    fn with_paths<T>(
+    pub(crate) fn with_paths<T>(
         &self,
         paths: &[PathBuf],
         action: impl FnOnce() -> Result<T, String>,
@@ -87,6 +88,29 @@ fn mutation_path_key(path: &Path) -> String {
 pub struct TextFileSnapshot {
     pub content: String,
     pub revision: String,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SampleSeedFile {
+    pub path: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SampleNotebookSeed {
+    pub directory_name: String,
+    pub files: Vec<SampleSeedFile>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveExternalNoteAsRequest {
+    pub default_file_name: String,
+    pub dialog_title: String,
+    pub filter_name: String,
+    pub content: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -826,7 +850,7 @@ fn rename_no_replace(old_path: &Path, new_path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-fn stage_text_file(target: &Path, content: &str) -> Result<PathBuf, String> {
+pub(crate) fn stage_text_file(target: &Path, content: &str) -> Result<PathBuf, String> {
     let tmp_path = unique_write_temp_path(target)?;
     let staged = (|| {
         let mut file = File::create(&tmp_path).map_err(|e| format!("写入文件失败: {e}"))?;
@@ -842,7 +866,7 @@ fn stage_text_file(target: &Path, content: &str) -> Result<PathBuf, String> {
     Ok(tmp_path)
 }
 
-fn commit_staged_text_file(tmp_path: &Path, target: &Path) -> Result<(), String> {
+pub(crate) fn commit_staged_text_file(tmp_path: &Path, target: &Path) -> Result<(), String> {
     replace_file(tmp_path, target).map_err(|e| {
         let _ = fs::remove_file(tmp_path);
         format!("保存文件失败: {}", e)
@@ -994,7 +1018,7 @@ pub fn open_notebook(
     path: String,
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
-) -> Result<String, String> {
+) -> CommandResult<String> {
     assert_workspace(&window, &sessions)?;
     let canonical = bind_notebook_root(&root, window.label(), Path::new(&path))?;
     Ok(canonical.to_string_lossy().to_string())
@@ -1010,7 +1034,7 @@ pub fn open_external_notebook(
     access: State<ExternalAccessGrants>,
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
-) -> Result<String, String> {
+) -> CommandResult<String> {
     // This legacy path is retained for saving a scratch note from a workspace
     // window. External-file windows must use promote_external_file_to_notebook,
     // which updates the bootstrap session and notebook root atomically.
@@ -1026,124 +1050,81 @@ fn local_app_data_dir() -> Result<PathBuf, String> {
     std::env::var_os("LOCALAPPDATA")
         .or_else(|| std::env::var_os("HOME"))
         .map(PathBuf::from)
-        .ok_or_else(|| "无法定位本机应用数据目录".to_string())
+        .ok_or_else(|| "unable to locate the local application data directory".to_string())
 }
 
-fn write_sample_file_if_missing(root_path: &Path, name: &str, content: &str) -> Result<(), String> {
-    let target = root_path.join(name);
-    if target.exists() {
+fn validate_sample_seed(seed: &SampleNotebookSeed) -> Result<(), String> {
+    let name = seed.directory_name.trim();
+    if name.is_empty()
+        || name == "."
+        || name == ".."
+        || name.contains('/')
+        || name.contains('\\')
+        || seed.files.is_empty()
+    {
+        return Err("invalid localized sample seed".to_string());
+    }
+    for file in &seed.files {
+        let relative = file.path.trim_start_matches('/');
+        if relative.is_empty() || !is_supported_note_file(relative) {
+            return Err(format!("invalid sample note path: {}", file.path));
+        }
+        resolve_safe_path(Path::new("."), relative).map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+fn create_sample_notebook_atomically(
+    app_root: &Path,
+    sample_root: &Path,
+    seed: &SampleNotebookSeed,
+) -> Result<(), String> {
+    if sample_root.exists() {
         return Ok(());
     }
-    fs::write(&target, content).map_err(|e| format!("写入示例文档失败: {}", e))
+    fs::create_dir_all(app_root).map_err(|error| error.to_string())?;
+    let staging_root = app_root.join(format!(".jotluck-sample-{}", Uuid::new_v4()));
+    fs::create_dir(&staging_root).map_err(|error| error.to_string())?;
+    let result = (|| {
+        for file in &seed.files {
+            let relative = file.path.trim_start_matches('/');
+            let target =
+                resolve_safe_path(&staging_root, relative).map_err(|error| error.to_string())?;
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+            }
+            write_text_file_atomically(&target, &file.content)?;
+        }
+        match fs::rename(&staging_root, sample_root) {
+            Ok(()) => Ok(()),
+            Err(_) if sample_root.exists() => Ok(()),
+            Err(error) => Err(error.to_string()),
+        }
+    })();
+    if staging_root.exists() {
+        let _ = fs::remove_dir_all(&staging_root);
+    }
+    result
 }
 
 /// Open or create the first-run sample notebook under the user's app data directory.
+/// Existing sample directories are never overwritten or augmented.
 #[tauri::command]
 pub fn open_sample_notebook(
     window: WebviewWindow,
+    seed: SampleNotebookSeed,
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
-) -> Result<String, String> {
+) -> CommandResult<String> {
     assert_workspace(&window, &sessions)?;
-    let sample_root = local_app_data_dir()?.join("JotLuck").join("示例笔记本");
-    fs::create_dir_all(&sample_root).map_err(|e| format!("创建示例笔记本失败: {}", e))?;
-
-    write_sample_file_if_missing(
-        &sample_root,
-        "快速入门.md",
-        r#"---
-title: 快速入门
-tags:
-  - 入门
-  - markdown
-created: 2026-06-01
----
-
-# 欢迎使用 JotLuck
-
-JotLuck 是一款轻量、本地优先、离线可用的 Markdown 笔记工具。每一条笔记都是普通的 .md 文件，文件夹就是笔记本。
-
-## 从这里开始
-
-- 在左侧书签中切换常用笔记。
-- 点击文件抽屉浏览当前文件夹。
-- 使用 Ctrl+K 搜索笔记、标签和正文。
-- 通过 [[格式示例]] 查看常用 Markdown 写法。
-- 关联项目资料：[[项目规划]]。
-- 外部链接示例：[JotLuck GitHub](https://github.com)。
-
-> JotLuck 只增强写作体验，不接管你的数据。
-"#,
-    )?;
-    write_sample_file_if_missing(
-        &sample_root,
-        "格式示例.md",
-        r#"---
-title: 格式示例
-tags:
-  - markdown
-  - 示例
-created: 2026-06-01
----
-
-# 格式示例
-
-## 文本样式
-
-普通正文、**粗体**、*斜体*、~~删除线~~、`行内代码`。
-
-## 列表与任务
-
-- 无序列表
-- 支持嵌套
-  - 子项目
-
-- [x] 打开示例文档
-- [ ] 创建第一条自己的笔记
-
-## 代码块
-
-~~~ts
-function hello(name: string): string {
-  return `Hello, ${name}`;
-}
-~~~
-
-## 表格
-
-| 功能 | 状态 |
-| --- | --- |
-| 本地文件 | 支持 |
-| Wiki-link | 支持 |
-| 离线补全 | 支持 |
-
-关联到 [[快速入门]]。
-"#,
-    )?;
-    write_sample_file_if_missing(
-        &sample_root,
-        "项目规划.md",
-        r#"---
-title: 项目规划
-tags:
-  - 规划
-  - 项目
-created: 2026-06-02
----
-
-# 项目规划
-
-## 本周目标
-
-- [x] 打开示例笔记本
-- [ ] 创建第一条自己的笔记
-- [ ] 试试 [[格式示例]] 中的 Markdown 写法
-"#,
-    )?;
+    validate_sample_seed(&seed)?;
+    let app_root = local_app_data_dir()?.join("JotLuck");
+    let sample_root = app_root.join(seed.directory_name.trim());
+    create_sample_notebook_atomically(&app_root, &sample_root, &seed)?;
 
     let canonical = sample_root
         .canonicalize()
-        .map_err(|e| format!("无法解析示例笔记本路径: {}", e))?;
+        .map_err(|error| error.to_string())?;
     root.set_for(window.label(), canonical.clone())?;
     Ok(canonical.to_string_lossy().to_string())
 }
@@ -1154,11 +1135,12 @@ pub fn get_notebook_root(
     window: WebviewWindow,
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
-) -> Result<String, String> {
+) -> CommandResult<String> {
     assert_workspace(&window, &sessions)?;
-    root.get_for(window.label())
+    Ok(root
+        .get_for(window.label())
         .map(|p| p.to_string_lossy().to_string())
-        .ok_or_else(|| "未打开笔记本".to_string())
+        .ok_or_else(|| "notebook is not open".to_string())?)
 }
 
 /// List supported note files and directories in a given directory (relative to notebook root).
@@ -1168,10 +1150,10 @@ pub fn list_directory(
     relative_path: String,
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
-) -> Result<Vec<DirEntry>, String> {
+) -> CommandResult<Vec<DirEntry>> {
     assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
-    list_directory_at(&root_path, &relative_path)
+    Ok(list_directory_at(&root_path, &relative_path)?)
 }
 
 fn list_directory_at(root_path: &Path, relative_path: &str) -> Result<Vec<DirEntry>, String> {
@@ -1234,10 +1216,10 @@ pub fn read_file(
     relative_path: String,
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
-) -> Result<String, String> {
+) -> CommandResult<String> {
     assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
-    read_file_at(&root_path, &relative_path)
+    Ok(read_file_at(&root_path, &relative_path)?)
 }
 
 /// Read a workspace note together with the exact UTF-8 content revision used
@@ -1248,11 +1230,11 @@ pub fn read_file_snapshot(
     relative_path: String,
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
-) -> Result<TextFileSnapshot, String> {
+) -> CommandResult<TextFileSnapshot> {
     assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
     let target = resolve_safe_path(&root_path, &relative_path).map_err(|e| e.to_string())?;
-    read_text_snapshot_from_target(&target, "读取文件失败")
+    Ok(read_text_snapshot_from_target(&target, "read file failed")?)
 }
 
 fn read_file_at(root_path: &Path, relative_path: &str) -> Result<String, String> {
@@ -1296,8 +1278,10 @@ fn read_external_note_snapshot(target: &Path) -> Result<TextFileSnapshot, String
     Ok(TextFileSnapshot { content, revision })
 }
 
-fn read_external_note_content(target: &Path) -> Result<String, String> {
-    read_external_note_snapshot(target).map(|snapshot| snapshot.content)
+fn read_external_note_content(target: &Path) -> CommandResult<String> {
+    read_external_note_snapshot(target)
+        .map(|snapshot| snapshot.content)
+        .map_err(Into::into)
 }
 
 /// Read one markdown-family file by absolute path without opening its parent as notebook.
@@ -1307,7 +1291,7 @@ pub fn read_external_markdown_file(
     access_token: String,
     relative_path: String,
     access: State<ExternalAccessGrants>,
-) -> Result<String, String> {
+) -> CommandResult<String> {
     assert_external_owner(&window, &access, &access_token)?;
     let target = access.resolve_file(&access_token, &relative_path, true, false)?;
     read_external_note_content(&target)
@@ -1317,7 +1301,7 @@ pub fn read_external_markdown_file(
 fn read_external_markdown_file_with_access(
     absolute_path: &str,
     access: &ExternalAccessGrants,
-) -> Result<String, String> {
+) -> CommandResult<String> {
     let handle = access.grant_for_saved_file(absolute_path, "test")?;
     let target = access.resolve_file(&handle.access_token, &handle.relative_path, true, false)?;
     read_external_note_content(&target)
@@ -1330,7 +1314,7 @@ pub fn read_external_note_file(
     access_token: String,
     relative_path: String,
     access: State<ExternalAccessGrants>,
-) -> Result<String, String> {
+) -> CommandResult<String> {
     assert_external_owner(&window, &access, &access_token)?;
     let target = access.resolve_file(&access_token, &relative_path, false, false)?;
     read_external_note_content(&target)
@@ -1342,10 +1326,10 @@ pub fn read_external_note_file_snapshot(
     access_token: String,
     relative_path: String,
     access: State<ExternalAccessGrants>,
-) -> Result<TextFileSnapshot, String> {
+) -> CommandResult<TextFileSnapshot> {
     assert_external_owner(&window, &access, &access_token)?;
     let target = access.resolve_file(&access_token, &relative_path, false, false)?;
-    read_external_note_snapshot(&target)
+    read_external_note_snapshot(&target).map_err(Into::into)
 }
 
 /// Write content to a file (relative to notebook root).
@@ -1358,10 +1342,15 @@ pub fn write_file(
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
     coordinator: State<FileMutationCoordinator>,
-) -> Result<(), String> {
+) -> CommandResult<()> {
     assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
-    write_file_at_coordinated(&root_path, &relative_path, &content, &coordinator)
+    Ok(write_file_at_coordinated(
+        &root_path,
+        &relative_path,
+        &content,
+        &coordinator,
+    )?)
 }
 
 #[cfg(test)]
@@ -1398,16 +1387,16 @@ pub fn write_file_if_unchanged(
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
     coordinator: State<FileMutationCoordinator>,
-) -> Result<ConditionalWriteResult, String> {
+) -> CommandResult<ConditionalWriteResult> {
     assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
     let target = resolve_safe_path(&root_path, &relative_path).map_err(|e| e.to_string())?;
-    write_text_file_if_unchanged_at(
+    Ok(write_text_file_if_unchanged_at(
         &target,
         &content,
         expected_revision.as_deref(),
         &coordinator,
-    )
+    )?)
 }
 
 /// Write one markdown-family file by absolute path without opening its parent as notebook.
@@ -1420,13 +1409,13 @@ pub fn write_external_markdown_file(
     access: State<ExternalAccessGrants>,
     sessions: State<WindowSessionRegistry>,
     coordinator: State<FileMutationCoordinator>,
-) -> Result<(), String> {
+) -> CommandResult<()> {
     assert_external_edit(&window, &sessions, &access_token)?;
     assert_external_owner(&window, &access, &access_token)?;
     let target = access.resolve_file(&access_token, &relative_path, true, true)?;
-    coordinator.with_paths(std::slice::from_ref(&target), || {
+    Ok(coordinator.with_paths(std::slice::from_ref(&target), || {
         write_text_file_atomically(&target, &content)
-    })
+    })?)
 }
 
 #[cfg(test)]
@@ -1450,15 +1439,15 @@ pub fn write_external_note_file(
     access: State<ExternalAccessGrants>,
     sessions: State<WindowSessionRegistry>,
     coordinator: State<FileMutationCoordinator>,
-) -> Result<(), String> {
+) -> CommandResult<()> {
     assert_external_edit(&window, &sessions, &access_token)?;
     assert_external_owner(&window, &access, &access_token)?;
     let target = access.resolve_file(&access_token, &relative_path, false, true)?;
-    coordinator
+    Ok(coordinator
         .with_paths(std::slice::from_ref(&target), || {
             write_text_file_atomically(&target, &content)
         })
-        .map_err(|e| format!("保存外部文件失败: {e}"))
+        .map_err(|e| format!("save external file failed: {e}"))?)
 }
 
 #[tauri::command]
@@ -1473,16 +1462,16 @@ pub fn write_external_note_file_if_unchanged(
     access: State<ExternalAccessGrants>,
     sessions: State<WindowSessionRegistry>,
     coordinator: State<FileMutationCoordinator>,
-) -> Result<ConditionalWriteResult, String> {
+) -> CommandResult<ConditionalWriteResult> {
     assert_external_edit(&window, &sessions, &access_token)?;
     assert_external_owner(&window, &access, &access_token)?;
     let target = access.resolve_file_for_conditional_write(&access_token, &relative_path, false)?;
-    write_text_file_if_unchanged_at(
+    Ok(write_text_file_if_unchanged_at(
         &target,
         &content,
         expected_revision.as_deref(),
         &coordinator,
-    )
+    )?)
 }
 
 /// Open the native save dialog, write the selected note, then issue its grant.
@@ -1491,21 +1480,28 @@ pub fn write_external_note_file_if_unchanged(
 pub fn save_external_note_as(
     window: WebviewWindow,
     app: AppHandle,
-    default_file_name: String,
-    content: String,
+    request: SaveExternalNoteAsRequest,
     access: State<ExternalAccessGrants>,
     sessions: State<WindowSessionRegistry>,
     coordinator: State<FileMutationCoordinator>,
-) -> Result<ExternalFileHandle, String> {
+) -> CommandResult<Option<ExternalFileHandle>> {
+    let SaveExternalNoteAsRequest {
+        default_file_name,
+        dialog_title,
+        filter_name,
+        content,
+    } = request;
     sessions.assert_save_as_allowed(window.label())?;
     let selected = app
         .dialog()
         .file()
-        .set_title("Save Markdown note")
+        .set_title(dialog_title)
         .set_file_name(default_file_name)
-        .add_filter("Markdown", &["md", "markdown", "mdx", "txt"])
-        .blocking_save_file()
-        .ok_or_else(|| "save dialog was cancelled".to_string())?;
+        .add_filter(filter_name, &["md", "markdown", "mdx", "txt"])
+        .blocking_save_file();
+    let Some(selected) = selected else {
+        return Ok(None);
+    };
     let path = selected
         .into_path()
         .map_err(|e| format!("unable to resolve selected save path: {e}"))?;
@@ -1514,7 +1510,9 @@ pub fn save_external_note_as(
     coordinator.with_paths(std::slice::from_ref(&target), || {
         write_text_file_atomically(&target, &content)
     })?;
-    access.grant_for_saved_file(&path_text, window.label())
+    Ok(Some(
+        access.grant_for_saved_file(&path_text, window.label())?,
+    ))
 }
 
 #[tauri::command]
@@ -1522,7 +1520,7 @@ pub fn revoke_external_access(
     window: WebviewWindow,
     access_token: String,
     access: State<ExternalAccessGrants>,
-) -> Result<(), String> {
+) -> CommandResult<()> {
     assert_external_owner(&window, &access, &access_token)?;
     access.revoke(&access_token);
     Ok(())
@@ -1537,10 +1535,15 @@ pub fn write_binary_file(
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
     coordinator: State<FileMutationCoordinator>,
-) -> Result<(), String> {
+) -> CommandResult<()> {
     assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
-    write_binary_file_at_coordinated(&root_path, &relative_path, &base64, &coordinator)
+    Ok(write_binary_file_at_coordinated(
+        &root_path,
+        &relative_path,
+        &base64,
+        &coordinator,
+    )?)
 }
 
 #[cfg(test)]
@@ -1579,10 +1582,10 @@ pub fn read_binary_file(
     relative_path: String,
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
-) -> Result<String, String> {
+) -> CommandResult<String> {
     assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
-    read_binary_file_at(&root_path, &relative_path)
+    Ok(read_binary_file_at(&root_path, &relative_path)?)
 }
 
 fn read_binary_file_at(root_path: &Path, relative_path: &str) -> Result<String, String> {
@@ -1604,10 +1607,14 @@ pub fn delete_file(
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
     coordinator: State<FileMutationCoordinator>,
-) -> Result<(), String> {
+) -> CommandResult<()> {
     assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
-    delete_file_at_coordinated(&root_path, &relative_path, &coordinator)
+    Ok(delete_file_at_coordinated(
+        &root_path,
+        &relative_path,
+        &coordinator,
+    )?)
 }
 
 fn delete_file_at_coordinated(
@@ -1631,10 +1638,10 @@ pub fn create_directory(
     relative_path: String,
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
-) -> Result<(), String> {
+) -> CommandResult<()> {
     assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
-    create_directory_at(&root_path, &relative_path)
+    Ok(create_directory_at(&root_path, &relative_path)?)
 }
 
 fn create_directory_at(root_path: &Path, relative_path: &str) -> Result<(), String> {
@@ -1651,15 +1658,15 @@ pub fn rename_file(
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
     coordinator: State<FileMutationCoordinator>,
-) -> Result<(), String> {
+) -> CommandResult<()> {
     assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
-    rename_file_at_coordinated(
+    Ok(rename_file_at_coordinated(
         &root_path,
         &old_relative_path,
         &new_relative_path,
         &coordinator,
-    )
+    )?)
 }
 
 #[cfg(test)]
@@ -1711,7 +1718,7 @@ pub fn get_file_meta(
     relative_path: String,
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
-) -> Result<DirEntry, String> {
+) -> CommandResult<DirEntry> {
     assert_workspace(&window, &sessions)?;
     let root_path = notebook_root_for(&window, &root)?;
     let target = resolve_safe_path(&root_path, &relative_path).map_err(|e| e.to_string())?;
@@ -2440,7 +2447,11 @@ mod tests {
         file.set_len(MAX_EXTERNAL_NOTE_BYTES + 1).unwrap();
 
         let error = read_external_note_content(&target).unwrap_err();
-        assert!(error.contains("超过 5 MB"));
+        assert_eq!(error.code, "file_too_large");
+        assert!(error
+            .diagnostic
+            .as_deref()
+            .is_some_and(|message| message.contains("超过 5 MB")));
 
         std::fs::remove_dir_all(root).unwrap();
     }
@@ -2467,5 +2478,41 @@ mod tests {
             .is_err());
 
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn localized_sample_seed_is_created_once_without_overwriting_existing_files() {
+        let app_root = temp_notebook("localized-sample-seed");
+        let sample_root = app_root.join("Sample Notebook");
+        let first = SampleNotebookSeed {
+            directory_name: "Sample Notebook".to_string(),
+            files: vec![SampleSeedFile {
+                path: "/Getting Started.md".to_string(),
+                content: "# First locale".to_string(),
+            }],
+        };
+        create_sample_notebook_atomically(&app_root, &sample_root, &first).unwrap();
+
+        let second = SampleNotebookSeed {
+            directory_name: "Sample Notebook".to_string(),
+            files: vec![
+                SampleSeedFile {
+                    path: "/Getting Started.md".to_string(),
+                    content: "# Another locale".to_string(),
+                },
+                SampleSeedFile {
+                    path: "/Added Later.md".to_string(),
+                    content: "# Must not appear".to_string(),
+                },
+            ],
+        };
+        create_sample_notebook_atomically(&app_root, &sample_root, &second).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(sample_root.join("Getting Started.md")).unwrap(),
+            "# First locale"
+        );
+        assert!(!sample_root.join("Added Later.md").exists());
+        std::fs::remove_dir_all(app_root).unwrap();
     }
 }

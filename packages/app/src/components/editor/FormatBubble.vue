@@ -7,7 +7,7 @@
         class="format-bubble"
         :style="bubbleStyle"
         role="toolbar"
-        aria-label="文本格式"
+        :aria-label="t('editor.toolbar.textFormat')"
         @mouseenter="resetInactivityTimer"
         @mousemove="resetInactivityTimer"
       >
@@ -15,8 +15,8 @@
           variant="ghost"
           size="icon-sm"
           class="bubble-btn bubble-btn--bold"
-          title="加粗 (Ctrl+B)"
-          aria-label="加粗"
+          :title="t('editor.toolbar.boldTitle')"
+          :aria-label="t('editor.toolbar.bold')"
           @mousedown.prevent
           @click="emitFormat('bold')"
           >B</Button
@@ -25,8 +25,8 @@
           variant="ghost"
           size="icon-sm"
           class="bubble-btn bubble-btn--italic"
-          title="斜体 (Ctrl+I)"
-          aria-label="斜体"
+          :title="t('editor.toolbar.italicTitle')"
+          :aria-label="t('editor.toolbar.italic')"
           @mousedown.prevent
           @click="emitFormat('italic')"
           >I</Button
@@ -35,8 +35,8 @@
           variant="ghost"
           size="icon-sm"
           class="bubble-btn"
-          title="删除线"
-          aria-label="删除线"
+          :title="t('editor.toolbar.strikethrough')"
+          :aria-label="t('editor.toolbar.strikethrough')"
           @mousedown.prevent
           @click="emitFormat('strikethrough')"
           >S</Button
@@ -45,8 +45,8 @@
           variant="ghost"
           size="icon-sm"
           class="bubble-btn bubble-btn--mono"
-          title="行内代码 (Ctrl+`)"
-          aria-label="行内代码"
+          :title="t('editor.toolbar.inlineCodeTitle')"
+          :aria-label="t('editor.toolbar.inlineCode')"
           @mousedown.prevent
           @click="emitFormat('inlineCode')"
           >&lt;/&gt;</Button
@@ -55,8 +55,8 @@
           variant="ghost"
           size="icon-sm"
           class="bubble-btn"
-          title="链接 (Ctrl+K)"
-          aria-label="链接"
+          :title="t('editor.toolbar.linkTitle')"
+          :aria-label="t('editor.toolbar.link')"
           @mousedown.prevent
           @click="emitFormat('link')"
         >
@@ -80,8 +80,8 @@
           variant="ghost"
           size="icon-sm"
           class="bubble-btn bubble-btn--clear"
-          title="清除格式"
-          aria-label="清除格式"
+          :title="t('editor.toolbar.clear')"
+          :aria-label="t('editor.toolbar.clear')"
           @mousedown.prevent
           @click="emitFormat('clear')"
         >
@@ -117,8 +117,11 @@
  * @see spec/frontend/migration-map.md §1.2
  */
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Button from '@/components/common/Button.vue';
 import type { FormatAction } from '@/types';
+
+const { t } = useI18n();
 
 // ============================================================
 // Constants

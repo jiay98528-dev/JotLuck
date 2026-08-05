@@ -369,6 +369,7 @@ interface ThemeHostContext {
   readonly editor: ThemeHostEditorApi;
   readonly dialogs: ThemeHostDialogApi;
   readonly toast: ThemeHostToastApi;
+  readonly i18n: ThemeHostI18nApi;
   readonly commerce: ThemeCommerceProvider;
   readonly appState: Record<string, unknown>;
   readonly ui: Record<string, unknown>;
@@ -378,17 +379,35 @@ interface ThemeHostContext {
 
 子 API：
 
-| API        | 当前方法                                     | 语义                                                       |
-| ---------- | -------------------------------------------- | ---------------------------------------------------------- |
-| `actions`  | `list()`、`dispatch(actionId)`               | 读取和触发宿主 action。                                    |
-| `slots`    | `has(slot)`                                  | 判断当前主题是否已注册代码 slot 组件。                     |
-| `storage`  | `get(key)`、`set(key, value)`、`remove(key)` | 主题私有 localStorage，前缀为 `jotluck:theme:<themeId>:`。 |
-| `editor`   | `getContent()`、`setContent?()`、`focus?()`  | 编辑器受控能力，由宿主按当前页面状态注入。                 |
-| `dialogs`  | `open(slot)`、`close(slot)`                  | 打开/关闭已暴露的 dialog slot。                            |
-| `toast`    | `show(message)`                              | 展示宿主 toast。                                           |
-| `commerce` | `ThemeCommerceProvider`                      | 读取主题目录、授权状态、购买/兑换/刷新契约。               |
-| `appState` | readonly record                              | 只读应用状态快照。                                         |
-| `ui`       | record                                       | 宿主传给 runtime 的扩展 UI API 容器。                      |
+| API        | 当前方法                                                                   | 语义                                                       |
+| ---------- | -------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `actions`  | `list()`、`dispatch(actionId)`                                             | 读取和触发宿主 action。                                    |
+| `slots`    | `has(slot)`                                                                | 判断当前主题是否已注册代码 slot 组件。                     |
+| `storage`  | `get(key)`、`set(key, value)`、`remove(key)`                               | 主题私有 localStorage，前缀为 `jotluck:theme:<themeId>:`。 |
+| `editor`   | `getContent()`、`setContent?()`、`focus?()`                                | 编辑器受控能力，由宿主按当前页面状态注入。                 |
+| `dialogs`  | `open(slot)`、`close(slot)`                                                | 打开/关闭已暴露的 dialog slot。                            |
+| `toast`    | `show(message)`                                                            | 展示宿主 toast。                                           |
+| `i18n`     | `getLocale()`、`t()`、`formatDate()`、`formatNumber()`、`onLocaleChange()` | 读取宿主语言、翻译宿主消息并订阅显式语言切换。             |
+| `commerce` | `ThemeCommerceProvider`                                                    | 读取主题目录、授权状态、购买/兑换/刷新契约。               |
+| `appState` | readonly record                                                            | 只读应用状态快照。                                         |
+| `ui`       | record                                                                     | 宿主传给 runtime 的扩展 UI API 容器。                      |
+
+`ThemeHostI18nApi` 是只读加法接口：
+
+```ts
+interface ThemeHostI18nApi {
+  getLocale(): 'zh-CN' | 'en' | 'ja' | 'ko' | 'fr';
+  t(key: string, args?: Record<string, string | number>): string;
+  formatDate(value: Date | number, options?: Intl.DateTimeFormatOptions): string;
+  formatNumber(value: number, options?: Intl.NumberFormatOptions): string;
+  onLocaleChange(listener: (locale: SupportedLocale) => void): () => void;
+}
+```
+
+- `t()` 只访问宿主公开消息，不能读取用户笔记或第三方主题私有资源。
+- 官方主题必须用该 API 或宿主本地化工厂生成用户可见文案，并在 locale 变化后更新。
+- 第三方主题可用 `getLocale()` 选择自己的文案，但本版本不为 `.mltheme` 增加语言目录、manifest 字段或自动翻译。
+- cleanup 必须调用 `onLocaleChange()` 返回的取消函数，避免主题切换后残留监听器。
 
 兼容别名：
 
@@ -606,6 +625,7 @@ pnpm.cmd --filter @jotluck/app build
 
 ## 变更记录
 
+- 2026-08-03：为 ThemeHostContext 增加只读 i18n API，定义宿主翻译、格式化与语言变化订阅；不扩展 `.mltheme` 包协议。
 - 2026-08-03：扩展既有 `scratch-exit-dialog` 的冲突/文件缺失恢复状态，加入采用外部版本、明确覆盖/重建、另存副本与复制全文回调；不新增 slot，文件 IO 仍由宿主独占。
 - 2026-08-02：为 `status-bar` 补充 `retrySave` / `saveCopy` 恢复回调，并让 `scratch-exit-dialog` 承载保存失败后的明确退出选择；主题不得隐藏宿主恢复闭环。
 - 2026-07-25：澄清 `external-reader` 保持 `enableEdit` / `openParentAsNotebook` props 兼容；默认文案为“添加到笔记”，不新增 ThemeSlotId 或 ThemeActionId。

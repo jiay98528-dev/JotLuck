@@ -40,6 +40,7 @@ export default defineConfig({
               return 'vendor-codemirror-language';
             }
             if (id.includes('docx') || id.includes('write-excel-file')) return 'vendor-export';
+            if (id.includes('vue-i18n') || id.includes('@intlify')) return 'vendor-i18n';
             if (id.includes('vue') || id.includes('pinia')) return 'vendor-vue';
             if (id.includes('marked') || id.includes('dompurify')) return 'vendor-markdown';
             if (id.includes('@tauri-apps')) return 'vendor-tauri';

@@ -1,4 +1,6 @@
 LangString addOrReinstall ${LANG_ENGLISH} "Add/Reinstall components"
+LangString JotLuckFileType ${LANG_ENGLISH} "Markdown or Text Note"
+LangString JotLuckDocumentType ${LANG_ENGLISH} "Importable Word, PDF, or Excel document"
 LangString alreadyInstalled ${LANG_ENGLISH} "Already Installed"
 LangString alreadyInstalledLong ${LANG_ENGLISH} "${PRODUCTNAME} ${VERSION} is already installed. Select the operation you want to perform and click Next to continue."
 LangString appRunning ${LANG_ENGLISH} "{{product_name}} is running. Please close it first, then try again."

@@ -1,0 +1,233 @@
+{
+  "schemaVersion": 1,
+  "subsetTool": "fonttools 4.63.0",
+  "families": [
+    {
+      "family": "Bodoni Moda",
+      "role": "display",
+      "sourceVersion": "google/fonts@2796410152d4f9524b68ed46e69c1b60f8e0f7c3",
+      "sourceUrl": "https://github.com/google/fonts/blob/2796410152d4f9524b68ed46e69c1b60f8e0f7c3/ofl/bodonimoda/BodoniModa%5Bopsz%2Cwght%5D.ttf",
+      "sourceFile": "BodoniModa[opsz,wght].ttf",
+      "sourceSha256": "550F5E34EE0A828D7941B1FE9BC58B34E5260D3F33A61532E6D0A0114E79A5CF",
+      "licensePath": "public/assets/fonts/licenses/OFL-Bodoni-Moda.txt",
+      "outputs": [
+        {
+          "file": "display-en.woff2",
+          "sha256": "AC934591E154C0EE7041232EEAE9E27CAE9350CECFD4CB836A8B070CF10A8B39",
+          "locales": ["en"],
+          "weight": 400,
+          "unicodeRange": "U+0000-024F,U+2000-206F,U+20AC",
+          "command": "fonttools varLib.instancer BodoniModa-variable.ttf wght=400 opsz=48; pyftsubset BodoniModa-400.ttf --text-file=en.txt --flavor=woff2"
+        },
+        {
+          "file": "display-fr.woff2",
+          "sha256": "9EEBB1B59914F3810F9A6663A20190AE21292021F73EB75B2DAA7FC82F035911",
+          "locales": ["fr"],
+          "weight": 400,
+          "unicodeRange": "U+0000-024F,U+2000-206F,U+20AC",
+          "command": "fonttools varLib.instancer BodoniModa-variable.ttf wght=400 opsz=48; pyftsubset BodoniModa-400.ttf --text-file=fr.txt --flavor=woff2"
+        }
+      ]
+    },
+    {
+      "family": "ZCOOL XiaoWei",
+      "role": "display",
+      "sourceVersion": "google/fonts@2796410152d4f9524b68ed46e69c1b60f8e0f7c3",
+      "sourceUrl": "https://github.com/google/fonts/blob/2796410152d4f9524b68ed46e69c1b60f8e0f7c3/ofl/zcoolxiaowei/ZCOOLXiaoWei-Regular.ttf",
+      "sourceFile": "ZCOOLXiaoWei-Regular.ttf",
+      "sourceSha256": "A42B620140F493DB42F741351DFBF343C0936D58588EE8004B8B2A218D997FF1",
+      "licensePath": "public/assets/fonts/licenses/OFL-ZCOOL-XiaoWei.txt",
+      "outputs": [
+        {
+          "file": "display-zh-hans.woff2",
+          "sha256": "0E518A6FB625982BADF084650C1C9A0C3A016AFED3113B0F0B0C287E2A7A969A",
+          "locales": ["zh-hans"],
+          "weight": 400,
+          "unicodeRange": "U+0000-00FF,U+2000-206F,U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+FF00-FFEF",
+          "command": "pyftsubset ZCOOLXiaoWei-Regular.ttf --text-file=zh-hans.txt --flavor=woff2"
+        }
+      ]
+    },
+    {
+      "family": "Kaisei Decol",
+      "role": "display",
+      "sourceVersion": "google/fonts@2796410152d4f9524b68ed46e69c1b60f8e0f7c3",
+      "sourceUrl": "https://github.com/google/fonts/blob/2796410152d4f9524b68ed46e69c1b60f8e0f7c3/ofl/kaiseidecol/KaiseiDecol-Regular.ttf",
+      "sourceFile": "KaiseiDecol-Regular.ttf",
+      "sourceSha256": "FB9202B97944FA00B5F145AD4701DEF5C306BCD0D26407917BAEF9E01B042056",
+      "licensePath": "public/assets/fonts/licenses/OFL-Kaisei-Decol.txt",
+      "outputs": [
+        {
+          "file": "display-ja.woff2",
+          "sha256": "1F5CA692C0A5FD5DB6AA96B86148823799D9AD531979A2B382609C94AF664E2A",
+          "locales": ["ja"],
+          "weight": 400,
+          "unicodeRange": "U+0000-00FF,U+2000-206F,U+3000-30FF,U+31F0-31FF,U+3400-4DBF,U+4E00-9FFF,U+FF00-FFEF",
+          "command": "pyftsubset KaiseiDecol-Regular.ttf --text-file=ja.txt --flavor=woff2"
+        }
+      ]
+    },
+    {
+      "family": "Gowun Batang",
+      "role": "display",
+      "sourceVersion": "google/fonts@2796410152d4f9524b68ed46e69c1b60f8e0f7c3",
+      "sourceUrl": "https://github.com/google/fonts/blob/2796410152d4f9524b68ed46e69c1b60f8e0f7c3/ofl/gowunbatang/GowunBatang-Regular.ttf",
+      "sourceFile": "GowunBatang-Regular.ttf",
+      "sourceSha256": "466C593E7147412E748AF4856D5AD14709B5A860BDF62B9C2546F2C5874E9849",
+      "licensePath": "public/assets/fonts/licenses/OFL-Gowun-Batang.txt",
+      "outputs": [
+        {
+          "file": "display-ko.woff2",
+          "sha256": "8BF632313D772B165893FAE5DCA2B24B1BF898C45B5E656EF70AF834CAB56AE1",
+          "locales": ["ko"],
+          "weight": 400,
+          "unicodeRange": "U+0000-00FF,U+2000-206F,U+3000-303F,U+3130-318F,U+AC00-D7AF,U+FF00-FFEF",
+          "command": "pyftsubset GowunBatang-Regular.ttf --text-file=ko.txt --flavor=woff2"
+        }
+      ]
+    },
+    {
+      "family": "IBM Plex Sans",
+      "role": "body",
+      "sourceVersion": "@ibm/plex@6.4.1 · font 3.005",
+      "sourceUrl": "https://registry.npmjs.org/@ibm/plex/-/plex-6.4.1.tgz",
+      "sourceFile": "IBMPlexSans-Regular.woff2 / IBMPlexSans-Bold.woff2",
+      "sourceSha256": "BA711A3085FF9F27440B6B9C4550CFC47C97BF36591D5DA958B975BB3ADD8C1A / FA7130D854A660B39A7FC9E6E0F2DC23DBA5F1346E2ADEA3E1FE37B6D884133D",
+      "licensePath": "public/assets/fonts/licenses/OFL-IBM-Plex.txt",
+      "outputs": [
+        {
+          "file": "body-en-400.woff2",
+          "sha256": "306B8BD5DD8C51F8B0187443B61922084DBB5D27FF62DFC3820B0E1F67576544",
+          "locales": ["en"],
+          "weight": 400,
+          "unicodeRange": "U+0000-024F,U+2000-206F,U+20AC",
+          "command": "pyftsubset IBMPlexSans-Regular.woff2 --text-file=en.txt --flavor=woff2"
+        },
+        {
+          "file": "body-en-700.woff2",
+          "sha256": "14FB05D8D76EE4E498CF6AD908D80096EFE32DC5AF3398E35D60F9DD32A5E7E6",
+          "locales": ["en"],
+          "weight": 700,
+          "unicodeRange": "U+0000-024F,U+2000-206F,U+20AC",
+          "command": "pyftsubset IBMPlexSans-Bold.woff2 --text-file=en.txt --flavor=woff2"
+        },
+        {
+          "file": "body-fr-400.woff2",
+          "sha256": "0690887857674A29307E09940237150521710273E1D0F7AAA49E754D8DB27B59",
+          "locales": ["fr"],
+          "weight": 400,
+          "unicodeRange": "U+0000-024F,U+2000-206F,U+20AC",
+          "command": "pyftsubset IBMPlexSans-Regular.woff2 --text-file=fr.txt --flavor=woff2"
+        },
+        {
+          "file": "body-fr-700.woff2",
+          "sha256": "43CC9C6EAB9ADF5E726C7840F433DF5CA72302B126F776B13C98CB82EB70B630",
+          "locales": ["fr"],
+          "weight": 700,
+          "unicodeRange": "U+0000-024F,U+2000-206F,U+20AC",
+          "command": "pyftsubset IBMPlexSans-Bold.woff2 --text-file=fr.txt --flavor=woff2"
+        }
+      ]
+    },
+    {
+      "family": "IBM Plex Sans SC",
+      "role": "body",
+      "sourceVersion": "@ibm/plex-sans-sc@1.1.0 · font 1.000",
+      "sourceUrl": "https://registry.npmjs.org/@ibm/plex-sans-sc/-/plex-sans-sc-1.1.0.tgz",
+      "sourceFile": "IBMPlexSansSC-Regular.woff2 / IBMPlexSansSC-Bold.woff2",
+      "sourceSha256": "39967C10C916CC9166B5B0C58E605EB722C8D271F263B42E93AF9836DCA3D352 / 6D92A1928DA5892207AE4A5F624494D2500BCB2FBD2E8BF97AED5682EB800261",
+      "licensePath": "public/assets/fonts/licenses/OFL-IBM-Plex.txt",
+      "outputs": [
+        {
+          "file": "body-zh-hans-400.woff2",
+          "sha256": "307B9FEA0835A0EB8663AF1072F126CFEB2DDA73E386636FF5F04A92A69F1DFA",
+          "locales": ["zh-hans"],
+          "weight": 400,
+          "unicodeRange": "U+0000-00FF,U+2000-206F,U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+FF00-FFEF",
+          "command": "pyftsubset IBMPlexSansSC-Regular.woff2 --text-file=zh-hans.txt --flavor=woff2"
+        },
+        {
+          "file": "body-zh-hans-700.woff2",
+          "sha256": "F4FA347625F7B85F7AC4C9001FB52571195898CF0661DF0DC65E756CE6779B70",
+          "locales": ["zh-hans"],
+          "weight": 700,
+          "unicodeRange": "U+0000-00FF,U+2000-206F,U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+FF00-FFEF",
+          "command": "pyftsubset IBMPlexSansSC-Bold.woff2 --text-file=zh-hans.txt --flavor=woff2"
+        }
+      ]
+    },
+    {
+      "family": "IBM Plex Sans JP",
+      "role": "body",
+      "sourceVersion": "@ibm/plex@6.4.1 · font 1.001",
+      "sourceUrl": "https://registry.npmjs.org/@ibm/plex/-/plex-6.4.1.tgz",
+      "sourceFile": "IBMPlexSansJP-Regular.woff2 / IBMPlexSansJP-Bold.woff2",
+      "sourceSha256": "5A5662DCAA99383C79F0041A2E309DA9CDED7855F37896D0C6942DA6F09E0D34 / 8481D6DA4BD77BC376424A2CC49520A34834534767CF53825B34DB694D779265",
+      "licensePath": "public/assets/fonts/licenses/OFL-IBM-Plex.txt",
+      "outputs": [
+        {
+          "file": "body-ja-400.woff2",
+          "sha256": "72A5B06101DED5109515D8056BCEB6EA1B29EC3FF5E4AEB420A31492EAF90CBD",
+          "locales": ["ja"],
+          "weight": 400,
+          "unicodeRange": "U+0000-00FF,U+2000-206F,U+3000-30FF,U+31F0-31FF,U+3400-4DBF,U+4E00-9FFF,U+FF00-FFEF",
+          "command": "pyftsubset IBMPlexSansJP-Regular.woff2 --text-file=ja.txt --flavor=woff2"
+        },
+        {
+          "file": "body-ja-700.woff2",
+          "sha256": "AAF4816E875F8E7A10645CA36A7E74B13C344A4EC5E705785A58C66B414EF74C",
+          "locales": ["ja"],
+          "weight": 700,
+          "unicodeRange": "U+0000-00FF,U+2000-206F,U+3000-30FF,U+31F0-31FF,U+3400-4DBF,U+4E00-9FFF,U+FF00-FFEF",
+          "command": "pyftsubset IBMPlexSansJP-Bold.woff2 --text-file=ja.txt --flavor=woff2"
+        }
+      ]
+    },
+    {
+      "family": "IBM Plex Sans KR",
+      "role": "body",
+      "sourceVersion": "@ibm/plex@6.4.1 · font 1.002",
+      "sourceUrl": "https://registry.npmjs.org/@ibm/plex/-/plex-6.4.1.tgz",
+      "sourceFile": "IBMPlexSansKR-Regular.woff2 / IBMPlexSansKR-Bold.woff2",
+      "sourceSha256": "B60EADE7008992C54B27A6D5AC6E8DA4C5DC04637DCD9D9948141E1FF19A952E / E3336A32EA6AC697F96E041C09D4D897ED90CD47652639FE31F66333D898878B",
+      "licensePath": "public/assets/fonts/licenses/OFL-IBM-Plex.txt",
+      "outputs": [
+        {
+          "file": "body-ko-400.woff2",
+          "sha256": "2831314401AA2775711E331802A7029466B2BA4FD510594468AD207F4CC91BBE",
+          "locales": ["ko"],
+          "weight": 400,
+          "unicodeRange": "U+0000-00FF,U+2000-206F,U+3000-303F,U+3130-318F,U+AC00-D7AF,U+FF00-FFEF",
+          "command": "pyftsubset IBMPlexSansKR-Regular.woff2 --text-file=ko.txt --flavor=woff2"
+        },
+        {
+          "file": "body-ko-700.woff2",
+          "sha256": "6C48AA3D85BFABD0286C9F1B0B4F624E4F6DBD3E90C3ACF5644B2CE706790E4D",
+          "locales": ["ko"],
+          "weight": 700,
+          "unicodeRange": "U+0000-00FF,U+2000-206F,U+3000-303F,U+3130-318F,U+AC00-D7AF,U+FF00-FFEF",
+          "command": "pyftsubset IBMPlexSansKR-Bold.woff2 --text-file=ko.txt --flavor=woff2"
+        }
+      ]
+    },
+    {
+      "family": "Geist Mono",
+      "role": "mono",
+      "sourceVersion": "vercel/geist-font@v1.7.2",
+      "sourceUrl": "https://github.com/vercel/geist-font/blob/v1.7.2/fonts/GeistMono/webfonts/GeistMono-Regular.woff2",
+      "sourceFile": "GeistMono-Regular.woff2",
+      "sourceSha256": "67B27E8A75395C074CC23656ACF208CCD69E674DA4CAD2C7D6DFA254272AD7E8",
+      "licensePath": "public/assets/fonts/licenses/OFL-Geist-Mono.txt",
+      "outputs": [
+        {
+          "file": "mono-400.woff2",
+          "sha256": "731BD3E78045AF03381C1D5109BAA509F2C8E54F9E6F07CE6EA53A868560D17A",
+          "locales": ["en", "ja", "zh-hans", "ko", "fr"],
+          "weight": 400,
+          "unicodeRange": "U+0000-007F",
+          "command": "pyftsubset GeistMono-Regular.woff2 --text-file=mono.txt --flavor=woff2"
+        }
+      ]
+    }
+  ]
+}

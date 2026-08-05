@@ -25,7 +25,7 @@ const removeAssociationMacro =
   hooks.match(/!macro _JotLuck_REMOVE_OPTIONAL_ASSOC[\s\S]*?!macroend/mu)?.[0] ?? '';
 const publicDocuments = [
   'README.md',
-  'README.en.md',
+  'README.zh.md',
   'KNOWN_LIMITATIONS.md',
   'RELEASE_NOTES.md',
   'SECURITY.md',
@@ -35,56 +35,59 @@ const publicDocuments = [
 }));
 
 describe('public release facts', () => {
-  it('derives the unpublished preview candidate version from every build manifest', () => {
-    const version = '0.1.0-preview';
+  it('derives the unsigned signing candidate version from every build manifest', () => {
+    const version = rootPackage.version;
 
-    expect(rootPackage.version).toBe(version);
     expect(appPackage.version).toBe(version);
     expect(tauriConfig.version).toBe(version);
     expect(cargoVersion).toBe(version);
     for (const document of publicDocuments) {
       expect(document.content, document.file).toContain(`v${version}`);
-      expect(document.content, document.file).not.toContain('v0.15.0-rc.1');
+      expect(document.content, document.file).not.toContain('v0.10.0-rc.1');
     }
 
-    expect(readDocument('README.md')).toContain('未发布、未签名的内部预览候选');
-    expect(readDocument('README.en.md')).toContain(
-      'Unpublished, unsigned internal preview candidate',
-    );
+    expect(readDocument('README.md')).toContain('unsigned signing candidate');
+    expect(readDocument('README.zh.md')).toContain('未签名的签名申请候选');
     expect(readDocument('KNOWN_LIMITATIONS.md')).toContain(
-      'unpublished, unsigned internal candidate',
+      'unpublished, unsigned signing candidate',
     );
     expect(readDocument('RELEASE_NOTES.md')).toMatch(
-      /unpublished Windows x64 preview candidate[\s\S]*unsigned/iu,
+      /unpublished Windows x64 signing candidate[\s\S]*unsigned/iu,
     );
     expect(readDocument('SECURITY.md')).toMatch(
-      /not currently distributed[\s\S]*internal candidate/iu,
+      /not currently distributed[\s\S]*signing candidate/iu,
     );
     for (const document of publicDocuments) {
       expect(document.content, document.file).not.toMatch(
-        /已公开的未签名预览版|\bpublished, unsigned preview|\bpublished Windows x64 preview/iu,
+        /已公开的未签名版本|\bpublished, unsigned|\bpublished Windows x64/iu,
       );
     }
   });
 
-  it('derives four optional Open With extensions from the actual NSIS installer contract', () => {
-    const extensions = ['.md', '.markdown', '.mdx', '.txt'];
-    for (const extension of extensions) {
+  it('derives eight optional Open With extensions from the actual NSIS installer contract', () => {
+    const noteExtensions = ['.md', '.markdown', '.mdx', '.txt'];
+    const documentExtensions = ['.docx', '.pdf', '.xlsx', '.xls'];
+    for (const extension of noteExtensions) {
       expect(hooks).toContain(`_JotLuck_REGISTER_OPTIONAL_ASSOC "${extension}"`);
       expect(hooks).toContain(`_JotLuck_REMOVE_OPTIONAL_ASSOC "${extension}"`);
+    }
+    for (const extension of documentExtensions) {
+      expect(hooks).toContain(`_JotLuck_REGISTER_DOCUMENT_ASSOC "${extension}"`);
+      expect(hooks).toContain(`_JotLuck_REMOVE_DOCUMENT_ASSOC "${extension}"`);
     }
 
     const associationDocuments = [
       readDocument('README.md'),
-      readDocument('README.en.md'),
+      readDocument('README.zh.md'),
       readDocument('KNOWN_LIMITATIONS.md'),
       readDocument('RELEASE_NOTES.md'),
     ];
     for (const document of associationDocuments) {
-      for (const extension of extensions) expect(document).toContain(`\`${extension}\``);
+      for (const extension of [...noteExtensions, ...documentExtensions]) {
+        expect(document).toContain(`\`${extension}\``);
+      }
       expect(document).toMatch(/打开方式|Open With/u);
-      expect(document).toMatch(/不改写|不替换|does not replace|never replaces/u);
-      expect(document).not.toContain('does not hijack the default `.txt` association');
+      expect(document).toMatch(/不改写|不替换|does not replace|never replaces?/u);
     }
 
     expect(optionalAssociationMacro).toContain('OpenWithProgids');
@@ -107,18 +110,18 @@ describe('public release facts', () => {
     expect(limitations).toContain('must therefore not be described as a zero-warning');
   });
 
-  it('documents the real first-run notebook gate rather than the removed welcome flow', () => {
+  it('documents the real welcome association choice and notebook gate', () => {
     const readme = readDocument('README.md');
-    const englishReadme = readDocument('README.en.md');
+    const chineseReadme = readDocument('README.zh.md');
     const notes = readDocument('RELEASE_NOTES.md');
 
-    expect(readme).toContain('“打开笔记本”门页');
+    expect(readme).toContain('Welcome screen');
+    expect(readme).toContain('Open Notebook gate');
     expect(readme).toContain('`Ctrl/Cmd+O`');
-    expect(readme).not.toContain('第一次启动会显示欢迎页');
-    expect(englishReadme).toContain('Open Notebook gate');
-    expect(englishReadme).not.toContain('Welcome screen');
+    expect(chineseReadme).toContain('欢迎页');
+    expect(chineseReadme).toContain('“打开笔记本”门页');
     expect(notes).toContain('Open Notebook gate');
-    expect(notes).toContain('writable temporary');
+    expect(notes).toContain('Welcome screen');
   });
 });
 

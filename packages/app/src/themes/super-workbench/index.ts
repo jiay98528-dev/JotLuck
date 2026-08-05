@@ -2,41 +2,36 @@ import type { OfficialThemeModule } from '@/types/theme-pack';
 import { plugin } from './plugin';
 import { recipe } from './recipe';
 import { tokens } from './tokens';
+import { createOfficialThemeCopy } from '@/themes/official-copy';
 
-const superWorkbenchModule: OfficialThemeModule = {
-  id: 'jotluck.super-workbench',
-  name: '超级工作台',
-  catalogVisibility: 'developer',
-  tags: ['local-market', 'p0', 'full-ux-plugin', 'slot-takeover'],
-  capabilities: ['tokens', 'layout-preset', 'ux-components', 'animations', 'trusted-code'],
-  meta: {
-    role: 'workflow',
-    headline: '验证主题能接管 JotLuck Shell 级 UX',
-    story:
-      'P0 全权限 UX Theme Plugin 验收主题。它通过官方代码插件注册多个 slot 组件，重排 TopBar、LeftWing、RightWing、StatusBar、EditorControl、Workflow、EditorSurface 和主题中心入口。',
-    bestFor: ['主题系统验收', 'UX 插件能力验证', '热插拔回归测试'],
-    visualFeatures: [
-      '插件化 TopBar',
-      '数字导航 LeftWing',
-      'Atlas RightWing',
-      'Dashboard StatusBar',
-      '包裹式编辑器接管',
-      '主题中心入口接管',
-    ],
-    uiProfile: {
-      toolbarDensity: 'productive',
-      sidebarMode: 'research',
-      drawerEmphasis: 'high',
-      readingWidth: 'wide',
-      motionIntensity: 'high',
+export function createSuperWorkbenchModule(): OfficialThemeModule {
+  const copy = createOfficialThemeCopy('superWorkbench');
+  return {
+    id: 'jotluck.super-workbench',
+    name: copy.name,
+    catalogVisibility: 'developer',
+    tags: ['local-market', 'p0', 'full-ux-plugin', 'slot-takeover'],
+    capabilities: ['tokens', 'layout-preset', 'ux-components', 'animations', 'trusted-code'],
+    meta: {
+      role: 'workflow',
+      headline: copy.headline,
+      story: copy.story,
+      bestFor: copy.bestFor,
+      visualFeatures: copy.visualFeatures,
+      uiProfile: {
+        toolbarDensity: 'productive',
+        sidebarMode: 'research',
+        drawerEmphasis: 'high',
+        readingWidth: 'wide',
+        motionIntensity: 'high',
+      },
+      performanceLevel: 5,
+      effectProfile: 'immersive',
     },
-    performanceLevel: 5,
-    effectProfile: 'immersive',
-  },
-  recipe,
-  tokens,
-  plugin,
-  css: `
+    recipe,
+    tokens,
+    plugin,
+    css: `
 [data-theme-id='jotluck.super-workbench'] .app-shell {
   background:
     radial-gradient(circle at 12% 8%, color-mix(in oklch, var(--accent) 18%, transparent), transparent 28%),
@@ -281,6 +276,7 @@ const superWorkbenchModule: OfficialThemeModule = {
   box-shadow: var(--shadow-float);
 }
 `,
-};
+  };
+}
 
-export default superWorkbenchModule;
+export default createSuperWorkbenchModule;

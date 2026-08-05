@@ -1,5 +1,5 @@
 import { getAllThemeModules } from '@/themes/registry';
-import { localMarketModules } from '@/themes/market/local-catalog';
+import { getLocalMarketModules } from '@/themes/market/local-catalog';
 import { APP_VERSION } from '@/config/app-meta';
 import type {
   InstalledThemePack,
@@ -12,6 +12,8 @@ import type {
   ThemeTokenSet,
 } from '@/types/theme-pack';
 import { findUnscopedCssSelector } from './theme-css-scope';
+import { translate } from '@/i18n';
+import { createUserMessageError } from './command-errors';
 
 export const ACTIVE_THEME_STYLE_ID = 'jotluck-active-theme';
 export const DEFAULT_THEME_ID = 'paper';
@@ -19,43 +21,45 @@ export const APP_THEME_VERSION = APP_VERSION;
 
 const BUILTIN_CHECKSUM = 'sha256-builtin';
 
-export const THEME_PERFORMANCE_BADGES: Record<ThemePerformanceLevel, ThemePerformanceBadge> = {
-  1: {
-    level: 1,
-    name: '轻盈',
-    color: 'green',
-    icon: 'leaf',
-    description: '默认羽翼布局，稳定且低开销。',
-  },
-  2: {
-    level: 2,
-    name: '标准',
-    color: 'cyan',
-    icon: 'gauge',
-    description: '保留字段，仅供兼容旧文档类型。',
-  },
-  3: {
-    level: 3,
-    name: '增强',
-    color: 'blue',
-    icon: 'spark',
-    description: '保留字段，仅供兼容旧文档类型。',
-  },
-  4: {
-    level: 4,
-    name: '沉浸',
-    color: 'purple',
-    icon: 'moon',
-    description: '保留字段，仅供兼容旧文档类型。',
-  },
-  5: {
-    level: 5,
-    name: '重载',
-    color: 'orange',
-    icon: 'flame',
-    description: '保留字段，仅供兼容旧文档类型。',
-  },
-};
+export function getThemePerformanceBadges(): Record<ThemePerformanceLevel, ThemePerformanceBadge> {
+  return {
+    1: {
+      level: 1,
+      name: translate('theme.performance.lightName'),
+      color: 'green',
+      icon: 'leaf',
+      description: translate('theme.performance.lightDescription'),
+    },
+    2: {
+      level: 2,
+      name: translate('theme.performance.standardName'),
+      color: 'cyan',
+      icon: 'gauge',
+      description: translate('theme.performance.standardDescription'),
+    },
+    3: {
+      level: 3,
+      name: translate('theme.performance.enhancedName'),
+      color: 'blue',
+      icon: 'spark',
+      description: translate('theme.performance.enhancedDescription'),
+    },
+    4: {
+      level: 4,
+      name: translate('theme.performance.immersiveName'),
+      color: 'purple',
+      icon: 'moon',
+      description: translate('theme.performance.immersiveDescription'),
+    },
+    5: {
+      level: 5,
+      name: translate('theme.performance.heavyName'),
+      color: 'orange',
+      icon: 'flame',
+      description: translate('theme.performance.heavyDescription'),
+    },
+  };
+}
 
 function moduleToPack(
   mod: OfficialThemeModule,
@@ -122,6 +126,66 @@ function moduleToPack(
   };
 }
 
+const officialLocaleKeys: Record<string, string> = {
+  paper: 'paper',
+  'jotluck.ability-lab': 'abilityLab',
+  'jotluck.halo-canvas': 'haloCanvas',
+  'jotluck.lumen-field': 'lumenField',
+  'jotluck.super-workbench': 'superWorkbench',
+};
+
+function localizedThemeModule(mod: OfficialThemeModule): OfficialThemeModule {
+  const localeKey = officialLocaleKeys[mod.id];
+  if (!localeKey) return mod;
+  // i18n-dynamic-key: localeKey is a closed official theme key and fields are fixed below.
+  const key = (field: string): string => translate(`theme.official.${localeKey}.${field}`);
+  const drawerShell = mod.recipe.drawerShell
+    ? {
+        left: { ...mod.recipe.drawerShell.left, label: translate('theme.plugin.fileBeacon') },
+        right: {
+          ...mod.recipe.drawerShell.right,
+          label: translate('theme.plugin.knowledgeRadar'),
+        },
+        bottom: {
+          ...mod.recipe.drawerShell.bottom,
+          label: translate('theme.plugin.commandDeck'),
+        },
+      }
+    : undefined;
+  const ux = mod.ux
+    ? Object.fromEntries(
+        Object.entries(mod.ux).map(([slot, recipe]) => [
+          slot,
+          recipe
+            ? {
+                ...recipe,
+                root: {
+                  ...recipe.root,
+                  children: recipe.root.children?.map((child) =>
+                    child.type === 'Text' ? { ...child, text: key('name') } : child,
+                  ),
+                },
+              }
+            : recipe,
+        ]),
+      )
+    : undefined;
+  return {
+    ...mod,
+    name: key('name'),
+    meta: {
+      ...mod.meta,
+      headline: key('headline'),
+      story: key('story'),
+      bestFor: key('bestFor').split('|'),
+      visualFeatures: key('features').split('|'),
+      uiProfile: { ...mod.meta.uiProfile },
+    },
+    recipe: { ...mod.recipe, drawerShell },
+    ux,
+  };
+}
+
 function buildThemeCss(id: string, tokens: ThemeTokenSet, extraCss?: string): string {
   const parts: string[] = [];
   const entries = Object.entries(tokens);
@@ -137,20 +201,15 @@ function buildThemeCss(id: string, tokens: ThemeTokenSet, extraCss?: string): st
   if (extraCss) {
     const unscoped = findUnscopedCssSelector(extraCss, id);
     if (unscoped) {
-      throw new Error(`官方主题 CSS 未限定在当前主题根节点：${unscoped}`);
+      throw createUserMessageError('theme.validation.officialCssUnscoped', {
+        selector: unscoped,
+      });
     }
     parts.push(extraCss.trim());
   }
 
   return parts.join('\n');
 }
-
-const builtInThemes: InstalledThemePack[] = getAllThemeModules().map((mod) =>
-  moduleToPack(mod, 'builtin'),
-);
-const localMarketThemes: InstalledThemePack[] = localMarketModules.map((mod) =>
-  moduleToPack(mod, 'market'),
-);
 
 function cloneOfficialProfile(profile?: OfficialThemeProfile): OfficialThemeProfile | undefined {
   if (!profile) return undefined;
@@ -182,11 +241,15 @@ function cloneThemePack(pack: InstalledThemePack): InstalledThemePack {
 }
 
 export function getBuiltInThemePacks(): InstalledThemePack[] {
-  return builtInThemes.map(cloneThemePack);
+  return getAllThemeModules().map((mod) =>
+    cloneThemePack(moduleToPack(localizedThemeModule(mod), 'builtin')),
+  );
 }
 
 export function getLocalMarketThemePacks(): InstalledThemePack[] {
-  return localMarketThemes.map(cloneThemePack);
+  return getLocalMarketModules().map((mod) =>
+    cloneThemePack(moduleToPack(localizedThemeModule(mod), 'market')),
+  );
 }
 
 export function getAllRegistryThemePacks(): InstalledThemePack[] {
@@ -194,12 +257,11 @@ export function getAllRegistryThemePacks(): InstalledThemePack[] {
 }
 
 export function getThemePerformanceBadge(level: ThemePerformanceLevel): ThemePerformanceBadge {
-  return THEME_PERFORMANCE_BADGES[level];
+  return getThemePerformanceBadges()[level];
 }
 
 export function getOfficialThemeProfile(themeId: string): OfficialThemeProfile | undefined {
   return cloneOfficialProfile(
-    [...builtInThemes, ...localMarketThemes].find((pack) => pack.manifest.id === themeId)
-      ?.officialProfile,
+    getAllRegistryThemePacks().find((pack) => pack.manifest.id === themeId)?.officialProfile,
   );
 }

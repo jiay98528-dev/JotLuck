@@ -6,6 +6,7 @@
  * @see migration-map.md §4
  */
 import type { IFileSystemService, SearchIndex, DocumentEntry, BacklinkEntry } from '@/types';
+import { translate } from '@/i18n';
 import {
   isIgnoredNotebookDirectory,
   isSupportedNoteFile,
@@ -220,7 +221,7 @@ export class IndexService {
       );
       if (this.indexedNoteCount + noteEntries.length > MAX_INDEXED_NOTE_FILES) {
         throw new Error(
-          `${INDEX_LIMIT_ERROR}: 当前文件夹包含超过 ${MAX_INDEXED_NOTE_FILES} 个笔记文件，请选择更精确的笔记本文件夹。`,
+          `${INDEX_LIMIT_ERROR}: ${translate('program.indexTooLarge', { limit: MAX_INDEXED_NOTE_FILES })}`,
         );
       }
       this.indexedNoteCount += noteEntries.length;
@@ -238,7 +239,7 @@ export class IndexService {
     } catch (e) {
       if (String(e).includes(INDEX_LIMIT_ERROR)) throw e;
       // eslint-disable-next-line no-console
-      console.error('[IndexService] scanDirectory 失败:', e);
+      console.error('[IndexService] scanDirectory failed:', e);
     }
   }
 

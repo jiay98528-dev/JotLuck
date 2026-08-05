@@ -10,6 +10,8 @@
  * @see migration-map.md §5
  */
 import { computed, ref } from 'vue';
+import { translate } from '@/i18n';
+import { createUserMessageError, localizeUserError } from '@/services/command-errors';
 import type { IFileSystemService } from '@/types';
 import type { EditorView } from '@codemirror/view';
 
@@ -99,7 +101,7 @@ function insertImageMarkdown(
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error('无法读取图片文件'));
+    reader.onerror = () => reject(createUserMessageError('program.imageReadFailed'));
     reader.onload = () => {
       const result = String(reader.result ?? '');
       const comma = result.indexOf(',');
@@ -134,7 +136,7 @@ function relativeMarkdownPath(fromFile: string, targetPath: string): string {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return localizeUserError(error);
 }
 
 export function useImageUpload(
@@ -214,10 +216,13 @@ export function useImageUpload(
       await fs.deleteFile(path);
       uploadError.value =
         reason === 'owner-changed'
-          ? '图片插入已取消：原笔记已切换，未使用的图片已清理'
-          : '图片插入失败，未使用的图片已清理';
+          ? translate('program.imageCancelledCleaned')
+          : translate('program.imageInsertFailedCleaned');
     } catch (error) {
-      const message = `图片未插入，且无法清理未使用的资源 ${path}：${errorMessage(error)}`;
+      const message = translate('program.imageCleanupFailed', {
+        path,
+        error: errorMessage(error),
+      });
       uploadError.value = message;
       try {
         onOrphanCleanupFailed?.({
@@ -234,7 +239,7 @@ export function useImageUpload(
 
   async function processJob(job: ImageUploadJob): Promise<void> {
     if (!isOwnerCurrent(job)) {
-      uploadError.value = '图片插入已取消：原笔记或编辑位置已经变化';
+      uploadError.value = translate('program.imagePositionChanged');
       return;
     }
 
@@ -243,14 +248,14 @@ export function useImageUpload(
       await ensureAssetsDir();
       const base64 = await readFileAsBase64(job.file);
       if (!isOwnerCurrent(job)) {
-        uploadError.value = '图片插入已取消：原笔记或编辑位置已经变化';
+        uploadError.value = translate('program.imagePositionChanged');
         return;
       }
 
       path = `/${ASSETS_DIR}/${uniqueName(job.file.type)}`;
       await fs.writeBinary(path, base64);
     } catch (error) {
-      uploadError.value = `图片保存失败：${errorMessage(error)}`;
+      uploadError.value = translate('program.imageSaveFailed', { error: errorMessage(error) });
       return;
     }
 
@@ -287,7 +292,7 @@ export function useImageUpload(
     try {
       await onImageUploaded?.(path, job.owner);
     } catch (error) {
-      uploadError.value = `图片已插入，但图片列表刷新失败：${errorMessage(error)}`;
+      uploadError.value = translate('program.imageRefreshFailed', { error: errorMessage(error) });
     }
   }
 
@@ -298,7 +303,7 @@ export function useImageUpload(
   function queueImageFile(file: File): boolean {
     if (!IMAGE_MIMES.has(file.type)) return false;
     if (file.size > MAX_IMAGE_BYTES) {
-      uploadError.value = '图片超过 5MB，请压缩后再插入';
+      uploadError.value = translate('program.imageTooLarge');
       return true;
     }
 
@@ -310,7 +315,7 @@ export function useImageUpload(
     queueTail = queueTail
       .then(() => processJob(job))
       .catch((error: unknown) => {
-        uploadError.value = `图片处理失败：${errorMessage(error)}`;
+        uploadError.value = translate('program.imageProcessFailed', { error: errorMessage(error) });
       })
       .finally(() => {
         pendingCount.value--;

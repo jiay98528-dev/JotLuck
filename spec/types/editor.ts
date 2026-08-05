@@ -99,6 +99,9 @@ export interface ToolbarItemConfig {
 /** 主题模式 */
 export type ThemeMode = 'light' | 'dark' | 'system';
 
+/** JotLuck 支持的界面语言 */
+export type SupportedLocale = 'zh-CN' | 'en' | 'ja' | 'ko' | 'fr';
+
 // ===== 文字补全 =====
 
 /** 补全候选条目（结构化补全菜单使用） */
@@ -249,7 +252,7 @@ export interface AppSettings {
 
   // --- 语言 ---
   /** 界面语言 */
-  language: 'zh-CN' | 'en';
+  language: SupportedLocale;
 }
 
 // ===== Wiki-link / 反向链接 / 标签（展示层类型） =====

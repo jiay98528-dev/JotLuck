@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      release_id:
+        description: Safe release evidence identifier (for example, v0.11.0-signing-1)
+        required: true
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -292,4 +297,140 @@ jobs:
             packages/app/dist/**
             packages/app/src-tauri/target/release/jotluck.exe
             packages/app/src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+
+  installed-app-evidence-capture:
+    name: Installed-app Evidence Capture
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    needs: [lint-and-typecheck, test, e2e, e2e-visual-windows, rust, tauri-build-windows]
+    outputs:
+      evidence-artifact-id: ${{ steps.evidence-upload.outputs.artifact-id }}
+      evidence-artifact-digest: ${{ steps.evidence-upload.outputs.artifact-digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download immutable Windows candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: jotluck-windows-candidate
+          path: ${{ runner.temp }}/jotluck-candidate
+
+      - name: Resolve exact candidate application
+        shell: pwsh
+        run: |
+          $candidateRoot = (Resolve-Path "$env:RUNNER_TEMP\jotluck-candidate" -ErrorAction Stop).Path
+          $applications = @(Get-ChildItem -LiteralPath $candidateRoot -Recurse -File | Where-Object { $_.Name -ieq 'jotluck.exe' })
+          if ($applications.Count -ne 1) {
+            throw "expected exactly one candidate jotluck.exe, found $($applications.Count)"
+          }
+          "JOTLUCK_CANDIDATE_ROOT=$candidateRoot" >> $env:GITHUB_ENV
+          "JOTLUCK_CANDIDATE_APPLICATION_PATH=$($applications[0].FullName)" >> $env:GITHUB_ENV
+
+      - name: Install pinned capture tauri-driver
+        shell: pwsh
+        run: |
+          cargo install tauri-driver --version 2.0.6 --locked
+          $tauriDriver = (Resolve-Path "$env:USERPROFILE\.cargo\bin\tauri-driver.exe" -ErrorAction Stop).Path
+          $tauriDriverVersion = & $tauriDriver --version
+          if ($tauriDriverVersion -notmatch '(^|\s)2\.0\.6($|\s)') {
+            throw "unexpected tauri-driver version: $tauriDriverVersion"
+          }
+          "JOTLUCK_TAURI_DRIVER=$tauriDriver" >> $env:GITHUB_ENV
+
+      - name: Install matching Microsoft Edge Driver
+        shell: pwsh
+        run: |
+          cargo install --git https://github.com/chippers/msedgedriver-tool --rev 8c4b34f51b45f5cf08013366d703de464ab871d1 --locked
+          & "$env:USERPROFILE\.cargo\bin\msedgedriver-tool.exe"
+          $edgeDriver = (Resolve-Path ".\msedgedriver.exe").Path
+          "JOTLUCK_EDGE_DRIVER=$edgeDriver" >> $env:GITHUB_ENV
+
+      - name: Run fixed installed-app evidence adapters
+        shell: pwsh
+        run: |
+          $outputRoot = Join-Path $env:GITHUB_WORKSPACE 'installed-app-evidence'
+          node scripts/release/capture-installed-app-evidence-v2.mjs "${{ inputs.release_id }}" "$env:JOTLUCK_CANDIDATE_ROOT" "$outputRoot"
+
+      - name: Upload trusted installed-app execution evidence
+        id: evidence-upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: jotluck-installed-app-evidence-v2-${{ inputs.release_id }}
+          path: installed-app-evidence/**
+          if-no-files-found: error
+
+      - name: Upload installed-app failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jotluck-installed-app-evidence-diagnostics-${{ inputs.release_id }}
+          path: installed-app-evidence-diagnostics/**
+          if-no-files-found: ignore
+
+  installed-app-evidence-materialization:
+    name: Installed-app Evidence Materialization
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    needs: [tauri-build-windows, installed-app-evidence-capture]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download immutable Windows candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: jotluck-windows-candidate
+          path: ${{ runner.temp }}/jotluck-candidate
+
+      - name: Download trusted installed-app execution evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: jotluck-installed-app-evidence-v2-${{ inputs.release_id }}
+          path: ${{ runner.temp }}/installed-app-evidence
+
+      - name: Resolve current-run provenance
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          node scripts/release/resolve-current-run-provenance.mjs "${{ inputs.release_id }}" "${{ needs.tauri-build-windows.outputs.candidate-artifact-id }}" "${{ needs.installed-app-evidence-capture.outputs.evidence-artifact-id }}" "$env:RUNNER_TEMP\installed-app-provenance.json"
+
+      - name: Materialize managed evidence bundle
+        shell: pwsh
+        run: |
+          node scripts/release/materialize-installed-app-evidence-v2.mjs "${{ inputs.release_id }}" "$env:RUNNER_TEMP\jotluck-candidate" "$env:RUNNER_TEMP\installed-app-evidence" "$env:RUNNER_TEMP\installed-app-provenance.json" "$env:RUNNER_TEMP\managed-evidence"
+
+      - name: Upload managed evidence bundle for evidence-only commit
+        uses: actions/upload-artifact@v4
+        with:
+          name: jotluck-installed-app-managed-evidence-v2-${{ inputs.release_id }}
+          path: ${{ runner.temp }}/managed-evidence/**
           if-no-files-found: error

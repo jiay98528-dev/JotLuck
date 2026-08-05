@@ -66,7 +66,7 @@ describe('TauriIPCService recent notebook sanitizer', () => {
     });
 
     invokeMock.mockRejectedValueOnce(new Error('文件夹不存在'));
-    await expect(service.openNotebookAt('D:/Notes/Missing')).rejects.toThrow('文件夹不存在');
+    await expect(service.openNotebookAt('D:/Notes/Missing')).rejects.toThrow('操作失败，请重试。');
     expect(JSON.parse(localStorage.getItem('jotluck-recent-notebooks') ?? '[]')).toEqual([
       'D:/Notes/Selected',
       'D:/Notes/Keep',

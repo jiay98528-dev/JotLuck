@@ -11,6 +11,8 @@ import type {
 import { APP_THEME_VERSION } from './ThemeRegistry';
 import { findUnscopedCssSelector } from './theme-css-scope';
 import { isSemVerAtLeast } from '@/utils/semver';
+import { translate } from '@/i18n';
+import { createUserMessageError } from './command-errors';
 
 const STORAGE_KEY = 'jotluck:themes:installed:v2';
 const MAX_THEME_PACKAGE_BYTES = 8 * 1024 * 1024;
@@ -103,12 +105,13 @@ export async function parseThemePack(input: ThemeZipInput): Promise<ThemePackage
   await validateZipEntries(zip);
 
   const manifestFile = zip.file('manifest.json');
-  if (!manifestFile) throw new Error('主题包缺少 manifest.json');
+  if (!manifestFile) throw createUserMessageError('theme.validation.missingManifest');
 
   const manifest = JSON.parse(await manifestFile.async('string')) as ThemeManifestV2;
   const cssFile = zip.file('theme.css');
   const cssBytes = cssFile ? await cssFile.async('uint8array') : new Uint8Array();
-  if (cssBytes.byteLength > MAX_CSS_BYTES) throw new Error('theme.css 超过大小限制');
+  if (cssBytes.byteLength > MAX_CSS_BYTES)
+    throw createUserMessageError('theme.validation.cssTooLarge');
 
   if (cssFile && manifest.checksums?.['theme.css']) {
     await verifyChecksum('theme.css', cssBytes, manifest.checksums['theme.css']);
@@ -117,7 +120,10 @@ export async function parseThemePack(input: ThemeZipInput): Promise<ThemePackage
   const entrypoints = Array.isArray(manifest.entrypoints) ? manifest.entrypoints : [];
   for (const entrypoint of entrypoints) {
     const moduleFile = zip.file(entrypoint.module);
-    if (!moduleFile) throw new Error(`主题代码入口不存在: ${entrypoint.module}`);
+    if (!moduleFile)
+      throw createUserMessageError('theme.validation.missingEntrypoint', {
+        path: entrypoint.module,
+      });
     await verifyChecksum(
       entrypoint.module,
       await moduleFile.async('uint8array'),
@@ -140,7 +146,11 @@ export async function parseThemePack(input: ThemeZipInput): Promise<ThemePackage
     codeBundles,
   };
   const issues = validateThemePackage(inputPackage);
-  if (issues.length > 0) throw new Error(issues.map((issue) => issue.message).join('\n'));
+  if (issues.length > 0) {
+    throw createUserMessageError('theme.validation.packageIssues', {
+      issues: issues.map((issue) => issue.message).join('\n'),
+    });
+  }
   return inputPackage;
 }
 
@@ -150,35 +160,35 @@ export function validateThemePackage(input: ThemePackageInput): ThemeValidationI
   if (!manifest.id || !/^[a-z0-9][a-z0-9._-]+$/i.test(manifest.id)) {
     issues.push({
       code: 'invalid-id',
-      message: '主题 id 必须是稳定的包名格式。',
+      message: translate('theme.validation.invalidId'),
       path: 'manifest.id',
     });
   }
   if (manifest.themeApi !== 2) {
     issues.push({
       code: 'invalid-api',
-      message: '仅支持 Theme API v2。',
+      message: translate('theme.validation.invalidApi'),
       path: 'manifest.themeApi',
     });
   }
   if (!['declarative', 'trusted-code', 'official-code'].includes(manifest.runtime)) {
     issues.push({
       code: 'invalid-runtime',
-      message: '未知主题 runtime。',
+      message: translate('theme.validation.invalidRuntime'),
       path: 'manifest.runtime',
     });
   }
   if (manifest.runtime === 'trusted-code' && (manifest.entrypoints?.length ?? 0) === 0) {
     issues.push({
       code: 'missing-code-entrypoint',
-      message: 'trusted-code 主题必须声明代码入口。',
+      message: translate('theme.validation.missingCodeEntrypoint'),
       path: 'manifest.entrypoints',
     });
   }
   if (!manifest.checksums || typeof manifest.checksums !== 'object') {
     issues.push({
       code: 'invalid-checksums',
-      message: '主题 manifest 必须提供 checksums 对象。',
+      message: translate('theme.validation.invalidChecksums'),
       path: 'manifest.checksums',
     });
   }
@@ -191,7 +201,7 @@ export function validateThemePackage(input: ThemePackageInput): ThemeValidationI
     ) {
       issues.push({
         code: 'unknown-permission-declaration',
-        message: `当前版本不默认开放 ${permission} 权限。`,
+        message: translate('theme.validation.permissionUnavailable', { permission }),
         path: 'manifest.permissions',
       });
     }
@@ -199,14 +209,14 @@ export function validateThemePackage(input: ThemePackageInput): ThemeValidationI
   if (!isSemVerAtLeast(APP_THEME_VERSION, manifest.minAppVersion)) {
     issues.push({
       code: 'min-app-version',
-      message: `主题要求 JotLuck ${manifest.minAppVersion} 或更高版本。`,
+      message: translate('theme.validation.minAppVersion', { version: manifest.minAppVersion }),
       path: 'manifest.minAppVersion',
     });
   }
   if (manifest.slots !== undefined && !Array.isArray(manifest.slots)) {
     issues.push({
       code: 'invalid-slots',
-      message: 'manifest.slots 必须是主题 slot id 数组。',
+      message: translate('theme.validation.invalidSlots'),
       path: 'manifest.slots',
     });
   }
@@ -214,7 +224,7 @@ export function validateThemePackage(input: ThemePackageInput): ThemeValidationI
     if (!THEME_SLOT_IDS.has(slot)) {
       issues.push({
         code: 'unknown-slot',
-        message: `manifest 声明了未知 UX slot：${String(slot)}。`,
+        message: translate('theme.validation.unknownSlot', { slot: String(slot) }),
         path: 'manifest.slots',
       });
     }
@@ -224,7 +234,7 @@ export function validateThemePackage(input: ThemePackageInput): ThemeValidationI
     if (!entrypoint || typeof entrypoint !== 'object') {
       issues.push({
         code: 'invalid-entrypoint',
-        message: '主题代码入口必须是对象。',
+        message: translate('theme.validation.invalidEntrypoint'),
         path: `manifest.entrypoints[${index}]`,
       });
       continue;
@@ -232,21 +242,23 @@ export function validateThemePackage(input: ThemePackageInput): ThemeValidationI
     if (!THEME_SLOT_IDS.has(entrypoint.slot)) {
       issues.push({
         code: 'unknown-slot',
-        message: `代码入口声明了未知 UX slot：${String(entrypoint.slot)}。`,
+        message: translate('theme.validation.unknownSlot', { slot: String(entrypoint.slot) }),
         path: `manifest.entrypoints[${index}].slot`,
       });
     }
     if (typeof entrypoint.module !== 'string' || !entrypoint.module.trim()) {
       issues.push({
         code: 'invalid-entrypoint',
-        message: '主题代码入口必须提供 module 路径。',
+        message: translate('theme.validation.missingModule'),
         path: `manifest.entrypoints[${index}].module`,
       });
     }
     if (Array.isArray(manifest.slots) && !manifest.slots.includes(entrypoint.slot)) {
       issues.push({
         code: 'slot-not-declared',
-        message: `代码入口 slot 未出现在 manifest.slots：${String(entrypoint.slot)}。`,
+        message: translate('theme.validation.slotNotDeclared', {
+          slot: String(entrypoint.slot),
+        }),
         path: `manifest.entrypoints[${index}].slot`,
       });
     }
@@ -256,7 +268,10 @@ export function validateThemePackage(input: ThemePackageInput): ThemeValidationI
   if (unscopedSelector) {
     issues.push({
       code: 'unscoped-css-selector',
-      message: `theme.css selector must be scoped to [data-theme-id="${manifest.id}"]: ${unscopedSelector}`,
+      message: translate('theme.validation.unscopedCss', {
+        id: manifest.id,
+        selector: unscopedSelector,
+      }),
       path: 'theme.css',
     });
   }
@@ -270,14 +285,18 @@ function validateUxRecipeMap(
 ): void {
   if (ux === undefined) return;
   if (!ux || typeof ux !== 'object' || Array.isArray(ux)) {
-    issues.push({ code: 'invalid-ux', message: 'ux.json 必须是对象。', path: 'ux.json' });
+    issues.push({
+      code: 'invalid-ux',
+      message: translate('theme.validation.invalidUx'),
+      path: 'ux.json',
+    });
     return;
   }
   for (const [slotKey, recipe] of Object.entries(ux)) {
     if (!THEME_SLOT_IDS.has(slotKey)) {
       issues.push({
         code: 'unknown-slot',
-        message: `ux.json 声明了未知 UX slot：${slotKey}。`,
+        message: translate('theme.validation.unknownSlot', { slot: slotKey }),
         path: `ux.${slotKey}`,
       });
       continue;
@@ -285,7 +304,7 @@ function validateUxRecipeMap(
     if (!recipe || typeof recipe !== 'object' || Array.isArray(recipe)) {
       issues.push({
         code: 'invalid-ux-recipe',
-        message: `ux.${slotKey} 必须是 recipe 对象。`,
+        message: translate('theme.validation.invalidUxRecipe', { slot: slotKey }),
         path: `ux.${slotKey}`,
       });
       continue;
@@ -293,14 +312,14 @@ function validateUxRecipeMap(
     if (recipe.slot !== slotKey) {
       issues.push({
         code: 'slot-mismatch',
-        message: `ux.${slotKey}.slot 必须与 map key 一致。`,
+        message: translate('theme.validation.slotMismatch', { slot: slotKey }),
         path: `ux.${slotKey}.slot`,
       });
     }
     if (Array.isArray(manifest.slots) && !manifest.slots.includes(recipe.slot)) {
       issues.push({
         code: 'slot-not-declared',
-        message: `ux recipe slot 未出现在 manifest.slots：${slotKey}。`,
+        message: translate('theme.validation.slotNotDeclared', { slot: slotKey }),
         path: `ux.${slotKey}`,
       });
     }
@@ -316,7 +335,7 @@ function validatePrimitiveNode(
   if (!node || typeof node !== 'object' || Array.isArray(node)) {
     issues.push({
       code: 'invalid-primitive',
-      message: `${nodePath} 必须是 primitive 对象。`,
+      message: translate('theme.validation.invalidPrimitive', { path: nodePath }),
       path: nodePath,
     });
     return false;
@@ -325,7 +344,7 @@ function validatePrimitiveNode(
   if (typeof candidate.type !== 'string' || !THEME_PRIMITIVE_TYPES.has(candidate.type)) {
     issues.push({
       code: 'unknown-primitive',
-      message: `${nodePath}.type 不是当前 DSL 支持的 primitive。`,
+      message: translate('theme.validation.unknownPrimitive', { path: nodePath }),
       path: `${nodePath}.type`,
     });
   }
@@ -338,7 +357,7 @@ function validatePrimitiveNode(
     ) {
       issues.push({
         code: 'unknown-action',
-        message: `${nodePath}.action.actionId 不是当前宿主 action。`,
+        message: translate('theme.validation.unknownAction', { path: nodePath }),
         path: `${nodePath}.action.actionId`,
       });
     }
@@ -347,7 +366,7 @@ function validatePrimitiveNode(
     if (!Array.isArray(candidate.children)) {
       issues.push({
         code: 'invalid-primitive-children',
-        message: `${nodePath}.children 必须是数组。`,
+        message: translate('theme.validation.invalidChildren', { path: nodePath }),
         path: `${nodePath}.children`,
       });
     } else {
@@ -363,12 +382,14 @@ async function validateZipEntries(zip: JSZip): Promise<void> {
   let totalBytes = 0;
   for (const entry of Object.values(zip.files)) {
     const normalized = normalizeZipPath(entry.name);
-    if (!normalized) throw new Error(`主题包路径不安全: ${entry.name}`);
+    if (!normalized)
+      throw createUserMessageError('theme.validation.unsafePath', { path: entry.name });
     if (entry.dir) continue;
 
     const bytes = await entry.async('uint8array');
     totalBytes += bytes.byteLength;
-    if (totalBytes > MAX_THEME_PACKAGE_BYTES) throw new Error('主题包超过大小限制');
+    if (totalBytes > MAX_THEME_PACKAGE_BYTES)
+      throw createUserMessageError('theme.validation.packageTooLarge');
 
     const allowed =
       normalized === 'manifest.json' ||
@@ -377,12 +398,13 @@ async function validateZipEntries(zip: JSZip): Promise<void> {
       normalized.startsWith('runtime/') ||
       normalized.startsWith('assets/') ||
       normalized.startsWith('preview/');
-    if (!allowed) throw new Error(`主题包包含未声明目录: ${normalized}`);
+    if (!allowed)
+      throw createUserMessageError('theme.validation.undeclaredPath', { path: normalized });
     if (
       (normalized.startsWith('assets/') || normalized.startsWith('preview/')) &&
       !ALLOWED_ASSET_RE.test(normalized)
     ) {
-      throw new Error(`主题资产类型不受支持: ${normalized}`);
+      throw createUserMessageError('theme.validation.unsupportedAsset', { path: normalized });
     }
   }
 }
@@ -394,7 +416,8 @@ function normalizeZipPath(path: string): string | null {
 }
 
 async function verifyChecksum(path: string, bytes: Uint8Array, expected: string): Promise<void> {
-  if (!CHECKSUM_RE.test(expected)) throw new Error(`checksum 格式无效: ${path}`);
+  if (!CHECKSUM_RE.test(expected))
+    throw createUserMessageError('theme.validation.invalidChecksum', { path });
   const payload = new Uint8Array(bytes.byteLength);
   payload.set(bytes);
   const digest = await crypto.subtle.digest('SHA-256', payload.buffer);
@@ -402,14 +425,16 @@ async function verifyChecksum(path: string, bytes: Uint8Array, expected: string)
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('')}`;
   if (actual.toLowerCase() !== expected.toLowerCase()) {
-    throw new Error(`checksum 不匹配: ${path}`);
+    throw createUserMessageError('theme.validation.checksumMismatch', { path });
   }
 }
 
 export function installLocalThemePackage(input: ThemePackageInput): InstalledThemePack {
   const issues = validateThemePackage(input);
   if (issues.length > 0) {
-    throw new Error(issues.map((issue) => issue.message).join('\n'));
+    throw createUserMessageError('theme.validation.packageIssues', {
+      issues: issues.map((issue) => issue.message).join('\n'),
+    });
   }
 
   const stored: StoredThemePackage = {

@@ -2,8 +2,15 @@
 import { defineComponent, h, type PropType, type VNode, type VNodeChild } from 'vue';
 import type { BacklinkEntry, HeadingItem, TagEntry } from '@/types';
 import type { ShellAction, ThemePluginModule } from '@/types/theme-pack';
+import { currentLocale, translate } from '@/i18n';
 
 type SlotBag = { default?: () => VNodeChild };
+
+function tr(key: string, args?: Record<string, string | number>): string {
+  void currentLocale.value;
+  // i18n-dynamic-key: this theme helper is called only with literal theme.plugin keys.
+  return translate(key, args);
+}
 
 function actionButton(action: ShellAction, compact = false): VNode {
   return h(
@@ -46,7 +53,10 @@ const LumenLeftWing = defineComponent({
   setup(props) {
     return () =>
       h('aside', { class: 'lumen-left', 'data-theme-plugin-slot': 'left-wing' }, [
-        h('div', { class: 'lumen-left__header' }, [h('strong', 'JotLuck'), h('span', '本地笔记')]),
+        h('div', { class: 'lumen-left__header' }, [
+          h('strong', 'JotLuck'),
+          h('span', tr('theme.plugin.localNotes')),
+        ]),
         actionStrip(props.actions, true),
         h(
           'div',
@@ -66,7 +76,7 @@ const LumenLeftWing = defineComponent({
                   ],
                 ),
               )
-            : h('p', { class: 'lumen-empty' }, '打开文件夹后，最近编辑的笔记会显示在这里。'),
+            : h('p', { class: 'lumen-empty' }, tr('theme.plugin.recentEmpty')),
         ),
       ]);
   },
@@ -95,18 +105,25 @@ const LumenRightWing = defineComponent({
         h(
           'div',
           { class: 'lumen-radar__body' },
-          children.length > 0 ? children : [h('p', { class: 'lumen-empty' }, '当前笔记暂无内容。')],
+          children.length > 0
+            ? children
+            : [h('p', { class: 'lumen-empty' }, tr('theme.plugin.currentEmpty'))],
         ),
       ]);
 
     return () =>
       h('aside', { class: 'lumen-radar', 'data-theme-plugin-slot': 'right-wing' }, [
         h('div', { class: 'lumen-radar__header' }, [
-          h('span', '当前笔记'),
-          h('span', `${props.headings.length + props.backlinks.length + props.tags.length} 条线索`),
+          h('span', tr('theme.plugin.currentNote')),
+          h(
+            'span',
+            tr('theme.plugin.clues', {
+              count: props.headings.length + props.backlinks.length + props.tags.length,
+            }),
+          ),
         ]),
         section(
-          '大纲',
+          tr('theme.plugin.outline'),
           props.headings.length,
           props.headings.map((heading) =>
             h(
@@ -120,7 +137,7 @@ const LumenRightWing = defineComponent({
           ),
         ),
         section(
-          '反链',
+          tr('theme.plugin.backlinks'),
           props.backlinks.length,
           props.backlinks
             .slice(0, 8)
@@ -133,7 +150,7 @@ const LumenRightWing = defineComponent({
             ),
         ),
         section(
-          '标签',
+          tr('theme.plugin.tags'),
           props.tags.length,
           props.tags
             .slice(0, 18)
@@ -158,7 +175,7 @@ const LumenEditorControl = defineComponent({
     return () =>
       h('div', { class: 'lumen-command-deck', 'data-theme-plugin-slot': 'editor-control' }, [
         h('div', { class: 'lumen-command-deck__actions' }, [
-          h('strong', '命令'),
+          h('strong', tr('theme.plugin.commands')),
           actionStrip(props.actions),
         ]),
         h('div', { class: 'lumen-command-deck__format' }, defaultSlotChildren(slots)),
@@ -187,8 +204,13 @@ const LumenStatusBar = defineComponent({
           { class: ['lumen-status__state', props.saveError && 'is-error'] },
           props.saveError || props.statusText,
         ),
-        h('span', `${props.wordCount} 词 / ${props.charCount} 字`),
-        h('span', props.cursorLine === null ? '就绪' : `第 ${props.cursorLine} 行`),
+        h('span', tr('theme.plugin.counts', { words: props.wordCount, chars: props.charCount })),
+        h(
+          'span',
+          props.cursorLine === null
+            ? tr('theme.plugin.ready')
+            : tr('theme.plugin.line', { line: props.cursorLine }),
+        ),
         props.saveError
           ? h('div', { class: 'lumen-action-strip' }, [
               h(
@@ -197,20 +219,20 @@ const LumenStatusBar = defineComponent({
                   class: ['lumen-action', 'lumen-action--compact'],
                   type: 'button',
                   title: props.saveError,
-                  'aria-label': '重新保存当前笔记',
+                  'aria-label': tr('theme.plugin.retrySaveAria'),
                   onClick: () => props.retrySave?.(),
                 },
-                '重新保存',
+                tr('theme.plugin.retrySave'),
               ),
               h(
                 'button',
                 {
                   class: ['lumen-action', 'lumen-action--compact'],
                   type: 'button',
-                  'aria-label': '另存当前笔记副本',
+                  'aria-label': tr('theme.plugin.saveCopyAria'),
                   onClick: () => props.saveCopy?.(),
                 },
-                '另存副本',
+                tr('theme.plugin.saveCopy'),
               ),
             ])
           : actionStrip(props.actions, true),

@@ -6,17 +6,13 @@
  */
 import type { OfficialThemeModule } from '@/types/theme-pack';
 
-import paperModule from './paper';
-
-const ALL_MODULES: OfficialThemeModule[] = [paperModule];
-
-const BY_ID = new Map<string, OfficialThemeModule>(ALL_MODULES.map((mod) => [mod.id, mod]));
+import createPaperModule from './paper';
 
 export function getAllThemeModules(): OfficialThemeModule[] {
-  return ALL_MODULES;
+  return [createPaperModule()];
 }
 
 /** 按模块自声明的 id 精确查找（O(1)） */
 export function getThemeModuleById(id: string): OfficialThemeModule | undefined {
-  return BY_ID.get(id);
+  return getAllThemeModules().find((module) => module.id === id);
 }

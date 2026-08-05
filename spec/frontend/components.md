@@ -1,6 +1,6 @@
 # Frontend Components
 
-版本：2026-08-03
+版本：v1.1（2026-08-04）
 
 ## 布局主链
 
@@ -18,7 +18,14 @@
 - Shell、主页、编辑器表面、文件抽屉、命令面板、导出/模板/设置/分享/新建/删除/外部编辑/草稿退出弹窗、toast、更新提示和 Markdown 速查表都必须通过 `ThemeSlotBoundary` 暴露。
 - `ThemeSlotBoundary` 渲染优先级为插件组件 > `UxComponentRecipe` DSL > 宿主默认组件。
 - 所有 slot 都必须传入明确 `slotProps`，并保留默认 slot，使主题可以选择完全替换或包裹宿主 UI。
-- `ThemeHostContext` 向主题插件提供 action、slot、editor、dialog、toast、storage、commerce 和只读 appState API。
+- `ThemeHostContext` 向主题插件提供 action、slot、editor、dialog、toast、storage、commerce、i18n 和只读 appState API。
+
+## 本地化组件约束
+
+- 所有宿主可见文案、ARIA、title、placeholder、Toast、错误和配置标签使用语义消息 key；组件不得按 locale 写条件分支或把中文原文用作 key。
+- `SettingsDialog` 的首个页签固定为 `general`，包含关联到可见 label 的原生语言 `<select>`。语义命中框至少 44px，选项使用各语言本地名称，切换后保持控件焦点和当前弹窗状态。
+- 法语长文案、日/韩字体、360px 宽度和 200% 缩放时，设置导航、行布局、按钮和错误文本必须可换行且可滚动，不得裁切操作。
+- 官方主题的静态 recipe、manifest 展示信息和代码插件文案通过宿主 i18n 解析；第三方主题作者文本作为外部内容原样显示。
 
 ## 笔记本打开门页
 
@@ -74,6 +81,21 @@
 - `external-reader` slot 的 props 名称固定为 `enableEdit` 和 `openParentAsNotebook`，不得因文案调整而改名。默认宿主将 `openParentAsNotebook` 显示为“添加到笔记”。
 - `enableEdit` 只将当前窗口的初始只读 file grant 提升为该文件读写，并进入单文件 `external-edit` 壳；它不得暴露文件树、目录选择、跨文件导航或任何 workspace action。`openParentAsNotebook` 才提升父目录为当前窗口 `workspace`，并保留该文件选中。
 
+## 文档导入阅读器
+
+- `document-import-readonly` 复用 `ExternalReader` 的顶栏、正文滚动区、Markdown 样式和 RightWing，不新增 Office 工具栏或独立阅读器。右上角只有一个明显的“启动编辑”按钮，文案、图标、ARIA 与点击结果必须表达同一动作。
+- 转换状态覆盖 `queued / snapshotting / converting / complete / stale / cancelled / error`。确定进度使用原生 `progressbar` 语义与 `aria-valuenow/min/max`；不可确定阶段使用 `aria-busy` 和明确阶段文案，不填伪造数值。chunk 只能按序追加，追加不得抢滚动或焦点。
+- 警告区使用非模态、可折叠列表，不能用颜色作为唯一信号。错误必须说明发生了什么、为何无法继续以及“重试/重新转换”动作；取消后可重试。减弱动效下禁用内容位移，只保留状态变化。
+- “启动编辑”在转换未完成或已过期时禁用。点击打开统一模态框，首焦点为“编辑源文件”，第二操作为“编辑 Markdown 副本”，并提供明确关闭按钮、遮罩关闭、Escape 和焦点恢复；按钮命中区至少 44px。
+- 专业软件选项展示当前检测名称，如“在 Microsoft Word 中编辑”；没有候选时显示“选择其他应用”，触发系统 Open With。另存路径先显示“原文件不会被修改”，再调用原生对话框；取消保持当前预览和按钮状态。
+- 保存成功后撤销所有转换 blob URL/临时资产，路由进入现有 `external-edit`；源文件不再属于该窗口。源过期时正文顶部出现常驻状态和“重新转换”，旧“启动编辑”与另存均不可达。
+
+## 文件打开方式控件
+
+- 欢迎页用五个格式组表达 Markdown、纯文本、Word、PDF、Excel；默认只选 Markdown。格式组是可访问 checkbox/switch 语义，视觉选中与实际系统状态分开显示。
+- 欢迎页主动作固定为“在 Windows 中确认并应用”；系统页返回/窗口恢复焦点后重新读取状态，逐项显示已应用、部分应用、未应用，并为未完成项保留“继续设置”。欢迎流程不因未完成关联而阻塞。
+- 设置“通用”页新增“文件打开方式”区，显示同五组真实状态和一个系统更改按钮；不得以 toggle 表示 JotLuck 可直接改写 Windows 默认值。Web/PWA 显示桌面能力说明，不能调用 Windows IPC。
+
 ## 交互要求
 
 - 主题入口位于 TopBar，打开主题中心。
@@ -83,6 +105,10 @@
 - 外部只读窗口不得挂载文件树、编辑器、导出、索引、监听、补全或更新检查；进入 workspace 后这些目录级组件才可异步初始化。
 
 ## 变更记录
+
+- 2026-08-04（v1.1）：定义文档导入渐进状态、唯一编辑入口双选模态、源过期重转、欢迎格式组和设置页真实关联状态控件。
+
+- 2026-08-03：新增五语言组件文案规则、SettingsDialog 通用/语言入口和 ThemeHostContext i18n 约束。
 
 - 2026-08-03：定义带文件版本的条件保存、冲突/缺失恢复选择，以及笔记切换期间“可复制但不可继续写”的交互屏障。
 - 2026-08-02：定义保存错误的重新保存/另存副本动作、Ctrl/Cmd+S 共用保存流程及失败后的明确退出闭环。

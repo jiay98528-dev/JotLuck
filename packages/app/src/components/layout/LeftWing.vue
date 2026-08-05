@@ -5,9 +5,9 @@
     :data-mode="region.mode"
     :data-layout="region.layout"
     data-theme-part="navigator"
-    aria-label="笔记本导航"
+    :aria-label="t('shell.notebookNavigation')"
   >
-    <button class="wing-logo" title="JotLuck, 回到首页" @click="$emit('select-note', '')">
+    <button class="wing-logo" :title="t('shell.logoHome')" @click="$emit('select-note', '')">
       <svg
         width="20"
         height="20"
@@ -44,7 +44,7 @@
       {{ notes.length }}
     </div>
     <div v-else-if="region.layout === 'navigator'" class="wing-panel-kicker" aria-hidden="true">
-      Recent
+      {{ t('shell.recentNotes') }}
     </div>
     <div v-else-if="region.layout === 'studio-rail'" class="wing-rail-groove" aria-hidden="true" />
 
@@ -52,7 +52,7 @@
       ref="bookmarkList"
       class="wing-bookmarks"
       data-theme-part="navigator-list"
-      aria-label="最近笔记"
+      :aria-label="t('shell.recentNotes')"
     >
       <button
         v-for="note in notes"
@@ -102,8 +102,11 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import ShellActionButton from './ShellActionButton.vue';
 import type { ShellAction, LeftWingRegion } from '@/types/theme-pack';
+
+const { t } = useI18n();
 
 const props = withDefaults(
   defineProps<{

@@ -200,12 +200,32 @@
       "requiredArtifactKinds": ["execution-log", "registry-snapshot", "launch-trace"]
     },
     {
-      "id": "ASSOC-05-NO-DEFAULT-OVERRIDE",
+      "id": "ASSOC-05-DOCX",
+      "adapter": "association-docx",
+      "requiredArtifactKinds": ["execution-log", "registry-snapshot", "launch-trace"]
+    },
+    {
+      "id": "ASSOC-06-PDF",
+      "adapter": "association-pdf",
+      "requiredArtifactKinds": ["execution-log", "registry-snapshot", "launch-trace"]
+    },
+    {
+      "id": "ASSOC-07-XLSX",
+      "adapter": "association-xlsx",
+      "requiredArtifactKinds": ["execution-log", "registry-snapshot", "launch-trace"]
+    },
+    {
+      "id": "ASSOC-08-XLS",
+      "adapter": "association-xls",
+      "requiredArtifactKinds": ["execution-log", "registry-snapshot", "launch-trace"]
+    },
+    {
+      "id": "ASSOC-09-NO-DEFAULT-OVERRIDE",
       "adapter": "association-default-preservation",
       "requiredArtifactKinds": ["execution-log", "registry-snapshot"]
     },
     {
-      "id": "ASSOC-06-UNINSTALL",
+      "id": "ASSOC-10-UNINSTALL",
       "adapter": "association-uninstall-cleanup",
       "requiredArtifactKinds": ["execution-log", "registry-snapshot", "installer-log"]
     }

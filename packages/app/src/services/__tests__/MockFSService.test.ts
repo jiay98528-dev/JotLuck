@@ -26,9 +26,10 @@ describe('MockFSService sample notebook', () => {
       rootPath: '/',
       name: '示例笔记本',
     });
+    await expect(fs.getRecentNotebooks()).resolves.toEqual(['/']);
     await expect(fs.openNotebookAt('ignored-in-mock')).resolves.toMatchObject({
-      rootPath: '/',
-      name: '示例笔记本',
+      rootPath: 'ignored-in-mock',
+      name: 'ignored-in-mock',
     });
   });
 
@@ -45,8 +46,12 @@ describe('MockFSService sample notebook', () => {
 
     await expect(cancelled.getRecentNotebooks()).resolves.toEqual([]);
     await expect(cancelled.openNotebook()).resolves.toBeNull();
-    await expect(failed.openNotebookAt('missing')).rejects.toThrow('笔记本不可用');
-    await expect(failed.openNotebook()).rejects.toThrow('没有权限');
+    await expect(failed.openNotebookAt('missing')).rejects.toMatchObject({
+      payload: { code: 'not_found' },
+    });
+    await expect(failed.openNotebook()).rejects.toMatchObject({
+      payload: { code: 'permission_denied' },
+    });
   });
 
   it('lists only directories and supported editable note files', async () => {
@@ -120,7 +125,9 @@ describe('MockFSService sample notebook', () => {
     await fs.writeFile('/source.md', '# Source');
     await fs.writeFile('/target.md', '# Target');
 
-    await expect(fs.renameFile('/source.md', '/target.md')).rejects.toThrow('目标路径已存在');
+    await expect(fs.renameFile('/source.md', '/target.md')).rejects.toMatchObject({
+      payload: { code: 'already_exists' },
+    });
     await expect(fs.readFile('/source.md')).resolves.toBe('# Source');
     await expect(fs.readFile('/target.md')).resolves.toBe('# Target');
   });

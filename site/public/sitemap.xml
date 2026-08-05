@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <!-- 语言门页：alternate 五语指向五语首页，x-default 指自身 -->
+  <url>
+    <loc>https://jotluck.com/</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <!-- 中文 (zh-CN) -->
+  <url>
+    <loc>https://jotluck.com/zh/</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/zh/download</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/download"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/download"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/download"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/download"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/download"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/zh/themes</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/themes"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/themes"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/themes"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/themes"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/themes"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/zh/studio</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/studio"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/studio"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/studio"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/studio"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/studio"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <!-- 英语 (en) -->
+  <url>
+    <loc>https://jotluck.com/en/</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/en/download</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/download"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/download"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/download"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/download"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/download"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/en/themes</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/themes"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/themes"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/themes"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/themes"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/themes"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/en/studio</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/studio"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/studio"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/studio"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/studio"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/studio"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <!-- 日语 (ja) -->
+  <url>
+    <loc>https://jotluck.com/ja/</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/ja/download</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/download"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/download"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/download"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/download"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/download"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/ja/themes</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/themes"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/themes"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/themes"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/themes"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/themes"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/ja/studio</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/studio"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/studio"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/studio"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/studio"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/studio"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <!-- 韩语 (ko) -->
+  <url>
+    <loc>https://jotluck.com/ko/</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/ko/download</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/download"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/download"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/download"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/download"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/download"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/ko/themes</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/themes"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/themes"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/themes"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/themes"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/themes"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/ko/studio</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/studio"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/studio"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/studio"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/studio"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/studio"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <!-- 法语 (fr) -->
+  <url>
+    <loc>https://jotluck.com/fr/</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/fr/download</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/download"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/download"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/download"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/download"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/download"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/fr/themes</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/themes"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/themes"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/themes"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/themes"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/themes"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/fr/studio</loc>
+    <lastmod>2026-08-04</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/studio"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/studio"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/studio"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/studio"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/studio"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+</urlset>

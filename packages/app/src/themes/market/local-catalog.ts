@@ -1,12 +1,14 @@
-import abilityLabModule from '../ability-lab';
-import haloCanvasModule from '../halo-canvas';
-import lumenFieldModule from '../lumen-field';
-import superWorkbenchModule from '../super-workbench';
+import createAbilityLabModule from '../ability-lab';
+import createHaloCanvasModule from '../halo-canvas';
+import createLumenFieldModule from '../lumen-field';
+import createSuperWorkbenchModule from '../super-workbench';
 import type { OfficialThemeModule } from '@/types/theme-pack';
 
-export const localMarketModules: OfficialThemeModule[] = [
-  abilityLabModule,
-  haloCanvasModule,
-  lumenFieldModule,
-  superWorkbenchModule,
-];
+export function getLocalMarketModules(): OfficialThemeModule[] {
+  return [
+    createAbilityLabModule(),
+    createHaloCanvasModule(),
+    createLumenFieldModule(),
+    createSuperWorkbenchModule(),
+  ];
+}

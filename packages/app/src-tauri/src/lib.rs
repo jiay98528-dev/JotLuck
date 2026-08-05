@@ -3,14 +3,17 @@
 // The desktop host runs as one process with window-scoped notebook and
 // external-file sessions. A file association never replaces another window.
 
+mod command_error;
 mod completion_retrieval;
+mod document_import;
 mod file_watcher;
 mod fs_ops;
 mod indexer;
 mod path;
-mod template;
 mod window_session;
+mod windows_integration;
 
+use command_error::CommandResult;
 use std::{
     fs::{self, OpenOptions},
     io::Write,
@@ -22,12 +25,20 @@ use uuid::Uuid;
 /// Force-close the calling window after the frontend has completed its save guard.
 /// `close()` would emit another CloseRequested event and re-enter the guard.
 #[tauri::command]
-fn destroy_current_window(window: tauri::WebviewWindow) -> Result<(), String> {
-    window.destroy().map_err(|error| error.to_string())
+fn destroy_current_window(window: tauri::WebviewWindow) -> CommandResult<()> {
+    window.destroy().map_err(|error| error.to_string())?;
+    Ok(())
 }
 
 fn is_supported_opened_file_extension(ext: &str) -> bool {
-    matches!(ext, "md" | "markdown" | "mdx" | "txt")
+    matches!(
+        ext,
+        "md" | "markdown" | "mdx" | "txt" | "docx" | "pdf" | "xlsx" | "xls"
+    )
+}
+
+pub fn run_document_worker_if_requested() -> bool {
+    document_import::run_document_worker_if_requested()
 }
 
 fn opened_file_path_from_arg(arg: &str, cwd: &Path) -> Option<PathBuf> {
@@ -115,6 +126,8 @@ fn attach_window_cleanup(window: &WebviewWindow) {
             .remove_for(&label);
         app.state::<fs_ops::ExternalAccessGrants>()
             .revoke_for_window(&label);
+        app.state::<document_import::DocumentImportState>()
+            .cleanup_for_window(&label);
     });
 }
 
@@ -169,10 +182,15 @@ fn open_external_file_in_window(
         .unwrap_or_else(|| format!("file-{}", Uuid::new_v4().simple()));
     let existing_window = app.get_webview_window(&label);
     let access = app.state::<fs_ops::ExternalAccessGrants>();
-    let handle = access.grant_for_existing_file(&path.to_string_lossy(), &label)?;
-    if let Err(error) = sessions.register_external(&label, handle) {
-        access.revoke_for_window(&label);
-        return Err(error);
+    let is_document_import = window_session::ImportedDocumentKind::from_path(path).is_some();
+    if is_document_import {
+        sessions.register_document_import(&label, path)?;
+    } else {
+        let handle = access.grant_for_existing_file(&path.to_string_lossy(), &label)?;
+        if let Err(error) = sessions.register_external(&label, handle) {
+            access.revoke_for_window(&label);
+            return Err(error);
+        }
     }
 
     let window = match existing_window {
@@ -248,6 +266,7 @@ pub fn run() {
         .manage(fs_ops::ExternalAccessGrants::new())
         .manage(fs_ops::FileMutationCoordinator::new())
         .manage(window_session::WindowSessionRegistry::new())
+        .manage(document_import::DocumentImportState::new())
         .manage(file_watcher::FileWatcherState::new())
         .manage(completion_retrieval::CompletionRetrievalStates::new())
         .manage(indexer::SearchIndexState::new())
@@ -285,6 +304,15 @@ pub fn run() {
             window_session::get_window_bootstrap,
             window_session::enable_external_edit,
             window_session::promote_external_file_to_notebook,
+            document_import::start_document_conversion,
+            document_import::cancel_document_conversion,
+            document_import::read_document_conversion_asset,
+            document_import::refresh_document_source_revision,
+            document_import::save_converted_document_as,
+            windows_integration::get_document_editor_candidate,
+            windows_integration::open_document_source_in_editor,
+            windows_integration::get_windows_association_status,
+            windows_integration::open_jotluck_default_apps_settings,
             fs_ops::open_notebook,
             fs_ops::open_external_notebook,
             fs_ops::open_sample_notebook,
@@ -321,8 +349,6 @@ pub fn run() {
             completion_retrieval::completion_v2_diagnostics,
             file_watcher::start_file_watcher,
             file_watcher::stop_file_watcher,
-            template::render_template,
-            template::get_builtin_template,
         ])
         .run(tauri::generate_context!())
     {
@@ -338,15 +364,15 @@ mod tests {
     fn opened_file_capture_accepts_all_supported_extensions() {
         let root = std::env::temp_dir().join(format!("JotLuck-opened-{}", Uuid::new_v4()));
         fs::create_dir_all(&root).unwrap();
-        for extension in ["md", "markdown", "mdx", "txt"] {
+        for extension in ["md", "markdown", "mdx", "txt", "docx", "pdf", "xlsx", "xls"] {
             fs::write(root.join(format!("target.{extension}")), "content").unwrap();
         }
-        let args = ["md", "markdown", "mdx", "txt"]
+        let args = ["md", "markdown", "mdx", "txt", "docx", "pdf", "xlsx", "xls"]
             .into_iter()
             .map(|extension| format!("target.{extension}"))
             .collect::<Vec<_>>();
         let files = capture_opened_files_from_args(&args, &root);
-        assert_eq!(files.len(), 4);
+        assert_eq!(files.len(), 8);
         fs::remove_dir_all(root).unwrap();
     }
 

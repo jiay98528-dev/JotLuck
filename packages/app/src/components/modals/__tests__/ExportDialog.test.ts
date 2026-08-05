@@ -5,6 +5,7 @@ const exportNoteMock = vi.hoisted(() => vi.fn());
 vi.mock('@/services/Exporter', () => ({ exportNote: exportNoteMock }));
 
 import ExportDialog from '../ExportDialog.vue';
+import { translate } from '@/i18n';
 
 function findButton(label: string): HTMLButtonElement {
   const button = [...document.body.querySelectorAll<HTMLButtonElement>('button')].find(
@@ -39,7 +40,8 @@ describe('ExportDialog error recovery', () => {
     await flushPromises();
 
     expect(document.body.textContent).toContain('导出失败');
-    expect(document.body.textContent).toContain('磁盘空间不足');
+    expect(document.body.textContent).toContain(translate('dialogs.export.unknownError'));
+    expect(document.body.textContent).not.toContain('磁盘空间不足');
     expect(document.body.textContent).not.toContain('正在导出...');
     expect(findButton('取消').disabled).toBe(false);
     expect(findButton('导出').disabled).toBe(false);
@@ -130,7 +132,7 @@ describe('ExportDialog error recovery', () => {
     resolveFirst({ success: true, message: '过期任务完成' });
     await flushPromises();
 
-    expect(document.body.textContent).toContain('正在导出...');
+    expect(document.body.textContent).toContain(translate('dialogs.export.exporting'));
     expect(document.body.textContent).not.toContain('过期任务完成');
 
     resolveSecond({ success: true, message: '当前任务完成' });

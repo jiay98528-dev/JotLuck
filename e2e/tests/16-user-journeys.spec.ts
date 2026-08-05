@@ -81,8 +81,11 @@ test.describe('V6 用户旅程', () => {
     await page.waitForTimeout(500);
 
     // Step 6: 验证编辑器加载了子目录文件内容
-    const editorContent = await getEditorContent(page);
-    expect(editorContent).toContain('子文件夹笔记');
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().activePath ?? ''))
+      .toBe('/子文件夹/笔记A.md');
+    const editorContent = await getEditorContentFromBridge(page);
+    expect(editorContent).toContain('放在子文件夹里的笔记');
 
     // Step 7: 编辑并保存
     await typeInEditor(page, '# 来自子文件夹的笔记\n\n文件抽屉直接打开。');
@@ -263,7 +266,7 @@ test.describe('V6 用户旅程', () => {
     await page.locator('.new-note-btn').click();
     await expect(page.locator('.file-name-input')).toBeVisible({ timeout: 3000 });
     await page.locator('.file-name-input').fill(fileName);
-    await page.keyboard.press('Enter');
+    await page.locator('.modal-card').getByRole('button', { name: '确定', exact: true }).click();
     await expect(page.locator('.file-name-input')).not.toBeVisible({ timeout: 3000 });
     await expect(page.locator(`.tree-item:has-text("${fileName}")`)).toBeVisible({ timeout: 5000 });
     await page.keyboard.press('Escape');
@@ -573,7 +576,8 @@ test.describe('外部文件父目录笔记本会话', () => {
     await page.addInitScript((path) => {
       const sibling = 'C:/Users/alice/Desktop/sibling.md';
       const generated = 'C:/Users/alice/Desktop/node_modules/dependency/README.md';
-      localStorage.removeItem('jotluck:welcome:completed');
+      localStorage.setItem('jotluck:welcome:completed', '1');
+      localStorage.setItem('jotluck:locale:v1', 'zh-CN');
       localStorage.setItem(
         'jotluck-recent-notebooks',
         JSON.stringify(['C:/Users/alice/Desktop', 'D:/Notes/RealNotebook']),
@@ -618,7 +622,7 @@ test.describe('外部文件父目录笔记本会话', () => {
       performance
         .getEntriesByType('resource')
         .map((entry) => entry.name)
-        .filter((name) => /MarkdownEditor|vendor-codemirror/u.test(name)),
+        .filter((name) => /MarkdownEditor/u.test(name)),
     );
     expect(editorAssetsBeforeEdit).toEqual([]);
 

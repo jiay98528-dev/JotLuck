@@ -3,6 +3,7 @@
 // Builds and queries a full-text search index over supported note files
 // in the notebook directory. Supports incremental updates.
 
+use crate::command_error::CommandResult;
 use crate::fs_ops::NotebookRoot;
 use crate::path::{display_path, is_ignored_notebook_directory_name, resolve_safe_path};
 use crate::window_session::WindowSessionRegistry;
@@ -290,7 +291,7 @@ pub fn build_index(
     index: State<SearchIndexState>,
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
-) -> Result<usize, String> {
+) -> CommandResult<usize> {
     sessions.assert_workspace(window.label())?;
     let root_path = root.get_for(window.label()).ok_or("未打开笔记本")?;
     let mut indices = index.0.lock().map_err(|e| e.to_string())?;
@@ -342,7 +343,7 @@ pub fn update_index_document(
     index: State<SearchIndexState>,
     root: State<NotebookRoot>,
     sessions: State<WindowSessionRegistry>,
-) -> Result<(), String> {
+) -> CommandResult<()> {
     sessions.assert_workspace(window.label())?;
     let root_path = root.get_for(window.label()).ok_or("未打开笔记本")?;
     let indices = index.0.lock().map_err(|e| e.to_string())?;
@@ -375,13 +376,13 @@ pub fn search_index(
     query: String,
     index: State<SearchIndexState>,
     sessions: State<WindowSessionRegistry>,
-) -> Result<Vec<SearchResultItem>, String> {
+) -> CommandResult<Vec<SearchResultItem>> {
     sessions.assert_workspace(window.label())?;
     let indices = index.0.lock().map_err(|e| e.to_string())?;
     let idx = indices
         .get(window.label())
         .ok_or_else(|| "索引未打开".to_string())?;
-    idx.search(&query, 50)
+    Ok(idx.search(&query, 50)?)
 }
 
 /// Extract the first H1 title from markdown content.

@@ -13,10 +13,10 @@
           v-if="!isExpanded"
           key="pill"
           class="cheatsheet-pill"
-          aria-label="打开 Markdown 语法参考"
+          :aria-label="t('cheatSheet.open')"
           @click="expand"
         >
-          <span class="pill-text">? 语法</span>
+          <span class="pill-text">{{ t('cheatSheet.pill') }}</span>
         </button>
 
         <!-- Expanded Card -->
@@ -25,13 +25,15 @@
           <div class="cheatsheet-header">
             <span
               class="drag-handle"
-              title="拖拽移动"
-              aria-label="拖拽移动"
+              :title="t('cheatSheet.drag')"
+              :aria-label="t('cheatSheet.drag')"
               @pointerdown="startDrag"
               >⠿</span
             >
-            <span class="cheatsheet-title">语法参考</span>
-            <button class="collapse-btn" aria-label="收起语法参考" @click="collapse()">−</button>
+            <span class="cheatsheet-title">{{ t('cheatSheet.title') }}</span>
+            <button class="collapse-btn" :aria-label="t('cheatSheet.collapse')" @click="collapse()">
+              −
+            </button>
           </div>
 
           <!-- Content -->
@@ -58,6 +60,7 @@
  * categorized format. Position and state persist via localStorage.
  */
 import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 // ============================================================
 // Constants
@@ -76,15 +79,43 @@ interface CheatSection {
   entries: string[];
 }
 
-const sections: CheatSection[] = [
-  { label: '标题', entries: ['# H1', '## H2', '### H3'] },
-  { label: '行内格式', entries: ['**粗体**', '*斜体*', '~~删除线~~', '`代码`'] },
-  { label: '列表', entries: ['- 无序', '1. 有序', '- [ ] 任务'] },
-  { label: '引用与代码', entries: ['> 引用', '``` 代码块 ```'] },
-  { label: '链接与图片', entries: ['[文字](url)', '![图片](url)'] },
-  { label: 'Wiki-link', entries: ['[[笔记名]]', '[[笔记名|别名]]'] },
-  { label: '模板', entries: ['{{date}}', '{{time}}'] },
-];
+const { t } = useI18n();
+const sections = computed<CheatSection[]>(() => [
+  { label: t('cheatSheet.headings'), entries: ['# H1', '## H2', '### H3'] },
+  {
+    label: t('cheatSheet.inline'),
+    entries: [
+      `**${t('cheatSheet.bold')}**`,
+      `*${t('cheatSheet.italic')}*`,
+      `~~${t('cheatSheet.strikethrough')}~~`,
+      `\`${t('cheatSheet.code')}\``,
+    ],
+  },
+  {
+    label: t('cheatSheet.lists'),
+    entries: [
+      `- ${t('cheatSheet.unordered')}`,
+      `1. ${t('cheatSheet.ordered')}`,
+      `- [ ] ${t('cheatSheet.task')}`,
+    ],
+  },
+  {
+    label: t('cheatSheet.quoteCode'),
+    entries: [`> ${t('cheatSheet.quote')}`, `\`\`\` ${t('cheatSheet.codeBlock')} \`\`\``],
+  },
+  {
+    label: t('cheatSheet.linksImages'),
+    entries: [`[${t('cheatSheet.text')}](url)`, `![${t('cheatSheet.image')}](url)`],
+  },
+  {
+    label: t('cheatSheet.wikiLink'),
+    entries: [
+      `[[${t('cheatSheet.noteName')}]]`,
+      `[[${t('cheatSheet.noteName')}|${t('cheatSheet.alias')}]]`,
+    ],
+  },
+  { label: t('cheatSheet.templates'), entries: ['{{date}}', '{{time}}'] },
+]);
 
 // ============================================================
 // Reactive state

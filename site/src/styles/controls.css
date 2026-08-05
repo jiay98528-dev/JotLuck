@@ -1,0 +1,136 @@
+/**
+ * 全局控件词汇 — 结构像纸，控件像印记。
+ * 契约：44px 命中、命名不对称轮廓、80–150ms 微交互、焦点=2px 套准橙环。
+ */
+
+/* ---------- 按钮 ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: var(--r-control);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  transition:
+    transform var(--dur-micro) var(--ease-press),
+    box-shadow var(--dur-micro) var(--ease-press),
+    background-color var(--dur-micro) var(--ease-press);
+}
+.btn:active {
+  transform: scale(0.97);
+  transition-duration: var(--dur-press);
+}
+
+.btn-primary {
+  background: var(--teal);
+  color: var(--paper);
+}
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-stack);
+}
+
+.btn-secondary {
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--ink-30);
+}
+.btn-secondary:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-stack);
+}
+
+/* Hero 主动作：深青底 + 下方 ≤12px 橘红不规则套印底边（印刷错位，非装饰色块） */
+.btn-cta {
+  position: relative;
+  background: var(--teal);
+  color: var(--paper);
+  border-radius: var(--r-cta);
+}
+.btn-cta::after {
+  content: '';
+  position: absolute;
+  left: 7%;
+  bottom: -7px;
+  width: 76%;
+  height: 9px;
+  background: var(--orange);
+  border-radius: 2px 7px 3px 9px;
+  transform: rotate(-0.6deg);
+  opacity: 0.92;
+  z-index: -1;
+}
+.btn-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-stack);
+}
+.btn-cta:active {
+  transform: scale(0.97);
+}
+
+/* ---------- 编号批注（32px 圆 + 套准橙环，环向右下错位 1px 模拟套印偏差） ---------- */
+.annotation-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: var(--r-full);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  box-shadow:
+    1px 1px 0 0 var(--orange),
+    0 0 0 1px var(--ink-14);
+}
+
+/* ---------- 技术边注（mono 证据层，不伪装开发者气质） ---------- */
+.tech-rail {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-50);
+  letter-spacing: 0.03em;
+}
+
+/* ---------- 纸页 ---------- */
+.paper-sheet {
+  position: relative;
+  background: var(--paper);
+  border-radius: var(--r-sheet);
+  box-shadow: var(--shadow-sheet);
+}
+/* 每层纸的纤维位置固定且互不相同（禁运行时随机） */
+.paper-sheet::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: var(--site-paper-texture);
+  background-size: 627px;
+  background-blend-mode: multiply;
+  opacity: 0.28;
+  pointer-events: none;
+}
+.paper-sheet.tex-2::before {
+  background-position: 209px 313px;
+}
+.paper-sheet.tex-3::before {
+  background-position: 417px 97px;
+}
+.paper-sheet.tex-4::before {
+  background-position: 83px 521px;
+}
+
+/* ---------- 低可视俏皮注（保守估计） ---------- */
+.quip {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-50);
+}

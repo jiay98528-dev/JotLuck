@@ -51,14 +51,17 @@ const sourceOnlyHighlightStyle = HighlightStyle.define([
   { tag: tags.link, color: 'var(--link)', textDecoration: 'none' },
 ]);
 
-export function jotluckExtensions(ph = '开始书写…', sourceOnly = false): Extension[] {
+export function jotluckPlaceholder(text: string): Extension {
+  return cmPlaceholder(text);
+}
+
+export function jotluckExtensions(sourceOnly = false): Extension[] {
   return [
     markdown(),
     history(),
     highlightActiveLine(),
     keymap.of([...defaultKeymap, ...historyKeymap]),
     EditorView.lineWrapping,
-    cmPlaceholder(ph),
     syntaxHighlighting(sourceOnly ? sourceOnlyHighlightStyle : JotLuckHighlightStyle),
     EditorView.theme(
       {

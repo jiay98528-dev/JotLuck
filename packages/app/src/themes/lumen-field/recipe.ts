@@ -21,7 +21,7 @@ export const recipe: ShellRecipe = {
     left: {
       side: 'left',
       slot: 'left-wing',
-      label: '文件信标',
+      label: 'theme.plugin.fileBeacon',
       size: 280,
       minSize: 232,
       maxSize: 360,
@@ -29,7 +29,7 @@ export const recipe: ShellRecipe = {
     right: {
       side: 'right',
       slot: 'right-wing',
-      label: '知识雷达',
+      label: 'theme.plugin.knowledgeRadar',
       size: 320,
       minSize: 260,
       maxSize: 420,
@@ -37,7 +37,7 @@ export const recipe: ShellRecipe = {
     bottom: {
       side: 'bottom',
       slot: 'editor-control',
-      label: '命令舱',
+      label: 'theme.plugin.commandDeck',
       size: 164,
       minSize: 124,
       maxSize: 260,

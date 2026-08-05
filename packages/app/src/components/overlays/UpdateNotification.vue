@@ -6,13 +6,15 @@
         class="update-card"
         role="status"
         aria-live="polite"
-        aria-label="版本更新通知"
+        :aria-label="t('updateNotification.aria')"
       >
         <!-- Timer bar -->
         <div class="timer-bar" :class="{ 'is-running': ticking }" @animationend="onTimerEnd" />
 
         <!-- Header -->
-        <div class="card-header">🆕 {{ APP_NAME }} {{ latestVersion }} 已发布</div>
+        <div class="card-header">
+          {{ t('updateNotification.released', { app: APP_NAME, version: latestVersion }) }}
+        </div>
 
         <!-- Body: release notes (first 2-3 lines, ~120 chars max) -->
         <p v-if="displayNotes" class="card-body">{{ displayNotes }}</p>
@@ -21,11 +23,18 @@
         <div class="card-footer">
           <label class="dismiss-label">
             <input v-model="dontRemind" type="checkbox" class="dismiss-checkbox" />
-            <span>本版本不再提醒</span>
+            <span>{{ t('updateNotification.dontRemind') }}</span>
           </label>
           <div class="footer-actions">
-            <button class="link-btn" @click="openRelease">查看详情</button>
-            <button class="close-btn" aria-label="关闭通知" title="关闭" @click="close">
+            <button class="link-btn" @click="openRelease">
+              {{ t('updateNotification.details') }}
+            </button>
+            <button
+              class="close-btn"
+              :aria-label="t('updateNotification.close')"
+              :title="t('common.close')"
+              @click="close"
+            >
               &#x2715;
             </button>
           </div>
@@ -48,6 +57,7 @@
 import { ref, watch, onUnmounted, computed } from 'vue';
 import { APP_NAME } from '@/config/app-meta';
 import { normalizeUrl } from '@/utils/urlUtils';
+import { useI18n } from 'vue-i18n';
 
 // ─── Props ────────────────────────────────────────────────────────────
 
@@ -61,6 +71,7 @@ const props = defineProps<{
   /** Release notes summary (first 2-3 lines displayed, max ~120 chars). */
   releaseNotes?: string;
 }>();
+const { t } = useI18n();
 
 // ─── Emits ─────────────────────────────────────────────────────────────
 

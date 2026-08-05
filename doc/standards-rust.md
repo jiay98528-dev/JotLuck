@@ -1,6 +1,6 @@
 # JotLuck Rust 代码规范
 
-> 版本：v1.0 | 日期：2026-06-03
+> 版本：v1.1 | 日期：2026-08-04
 > 关联文档：`doc/TAD.md`（Rust 模块架构）、`PRODUCT.md`（"精确"、"轻量是道德"）
 
 ---
@@ -11,11 +11,11 @@
 # Cargo.toml
 [package]
 edition = "2021"
-rust-version = "1.80"  # MSRV
+rust-version = "1.88"  # MSRV
 
 [profile.release]
 strip = "symbols"
-lto = true
+lto = "thin"
 panic = "abort"
 opt-level = "s"  # 轻量化优先（Size）
 codegen-units = 1
@@ -373,3 +373,10 @@ another = ">=1.0"
 | 同步 I/O 在 async 上下文           | 使用 `tokio::fs` 或 `spawn_blocking` |
 | `.clone()` 无理由                  | 优先用引用或 `Rc`/`Arc`              |
 | 硬编码路径                         | 从配置/状态获取                      |
+
+---
+
+## 变更记录
+
+- **v1.1（2026-08-04）**：为隔离式 DOCX、PDF、XLS/XLSX 转换工作进程将 MSRV 提升至 Rust 1.88，并同步发布配置中的 Thin LTO。
+- **v1.0（2026-06-03）**：冻结首版 Rust 代码规范。

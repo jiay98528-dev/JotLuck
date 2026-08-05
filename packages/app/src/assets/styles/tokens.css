@@ -202,3 +202,20 @@
   --theme-control-density: 1;
   --theme-transition: opacity var(--dur-micro) var(--ease-fade);
 }
+
+:root:lang(en),
+:root:lang(fr) {
+  --ff-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+
+:root:lang(ja) {
+  --ff-body:
+    -apple-system, BlinkMacSystemFont, 'Yu Gothic UI', 'Hiragino Kaku Gothic ProN', Meiryo,
+    'Noto Sans CJK JP', sans-serif;
+}
+
+:root:lang(ko) {
+  --ff-body:
+    -apple-system, BlinkMacSystemFont, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans CJK KR',
+    sans-serif;
+}

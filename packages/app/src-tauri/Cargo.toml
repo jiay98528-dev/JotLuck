@@ -1,12 +1,12 @@
 [package]
 name = "jotluck"
-version = "0.10.2"
+version = "0.11.0"
 description = "JotLuck — local-first Markdown note-taking tool"
 authors = ["Linghu Technology (Shenzhen) Co., Ltd."]
 license = "MIT"
 repository = "https://github.com/jiay98528-dev/JotLuck"
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.88"
 
 [lib]
 name = "app_lib"
@@ -45,3 +45,30 @@ regex = "1"
 unicode-normalization = "0.1"
 uuid = { version = "1", features = ["v4"] }
 sha2 = "0.10"
+docx-rs = { version = "0.4.22", default-features = false }
+calamine = { version = "0.36.1", default-features = false, features = ["dates"] }
+lopdf = { version = "0.44", default-features = false }
+zip = { version = "4.3", default-features = false, features = ["deflate"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_System_Com",
+  "Win32_System_JobObjects",
+  "Win32_System_Registry",
+  "Win32_System_Threading",
+  "Win32_UI_Shell",
+] }
+windows = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_System_Com",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+opt-level = "s"
+panic = "abort"
+strip = "symbols"

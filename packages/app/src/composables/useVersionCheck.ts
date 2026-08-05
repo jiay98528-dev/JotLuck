@@ -11,6 +11,8 @@
 
 import { ref, computed } from 'vue';
 import { APP_RELEASES_API_URL, APP_VERSION } from '@/config/app-meta';
+import { translate } from '@/i18n';
+import { localizeUserError } from '@/services/command-errors';
 import { isSemVerNewer, normalizeReleaseVersion } from '@/utils/semver';
 
 // ---------------------------------------------------------------------------
@@ -199,14 +201,14 @@ export function useVersionCheck() {
         });
 
         if (!response.ok) {
-          error.value = `GitHub API returned ${response.status}`;
+          error.value = translate('settings.updates.failed');
           return;
         }
 
         const release: GitHubRelease = await response.json();
         const latest = cleanVersion(release.tag_name);
         if (!latest) {
-          error.value = `GitHub API returned an invalid release tag: ${release.tag_name}`;
+          error.value = translate('settings.updates.failed');
           return;
         }
         const info: CachedLatestInfo = {
@@ -219,8 +221,10 @@ export function useVersionCheck() {
         writeCachedInfo(info);
         applyLatestInfo(info);
       } catch (e: unknown) {
-        // Silent failure — capture the message but do not throw
-        error.value = e instanceof Error ? e.message : 'Unknown error';
+        // Network/library diagnostics stay out of user-visible reactive state.
+        // eslint-disable-next-line no-console
+        console.warn('[version-check] release lookup failed', e);
+        error.value = localizeUserError(e, 'settings.updates.failed');
       } finally {
         checking.value = false;
         pendingCheck = null;

@@ -11,6 +11,7 @@ import type { IFileSystemService } from '@/types';
 import { IndexService } from '@/services/IndexService';
 import type { SearchEngine } from '@/services/SearchEngine';
 import { useSearchStore } from '@/stores/search';
+import { localizeUserError } from '@/services/command-errors';
 
 export type IndexStatus = 'idle' | 'building' | 'ready' | 'error';
 
@@ -59,8 +60,8 @@ export const useIndexStore = defineStore('index', () => {
     } catch (e) {
       if (generation !== initializeGeneration) return;
       // eslint-disable-next-line no-console
-      console.error('[indexStore] initialize 索引构建失败:', e);
-      error.value = e instanceof Error ? e.message : '索引构建失败';
+      console.error('[indexStore] index initialization failed:', e);
+      error.value = localizeUserError(e, 'errors.indexUnavailable');
       status.value = 'error';
     }
   }
@@ -73,7 +74,7 @@ export const useIndexStore = defineStore('index', () => {
       recentNotes.value = indexService.getRecentNotes(20);
     } catch (e) {
       // eslint-disable-next-line no-console
-      console.warn('[indexStore] refreshDocument 失败', e);
+      console.warn('[indexStore] refreshDocument failed', e);
     }
   }
 

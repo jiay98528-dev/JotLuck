@@ -26,9 +26,11 @@
         <strong>{{ drawerShell.left.label }}</strong>
         <div class="single-page-drawer__actions">
           <button type="button" @click="togglePinned('left')">
-            {{ pinned.left ? '取消固定' : '固定' }}
+            {{ pinned.left ? t('shell.unpin') : t('shell.pin') }}
           </button>
-          <button v-if="!pinned.left" type="button" @click="closeDrawer('left')">关闭</button>
+          <button v-if="!pinned.left" type="button" @click="closeDrawer('left')">
+            {{ t('shell.closeDrawer') }}
+          </button>
         </div>
       </div>
       <div class="single-page-drawer__body">
@@ -50,9 +52,11 @@
         <strong>{{ drawerShell.right.label }}</strong>
         <div class="single-page-drawer__actions">
           <button type="button" @click="togglePinned('right')">
-            {{ pinned.right ? '取消固定' : '固定' }}
+            {{ pinned.right ? t('shell.unpin') : t('shell.pin') }}
           </button>
-          <button v-if="!pinned.right" type="button" @click="closeDrawer('right')">关闭</button>
+          <button v-if="!pinned.right" type="button" @click="closeDrawer('right')">
+            {{ t('shell.closeDrawer') }}
+          </button>
         </div>
       </div>
       <div class="single-page-drawer__body">
@@ -70,9 +74,11 @@
         <strong>{{ drawerShell.bottom.label }}</strong>
         <div class="single-page-drawer__actions">
           <button type="button" @click="togglePinned('bottom')">
-            {{ pinned.bottom ? '取消固定' : '固定' }}
+            {{ pinned.bottom ? t('shell.unpin') : t('shell.pin') }}
           </button>
-          <button v-if="!pinned.bottom" type="button" @click="closeDrawer('bottom')">关闭</button>
+          <button v-if="!pinned.bottom" type="button" @click="closeDrawer('bottom')">
+            {{ t('shell.closeDrawer') }}
+          </button>
         </div>
       </div>
       <div class="single-page-drawer__body">
@@ -85,7 +91,7 @@
       type="button"
       class="single-page-drawer-handle single-page-drawer-handle--left"
       :aria-expanded="open.left"
-      :aria-label="`${drawerShell.left.label}抽屉`"
+      :aria-label="t('shell.drawerAria', { label: drawerShell.left.label })"
       @click="toggleOpen('left')"
     >
       <span />
@@ -95,7 +101,7 @@
       type="button"
       class="single-page-drawer-handle single-page-drawer-handle--right"
       :aria-expanded="open.right"
-      :aria-label="`${drawerShell.right.label}抽屉`"
+      :aria-label="t('shell.drawerAria', { label: drawerShell.right.label })"
       @click="toggleOpen('right')"
     >
       <span />
@@ -105,7 +111,7 @@
       type="button"
       class="single-page-drawer-handle single-page-drawer-handle--bottom"
       :aria-expanded="open.bottom"
-      :aria-label="`${drawerShell.bottom.label}抽屉`"
+      :aria-label="t('shell.drawerAria', { label: drawerShell.bottom.label })"
       @click="toggleOpen('bottom')"
     >
       <span />
@@ -115,11 +121,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type {
   ThemeDrawerRegionRecipe,
   ThemeDrawerShellRecipe,
   ThemeDrawerSide,
 } from '@/types/theme-pack';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   themeId: string;

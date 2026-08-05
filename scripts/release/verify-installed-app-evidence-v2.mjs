@@ -24,7 +24,12 @@ const ASSOCIATION_EXTENSIONS = Object.freeze({
   'ASSOC-02-MARKDOWN': '.markdown',
   'ASSOC-03-MDX': '.mdx',
   'ASSOC-04-TXT': '.txt',
+  'ASSOC-05-DOCX': '.docx',
+  'ASSOC-06-PDF': '.pdf',
+  'ASSOC-07-XLSX': '.xlsx',
+  'ASSOC-08-XLS': '.xls',
 });
+const DOCUMENT_ASSOCIATION_EXTENSIONS = new Set(['.docx', '.pdf', '.xlsx', '.xls']);
 const WEBDRIVER_CASE_COMMANDS = Object.freeze({
   'GUI-01-NOTE-LIFECYCLE': ['refresh', 'elementClear', 'elementSendKeys', 'performActions'],
   'GUI-02-FILE-DRAWER': ['findElements', 'elementClick', 'elementSendKeys'],
@@ -630,7 +635,7 @@ function validateCaseResult(
     );
     bindDriverObservation(observationContext, webdriverObservation, execution.caseId);
   }
-  if (/^ASSOC-0[1-4]-/u.test(execution.caseId)) {
+  if (/^ASSOC-0[1-8]-/u.test(execution.caseId)) {
     const installedApplication = validateAssociationEvidence(
       value.artifacts,
       execution,
@@ -947,6 +952,10 @@ function validateAssociationEvidence(artifacts, execution, candidateApplication,
 
 function validateAssociationObjects(registry, launch, execution, candidateApplication) {
   const expectedExtension = ASSOCIATION_EXTENSIONS[execution.caseId];
+  const expectedProgId = DOCUMENT_ASSOCIATION_EXTENSIONS.has(expectedExtension)
+    ? 'JotLuck.DocumentImport'
+    : 'JotLuck.Note';
+  const binaryTarget = DOCUMENT_ASSOCIATION_EXTENSIONS.has(expectedExtension);
   const commandMatch = String(registry.openCommand).match(/^"([^"\r\n]+)"\s+"%1"$/u);
   const installed = launch.application?.installed;
   const packaged = launch.application?.packaged;
@@ -961,6 +970,7 @@ function validateAssociationObjects(registry, launch, execution, candidateApplic
       'openWithListExists',
       'defaultProgId',
       'userChoiceProgId',
+      'userChoiceLatestProgId',
       'mruList',
       'openWithSlots',
       'openWithExecutables',
@@ -976,9 +986,9 @@ function validateAssociationObjects(registry, launch, execution, candidateApplic
     !expectedExtension ||
     registry.extension !== expectedExtension ||
     !Array.isArray(registry.classOpenWithProgIds) ||
-    !registry.classOpenWithProgIds.includes('JotLuck.Note') ||
+    !registry.classOpenWithProgIds.includes(expectedProgId) ||
     !Array.isArray(registry.explorerOpenWithProgIds) ||
-    !registry.explorerOpenWithProgIds.includes('JotLuck.Note') ||
+    !registry.explorerOpenWithProgIds.includes(expectedProgId) ||
     registry.supportedType !== true ||
     !/^"[^"\r\n]*[\\/]JotLuck\.exe"\s+"%1"$/iu.test(String(registry.openCommand)) ||
     registry.progIdOpenCommand !== registry.openCommand ||
@@ -1008,7 +1018,7 @@ function validateAssociationObjects(registry, launch, execution, candidateApplic
   assertObject(target.after, `association target after ${execution.caseId}`);
   assertExactKeys(
     target.after,
-    ['bytes', 'sha256', 'contentUtf8'],
+    binaryTarget ? ['bytes', 'sha256'] : ['bytes', 'sha256', 'contentUtf8'],
     `association target after ${execution.caseId}`,
   );
   assertObject(launch.shell, `association Shell result ${execution.caseId}`);
@@ -1041,7 +1051,9 @@ function validateAssociationObjects(registry, launch, execution, candidateApplic
   if (isExecutableIdentity(packaged)) {
     assertExactKeys(packaged, ['path', 'bytes', 'sha256'], 'packaged application identity');
   }
-  const afterBytes = Buffer.from(String(target?.after?.contentUtf8 ?? ''), 'utf8');
+  const afterBytes = binaryTarget
+    ? null
+    : Buffer.from(String(target?.after?.contentUtf8 ?? ''), 'utf8');
   const targetStem = path.win32.parse(String(target?.path ?? '')).name.toLowerCase();
   if (
     launch.schema !== 'jotluck.installed-app.association-launch.v2' ||
@@ -1054,20 +1066,23 @@ function validateAssociationObjects(registry, launch, execution, candidateApplic
     !Number.isInteger(target.before?.bytes) ||
     target.before.bytes <= 0 ||
     !SHA256.test(String(target.before?.sha256)) ||
-    target.after?.bytes !== afterBytes.byteLength ||
-    target.after?.sha256 !== sha256(afterBytes) ||
+    !Number.isInteger(target.after?.bytes) ||
+    target.after.bytes <= 0 ||
+    !SHA256.test(String(target.after?.sha256)) ||
+    (!binaryTarget && target.after.bytes !== afterBytes.byteLength) ||
+    (!binaryTarget && target.after.sha256 !== sha256(afterBytes)) ||
     target.before.bytes !== target.after.bytes ||
     target.before.sha256 !== target.after.sha256 ||
-    !String(target.after?.contentUtf8).includes(target.marker) ||
+    (!binaryTarget && !String(target.after?.contentUtf8).includes(target.marker)) ||
     launch.shell?.method !== 'ShellExecuteExW' ||
-    launch.shell?.className !== 'JotLuck.Note' ||
+    launch.shell?.className !== expectedProgId ||
     !Number.isInteger(launch.shell?.processId) ||
     launch.shell.processId <= 0 ||
     processObserved?.target !== target.path ||
     process?.Id !== launch.shell.processId ||
     process?.observationSource !== 'Windows-UIAutomation' ||
     !nonEmpty(process?.matchedText) ||
-    !process.matchedText.includes(target.marker) ||
+    (expectedExtension !== '.xls' && !process.matchedText.includes(target.marker)) ||
     !nonEmpty(process?.MainWindowTitle) ||
     !process.MainWindowTitle.toLowerCase().includes(targetStem) ||
     !isExecutableIdentity(installed) ||

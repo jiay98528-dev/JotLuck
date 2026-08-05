@@ -208,9 +208,13 @@ test.describe('即时模式 (Live Preview)', () => {
   // Test 3: 外部链接可点击（渲染验证 + window.open mock）
   // ==========================================================
   test('03-外部链接渲染且可点击（真实用户路径）', async ({ page }) => {
-    // Step 1: 切换到"快速入门"笔记
-    await switchToNote(page, '快速入门');
-    await page.waitForTimeout(500);
+    // Step 1: 自行写入稳定的外链夹具，不依赖任何语言的内置示例正文。
+    await switchToSplitMode(page);
+    await typeInEditor(
+      page,
+      '# External link\n\n[JotLuck GitHub](https://github.com/jiay98528-dev/JotLuck)\n\nEnd',
+    );
+    await waitForAutoSave(page);
     await switchToLiveMode(page);
 
     // Step 2: 将光标移动到文档末尾，让外部链接行失焦渲染
@@ -367,7 +371,7 @@ test.describe('即时模式 (Live Preview)', () => {
     await page.waitForTimeout(300);
 
     // Step 7: 验证编辑器仍正常工作
-    await page.keyboard.type(' (after unpin)', { delay: 10 });
+    await appendInEditor(page, ' (after unpin)');
     const afterUnpin = await getEditorContent(page);
     expect(afterUnpin).toContain('after unpin');
     await waitForAutoSave(page);

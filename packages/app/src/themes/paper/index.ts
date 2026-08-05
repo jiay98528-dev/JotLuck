@@ -2,31 +2,35 @@ import type { OfficialThemeModule } from '@/types/theme-pack';
 import { recipe } from './recipe';
 import { tokens } from './tokens';
 import paperPreview from '@/assets/theme-assets/paper-preview.webp';
+import { createOfficialThemeCopy } from '@/themes/official-copy';
 
-const paperModule: OfficialThemeModule = {
-  id: 'paper',
-  name: '羽翼布局',
-  tags: ['default', 'writing', 'workflow'],
-  capabilities: ['tokens', 'layout-preset', 'markdown', 'codemirror'],
-  meta: {
-    role: 'baseline',
-    headline: '稳定的写作桌面',
-    story: 'JotLuck 的基线体验。左翼承载最近笔记，中心保留写作版心，右翼提供大纲、反链和标签。',
-    bestFor: ['日常写作', '首次使用', '低性能设备', '长时间整理'],
-    visualFeatures: ['三栏稳定布局', '低干扰纸面', '最少动效', '完整控件权重'],
-    uiProfile: {
-      toolbarDensity: 'calm',
-      sidebarMode: 'balanced',
-      drawerEmphasis: 'medium',
-      readingWidth: 'standard',
-      motionIntensity: 'none',
+export function createPaperModule(): OfficialThemeModule {
+  const copy = createOfficialThemeCopy('paper');
+  return {
+    id: 'paper',
+    name: copy.name,
+    tags: ['default', 'writing', 'workflow'],
+    capabilities: ['tokens', 'layout-preset', 'markdown', 'codemirror'],
+    meta: {
+      role: 'baseline',
+      headline: copy.headline,
+      story: copy.story,
+      bestFor: copy.bestFor,
+      visualFeatures: copy.visualFeatures,
+      uiProfile: {
+        toolbarDensity: 'calm',
+        sidebarMode: 'balanced',
+        drawerEmphasis: 'medium',
+        readingWidth: 'standard',
+        motionIntensity: 'none',
+      },
+      performanceLevel: 1,
+      effectProfile: 'none',
+      previewImage: paperPreview,
     },
-    performanceLevel: 1,
-    effectProfile: 'none',
-    previewImage: paperPreview,
-  },
-  recipe,
-  tokens,
-};
+    recipe,
+    tokens,
+  };
+}
 
-export default paperModule;
+export default createPaperModule;

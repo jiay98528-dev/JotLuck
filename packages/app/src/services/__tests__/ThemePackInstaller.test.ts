@@ -10,6 +10,7 @@ import {
 } from '../ThemePackInstaller';
 import type { ThemeManifestV2 } from '@/types/theme-pack';
 import { APP_THEME_VERSION } from '../ThemeRegistry';
+import { translate } from '@/i18n';
 
 const nextMajorVersion = `${Number(APP_THEME_VERSION.split('.')[0]) + 1}.0.0`;
 
@@ -177,7 +178,10 @@ describe('ThemePackInstaller', () => {
     zip.file('theme.css', css);
 
     await expect(parseThemePack(await zip.generateAsync({ type: 'uint8array' }))).rejects.toThrow(
-      'selector must be scoped',
+      translate('theme.validation.unscopedCss', {
+        id: 'local.test-theme',
+        selector: 'body',
+      }),
     );
   });
 

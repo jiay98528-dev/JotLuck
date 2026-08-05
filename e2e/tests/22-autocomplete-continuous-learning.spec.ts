@@ -115,6 +115,10 @@ function rate(value: number, total: number): number {
 }
 
 async function openApp(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    localStorage.setItem('jotluck:welcome:completed', '1');
+    localStorage.setItem('jotluck:locale:v1', 'zh-CN');
+  });
   await page.goto('/', {
     waitUntil: 'domcontentloaded',
   });

@@ -3,40 +3,47 @@ import { plugin } from './plugin';
 import { recipe } from './recipe';
 import { tokens } from './tokens';
 import lumenFieldPreview from '@/assets/theme-assets/lumen-field-preview.webp';
+import { createOfficialThemeCopy } from '@/themes/official-copy';
+import { translate } from '@/i18n';
 
-const lumenFieldModule: OfficialThemeModule = {
-  id: 'jotluck.lumen-field',
-  name: '光场知识舱',
-  tags: ['local-market', 'single-page', 'drawer-shell', 'dark', 'next-generation'],
-  capabilities: ['tokens', 'layout-preset', 'ux-components', 'animations', 'trusted-code'],
-  meta: {
-    role: 'workflow',
-    headline: '单页写作与三向知识抽屉',
-    story:
-      '深色低眩光的单页面主题。文件、知识和命令默认收进左、右、底三个动态抽屉，写作区保持单页聚焦，固定抽屉后让出版心。',
-    bestFor: ['深夜写作', '研究整理', '沉浸编辑', '大屏工作区'],
-    visualFeatures: [
-      '单页面编辑器',
-      '三向动态抽屉',
-      '信标式文件导航',
-      '知识雷达面板',
-      '低眩光光场配色',
-    ],
-    uiProfile: {
-      toolbarDensity: 'productive',
-      sidebarMode: 'rail',
-      drawerEmphasis: 'high',
-      readingWidth: 'immersive',
-      motionIntensity: 'medium',
+export function createLumenFieldModule(): OfficialThemeModule {
+  const copy = createOfficialThemeCopy('lumenField');
+  const localizedRecipe = {
+    ...recipe,
+    drawerShell: recipe.drawerShell
+      ? {
+          left: { ...recipe.drawerShell.left, label: translate('theme.plugin.fileBeacon') },
+          right: { ...recipe.drawerShell.right, label: translate('theme.plugin.knowledgeRadar') },
+          bottom: { ...recipe.drawerShell.bottom, label: translate('theme.plugin.commandDeck') },
+        }
+      : undefined,
+  };
+  return {
+    id: 'jotluck.lumen-field',
+    name: copy.name,
+    tags: ['local-market', 'single-page', 'drawer-shell', 'dark', 'next-generation'],
+    capabilities: ['tokens', 'layout-preset', 'ux-components', 'animations', 'trusted-code'],
+    meta: {
+      role: 'workflow',
+      headline: copy.headline,
+      story: copy.story,
+      bestFor: copy.bestFor,
+      visualFeatures: copy.visualFeatures,
+      uiProfile: {
+        toolbarDensity: 'productive',
+        sidebarMode: 'rail',
+        drawerEmphasis: 'high',
+        readingWidth: 'immersive',
+        motionIntensity: 'medium',
+      },
+      performanceLevel: 4,
+      effectProfile: 'ambient',
+      previewImage: lumenFieldPreview,
     },
-    performanceLevel: 4,
-    effectProfile: 'ambient',
-    previewImage: lumenFieldPreview,
-  },
-  recipe,
-  tokens,
-  plugin,
-  css: `
+    recipe: localizedRecipe,
+    tokens,
+    plugin,
+    css: `
 [data-theme-id='jotluck.lumen-field'] .single-page-drawer-shell {
   background:
     linear-gradient(90deg, color-mix(in oklch, var(--rule-strong) 18%, transparent) 1px, transparent 1px),
@@ -350,6 +357,7 @@ const lumenFieldModule: OfficialThemeModule = {
   }
 }
 `,
-};
+  };
+}
 
-export default lumenFieldModule;
+export default createLumenFieldModule;

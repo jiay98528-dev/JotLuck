@@ -1,6 +1,6 @@
 {
   "name": "jotluck",
-  "version": "0.10.2",
+  "version": "0.11.0",
   "private": true,
   "description": "Lightweight, local-first Markdown note-taking tool",
   "author": "Linghu Technology (Shenzhen) Co., Ltd.",
@@ -28,6 +28,7 @@
     "build-autocomplete-v2s-evaluator-tree": "node scripts/build-autocomplete-v2s-evaluator-tree.mjs",
     "publish-autocomplete-v2s-final": "tsx scripts/publish-autocomplete-v2s-final.ts",
     "lint": "eslint .",
+    "i18n:check": "node scripts/check-i18n.mjs",
     "lint:tokens": "node scripts/lint-tokens.mjs",
     "lint:fix": "eslint . --fix",
     "format": "prettier --check \"*.{json,mjs,yml,yaml}\" \".github/**/*.yml\" \"doc/**/*.md\" \"spec/**/*.md\" \"e2e/**/*.{ts,mjs}\" \"scripts/**/*.{ts,mjs,json}\" \"packages/**/*.{ts,vue,css,json,md,yaml}\"",
@@ -80,7 +81,7 @@
     "vue-eslint-parser": "^10.4.1"
   },
   "engines": {
-    "node": ">=20.0.0",
+    "node": ">=22.0.0",
     "pnpm": ">=9.0.0"
   },
   "packageManager": "pnpm@11.5.1",

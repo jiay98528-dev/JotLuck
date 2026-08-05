@@ -8,6 +8,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function clearStartupFlags(page: Page) {
   await page.addInitScript(() => {
+    localStorage.setItem('jotluck:locale:v1', 'zh-CN');
     const cleanBootMarker = 'jotluck:e2e:onboarding-clean-boot';
     if (sessionStorage.getItem(cleanBootMarker) !== '1') {
       for (let i = localStorage.length - 1; i >= 0; i -= 1) {
@@ -70,5 +71,33 @@ test.describe('启动体验', () => {
     await expect(page.locator('.welcome-overlay')).toHaveCount(0);
     await expect(page.getByTestId('notebook-open-gate')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('.cm-content')).toHaveCount(0);
+  });
+
+  test('05-默认应用步骤逐项显示五类格式且仅预选 Markdown', async ({ page }) => {
+    const next = page.locator('.welcome-next-btn');
+    await next.click();
+    await next.click();
+    await next.click();
+
+    await expect(page.getByRole('heading', { name: '选择用 JotLuck 打开的文件' })).toBeVisible();
+    const choices = page.locator('.welcome-association-checkbox');
+    await expect(choices).toHaveCount(5);
+    await expect(choices.nth(0)).toHaveAttribute('data-association-id', 'markdown');
+    await expect(choices.nth(0)).toBeChecked();
+    for (let index = 1; index < 5; index += 1) {
+      await expect(choices.nth(index)).not.toBeChecked();
+    }
+
+    for (const label of ['Markdown', '纯文本', 'Word', 'PDF', 'Excel']) {
+      await expect(page.locator('.welcome-association-row', { hasText: label })).toBeVisible();
+    }
+    await expect(page.locator('.welcome-association-row', { hasText: 'Excel' })).toContainText(
+      '.xlsx, .xls',
+    );
+
+    const textChoice = page.locator('[data-association-id="text"]');
+    await textChoice.check();
+    await expect(textChoice).toBeChecked();
+    await expect(textChoice.locator('xpath=..')).toContainText('当前平台不支持');
   });
 });

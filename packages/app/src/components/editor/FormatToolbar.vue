@@ -5,16 +5,20 @@
     :data-density="density"
     data-theme-part="format-toolbar"
     role="toolbar"
-    aria-label="固定格式工具栏"
+    :aria-label="t('editor.toolbar.aria')"
   >
     <label class="format-toolbar__preset" data-theme-part="format-toolbar-preset">
-      <span class="sr-only">段落样式</span>
-      <select :value="displayPreset" aria-label="段落样式" @change="onPresetChange">
-        <option value="paragraph">正文</option>
-        <option value="heading1">标题 1</option>
-        <option value="heading2">标题 2</option>
-        <option value="heading3">标题 3</option>
-        <option value="blockquote">引用</option>
+      <span class="sr-only">{{ t('editor.toolbar.paragraphStyle') }}</span>
+      <select
+        :value="displayPreset"
+        :aria-label="t('editor.toolbar.paragraphStyle')"
+        @change="onPresetChange"
+      >
+        <option value="paragraph">{{ t('editor.toolbar.paragraph') }}</option>
+        <option value="heading1">{{ t('editor.toolbar.heading1') }}</option>
+        <option value="heading2">{{ t('editor.toolbar.heading2') }}</option>
+        <option value="heading3">{{ t('editor.toolbar.heading3') }}</option>
+        <option value="blockquote">{{ t('editor.toolbar.blockquote') }}</option>
       </select>
     </label>
 
@@ -46,22 +50,25 @@
       variant="ghost"
       size="sm"
       class="format-toolbar__clear"
-      title="清除格式"
-      aria-label="清除格式"
+      :title="t('editor.toolbar.clear')"
+      :aria-label="t('editor.toolbar.clear')"
       data-theme-part="format-toolbar-clear"
       @mousedown.prevent
       @click="$emit('format', 'clear')"
     >
-      清除格式
+      {{ t('editor.toolbar.clear') }}
     </Button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Button from '@/components/common/Button.vue';
 import type { FormatAction, ParagraphPreset } from '@/types';
 import type { ThemeToolbarDensity } from '@/types/theme-pack';
+
+const { t } = useI18n();
 
 const props = withDefaults(
   defineProps<{
@@ -94,25 +101,50 @@ const displayPreset = computed<ParagraphPreset>(() =>
     : props.preset,
 );
 
-const inlineActions: Array<{
-  action: FormatAction;
-  icon: string;
-  label: string;
-  title: string;
-  className?: string;
-}> = [
-  { action: 'bold', icon: 'B', label: '加粗', title: '加粗 (Ctrl+B)', className: 'is-bold' },
-  { action: 'italic', icon: 'I', label: '斜体', title: '斜体 (Ctrl+I)', className: 'is-italic' },
-  { action: 'strikethrough', icon: 'S', label: '删除线', title: '删除线', className: 'is-strike' },
+const inlineActions = computed<
+  Array<{
+    action: FormatAction;
+    icon: string;
+    label: string;
+    title: string;
+    className?: string;
+  }>
+>(() => [
+  {
+    action: 'bold',
+    icon: 'B',
+    label: t('editor.toolbar.bold'),
+    title: t('editor.toolbar.boldTitle'),
+    className: 'is-bold',
+  },
+  {
+    action: 'italic',
+    icon: 'I',
+    label: t('editor.toolbar.italic'),
+    title: t('editor.toolbar.italicTitle'),
+    className: 'is-italic',
+  },
+  {
+    action: 'strikethrough',
+    icon: 'S',
+    label: t('editor.toolbar.strikethrough'),
+    title: t('editor.toolbar.strikethrough'),
+    className: 'is-strike',
+  },
   {
     action: 'inlineCode',
     icon: '</>',
-    label: '行内代码',
-    title: '行内代码 (Ctrl+`)',
+    label: t('editor.toolbar.inlineCode'),
+    title: t('editor.toolbar.inlineCodeTitle'),
     className: 'is-code',
   },
-  { action: 'link', icon: '↗', label: '链接', title: '链接 (Ctrl+K)' },
-];
+  {
+    action: 'link',
+    icon: '↗',
+    label: t('editor.toolbar.link'),
+    title: t('editor.toolbar.linkTitle'),
+  },
+]);
 
 function onPresetChange(event: Event): void {
   emit('format', (event.target as HTMLSelectElement).value as ParagraphPreset);

@@ -11,8 +11,13 @@
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="export-dialog-title">
         <!-- Header -->
         <div class="modal-header">
-          <h2 id="export-dialog-title">导出笔记</h2>
-          <button class="modal-close" data-dialog-initial-focus aria-label="关闭" @click="cancel">
+          <h2 id="export-dialog-title">{{ t('dialogs.export.title') }}</h2>
+          <button
+            class="modal-close"
+            data-dialog-initial-focus
+            :aria-label="t('common.close')"
+            @click="cancel"
+          >
             &times;
           </button>
         </div>
@@ -38,13 +43,13 @@
 
             <div class="options-section">
               <label class="toggle-row">
-                <span class="toggle-label">包含 YAML Frontmatter</span>
+                <span class="toggle-label">{{ t('dialogs.export.frontmatter') }}</span>
                 <span
                   class="toggle-track"
                   :class="{ active: includeFrontmatter }"
                   role="switch"
                   tabindex="0"
-                  aria-label="包含 YAML Frontmatter"
+                  :aria-label="t('dialogs.export.frontmatter')"
                   :aria-checked="includeFrontmatter"
                   @click="includeFrontmatter = !includeFrontmatter"
                   @keydown.enter.prevent="includeFrontmatter = !includeFrontmatter"
@@ -54,13 +59,13 @@
                 </span>
               </label>
               <label class="toggle-row">
-                <span class="toggle-label">代码行号</span>
+                <span class="toggle-label">{{ t('dialogs.export.codeLineNumbers') }}</span>
                 <span
                   class="toggle-track"
                   :class="{ active: codeLineNumbers }"
                   role="switch"
                   tabindex="0"
-                  aria-label="代码行号"
+                  :aria-label="t('dialogs.export.codeLineNumbers')"
                   :aria-checked="codeLineNumbers"
                   @click="codeLineNumbers = !codeLineNumbers"
                   @keydown.enter.prevent="codeLineNumbers = !codeLineNumbers"
@@ -70,13 +75,13 @@
                 </span>
               </label>
               <label class="toggle-row">
-                <span class="toggle-label">保留 Wiki 链接 [[...]]</span>
+                <span class="toggle-label">{{ t('dialogs.export.wikiLinks') }}</span>
                 <span
                   class="toggle-track"
                   :class="{ active: includeWikiLinks }"
                   role="switch"
                   tabindex="0"
-                  aria-label="保留 Wiki 链接"
+                  :aria-label="t('dialogs.export.wikiLinksAria')"
                   :aria-checked="includeWikiLinks"
                   @click="includeWikiLinks = !includeWikiLinks"
                   @keydown.enter.prevent="includeWikiLinks = !includeWikiLinks"
@@ -96,7 +101,7 @@
             aria-live="polite"
           >
             <span class="spinner"></span>
-            <span class="status-text">正在导出...</span>
+            <span class="status-text">{{ t('dialogs.export.exporting') }}</span>
           </div>
 
           <!-- Success -->
@@ -127,7 +132,7 @@
               <circle cx="12" cy="12" r="10" />
               <path d="M12 8v4M12 16h.01" stroke-linecap="round" />
             </svg>
-            <span class="status-text error-text">导出失败</span>
+            <span class="status-text error-text">{{ t('dialogs.export.failed') }}</span>
             <span class="error-message">{{ exportError }}</span>
           </div>
         </div>
@@ -135,15 +140,21 @@
         <!-- Footer -->
         <div class="modal-footer">
           <template v-if="exportState === 'idle' || exportState === 'error'">
-            <Button variant="secondary" @click="cancel">取消</Button>
-            <Button variant="default" :disabled="!hasContent" @click="doExport">导出</Button>
+            <Button variant="secondary" @click="cancel">{{ t('common.cancel') }}</Button>
+            <Button variant="default" :disabled="!hasContent" @click="doExport">
+              {{ t('dialogs.export.export') }}
+            </Button>
           </template>
           <template v-if="exportState === 'exporting'">
-            <Button variant="secondary" @click="cancel">取消导出</Button>
-            <Button variant="default" loading disabled>导出中...</Button>
+            <Button variant="secondary" @click="cancel">
+              {{ t('dialogs.export.cancelExport') }}
+            </Button>
+            <Button variant="default" loading disabled>
+              {{ t('dialogs.export.exportingButton') }}
+            </Button>
           </template>
           <template v-if="exportState === 'success'">
-            <Button variant="default" @click="cancel">关闭</Button>
+            <Button variant="default" @click="cancel">{{ t('common.close') }}</Button>
           </template>
         </div>
       </div>
@@ -158,6 +169,8 @@ import { ExportFormat } from '@/types';
 import type { ExportResult } from '@/types';
 import Button from '@/components/common/Button.vue';
 import { useDialogFocus } from '@/composables/useDialogFocus';
+import { localizeUserError } from '@/services/command-errors';
+import { useI18n } from 'vue-i18n';
 
 // ── Props ──────────────────────────────────────────────
 const props = defineProps<{
@@ -166,6 +179,7 @@ const props = defineProps<{
   noteTitle?: string;
   markdownContent?: string;
 }>();
+const { t } = useI18n();
 
 // ── Emits ──────────────────────────────────────────────
 const emit = defineEmits<{
@@ -198,7 +212,9 @@ const hasContent = computed(() => {
   return !!(props.markdownContent && props.markdownContent.trim().length > 0);
 });
 const exportSuccessLabel = computed(() =>
-  completedFormat.value === ExportFormat.PDF ? '打印流程已结束' : '已导出',
+  completedFormat.value === ExportFormat.PDF
+    ? t('dialogs.export.printComplete')
+    : t('dialogs.export.complete'),
 );
 
 // ── Format definitions ─────────────────────────────────
@@ -293,7 +309,7 @@ async function doExport(): Promise<void> {
   try {
     const result: ExportResult = await exportNote(
       props.markdownContent!,
-      props.noteTitle || '笔记',
+      props.noteTitle || t('dialogs.export.defaultTitle'),
       {
         format: runFormat,
         includeFrontmatter: includeFrontmatter.value,
@@ -309,15 +325,19 @@ async function doExport(): Promise<void> {
       completedFormat.value = runFormat;
       exportState.value = 'success';
       exportMessage.value =
-        result.message || (result.fileName ? `文件已保存：${result.fileName}` : '文件已导出');
+        runFormat === ExportFormat.PDF
+          ? result.message || t('export.pdfClosed')
+          : result.fileName
+            ? t('dialogs.export.savedFile', { fileName: result.fileName })
+            : result.message || t('dialogs.export.fileExported');
       return;
     }
     exportState.value = 'error';
-    exportError.value = result.error || '导出过程中发生未知错误';
+    exportError.value = result.error || t('dialogs.export.unknownError');
   } catch (error) {
     if (!isCurrentExportRun(runId, controller)) return;
     exportState.value = 'error';
-    exportError.value = error instanceof Error ? error.message : '导出过程中发生未知错误';
+    exportError.value = localizeUserError(error, 'dialogs.export.unknownError');
   } finally {
     if (runId === exportRunId && activeExportController === controller) {
       activeExportController = null;

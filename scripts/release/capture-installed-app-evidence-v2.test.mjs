@@ -66,6 +66,17 @@ describe('installed-app evidence capture entrypoint', () => {
     expect(workflow).toContain('unexpected tauri-driver version');
     expect(workflow).toContain('expected exactly one candidate jotluck.exe');
     expect(workflow).toContain('JOTLUCK_CANDIDATE_APPLICATION_PATH');
-    expect(workflow).toContain('verify-preview-release-gate.mjs');
+  });
+
+  it('materializes provenance-bound evidence for a separate evidence-only commit', () => {
+    const workflow = readFileSync(workflowPath, 'utf8');
+
+    expect(workflow).toContain('name: Installed-app Evidence Materialization');
+    expect(workflow).toContain('Resolve current-run provenance');
+    expect(workflow).toContain('resolve-current-run-provenance.mjs');
+    expect(workflow).toContain('Materialize managed evidence bundle');
+    expect(workflow).toContain('materialize-installed-app-evidence-v2.mjs');
+    expect(workflow).toContain('jotluck-installed-app-managed-evidence-v2-');
+    expect(workflow).toContain('for evidence-only commit');
   });
 });

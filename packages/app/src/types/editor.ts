@@ -3,6 +3,8 @@
 // ============================================================
 // Source: spec/types/editor.ts (authoritative for BlockType)
 
+import type { SupportedLocale } from './i18n';
+
 /** 语法块类型枚举 */
 export type BlockType =
   | 'heading'
@@ -101,6 +103,7 @@ export interface AppSettings {
   tabSize: number;
   showLineNumbers: boolean;
   defaultNotebookPath?: string;
+  language: SupportedLocale;
 }
 
 /** 反向链接条目 */

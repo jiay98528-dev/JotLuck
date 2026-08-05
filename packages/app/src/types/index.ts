@@ -20,6 +20,17 @@ export type {
   FormatAction,
 } from './editor';
 
+// --- i18n.ts ---
+export { SUPPORTED_LOCALES } from './i18n';
+export type {
+  SupportedLocale,
+  TextDirection,
+  LocaleDefinition,
+  TranslationArgs,
+  AppErrorCode,
+  CommandErrorPayload,
+} from './i18n';
+
 // --- theme-pack.ts ---
 export type {
   ThemeRuntime,
@@ -140,9 +151,22 @@ export type {
 // --- window-session.ts ---
 export type {
   WindowSessionMode,
+  ImportedDocumentKind,
+  SourceRevision,
   ExternalOpenedFile,
   WorkspaceBootstrapPayload,
   ExternalWindowBootstrapPayload,
+  DocumentImportBootstrapPayload,
   WindowBootstrapPayload,
   PromotedNotebookPayload,
+  SaveExternalNoteAsRequest,
+  DocumentProgressUnit,
+  DocumentConversionEvent,
+  DocumentConversionAssetPayload,
+  SaveConvertedDocumentDialogRequest,
+  DocumentEditorCandidate,
+  DocumentEditorLaunchResult,
+  AssociationApplicationState,
+  AssociationGroupStatus,
+  WindowsAssociationStatus,
 } from './window-session';

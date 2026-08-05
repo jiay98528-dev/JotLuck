@@ -15,9 +15,14 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { pathToFileURL } from 'node:url';
+import { Document, Packer, Paragraph } from 'docx';
 import { createTauriDriverHost } from './tauri-webdriver-host.mjs';
 
-const SUPPORTED_EXTENSIONS = ['.md', '.markdown', '.mdx', '.txt'];
+const PROJECT_ROOT = path.resolve(import.meta.dirname, '../..');
+const NOTE_EXTENSIONS = ['.md', '.markdown', '.mdx', '.txt'];
+const DOCUMENT_EXTENSIONS = ['.docx', '.pdf', '.xlsx', '.xls'];
+const SUPPORTED_EXTENSIONS = [...NOTE_EXTENSIONS, ...DOCUMENT_EXTENSIONS];
 const PERFORMANCE_SAMPLE_COUNTS = Object.freeze({ coldStart: 20, hotWindow: 30 });
 const state = {
   candidate: null,
@@ -60,6 +65,10 @@ const ADAPTERS = new Map([
   ['association-markdown', associationMarkdown],
   ['association-mdx', associationMdx],
   ['association-txt', associationTxt],
+  ['association-docx', associationDocx],
+  ['association-pdf', associationPdf],
+  ['association-xlsx', associationXlsx],
+  ['association-xls', associationXls],
   ['association-default-preservation', associationDefaultPreservation],
   ['association-uninstall-cleanup', associationUninstallCleanup],
 ]);
@@ -159,6 +168,9 @@ export const __test = Object.freeze({
   assertMatchingExecutableIdentities,
   resolveAssociationProcessId,
   sanitizeTraceValue,
+  supportedExtensions: () => [...SUPPORTED_EXTENSIONS],
+  progIdForExtension,
+  createSupportedFixture,
 });
 
 class EvidenceTrace {
@@ -621,10 +633,10 @@ async function spawnAssociatedFile(filePath, trace) {
   return child;
 }
 
-function shellExecuteAssociatedFile(filePath, trace) {
+function shellExecuteAssociatedFile(filePath, trace, className = 'JotLuck.Note') {
   trace.record('shell-execute-associated-file-requested', {
     filePath,
-    className: 'JotLuck.Note',
+    className,
   });
   const script = String.raw`
 Add-Type -TypeDefinition @'
@@ -664,7 +676,7 @@ $info.cbSize = [Runtime.InteropServices.Marshal]::SizeOf($info)
 $info.fMask = 0x00000001 -bor 0x00000040 -bor 0x00000100
 $info.lpVerb = 'open'
 $info.lpFile = $env:JOTLUCK_ASSOCIATED_FILE
-$info.lpClass = 'JotLuck.Note'
+$info.lpClass = $env:JOTLUCK_ASSOCIATION_CLASS
 $info.nShow = 1
 if (-not [JotLuckShellEvidence]::ShellExecuteExW([ref]$info)) {
   throw "ShellExecuteExW failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
@@ -673,14 +685,17 @@ $processId = [JotLuckShellEvidence]::GetProcessId($info.hProcess)
 [void][JotLuckShellEvidence]::CloseHandle($info.hProcess)
 [pscustomobject]@{
   method = 'ShellExecuteExW'
-  className = 'JotLuck.Note'
+  className = $env:JOTLUCK_ASSOCIATION_CLASS
   processId = [int]$processId
 } | ConvertTo-Json -Compress
 `;
   const result = JSON.parse(
-    runPowerShell(script, { JOTLUCK_ASSOCIATED_FILE: path.resolve(filePath) }),
+    runPowerShell(script, {
+      JOTLUCK_ASSOCIATED_FILE: path.resolve(filePath),
+      JOTLUCK_ASSOCIATION_CLASS: className,
+    }),
   );
-  if (result.method !== 'ShellExecuteExW' || result.className !== 'JotLuck.Note') {
+  if (result.method !== 'ShellExecuteExW' || result.className !== className) {
     throw new Error('Windows Shell launch observation is invalid');
   }
   trace.record('shell-execute-associated-file-complete', result);
@@ -779,18 +794,21 @@ function assertMatchingExecutableIdentities(packaged, installed) {
 
 function readAssociationSnapshot() {
   const script = String.raw`
-$extensions = @('.md','.markdown','.mdx','.txt')
+$extensions = @('.md','.markdown','.mdx','.txt','.docx','.pdf','.xlsx','.xls')
 $items = foreach ($extension in $extensions) {
   $classPath = "HKCU:\Software\Classes\$extension"
   $userChoicePath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\$extension\UserChoice"
+  $userChoiceLatestPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\$extension\UserChoiceLatest\ProgId"
   $openWithPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\$extension\OpenWithList"
   $class = Get-ItemProperty $classPath -ErrorAction SilentlyContinue
   $choice = Get-ItemProperty $userChoicePath -ErrorAction SilentlyContinue
+  $latestChoice = Get-ItemProperty $userChoiceLatestPath -ErrorAction SilentlyContinue
   $openWith = Get-ItemProperty $openWithPath -ErrorAction SilentlyContinue
   [pscustomobject]@{
     extension = $extension
     defaultProgId = if ($class) { $class.'(default)' } else { $null }
     userChoiceProgId = if ($choice) { $choice.ProgId } else { $null }
+    userChoiceLatestProgId = if ($latestChoice) { $latestChoice.ProgId } else { $null }
     mruList = if ($openWith) { $openWith.MRUList } else { $null }
   }
 }
@@ -1057,19 +1075,89 @@ async function guiImageAsset({ workRoot, trace }) {
   ];
 }
 
+function isDocumentExtension(extension) {
+  return DOCUMENT_EXTENSIONS.includes(extension);
+}
+
+function progIdForExtension(extension) {
+  return isDocumentExtension(extension) ? 'JotLuck.DocumentImport' : 'JotLuck.Note';
+}
+
+function pdfFixture(text) {
+  const escaped = text.replaceAll('\\', '\\\\').replaceAll('(', '\\(').replaceAll(')', '\\)');
+  const stream = `BT /F1 12 Tf 72 720 Td (${escaped}) Tj ET`;
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+    `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>',
+  ];
+  const chunks = [Buffer.from('%PDF-1.4\n', 'ascii')];
+  const offsets = [0];
+  for (const [index, object] of objects.entries()) {
+    offsets.push(chunks.reduce((total, chunk) => total + chunk.length, 0));
+    chunks.push(Buffer.from(`${index + 1} 0 obj\n${object}\nendobj\n`, 'ascii'));
+  }
+  const xrefOffset = chunks.reduce((total, chunk) => total + chunk.length, 0);
+  const xref = [
+    `xref\n0 ${objects.length + 1}\n`,
+    '0000000000 65535 f \n',
+    ...offsets.slice(1).map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`),
+    `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`,
+  ].join('');
+  return Buffer.concat([...chunks, Buffer.from(xref, 'ascii')]);
+}
+
+async function createSupportedFixture(target, extension, marker) {
+  if (extension === '.txt') {
+    const content = `<b>${marker}</b>\n# must remain text\n[link](https://example.invalid)`;
+    writeFileSync(target, content, 'utf8');
+    return { expectedText: marker, binary: false };
+  }
+  if (NOTE_EXTENSIONS.includes(extension)) {
+    writeFileSync(target, `# ${marker}\n\n[link](https://example.invalid)`, 'utf8');
+    return { expectedText: marker, binary: false };
+  }
+  if (extension === '.docx') {
+    const document = new Document({
+      sections: [{ children: [new Paragraph({ text: marker })] }],
+    });
+    writeFileSync(target, await Packer.toBuffer(document));
+    return { expectedText: marker, binary: true };
+  }
+  if (extension === '.pdf') {
+    writeFileSync(target, pdfFixture(marker));
+    return { expectedText: marker, binary: true };
+  }
+  if (extension === '.xlsx') {
+    const moduleUrl = pathToFileURL(
+      path.join(PROJECT_ROOT, 'packages/app/node_modules/write-excel-file/node/index.js'),
+    ).href;
+    const { default: writeXlsxFile } = await import(moduleUrl);
+    await writeXlsxFile([[marker]], { sheet: 'Sheet1' }).toFile(target);
+    return { expectedText: marker, binary: true };
+  }
+  if (extension === '.xls') {
+    const encoded = readFileSync(
+      path.join(PROJECT_ROOT, 'packages/app/src-tauri/fixtures/biff5_write.xls.b64'),
+      'utf8',
+    ).trim();
+    writeFileSync(target, Buffer.from(encoded, 'base64'));
+    return { expectedText: 'foo', binary: true };
+  }
+  throw new Error(`unsupported fixture extension: ${extension}`);
+}
+
 async function rfColdOpenSupportedFiles({ workRoot, trace }) {
   const observations = [];
   for (const extension of SUPPORTED_EXTENSIONS) {
     const marker = `cold-${extension.slice(1)}-${randomUUID()}`;
-    const content =
-      extension === '.txt'
-        ? `<b>${marker}</b>\n# must remain text\n[link](https://example.invalid)`
-        : `# ${marker}\n\n[link](https://example.invalid)`;
     const target = path.join(workRoot, `cold${extension}`);
-    writeFileSync(target, content, 'utf8');
+    const fixture = await createSupportedFixture(target, extension, marker);
     await withSession(trace, [target], async (browser) => {
       const started = Date.now();
-      await waitForReader(browser, marker, trace);
+      await waitForReader(browser, fixture.expectedText, trace);
       const readyMs = Date.now() - started;
       const reader = await browser.$('[data-testid="external-file-session"]');
       const title = await browser.getTitle();
@@ -1091,7 +1179,7 @@ async function rfColdOpenSupportedFiles({ workRoot, trace }) {
         title,
         readyMs,
         heavyweightShell,
-        content: readFileSync(target, 'utf8'),
+        readback: textFileReadback(target, !fixture.binary),
       });
     });
   }
@@ -1100,21 +1188,37 @@ async function rfColdOpenSupportedFiles({ workRoot, trace }) {
 
 async function rfRuntimeNewWindow({ workRoot, trace }) {
   const first = path.join(workRoot, 'first.md');
-  const second = path.join(workRoot, 'second.md');
   writeFileSync(first, '# Runtime first\n', 'utf8');
-  writeFileSync(second, '# Runtime second\n', 'utf8');
   let snapshot;
   await withSession(trace, [first], async (browser) => {
     await waitForReader(browser, 'Runtime first', trace);
     const original = await browser.getWindowHandle();
-    await spawnAssociatedFile(second, trace);
-    await waitForHandleCount(browser, 2, trace);
-    snapshot = await snapshotWindows(browser, trace);
-    if (!snapshot.some((window) => window.title.includes('second'))) {
-      throw new Error('runtime file did not open in a distinct window');
+    const openedHandles = new Set(await browser.getWindowHandles());
+    const runtimeFixtures = [
+      { extension: '.md', marker: 'Runtime second' },
+      ...DOCUMENT_EXTENSIONS.map((extension) => ({
+        extension,
+        marker: `runtime-${extension.slice(1)}-${randomUUID()}`,
+      })),
+    ];
+    for (const fixture of runtimeFixtures) {
+      const target = path.join(workRoot, `runtime-${randomUUID()}${fixture.extension}`);
+      const created = await createSupportedFixture(target, fixture.extension, fixture.marker);
+      await spawnAssociatedFile(target, trace);
+      await waitForHandleCount(browser, openedHandles.size + 1, trace);
+      const newHandle = (await browser.getWindowHandles()).find(
+        (handle) => !openedHandles.has(handle),
+      );
+      if (!newHandle) throw new Error(`runtime ${fixture.extension} window was not created`);
+      openedHandles.add(newHandle);
+      await browser.switchToWindow(newHandle);
+      await waitForReader(browser, created.expectedText, trace);
+      await browser.switchToWindow(original);
+      await waitForReader(browser, 'Runtime first', trace);
     }
-    await browser.switchToWindow(original);
-    await waitForReader(browser, 'Runtime first', trace);
+    snapshot = await snapshotWindows(browser, trace);
+    if (snapshot.length !== runtimeFixtures.length + 1)
+      throw new Error('runtime files did not each open in a distinct window');
   });
   return [webdriverArtifact(workRoot), writeJsonArtifact(workRoot, 'window-snapshot', snapshot)];
 }
@@ -1395,10 +1499,17 @@ function inspectReaderBundle(dist, sourceRoot = process.cwd()) {
     .map((match) => match[1])
     .sort();
   const allowedCommands = new Set([
+    'cancel_document_conversion',
     'enable_external_edit',
+    'get_document_editor_candidate',
     'get_window_bootstrap',
+    'open_document_source_in_editor',
     'promote_external_file_to_notebook',
+    'read_document_conversion_asset',
     'read_external_note_file',
+    'refresh_document_source_revision',
+    'save_converted_document_as',
+    'start_document_conversion',
   ]);
   if (invokedCommands.some((command) => !allowedCommands.has(command))) {
     throw new Error(`reader invokes a workspace-only command: ${invokedCommands.join(', ')}`);
@@ -1546,20 +1657,33 @@ async function associationMdx(context) {
 async function associationTxt(context) {
   return associationCase(context, '.txt');
 }
+async function associationDocx(context) {
+  return associationCase(context, '.docx');
+}
+async function associationPdf(context) {
+  return associationCase(context, '.pdf');
+}
+async function associationXlsx(context) {
+  return associationCase(context, '.xlsx');
+}
+async function associationXls(context) {
+  return associationCase(context, '.xls');
+}
 
 async function associationCase({ workRoot, trace }, extension) {
   const marker = `association-${extension.slice(1)}-${randomUUID()}`;
   const target = path.join(workRoot, `association evidence ${randomUUID()}${extension}`);
-  writeFileSync(target, extension === '.txt' ? marker : `# ${marker}\n`, 'utf8');
+  const fixture = await createSupportedFixture(target, extension, marker);
   const before = textFileReadback(target, false);
   const launchedAt = new Date().toISOString();
   await waitForInstalledApplicationExit();
-  const shell = shellExecuteAssociatedFile(target, trace);
+  const expectedProgId = progIdForExtension(extension);
+  const shell = shellExecuteAssociatedFile(target, trace, expectedProgId);
   state.shellProcessIds.add(shell.processId);
   let processObserved;
   try {
-    processObserved = await waitForProcessWindow(marker, target, shell.processId);
-    const after = textFileReadback(target, true);
+    processObserved = await waitForProcessWindow(fixture.expectedText, target, shell.processId);
+    const after = textFileReadback(target, !fixture.binary);
     const launchTrace = writeJsonArtifact(workRoot, 'launch-trace', {
       schema: 'jotluck.installed-app.association-launch.v2',
       launchedAt,
@@ -1580,8 +1704,8 @@ async function associationCase({ workRoot, trace }, extension) {
     });
     const registry = readDetailedAssociationSnapshot(extension);
     if (
-      !registry.classOpenWithProgIds.includes('JotLuck.Note') ||
-      !registry.explorerOpenWithProgIds.includes('JotLuck.Note') ||
+      !registry.classOpenWithProgIds.includes(expectedProgId) ||
+      !registry.explorerOpenWithProgIds.includes(expectedProgId) ||
       registry.supportedType !== true ||
       !isQuotedJotLuckOpenCommand(registry.openCommand) ||
       !isQuotedJotLuckOpenCommand(registry.progIdOpenCommand) ||
@@ -1608,7 +1732,8 @@ async function associationDefaultPreservation({ workRoot }) {
     if (!afterEntry) throw new Error(`missing registry observation for ${beforeEntry.extension}`);
     if (
       beforeEntry.defaultProgId !== afterEntry.defaultProgId ||
-      beforeEntry.userChoiceProgId !== afterEntry.userChoiceProgId
+      beforeEntry.userChoiceProgId !== afterEntry.userChoiceProgId ||
+      beforeEntry.userChoiceLatestProgId !== afterEntry.userChoiceLatestProgId
     ) {
       throw new Error(`installer changed the default application for ${beforeEntry.extension}`);
     }
@@ -1645,12 +1770,14 @@ async function associationUninstallCleanup({ workRoot }) {
       readDetailedAssociationSnapshot(extension),
     );
     if (
-      extensionCleanup.some(
-        (entry) =>
-          entry.classOpenWithProgIds.includes('JotLuck.Note') ||
-          entry.explorerOpenWithProgIds.includes('JotLuck.Note') ||
-          entry.supportedType,
-      )
+      extensionCleanup.some((entry) => {
+        const expectedProgId = progIdForExtension(entry.extension);
+        return (
+          entry.classOpenWithProgIds.includes(expectedProgId) ||
+          entry.explorerOpenWithProgIds.includes(expectedProgId) ||
+          entry.supportedType
+        );
+      })
     ) {
       throw new Error('uninstall left an optional JotLuck file association');
     }
@@ -1678,19 +1805,22 @@ function collectManifestClosure(manifest, roots) {
 }
 
 function readDetailedAssociationSnapshot(extension) {
+  const expectedProgId = progIdForExtension(extension);
   const script = String.raw`
 $extension = $env:JOTLUCK_EXTENSION
 $classPath = "HKCU:\Software\Classes\$extension"
 $userChoicePath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\$extension\UserChoice"
+$userChoiceLatestPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\$extension\UserChoiceLatest\ProgId"
 $openWithPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\$extension\OpenWithList"
 $classOpenWithProgIdsPath = "HKCU:\Software\Classes\$extension\OpenWithProgids"
 $explorerOpenWithProgIdsPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\$extension\OpenWithProgids"
 $applicationPath = 'HKCU:\Software\Classes\Applications\JotLuck.exe'
 $supportedTypesPath = "$applicationPath\SupportedTypes"
 $openCommandPath = "$applicationPath\shell\open\command"
-$progIdOpenCommandPath = 'HKCU:\Software\Classes\JotLuck.Note\shell\open\command'
+$progIdOpenCommandPath = "HKCU:\Software\Classes\$env:JOTLUCK_ASSOCIATION_CLASS\shell\open\command"
 $class = Get-ItemProperty $classPath -ErrorAction SilentlyContinue
 $choice = Get-ItemProperty $userChoicePath -ErrorAction SilentlyContinue
+$latestChoice = Get-ItemProperty $userChoiceLatestPath -ErrorAction SilentlyContinue
 $openWith = Get-ItemProperty $openWithPath -ErrorAction SilentlyContinue
 $classOpenWithProgIds = Get-ItemProperty $classOpenWithProgIdsPath -ErrorAction SilentlyContinue
 $explorerOpenWithProgIds = Get-ItemProperty $explorerOpenWithProgIdsPath -ErrorAction SilentlyContinue
@@ -1708,6 +1838,7 @@ if ($openWith) {
   openWithListExists = [bool](Test-Path -LiteralPath $openWithPath)
   defaultProgId = if ($class) { $class.'(default)' } else { $null }
   userChoiceProgId = if ($choice) { $choice.ProgId } else { $null }
+  userChoiceLatestProgId = if ($latestChoice) { $latestChoice.ProgId } else { $null }
   mruList = if ($openWith) { $openWith.MRUList } else { $null }
   openWithSlots = $slots
   openWithExecutables = @($slots.Values)
@@ -1718,7 +1849,12 @@ if ($openWith) {
   progIdOpenCommand = if ($progIdOpenCommand) { [string]$progIdOpenCommand.'(default)' } else { '' }
 } | ConvertTo-Json -Compress -Depth 4
 `;
-  return JSON.parse(runPowerShell(script, { JOTLUCK_EXTENSION: extension }));
+  return JSON.parse(
+    runPowerShell(script, {
+      JOTLUCK_EXTENSION: extension,
+      JOTLUCK_ASSOCIATION_CLASS: expectedProgId,
+    }),
+  );
 }
 
 function isQuotedJotLuckOpenCommand(command) {

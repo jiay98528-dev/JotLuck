@@ -6,7 +6,7 @@
     :data-layout="region.layout"
     data-theme-part="topbar"
     role="banner"
-    aria-label="编辑器工具栏"
+    :aria-label="t('shell.editorToolbar')"
   >
     <div
       v-if="region.layout === 'search-first'"
@@ -163,8 +163,11 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import ShellActionButton from '@/components/layout/ShellActionButton.vue';
 import type { ShellAction, TopBarRegion } from '@/types/theme-pack';
+
+const { t } = useI18n();
 
 const props = withDefaults(
   defineProps<{
@@ -183,7 +186,7 @@ const props = withDefaults(
   },
 );
 
-const titleText = computed(() => props.noteTitle || '无标题');
+const titleText = computed(() => props.noteTitle || t('shell.untitled'));
 </script>
 
 <style scoped>

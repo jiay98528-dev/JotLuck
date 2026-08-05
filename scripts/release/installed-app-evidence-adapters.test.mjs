@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -47,6 +47,35 @@ describe('fixed installed-app evidence adapters', () => {
     expect(
       webdriverCases.every((entry) => entry.requiredArtifactKinds.includes('adapter-action-log')),
     ).toBe(true);
+  });
+
+  it('covers all eight installer extensions and emits real binary document fixtures', async () => {
+    expect(__test.supportedExtensions()).toEqual([
+      '.md',
+      '.markdown',
+      '.mdx',
+      '.txt',
+      '.docx',
+      '.pdf',
+      '.xlsx',
+      '.xls',
+    ]);
+    expect(__test.progIdForExtension('.md')).toBe('JotLuck.Note');
+    expect(__test.progIdForExtension('.docx')).toBe('JotLuck.DocumentImport');
+
+    const root = makeTemporaryRoot('jotluck-document-fixtures-');
+    const signatures = new Map([
+      ['.docx', '504b'],
+      ['.pdf', '2550'],
+      ['.xlsx', '504b'],
+      ['.xls', 'd0cf'],
+    ]);
+    for (const [extension, signature] of signatures) {
+      const target = path.join(root, `fixture${extension}`);
+      const fixture = await __test.createSupportedFixture(target, extension, `marker-${extension}`);
+      expect(fixture.binary).toBe(true);
+      expect(readFileSync(target).subarray(0, 2).toString('hex')).toBe(signature);
+    }
   });
 
   it('accepts only a quoted JotLuck executable plus a quoted percent-one placeholder', () => {
@@ -100,11 +129,16 @@ describe('fixed installed-app evidence adapters', () => {
 });
 
 function makeCandidate() {
-  const root = mkdtempSync(path.join(os.tmpdir(), 'jotluck-adapter-candidate-'));
-  roots.push(root);
+  const root = makeTemporaryRoot('jotluck-adapter-candidate-');
   mkdirSync(path.join(root, 'bundle', 'dist'), { recursive: true });
   writeFileSync(path.join(root, 'JotLuck_0.1.0-preview_x64-setup.exe'), 'installer');
   writeFileSync(path.join(root, 'JotLuck.exe'), 'application');
   writeFileSync(path.join(root, 'bundle', 'dist', 'index.html'), '<main>JotLuck</main>');
+  return root;
+}
+
+function makeTemporaryRoot(prefix) {
+  const root = mkdtempSync(path.join(os.tmpdir(), prefix));
+  roots.push(root);
   return root;
 }

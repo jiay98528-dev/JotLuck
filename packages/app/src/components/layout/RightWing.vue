@@ -5,13 +5,13 @@
     :data-policy="region.policy"
     data-theme-part="inspector"
     :style="{ width: collapsed ? '0px' : `var(--inspector-inline-width, ${panelWidth}px)` }"
-    aria-label="参考面板"
+    :aria-label="t('shell.inspector')"
   >
     <!-- Left-edge grab handle for resize / collapse -->
     <div
       class="grab-handle"
       data-theme-part="inspector-resize"
-      title="双击折叠 / 展开 | 拖拽调整宽度"
+      :title="t('shell.inspectorResize')"
       role="separator"
       tabindex="0"
       aria-orientation="vertical"
@@ -31,7 +31,7 @@
       data-theme-part="inspector-rail-toggle"
       :aria-expanded="railExpanded"
       aria-controls="inspector-content"
-      :aria-label="railExpanded ? '收起检查器' : '展开检查器'"
+      :aria-label="railExpanded ? t('shell.collapseInspector') : t('shell.expandInspector')"
       @click="railExpanded = !railExpanded"
     >
       <svg
@@ -49,7 +49,9 @@
         <path d="M7.5 13h3" />
         <path d="M7.5 17h3" />
       </svg>
-      <span class="sr-only">{{ railExpanded ? '收起检查器' : '展开检查器' }}</span>
+      <span class="sr-only">
+        {{ railExpanded ? t('shell.collapseInspector') : t('shell.expandInspector') }}
+      </span>
     </button>
 
     <!-- Panel Content -->
@@ -148,7 +150,7 @@
               :active-id="activeHeadingId"
               @navigate-heading="onNavigateHeading"
             />
-            <p v-if="headings.length === 0" class="empty-hint">暂无标题</p>
+            <p v-if="headings.length === 0" class="empty-hint">{{ t('shell.noHeadings') }}</p>
           </div>
 
           <div
@@ -167,7 +169,7 @@
                 <span class="backlink-context">{{ entry.context }}</span>
               </button>
             </template>
-            <p v-else class="empty-hint">{{ backlinksEmptyText }}</p>
+            <p v-else class="empty-hint">{{ resolvedBacklinksEmptyText }}</p>
           </div>
 
           <div
@@ -188,7 +190,7 @@
                 </button>
               </div>
             </template>
-            <p v-else class="empty-hint">无标签</p>
+            <p v-else class="empty-hint">{{ t('shell.noTags') }}</p>
           </div>
         </section>
 
@@ -207,6 +209,7 @@
  */
 import { defineComponent, h, type PropType } from 'vue';
 import type { HeadingItem } from '@/types';
+import { translate } from '@/i18n';
 
 export const HeadingTreeNode: ReturnType<typeof defineComponent> = defineComponent({
   name: 'HeadingTreeNode',
@@ -250,7 +253,7 @@ export const HeadingTreeNode: ReturnType<typeof defineComponent> = defineCompone
                 },
                 [
                   h('span', { class: 'heading-accent' }),
-                  h('span', { class: 'heading-text' }, node.text || '(无标题)'),
+                  h('span', { class: 'heading-text' }, node.text || translate('shell.untitled')),
                 ],
               ),
               node.children.length > 0
@@ -279,12 +282,15 @@ export const HeadingTreeNode: ReturnType<typeof defineComponent> = defineCompone
  * @see spec/frontend/components.md — RightWing 组件规格
  */
 import { ref, computed, onUnmounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { BacklinkEntry, TagEntry } from '@/types';
 import type {
   RightWingRegion,
   ThemeReferenceSection,
   ThemeRightWingPolicy,
 } from '@/types/theme-pack';
+
+const { t } = useI18n();
 
 // ============================================================
 // Props
@@ -301,7 +307,7 @@ const props = withDefaults(
   }>(),
   {
     collapsed: false,
-    backlinksEmptyText: '无反链',
+    backlinksEmptyText: undefined,
     region: () => ({
       mode: 'balanced' as const,
       policy: 'outline' as const,
@@ -309,6 +315,10 @@ const props = withDefaults(
       defaultOpenSections: ['outline', 'tags'] as const,
     }),
   },
+);
+
+const resolvedBacklinksEmptyText = computed(
+  () => props.backlinksEmptyText ?? t('shell.noBacklinks'),
 );
 
 // ============================================================
@@ -355,9 +365,9 @@ function toggleSection(key: SectionKey) {
 }
 
 function sectionLabel(section: SectionKey): string {
-  if (section === 'backlinks') return '反链';
-  if (section === 'tags') return '标签';
-  return '大纲';
+  if (section === 'backlinks') return t('shell.backlinks');
+  if (section === 'tags') return t('shell.tags');
+  return t('shell.outline');
 }
 
 function sectionCount(section: SectionKey): number {

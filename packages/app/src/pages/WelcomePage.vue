@@ -13,17 +13,17 @@
         >
           <div class="welcome-brand">
             <h1 id="welcome-title" class="welcome-brand-name">JotLuck</h1>
-            <p class="welcome-brand-sub">轻量、本地、离线</p>
+            <p class="welcome-brand-sub">{{ t('welcome.tagline') }}</p>
           </div>
 
-          <div class="welcome-steps" role="tablist" aria-label="引导进度">
+          <div class="welcome-steps" role="tablist" :aria-label="t('welcome.progress')">
             <template v-for="i in TOTAL_STEPS" :key="i">
               <span
                 class="welcome-step-dot"
                 :class="{ active: currentStep >= i }"
                 role="tab"
                 :aria-selected="currentStep === i"
-                :aria-label="`第 ${i} 步`"
+                :aria-label="t('welcome.stepAria', { step: i })"
               />
               <span
                 v-if="i < TOTAL_STEPS"
@@ -36,37 +36,81 @@
           <div class="welcome-content">
             <Transition name="step-slide" mode="out-in">
               <div v-if="currentStep === 1" class="welcome-step-body">
-                <h2 class="welcome-step-title">你的笔记就是纯文本文件</h2>
-                <p class="welcome-step-text">
-                  每一条笔记都是本地 Markdown 或文本文件。文件夹就是笔记本，数据不被数据库锁住。
-                </p>
+                <h2 class="welcome-step-title">{{ t('welcome.plainTitle') }}</h2>
+                <p class="welcome-step-text">{{ t('welcome.plainBody') }}</p>
               </div>
 
               <div v-else-if="currentStep === 2" class="welcome-step-body">
-                <h2 class="welcome-step-title">默认工作台是羽翼布局</h2>
-                <p class="welcome-step-text">
-                  左侧管理最近笔记，中间专注编辑，右侧保留大纲、反链和标签。当前版本只保留这一套稳定布局。
-                </p>
+                <h2 class="welcome-step-title">{{ t('welcome.workspaceTitle') }}</h2>
+                <p class="welcome-step-text">{{ t('welcome.workspaceBody') }}</p>
               </div>
 
               <div v-else-if="currentStep === 3" class="welcome-step-body">
-                <h2 class="welcome-step-title">核心工作流已经就绪</h2>
-                <p class="welcome-step-text">
-                  支持即时预览、Wiki-link、模板、搜索、导出与本地自动补全，不依赖网络。
-                </p>
+                <h2 class="welcome-step-title">{{ t('welcome.workflowTitle') }}</h2>
+                <p class="welcome-step-text">{{ t('welcome.workflowBody') }}</p>
               </div>
 
               <div v-else-if="currentStep === 4" class="welcome-step-body">
-                <h2 class="welcome-step-title">把我设为默认编辑器？</h2>
-                <p class="welcome-step-text">
-                  安装版可打开 Windows 默认应用设置，由你手动把 `.md`、`.markdown`、`.mdx` 关联到
-                  JotLuck。
+                <h2 class="welcome-step-title">{{ t('welcome.defaultEditorTitle') }}</h2>
+                <p class="welcome-step-text">{{ t('welcome.defaultEditorBody') }}</p>
+                <fieldset class="welcome-association-summary">
+                  <legend class="welcome-association-legend">
+                    {{ t('welcome.associationSelectionLegend') }}
+                  </legend>
+                  <div
+                    class="welcome-association-list"
+                    aria-live="polite"
+                    :aria-busy="associationStatusPending"
+                  >
+                    <label
+                      v-for="group in associationGroups"
+                      :key="group.id"
+                      class="welcome-association-row"
+                      :class="{
+                        'welcome-association-row--selected': selectedAssociationGroups[group.id],
+                      }"
+                    >
+                      <input
+                        v-model="selectedAssociationGroups[group.id]"
+                        class="welcome-association-checkbox"
+                        type="checkbox"
+                        :data-association-id="group.id"
+                        :aria-describedby="`welcome-association-${group.id}-extensions welcome-association-${group.id}-status`"
+                      />
+                      <span class="welcome-association-copy">
+                        <strong>{{ t(`settings.general.associationGroups.${group.id}`) }}</strong>
+                        <small :id="`welcome-association-${group.id}-extensions`">
+                          {{ group.extensions.join(', ') }}
+                        </small>
+                      </span>
+                      <span
+                        :id="`welcome-association-${group.id}-status`"
+                        class="welcome-association-state"
+                        :class="`welcome-association-state--${group.state}`"
+                      >
+                        {{ t(`settings.general.associationStates.${group.state}`) }}
+                      </span>
+                    </label>
+                  </div>
+                </fieldset>
+                <p v-if="associationStatusPending" class="welcome-setting-note" role="status">
+                  {{ t('settings.general.associationLoading') }}
+                </p>
+                <p v-else-if="associationStatusError" class="welcome-setting-note" role="alert">
+                  {{ t('settings.general.associationFailed') }}
                 </p>
                 <div class="welcome-actions">
-                  <Button variant="default" size="md" @click="onSetDefaultEditor">
-                    打开系统设置
+                  <Button
+                    variant="default"
+                    size="md"
+                    :loading="associationPending"
+                    @click="onSetDefaultEditor"
+                  >
+                    {{ associationActionLabel }}
                   </Button>
-                  <button class="welcome-link-btn" @click="nextStep">暂不设置</button>
+                  <button class="welcome-link-btn" @click="nextStep">
+                    {{ t('welcome.notNow') }}
+                  </button>
                 </div>
                 <p v-if="defaultEditorNotice" class="welcome-setting-note">
                   {{ defaultEditorNotice }}
@@ -74,10 +118,10 @@
               </div>
 
               <div v-else-if="currentStep === 5" class="welcome-step-body">
-                <h2 class="welcome-step-title">需要自动检查新版本吗？</h2>
+                <h2 class="welcome-step-title">{{ t('welcome.updatesTitle') }}</h2>
                 <div class="welcome-setting-row">
                   <div class="welcome-setting-info">
-                    <span class="welcome-setting-label">自动检查可用更新</span>
+                    <span class="welcome-setting-label">{{ t('welcome.autoCheck') }}</span>
                     <button
                       class="toggle-track"
                       :class="{ active: autoCheckEnabled }"
@@ -89,22 +133,20 @@
                       <span class="toggle-thumb" />
                     </button>
                   </div>
-                  <p class="welcome-setting-desc">仅查询 GitHub 公开版本号，不上传任何笔记内容。</p>
+                  <p class="welcome-setting-desc">{{ t('welcome.autoCheckBody') }}</p>
                 </div>
               </div>
 
               <div v-else class="welcome-step-body">
-                <h2 class="welcome-step-title">可以开始了</h2>
-                <p class="welcome-step-text">
-                  打开一个本地文件夹，继续写作。后续所有设置都可以在应用内调整。
-                </p>
+                <h2 class="welcome-step-title">{{ t('welcome.readyTitle') }}</h2>
+                <p class="welcome-step-text">{{ t('welcome.readyBody') }}</p>
               </div>
             </Transition>
           </div>
 
           <div class="welcome-footer">
             <button v-if="currentStep < TOTAL_STEPS" class="welcome-skip-link" @click="skip">
-              跳过
+              {{ t('welcome.skip') }}
             </button>
             <span v-else class="welcome-footer-spacer" />
 
@@ -115,7 +157,7 @@
               data-dialog-initial-focus
               @click="nextStep"
             >
-              {{ currentStep < TOTAL_STEPS ? '下一步' : '完成设置' }}
+              {{ currentStep < TOTAL_STEPS ? t('common.next') : t('welcome.finish') }}
             </Button>
           </div>
         </div>
@@ -125,15 +167,18 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
-import { open as openExternal } from '@tauri-apps/plugin-shell';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import Button from '@/components/common/Button.vue';
 import { useDialogFocus } from '@/composables/useDialogFocus';
 import { isDesktopRuntime } from '@/utils/runtime';
 import { hasCompletedWelcome, markWelcomeCompleted } from '@/utils/welcome';
+import { useI18n } from 'vue-i18n';
+import type { AssociationGroupStatus, WindowsAssociationStatus } from '@/types';
 
 const props = defineProps<{ visible: boolean }>();
 const emit = defineEmits<{ 'update:visible': [boolean]; complete: [] }>();
+const { t } = useI18n();
 
 const AUTO_CHECK_KEY = 'jotluck:version:autoCheck';
 const AUTO_INSTALL_KEY = 'jotluck:version:autoInstall';
@@ -142,7 +187,71 @@ const TOTAL_STEPS = 6;
 
 const currentStep = ref(1);
 const autoCheckEnabled = ref(localStorage.getItem(AUTO_CHECK_KEY) === 'true');
-const defaultEditorNotice = ref('');
+type DefaultEditorNotice = '' | 'webPreview' | 'settingsOpened' | 'settingsFailed';
+type AssociationGroupId = AssociationGroupStatus['id'];
+const associationGroupDefinitions: Array<Pick<AssociationGroupStatus, 'id' | 'extensions'>> = [
+  { id: 'markdown', extensions: ['.md', '.markdown', '.mdx'] },
+  { id: 'text', extensions: ['.txt'] },
+  { id: 'word', extensions: ['.docx'] },
+  { id: 'pdf', extensions: ['.pdf'] },
+  { id: 'excel', extensions: ['.xlsx', '.xls'] },
+];
+
+function defaultAssociationSelections(): Record<AssociationGroupId, boolean> {
+  return {
+    markdown: true,
+    text: false,
+    word: false,
+    pdf: false,
+    excel: false,
+  };
+}
+
+const defaultEditorNoticeKind = ref<DefaultEditorNotice>('');
+const associationStatus = ref<WindowsAssociationStatus | null>(null);
+const associationPending = ref(false);
+const associationStatusPending = ref(false);
+const associationStatusError = ref(false);
+const selectedAssociationGroups = ref<Record<AssociationGroupId, boolean>>(
+  defaultAssociationSelections(),
+);
+const associationGroups = computed<AssociationGroupStatus[]>(() => {
+  const realGroups = new Map(associationStatus.value?.groups.map((group) => [group.id, group]));
+  return associationGroupDefinitions.map(
+    (definition) =>
+      realGroups.get(definition.id) ?? {
+        ...definition,
+        state: 'unsupported',
+        activeProgIds: [],
+      },
+  );
+});
+const hasIncompleteSelectedAssociations = computed(() => {
+  return associationGroups.value.some(
+    (group) => selectedAssociationGroups.value[group.id] && group.state !== 'applied',
+  );
+});
+const associationActionLabel = computed(() => {
+  if (
+    defaultEditorNoticeKind.value === 'settingsOpened' &&
+    hasIncompleteSelectedAssociations.value
+  ) {
+    return t('welcome.continueSystemSettings');
+  }
+  return t('welcome.openSystemSettings');
+});
+const defaultEditorNotice = computed(() => {
+  switch (defaultEditorNoticeKind.value) {
+    case 'webPreview':
+      return t('welcome.webPreview');
+    case 'settingsOpened':
+      return t('welcome.settingsOpened');
+    case 'settingsFailed':
+      return t('welcome.settingsFailed');
+    default:
+      return '';
+  }
+});
 const overlayRef = ref<HTMLDivElement | null>(null);
 
 useDialogFocus({
@@ -153,10 +262,13 @@ useDialogFocus({
 });
 
 onMounted(() => {
+  window.addEventListener('focus', refreshAssociationStatus);
   if (hasCompletedWelcome()) {
     emit('update:visible', false);
   }
 });
+
+onBeforeUnmount(() => window.removeEventListener('focus', refreshAssociationStatus));
 
 watch(
   () => props.visible,
@@ -164,9 +276,15 @@ watch(
     if (!visible) return;
     currentStep.value = 1;
     autoCheckEnabled.value = localStorage.getItem(AUTO_CHECK_KEY) === 'true';
-    defaultEditorNotice.value = '';
+    defaultEditorNoticeKind.value = '';
+    selectedAssociationGroups.value = defaultAssociationSelections();
+    void refreshAssociationStatus();
   },
 );
+
+watch(currentStep, (step) => {
+  if (step === 4) void refreshAssociationStatus();
+});
 
 function nextStep(): void {
   if (currentStep.value < TOTAL_STEPS) {
@@ -196,18 +314,40 @@ async function onSetDefaultEditor(): Promise<void> {
   localStorage.setItem(DEFAULT_EDITOR_PROMPT_KEY, '1');
 
   if (!isDesktopRuntime()) {
-    defaultEditorNotice.value =
-      '当前是 Web 预览环境。安装版会尝试打开 Windows 默认应用设置，最终仍需你手动选择 JotLuck。';
+    defaultEditorNoticeKind.value = 'webPreview';
     return;
   }
 
   try {
-    await openExternal('ms-settings:defaultapps');
-    defaultEditorNotice.value =
-      '已打开 Windows 默认应用设置。请搜索 .md、.markdown 或 .mdx，并选择 JotLuck。';
+    associationPending.value = true;
+    await invoke('open_jotluck_default_apps_settings');
+    defaultEditorNoticeKind.value = 'settingsOpened';
   } catch {
-    defaultEditorNotice.value =
-      '无法自动打开系统设置。请手动进入 Windows 设置 > 应用 > 默认应用，并关联 Markdown 文件。';
+    defaultEditorNoticeKind.value = 'settingsFailed';
+  } finally {
+    associationPending.value = false;
+  }
+}
+
+async function refreshAssociationStatus(): Promise<void> {
+  if (!props.visible || currentStep.value !== 4) return;
+  associationStatusError.value = false;
+
+  if (!isDesktopRuntime()) {
+    associationStatus.value = null;
+    return;
+  }
+
+  associationStatusPending.value = true;
+  try {
+    associationStatus.value = await invoke<WindowsAssociationStatus>(
+      'get_windows_association_status',
+    );
+  } catch {
+    associationStatus.value = null;
+    associationStatusError.value = true;
+  } finally {
+    associationStatusPending.value = false;
   }
 }
 </script>
@@ -225,9 +365,11 @@ async function onSetDefaultEditor(): Promise<void> {
 
 .welcome-card {
   width: min(720px, calc(100vw - 32px));
+  max-height: calc(100dvh - var(--space-40));
   display: flex;
   flex-direction: column;
   gap: var(--space-20);
+  overflow-y: auto;
   padding: clamp(var(--space-24), 4vw, var(--space-36));
   border: var(--border-thin) solid var(--rule);
   border-radius: calc(var(--radius) * 1.5);
@@ -305,6 +447,96 @@ async function onSetDefaultEditor(): Promise<void> {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-12);
+}
+
+.welcome-association-summary {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.welcome-association-legend {
+  margin-block-end: var(--space-8);
+  color: var(--ink-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+}
+
+.welcome-association-list {
+  display: grid;
+  overflow: hidden;
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-surface);
+}
+
+.welcome-association-row {
+  display: grid;
+  grid-template-columns: var(--touch-target-min) minmax(0, 1fr) auto;
+  gap: var(--space-8);
+  align-items: center;
+  min-height: var(--touch-target-min);
+  padding: var(--space-6) var(--space-12) var(--space-6) 0;
+  background: var(--paper-surface);
+  cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-fade);
+}
+
+.welcome-association-row + .welcome-association-row {
+  border-top: var(--border-thin) solid var(--rule);
+}
+
+.welcome-association-row--selected {
+  background: var(--accent-soft);
+}
+
+.welcome-association-checkbox {
+  inline-size: var(--space-16);
+  block-size: var(--space-16);
+  margin: 0;
+  justify-self: center;
+  accent-color: var(--accent);
+}
+
+.welcome-association-checkbox:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.welcome-association-copy {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.welcome-association-copy strong {
+  color: var(--ink-primary);
+  font-size: var(--text-sm);
+}
+
+.welcome-association-copy small {
+  overflow: hidden;
+  color: var(--ink-secondary);
+  line-height: var(--lh-ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.welcome-association-state {
+  justify-self: end;
+  padding: var(--space-4) var(--space-8);
+  border-radius: 999px;
+  background: var(--rule);
+  color: var(--ink-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+}
+
+.welcome-association-state--applied {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .welcome-setting-row {
@@ -402,6 +634,15 @@ async function onSetDefaultEditor(): Promise<void> {
   .welcome-setting-info {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .welcome-association-row {
+    grid-template-columns: var(--touch-target-min) minmax(0, 1fr);
+  }
+
+  .welcome-association-state {
+    grid-column: 2;
+    justify-self: start;
   }
 }
 </style>

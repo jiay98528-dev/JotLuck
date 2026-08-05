@@ -1,6 +1,16 @@
 # JotLuck TAD
 
-版本：2026-07-30
+版本：v1.1（2026-08-04）
+
+## 应用本地化架构
+
+- Vue 层使用 `vue-i18n` Composition API。`zh-CN` 主目录常驻，`en`、`ja`、`ko`、`fr` 作为构建内动态 chunk；应用必须在目标目录加载完成后再挂载，避免混合语言首屏。
+- `LocaleManager` 是界面语言唯一真相源，负责支持语言注册、`navigator.languages` 归一化、`jotluck:locale:v1` 持久化、跨窗口同步、`html.lang/dir` 更新及 `Intl` 格式化。不存在 URL locale，也不把语言状态混入笔记内容或补全工作区状态。
+- `zh-CN` 消息对象定义 `MessageSchema`。所有目录必须保持相同 key、复数分支和插值参数；缺键只作为生产容错回退中文，自动化检查必须拒绝缺键。
+- 组件通过 `useI18n()` 或宿主封装读取文案；Vue 外服务通过 LocaleManager 翻译。文件排序统一使用当前 locale 的 `Intl.Collator`，日期、相对时间、数量和导出语言标签使用同一 locale。
+- 会进入本地化 UI 的 Tauri 文件系统、索引、原生对话框等 command 失败返回 `CommandErrorPayload { code, args }`；对应 MockFS 使用同一合同，前端把稳定错误码映射到消息目录。补全检索和纯内部诊断接口保持各自内部错误类型，但不得把诊断直接展示。前端预期错误使用 `UserMessageError`，普通 `Error` 只触发上下文本地化兜底。原生保存/目录对话框由前端传入已翻译标题和过滤器文本，取消仍是正常空结果。
+- 内置模板与示例内容由前端单一本地化内容注册表提供。Web 直接使用该 Seed；Tauri 只在新建示例目录时写入调用方提供且通过相对路径校验的 Seed，已存在目录不覆盖。
+- `ThemeHostContext.i18n` 向代码主题提供 locale、宿主消息翻译、日期/数字格式化和订阅；官方主题视图模型在语言变化后重新计算。第三方 manifest/DSL 自有文字继续由作者负责。
 
 ## UX Theme Runtime v2
 
@@ -34,12 +44,24 @@ Vue 3 + Pinia + Vite
 
 - 桌面端维持单进程。启动参数解析全部受支持的 `.md`、`.markdown`、`.mdx`、`.txt` 文件：首项使用 `main` 窗口，其余项创建唯一 label 的窗口；运行中接收关联文件也创建窗口。
 - 路径身份是规范化、规范大小写后的绝对路径。若已存在同一路径窗口，后端只恢复、置前并聚焦该窗口。创建窗口从 single-instance 回调异步调度；失败时必须回滚授权和窗口注册表。
-- `WindowSessionMode` 为 `workspace | external-readonly | external-edit`；窗口只能经后端从调用窗口身份读取自身 `WindowBootstrapPayload`，前端不得提交任意窗口 label。外部会话初始 grant 只包含该文件的只读访问。
+- `WindowSessionMode` 为 `workspace | external-readonly | document-import-readonly | external-edit`；窗口只能经后端从调用窗口身份读取自身 `WindowBootstrapPayload`，前端不得提交任意窗口 label。笔记与文档导入授权使用不同状态和命令表，不能相互升级或复用 token。
 - `get_window_bootstrap` 仅返回调用窗口的一次性启动会话；`enable_external_edit` 仅把调用窗口切至 `external-edit` 并将同一文件 grant 提升为读写；`promote_external_file_to_notebook` 是唯一允许绑定其父目录为 workspace root 的命令，并返回初始目标文件。
 - 所有 workspace IPC 必须先由 Tauri 注入的调用窗口执行 `assert_workspace`，再访问 root、目录扫描、文件树、索引、watcher、completion、最近笔记本或跨文件读写。`external-readonly` 与 `external-edit` 不能通过遗留/通用 IPC 绕过该断言。
 - 笔记本 root、Tantivy 索引、notify watcher 和 Completion Retrieval 使用窗口 label 作为状态边界。所有 IPC 从调用窗口解析状态，watcher 事件定向发送，外部文件授权也绑定 owner window。窗口销毁只清理自己的授权和服务状态。
 - `external-readonly` 首屏为独立轻量入口：不得导入 CodeMirror、导出、文件抽屉、目录扫描、索引、监听、补全或版本检查；`external-edit` 保持单文件读写；仅 `workspace` 初始化目录级服务与最近笔记本持久化。
 - `v0.10.0-rc.1` 的 release gate 单独验证 Public L3 architecture-stop 是可接受的 fail-closed 状态，同时从生产依赖图、Vite/Tauri bundle 和安装包清单验证 V2S Worker、factory、候选 manifest 与候选资产不可达。
+
+## 文档导入隔离转换架构
+
+- `.docx/.pdf/.xlsx/.xls` 启动时由窗口会话注册表创建 `DocumentImportBootstrapPayload`，包含类型、文件名、窗口级只读源授权和初始 `SourceRevision`。该会话不能调用 `enable_external_edit`、父目录提升、workspace IPC 或普通外部笔记读写。
+- 主进程以单句柄有界读取把源复制到应用私有临时任务目录，同时计算 SHA-256；隐藏的同一可执行文件以 `--jotluck-document-worker` 模式启动，只接收快照路径、输出目录、类型和资源预算，不接触原文件。
+- 主进程与工作进程使用带 `protocolVersion` 的长度帧 stdin/stdout 协议。未知版本、未知事件、乱序 chunk 序号、超限或协议损坏立即终止任务。全局调度器最多运行两个任务，等待任务可取消；Windows 使用 Job Object 将单进程内存限制为 768 MiB，并在取消、窗口销毁或异常时终止进程树。
+- `DocumentConversionEvent` 固定为 `phase | chunk | asset | warning | complete | stale | cancelled | error`；进度单位固定为 `bytes | pages | sheets | rows | blocks | assets`。可观测阶段报告真实 `completed/total`，不可观测阶段显式 `indeterminate`；chunk 携带从 0 开始单调递增序号，前端只按序追加。
+- DOCX 使用 `docx-rs 0.4.22`，Excel 使用 `calamine 0.36.1`，PDF 使用 `lopdf 0.44`，均关闭不需要的 feature。所有源文本先进行 Markdown 转义；前端追加的完整 Markdown 仍进入既有 `marked → DOMPurify` 管线。
+- 转换 Markdown、警告和资产只存在窗口级注册表及私有临时目录。`read_document_conversion_asset` 按调用窗口、conversion ID 与 asset ID 返回原始字节；前端创建的 blob URL 在替换、取消和卸载时撤销。
+- 当前源文件通过单文件 `notify` watcher、窗口 focus 复核和另存前复核检测变化。revision 不一致时任务进入 `stale`，禁止旧转换另存；重新转换创建新 conversion ID 并清理旧注册表。
+- `save_converted_document_as` 只接受转换 ID 和本地化对话框请求，不接受任意源路径。后端强制 `.md`、选择唯一资产目录、在目标父目录创建同卷临时项并提交；成功后撤销文档源授权，将新 Markdown 建立现有可写外部 grant，并把窗口会话原子替换为 `external-edit`。
+- Windows 编辑器集成通过 `SHAssocEnumHandlers` 与 `IAssocHandler::Invoke`，handler ID 只引用当前窗口后端枚举缓存，不解析注册表命令。没有候选或 Invoke 失败时使用系统 Open With；默认应用状态通过实际 ProgID 查询，设置入口优先 `ms-settings:defaultapps?registeredAppUser=JotLuck`，旧系统回退总页。
 
 ## 离线补全架构（3.11）
 
@@ -86,15 +108,20 @@ Vue 3 + Pinia + Vite
 - 主题开发必须遵守 `doc/standards-theme-development.md`；不得新增未文档化 slot、Host API、Manifest 字段或宿主层 theme-id 特判。
 - 主题不得直接替换 Markdown 清洗、文件 IO、搜索索引、导出服务或系统 API；这些能力通过宿主 action/API 间接触发。
 - 商业化当前只提供接口和 mock 状态，不做真实支付、远程下载、账号体系或社区审核。
-- 系统关联只注册为可选打开程序，不擅自覆盖系统默认应用；`.txt` 关联是本版本明确覆盖旧策略的产品决定。
+- 系统关联只注册为可选打开程序，ProgID 设置 `AllowSilentDefaultTakeOver`，不得写扩展名默认值或 `UserChoice`；欢迎页与设置页按 `UserChoiceLatest` 优先、`UserChoice` 回退读取用户明确选择，不用 Shell 候选推导冒充授权状态。
 - NSIS 卸载按字母槽识别 `JotLuck.exe`，仅从 `MRUList` 删除对应字母并保持剩余顺序；不存在 JotLuck 槽时不得写 MRU，仍有其他槽时不得删除整个 `MRUList`。
 - installed-app evidence 的正式信任根为 GitHub Actions + REST provenance。候选和 execution evidence artifact 必须来自同一个 `main`/`workflow_dispatch` run，`head_sha` 等于候选提交且 required jobs/steps 全部成功；缺 token、REST 失败、artifact 过期或 digest 不一致一律 fail-closed。
 - required-case catalog 固定 adapter 与 artifact kinds；case result 必须包含可解析的 `execution-log.ndjson` 和指定观察产物。adapter 意图日志与真实 WebDriver 命令记录分离；WebDriver v3 以 `remote()` 返回后的 handshake 绑定 `attemptId + sessionId`，只保留锁定 `@wdio/protocols` 的 W3C 命令并折叠 browser/element wrapper 的重复 hook，只接受 handshake 后真实观察到的 case 命令与 `deleteSession`，不得伪造 hook 无法观察的 `newSession`。证据提交中的 raw report、case results 和附件必须与下载的 execution artifact 精确同构，transcript 只允许守恒转录。
-- capture 只调用仓库内固定的 24 个 adapter，不接受 manifest、参数或环境变量注入测试命令。Windows runner 从卸载注册表解析真实安装位置，并要求安装后 EXE 与候选 artifact 中 `jotluck.exe` 的字节数/SHA-256 完全一致；ASSOC-01～04 还必须绑定 case 对应扩展名、目标内容前后 readback、注册命令的规范安装路径，通过 `ShellExecuteExW` 指定 `JotLuck.Note`，并用 UI Automation 保存正文 matched text 与 CIM `ExecutablePath`。所有 case 完成或失败后统一回收 WebDriver、Shell PID、应用进程、安装状态、临时文件和测试注册表项。
+- capture 只调用仓库内固定的 28 个 adapter，不接受 manifest、参数或环境变量注入测试命令。Windows runner 从卸载注册表解析真实安装位置，并要求安装后 EXE 与候选 artifact 中 `jotluck.exe` 的字节数/SHA-256 完全一致；ASSOC-01～08 还必须绑定 case 对应扩展名、目标内容或二进制前后 readback、注册命令的规范安装路径，通过 `ShellExecuteExW` 对笔记格式指定 `JotLuck.Note`、对文档格式指定 `JotLuck.DocumentImport`，并用 UI Automation 保存正文 matched text 与 CIM `ExecutablePath`。所有 case 完成或失败后统一回收 WebDriver、Shell PID、应用进程、安装状态、临时文件和测试注册表项。
 - materialization job 必须先通过同一 run 的 REST resolver 核验 repository/workflow/event/branch/SHA/attempt、前置 job、固定 artifact ID/name/digest/size/唯一性，再按 ID 下载。materializer 对 raw report、case results 和附件逐文件验证增删改，生成 transcript、manifest、构建 inventory 与 preview-gate；该输出在进入独立 evidence commit 并通过在线 provenance 前只能称为 `structural-diagnostic`。
 - 安装版性能使用 catalog 中的 `coldStartP90ReferenceMs` / `hotWindowP90ReferenceMs`。20/30 原始样本、正数约束、P90 复算和 advisory 守恒是硬门控；20 次冷启动每轮前后必须为零进程，30 次热开窗每轮关闭后必须恢复原窗口数，热会话结束后必须再次为零进程。超过参考线只返回 `pass-with-warnings`，不改变退出码；生命周期边界不完整仍硬失败。
 
 ## 变更记录
+
+- 2026-08-04（v1.1）：增加独立文档导入会话、同可执行文件转换 worker、版本化流协议、资源/取消边界、源 revision、原子另存和 Windows 关联处理器架构。
+
+- 2026-08-04：将结构化错误合同限定到会进入本地化 UI 的 IPC/MockFS，补全检索和内部诊断明确排除。
+- 2026-08-03：新增五语言 Vue 运行时、LocaleManager、结构化 Tauri/MockFS 错误、单一内置内容源及 Theme Host i18n 数据流。
 
 - 2026-07-30：补充本地图片的宿主解析、DOMPurify 顺序、异步 generation 与外部单文件授权边界。
 - 2026-07-27：增加固定 installed-app adapter、同 run REST resolver 和 evidence materializer；性能参考线改为可复算 advisory，证据完整性仍 fail-closed。

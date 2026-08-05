@@ -7,6 +7,7 @@ import type {
   ThemeEntitlementDescriptor,
   ThemeLicenseRedeemRequest,
 } from '@/types/theme-pack';
+import { translate } from '@/i18n';
 
 const ENTITLEMENTS_KEY = 'jotluck:themes:entitlements:v2';
 
@@ -31,7 +32,7 @@ function defaultEntitlement(pack: InstalledThemePack): ThemeEntitlementDescripto
     state: pack.manifest.entitlement?.state ?? 'purchase-required',
     checkedAt: new Date(0).toISOString(),
     provider: 'local-mock',
-    note: 'Mock entitlement. Replace ThemeCommerceProvider to connect Gumroad, Polar, or a custom backend.',
+    note: translate('theme.center.mockEntitlementNote'),
   };
 }
 

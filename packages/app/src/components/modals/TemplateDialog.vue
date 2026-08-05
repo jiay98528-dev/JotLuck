@@ -16,8 +16,13 @@
       >
         <!-- Header -->
         <div class="modal-header">
-          <h2 id="template-dialog-title">新建笔记</h2>
-          <button class="modal-close" data-dialog-initial-focus aria-label="关闭" @click="cancel">
+          <h2 id="template-dialog-title">{{ t('dialogs.template.title') }}</h2>
+          <button
+            class="modal-close"
+            data-dialog-initial-focus
+            :aria-label="t('common.close')"
+            @click="cancel"
+          >
             &times;
           </button>
         </div>
@@ -43,8 +48,8 @@
                   <line x1="9" y1="15" x2="15" y2="15" />
                 </svg>
               </span>
-              <span class="tpl-card-title">空白笔记</span>
-              <span class="tpl-card-desc">从空白页面开始</span>
+              <span class="tpl-card-title">{{ t('dialogs.template.blank') }}</span>
+              <span class="tpl-card-desc">{{ t('dialogs.template.blankDescription') }}</span>
             </button>
 
             <!-- Built-in templates -->
@@ -75,8 +80,8 @@
               <span class="tpl-card-desc">{{ tpl.description }}</span>
               <button
                 class="template-delete"
-                title="删除模板"
-                aria-label="删除模板"
+                :title="t('dialogs.template.delete')"
+                :aria-label="t('dialogs.template.delete')"
                 @click.stop="deleteTemplate(tpl.id)"
               >
                 &times;
@@ -90,17 +95,25 @@
                 :disabled="!canSaveCustomTemplate"
                 @click="showSaveForm = !showSaveForm"
               >
-                + 保存为自定义模板
+                {{ t('dialogs.template.saveAsCustom') }}
               </button>
               <p v-if="!canSaveCustomTemplate && customTemplateDisabledReason" class="save-note">
                 {{ customTemplateDisabledReason }}
               </p>
               <div v-if="showSaveForm" class="save-form">
-                <input v-model="tplName" class="save-form-input" placeholder="模板名称" />
-                <input v-model="tplDesc" class="save-form-input" placeholder="模板描述（可选）" />
+                <input
+                  v-model="tplName"
+                  class="save-form-input"
+                  :placeholder="t('dialogs.template.namePlaceholder')"
+                />
+                <input
+                  v-model="tplDesc"
+                  class="save-form-input"
+                  :placeholder="t('dialogs.template.descriptionPlaceholder')"
+                />
                 <div class="save-form-actions">
                   <Button variant="secondary" size="sm" @click="showSaveForm = false">
-                    取消
+                    {{ t('common.cancel') }}
                   </Button>
                   <Button
                     variant="default"
@@ -108,7 +121,7 @@
                     :disabled="!tplName || !canSaveCustomTemplate"
                     @click="doSaveTemplate"
                   >
-                    保存
+                    {{ t('common.save') }}
                   </Button>
                 </div>
               </div>
@@ -119,13 +132,15 @@
           <div class="tpl-preview">
             <template v-if="selectedTpl">
               <div class="preview-header">
-                <span class="preview-label">预览</span>
+                <span class="preview-label">{{ t('dialogs.template.preview') }}</span>
                 <span class="preview-name">{{ selectedTpl.name }}</span>
               </div>
               <div class="preview-content">
                 <pre class="preview-text">{{ renderedPreview }}</pre>
               </div>
-              <Button variant="default" style="width: 100%" @click="emitSelect">使用此模板</Button>
+              <Button variant="default" style="width: 100%" @click="emitSelect">
+                {{ t('dialogs.template.use') }}
+              </Button>
             </template>
             <template v-else>
               <div class="preview-empty">
@@ -143,7 +158,7 @@
                   <line x1="16" y1="13" x2="8" y2="13" />
                   <line x1="16" y1="17" x2="8" y2="17" />
                 </svg>
-                <span class="preview-empty-text">选择一个模板以预览</span>
+                <span class="preview-empty-text">{{ t('dialogs.template.chooseToPreview') }}</span>
               </div>
             </template>
           </div>
@@ -151,7 +166,7 @@
 
         <!-- Footer -->
         <div class="modal-footer">
-          <Button variant="secondary" @click="cancel">取消</Button>
+          <Button variant="secondary" @click="cancel">{{ t('common.cancel') }}</Button>
         </div>
       </div>
     </div>
@@ -164,6 +179,8 @@ import { getBuiltInTemplates, previewTemplate } from '@/services/TemplateEngine'
 import type { TemplateItem } from '@/types';
 import Button from '@/components/common/Button.vue';
 import { useDialogFocus } from '@/composables/useDialogFocus';
+import { currentLocale } from '@/i18n';
+import { useI18n } from 'vue-i18n';
 
 // ── Internal: rich template shape as returned by the engine ─
 interface RichTemplateItem extends TemplateItem {
@@ -180,6 +197,7 @@ const props = defineProps<{
   canSaveCustomTemplate?: boolean;
   customTemplateDisabledReason?: string;
 }>();
+const { t } = useI18n();
 
 // ── Emits ──────────────────────────────────────────────
 const emit = defineEmits<{
@@ -199,7 +217,9 @@ useDialogFocus({
 });
 
 // ── State ──────────────────────────────────────────────
-const templates = getBuiltInTemplates() as RichTemplateItem[];
+const templates = computed<RichTemplateItem[]>(
+  () => getBuiltInTemplates(currentLocale.value) as RichTemplateItem[],
+);
 const selectedId = ref<string | null>(null);
 const selectedTpl = ref<RichTemplateItem | null>(null);
 
@@ -213,7 +233,7 @@ const renderedPreview = computed<string>(() => {
   if (!selectedTpl.value) return '';
   const content = selectedTpl.value.content;
   if (!content) return '';
-  const rendered = previewTemplate(content);
+  const rendered = previewTemplate(content, currentLocale.value);
   // Show first 6 lines for preview
   return rendered.split('\n').slice(0, 6).join('\n');
 });
@@ -237,7 +257,7 @@ function selectTemplate(tpl: RichTemplateItem): void {
 
 function emitSelect(): void {
   if (!selectedTpl.value) return;
-  const content = previewTemplate(selectedTpl.value.content);
+  const content = previewTemplate(selectedTpl.value.content, currentLocale.value);
   emit('select', selectedTpl.value, content);
 }
 
@@ -282,6 +302,12 @@ watch(customTemplates, (templatesValue) => {
   if (templatesValue.some((tpl) => tpl.id === selectedId.value)) return;
   selectedId.value = null;
   selectedTpl.value = null;
+});
+
+watch(currentLocale, () => {
+  if (!selectedTpl.value?.isBuiltin) return;
+  selectedTpl.value =
+    templates.value.find((template) => template.id === selectedTpl.value?.id) ?? null;
 });
 </script>
 

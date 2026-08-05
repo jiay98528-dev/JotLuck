@@ -11,27 +11,32 @@
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="share-dialog-title">
         <!-- Header -->
         <div class="modal-header">
-          <h2 id="share-dialog-title">分享笔记</h2>
-          <button class="modal-close" data-dialog-initial-focus aria-label="关闭" @click="cancel">
+          <h2 id="share-dialog-title">{{ t('dialogs.share.title') }}</h2>
+          <button
+            class="modal-close"
+            data-dialog-initial-focus
+            :aria-label="t('common.close')"
+            @click="cancel"
+          >
             &times;
           </button>
         </div>
 
         <!-- Step Indicator Dots -->
-        <div class="step-dots" role="tablist" aria-label="步骤指示器">
+        <div class="step-dots" role="tablist" :aria-label="t('dialogs.share.stepsAria')">
           <span
             class="dot"
             :class="{ active: step === 0 }"
             role="tab"
             :aria-selected="step === 0"
-            aria-label="步骤 1：选择格式"
+            :aria-label="t('dialogs.share.formatStepAria')"
           />
           <span
             class="dot"
             :class="{ active: step === 1 }"
             role="tab"
             :aria-selected="step === 1"
-            aria-label="步骤 2：选择渠道"
+            :aria-label="t('dialogs.share.channelStepAria')"
           />
         </div>
 
@@ -39,7 +44,7 @@
         <div class="modal-body">
           <!-- Step 1: Format Selection -->
           <template v-if="step === 0">
-            <p class="step-label">选择导出格式</p>
+            <p class="step-label">{{ t('dialogs.share.chooseFormat') }}</p>
             <div class="option-grid">
               <button
                 v-for="f in formats"
@@ -59,7 +64,7 @@
 
           <!-- Step 2: Channel Selection -->
           <template v-else>
-            <p class="step-label">选择分享渠道</p>
+            <p class="step-label">{{ t('dialogs.share.chooseChannel') }}</p>
             <div class="option-grid">
               <button
                 v-for="ch in channels"
@@ -77,10 +82,12 @@
 
         <!-- Footer -->
         <div class="modal-footer">
-          <Button v-if="step === 1" variant="secondary" @click="step = 0"> &larr; 返回 </Button>
-          <Button variant="secondary" @click="cancel">取消</Button>
+          <Button v-if="step === 1" variant="secondary" @click="step = 0">
+            &larr; {{ t('common.back') }}
+          </Button>
+          <Button variant="secondary" @click="cancel">{{ t('common.cancel') }}</Button>
           <Button v-if="step === 0" variant="default" :disabled="!hasContent" @click="step = 1">
-            下一步
+            {{ t('common.next') }}
           </Button>
         </div>
       </div>
@@ -94,6 +101,8 @@ import { ExportFormat, ShareChannel } from '@/types';
 import Button from '@/components/common/Button.vue';
 import { exportNote } from '@/services/Exporter';
 import { useDialogFocus } from '@/composables/useDialogFocus';
+import { getCurrentLocale, getLocaleFontStack } from '@/i18n';
+import { useI18n } from 'vue-i18n';
 
 // ============================================================
 // Props & Emits
@@ -103,6 +112,7 @@ const props = defineProps<{
   noteTitle?: string;
   markdownContent?: string;
 }>();
+const { t } = useI18n();
 
 const emit = defineEmits<{
   'update:visible': [boolean];
@@ -136,7 +146,7 @@ interface FormatEntry {
   icon: string;
 }
 
-const formats: FormatEntry[] = [
+const formats = computed<FormatEntry[]>(() => [
   {
     fmt: ExportFormat.MD,
     name: 'Markdown',
@@ -145,7 +155,7 @@ const formats: FormatEntry[] = [
   },
   {
     fmt: ExportFormat.TXT,
-    name: '纯文本',
+    name: t('dialogs.share.plainText'),
     ext: '.txt',
     icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="15" x2="14" y2="15"/><line x1="8" y1="18" x2="11" y2="18"/></svg>',
   },
@@ -161,7 +171,7 @@ const formats: FormatEntry[] = [
     ext: '.pdf',
     icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><rect x="8" y="12" width="8" height="7" rx="1"/><line x1="10" y1="14.5" x2="14" y2="14.5"/><line x1="10" y1="16.5" x2="14" y2="16.5"/></svg>',
   },
-];
+]);
 
 // ============================================================
 // Channel Definitions
@@ -172,28 +182,28 @@ interface ChannelEntry {
   icon: string;
 }
 
-const channels: ChannelEntry[] = [
+const channels = computed<ChannelEntry[]>(() => [
   {
     ch: ShareChannel.SYSTEM_SHARE,
-    name: '系统分享',
+    name: t('dialogs.share.system'),
     icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>',
   },
   {
     ch: ShareChannel.EMAIL,
-    name: '邮件',
+    name: t('dialogs.share.email'),
     icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="2 4 12 13 22 4"/></svg>',
   },
   {
     ch: ShareChannel.CLIPBOARD,
-    name: '剪贴板',
+    name: t('dialogs.share.clipboard'),
     icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/></svg>',
   },
   {
     ch: ShareChannel.LOCAL_EXPORT,
-    name: '本地导出',
+    name: t('dialogs.share.localExport'),
     icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 8l-6-6H8a2 2 0 00-2 2v16a2 2 0 002 2h8"/><polyline points="12 10 12 20"/><polyline points="9 17 12 20 15 17"/><path d="M16 2v6h6"/></svg>',
   },
-];
+]);
 
 // ============================================================
 // Methods
@@ -213,7 +223,7 @@ async function doShare(channel: ShareChannel): Promise<void> {
   if (!hasContent.value) return;
 
   const content = getFormattedContent();
-  const title = props.noteTitle || '未命名笔记';
+  const title = props.noteTitle || t('common.untitledNote');
 
   try {
     switch (channel) {
@@ -236,7 +246,7 @@ async function doShare(channel: ShareChannel): Promise<void> {
     // User cancellation is not an error
     if (err instanceof DOMException && err.name === 'AbortError') return;
     // eslint-disable-next-line no-console
-    console.error('分享失败:', err);
+    console.error('[ShareDialog] share failed:', err);
   }
 }
 
@@ -252,7 +262,7 @@ function getFormattedContent(): string {
     case ExportFormat.TXT:
       return stripMarkdown(md);
     case ExportFormat.HTML:
-      return wrapHtml(md, props.noteTitle || '未命名笔记');
+      return wrapHtml(md, props.noteTitle || t('common.untitledNote'));
     case ExportFormat.PDF:
       return md;
     default:
@@ -267,12 +277,14 @@ function stripMarkdown(md: string): string {
     .replace(/\*(.+?)\*/g, '$1')
     .replace(/`(.+?)`/g, '$1')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '[图片: $1]');
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, (_match, alt: string) =>
+      t('dialogs.share.imagePlaceholder', { alt }),
+    );
 }
 
 function wrapHtml(md: string, title: string): string {
   return `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="${getCurrentLocale()}">
 <head><meta charset="UTF-8"><title>${escapeHtml(title)}</title>
 <style>
   :root {
@@ -285,7 +297,7 @@ function wrapHtml(md: string, title: string): string {
     --code-bg: oklch(0.96 0.002 85);
     --table-stripe: oklch(0.97 0.002 85);
   }
-  body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;max-width:720px;margin:48px auto;padding:0 24px;line-height:1.8;color:var(--ink-primary)}
+  body{font-family:${getLocaleFontStack()};max-width:720px;margin:48px auto;padding:0 24px;line-height:1.8;color:var(--ink-primary)}
   h1,h2,h3{line-height:1.3;margin:1.5em 0 .5em}
   pre{background:var(--code-block-bg);padding:16px;border-radius:2px;overflow-x:auto;font-size:14px}
   code{font-family:'Fira Code',monospace;font-size:.9em;background:var(--code-bg);padding:2px 6px;border-radius:2px}

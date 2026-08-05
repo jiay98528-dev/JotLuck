@@ -1,0 +1,4 @@
+# 独立工程：不与上层 D:\VibeCoding\MarkLuck monorepo 的工作区合并
+packages: []
+# esbuild 的 postinstall 仅校验/下载平台二进制（optional dep 已带），安全放行
+dangerouslyAllowAllBuilds: true

@@ -1,19 +1,12 @@
-# JotLuck v0.10.0-rc.1 — Release Notes
+# JotLuck v0.11.0 — Signing Candidate Notes
 
-> Date: 2026-07-31
-> This document describes the current unpublished Windows x64 release candidate.
+> Date: 2026-08-05
+> This document describes the current unpublished Windows x64 signing candidate.
 > It is unsigned and is not a stable release.
 
-## ⚠️ Important — This Is a Release Candidate
+## Important — This Is Not Yet a Public Release
 
-JotLuck `v0.10.0-rc.1` is the **first public release candidate**. It is **not** a stable release. The Windows NSIS installer is **unsigned**.
-
-**On first launch**, Windows SmartScreen will show a warning because the binary is not signed. To proceed:
-
-1. Click "More info"
-2. Click "Run anyway"
-
-The unsigned status is a known issue tracked in [`CODE_SIGNING.md`](./CODE_SIGNING.md). Signing is in progress via SignPath Foundation's open-source program. A signed stable build will follow once approval is granted.
+JotLuck `v0.11.0` is an **unsigned signing candidate**. It must not be published or redistributed as a release. The exact Windows NSIS installer must first pass installed-app evidence capture, be submitted through the approved signing service, and have its Authenticode signature and post-sign SHA-256 verified. See [`CODE_SIGNING.md`](./CODE_SIGNING.md).
 
 ## Highlights
 
@@ -26,13 +19,16 @@ The unsigned status is a known issue tracked in [`CODE_SIGNING.md`](./CODE_SIGNI
 - **Offline completion.** Single ghost text suggestion, Tab to accept, fully on-device. Per-notebook and per-workspace learning.
 - **Hot-pluggable theme system.** Default `paper` (warm paper OKLCH layout), capability demo `super-workbench`, plus 8 more built-in themes. Theme API v2 supports local market, `.mltheme` import, preview, install, enable, uninstall, fallback, and persistence.
 - **Windows native desktop.** Tauri 2, Microsoft Edge WebView2, system file dialogs, native file watcher (Rust `notify`).
-- **Multi-window file association.** External `.md` / `.markdown` / `.mdx` files open in a single-file read-only preview. `.txt` remains an in-app note format and is not registered as a system launch format.
+- **Read-only document import.** `.docx`, `.pdf`, `.xlsx`, and `.xls` open in an isolated semantic Markdown preview. The source remains untouched; users can continue in a detected professional editor or save a new Markdown copy for JotLuck editing.
+- **Eight optional Windows associations.** `.md`, `.markdown`, `.mdx`, `.txt`, `.docx`, `.pdf`, `.xlsx`, and `.xls` are registered as optional Open With choices. Installation and upgrade never replace the user's Windows default application.
+- **Explicit first-run choice.** The Welcome screen suggests only Markdown associations. Text, Word, PDF, and Excel remain unchecked, and the Open Notebook gate remains the entry to folder-based editing.
 
 ## Upgrade and Data Notes
 
 - **Notes remain plain text files.** No migration is required. Existing notebooks open as-is.
-- **Windows installer registration covers `.md`, `.markdown`, `.mdx` as optional Open With choices.** JotLuck does **not** replace the user's current default application for any extension. `.txt` is not registered.
+- **Windows installer registration covers `.md`, `.markdown`, `.mdx`, `.txt`, `.docx`, `.pdf`, `.xlsx`, and `.xls` as optional Open With choices.** JotLuck does **not** replace the user's current default application for any extension.
 - **External file opening** uses a single-file read-only session by default. Editing must be explicitly enabled and saves only the current file; the parent directory is not added as a notebook unless the user explicitly opens it.
+- **Imported Office/PDF documents** use a separate read-only session. Their preview is semantic rather than pixel-perfect, PDF OCR is not included, and “Edit Markdown copy” always uses Save As without overwriting the source.
 - **Local completion / training metadata** may refresh automatically but stays on the device.
 - **Image assets remain in notebook `assets/` folders.** Deleting a note does not automatically delete image assets because they may be shared by multiple notes.
 
@@ -40,7 +36,7 @@ The unsigned status is a known issue tracked in [`CODE_SIGNING.md`](./CODE_SIGNI
 
 See [KNOWN_LIMITATIONS.md](./KNOWN_LIMITATIONS.md) for the complete list. Highlights:
 
-- **Unsigned installer** — SmartScreen will warn; see top of these notes.
+- **Unsigned installer** — the signing candidate is not a public download and must not be redistributed.
 - **macOS and Linux packages** have not completed host-specific packaging, signing, or release validation.
 - **Local `.mltheme` / `.zip` imports** are a developer experimental feature. `trusted-code` themes may execute theme author code and take over exposed UX slots. Import only themes from trusted sources.
 - **Cargo audit** reports allowed unsoundness warnings for `lru 0.12.5` and `memmap2 0.9.10` (transitive via tantivy 0.22.1).
@@ -49,20 +45,11 @@ See [KNOWN_LIMITATIONS.md](./KNOWN_LIMITATIONS.md) for the complete list. Highli
 
 ## Verification
 
-- `pnpm.cmd --filter @jotluck/app typecheck` — pass
-- `pnpm.cmd exec eslint packages/app/src packages/renderer/src` — pass
-- `pnpm.cmd --filter @jotluck/app lint:style` — pass
-- `pnpm.cmd --filter @jotluck/app test` — pass, 156/156
-- `pnpm.cmd --filter @jotluck/app build` — pass
-- `pnpm.cmd audit --audit-level high` — pass (low/moderate advisories remain)
-- Chromium E2E — pass
-- Firefox E2E — pass
-- Tauri release build — pass
-- `pnpm.cmd release:rc-gate` — pass
+Release verification is bound to the exact candidate commit and installer artifact, not copied into this document as mutable counters. The signing request requires green source checks, Windows installed-app evidence, an installer hash, an Authenticode verification result, and a post-sign hash.
 
 ## What to Expect Next
 
-- **Code signing** via SignPath Foundation (pending approval). A signed `v0.10.0` stable will follow.
+- **Code signing application** for the exact `v0.11.0` candidate, followed by Authenticode and post-sign hash verification.
 - **macOS / Linux packaging** (TBD).
 - **Public V2S offline completion** (currently fail-closed; will unlock only after passing the cold/workspace-conditioned final gate).
 - **Optional V3** offline semantic short completion (48M–80M dedicated SLM, model + host delta ≤ 96 MiB). This is a research charter only.

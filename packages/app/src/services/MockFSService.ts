@@ -16,6 +16,9 @@ import type {
   UnwatchFn,
 } from '@/types';
 import { isMarkdownLikeFile, isSupportedNoteFile } from '@/utils/note-files';
+import { createLocaleCollator, currentLocale } from '@/i18n';
+import { createCommandError } from './command-errors';
+import { createSampleNotebookSeed } from './SampleSeed';
 
 const STORAGE_KEY = 'jotluck-mockfs';
 const STORAGE_VERSION = 4;
@@ -69,172 +72,40 @@ async function textRevision(content: string): Promise<string> {
     .join('')}`;
 }
 
-function createSampleNotebook(): MockFSData {
+function createLocalizedSampleNotebook(): MockFSData {
   const now = Date.now();
-  const files: Record<string, StoredFile> = {
-    '/快速入门.md': {
-      content: `---
-title: 快速入门
-tags:
-  - 入门
-  - markdown
-created: 2026-06-01
----
+  const seed = createSampleNotebookSeed();
+  const files: Record<string, StoredFile> = {};
+  const directoryEntries = new Map<string, Set<string>>([['/', new Set()]]);
 
-# 欢迎使用 JotLuck
-
-JotLuck 是一款轻量、本地优先、离线可用的 Markdown 笔记工具。每一条笔记都是普通的 .md 文件，文件夹就是笔记本。
-
-## 从这里开始
-
-- 在左侧书签中切换常用笔记。
-- 点击文件抽屉浏览当前文件夹。
-- 使用 Ctrl+K 搜索笔记、标签和正文。
-- 通过 [[格式示例]] 查看常用 Markdown 写法。
-- 关联项目资料：[[项目规划]]。
-- 外部链接示例：[JotLuck GitHub](https://github.com)。
-
-## 文件就是数据
-
-你可以用任意文本编辑器打开这些文件，也可以把文件夹放进 Git、OneDrive 或移动硬盘中同步。
-
-> JotLuck 只增强写作体验，不接管你的数据。
-`,
-      mtime: now,
-      size: 0,
-    },
-    '/格式示例.md': {
-      content: `---
-title: 格式示例
-tags:
-  - markdown
-  - 示例
-created: 2026-06-01
----
-
-# 格式示例
-
-## 文本样式
-
-普通正文、**粗体**、*斜体*、~~删除线~~、\`行内代码\`。
-
-## 列表
-
-- 无序列表
-- 支持嵌套
-  - 子项目
-
-1. 有序列表
-2. 第二项
-
-## 任务
-
-- [x] 打开示例文档
-- [ ] 创建第一条自己的笔记
-- [ ] 试试导出功能
-
-## 引用
-
-> 纯文本是可靠的长期格式。
-
-## 代码块
-
-~~~ts
-function hello(name: string): string {
-  return \`Hello, \${name}\`;
-}
-~~~
-
-## 表格
-
-| 功能 | 状态 |
-| --- | --- |
-| 本地文件 | 支持 |
-| Wiki-link | 支持 |
-| 离线补全 | 支持 |
-
-## 链接
-
-关联到 [[快速入门]]，也可以写外部链接：[Markdown Guide](https://www.markdownguide.org/)。
-`,
-      mtime: now - 60000,
-      size: 0,
-    },
-    '/项目规划.md': {
-      content: `---
-title: 项目规划
-tags:
-  - 规划
-  - 项目
-created: 2026-06-02
----
-
-# 项目规划
-
-## 本周目标
-
-- [x] 整理笔记结构
-- [ ] 写一份会议纪要
-- [ ] 回顾 [[设计笔记]]
-
-## 里程碑
-
-| 阶段 | 目标 |
-| --- | --- |
-| M1 | 建立笔记体系 |
-| M2 | 完成资料归档 |
-| M3 | 输出复盘文档 |
-`,
-      mtime: now - 3600000,
-      size: 0,
-    },
-    '/设计笔记.md': {
-      content: `---
-title: 设计笔记
-tags:
-  - 设计
-  - 写作
-created: 2026-06-03
----
-
-# 设计笔记
-
-JotLuck 的界面应该退到内容之后。文件树、编辑器、预览和大纲是工作结构，不是装饰。
-
-## 原则
-
-- 结构清晰
-- 操作直接
-- 结果可见
-
-参考 [[快速入门]] 和 [[格式示例]]。
-`,
-      mtime: now - 7200000,
-      size: 0,
-    },
-    '/子文件夹/笔记A.md': {
-      content: `# 子文件夹笔记
-
-这是一条放在子文件夹里的笔记。
-
-链接回 [[快速入门]]。
-`,
-      mtime: now - 10800000,
-      size: 0,
-    },
+  const ensureDirectory = (path: string): void => {
+    const normalized = normalizePath(path);
+    if (directoryEntries.has(normalized)) return;
+    const parent = normalized.slice(0, normalized.lastIndexOf('/')) || '/';
+    ensureDirectory(parent);
+    directoryEntries.set(normalized, new Set());
+    directoryEntries.get(parent)?.add(normalized.split('/').pop() ?? '');
   };
 
-  for (const file of Object.values(files)) {
-    file.size = encodeSize(file.content);
-  }
+  seed.files.forEach((seedFile, index) => {
+    const path = normalizePath(seedFile.path);
+    const parent = path.slice(0, path.lastIndexOf('/')) || '/';
+    ensureDirectory(parent);
+    const content = seedFile.content;
+    files[path] = {
+      content,
+      mtime: now - index * 60_000,
+      size: encodeSize(content),
+    };
+    directoryEntries.get(parent)?.add(path.split('/').pop() ?? '');
+  });
 
   return {
     version: STORAGE_VERSION,
     files,
-    dirs: {
-      '/': ['快速入门.md', '格式示例.md', '项目规划.md', '设计笔记.md', '子文件夹'],
-      '/子文件夹': ['笔记A.md'],
-    },
+    dirs: Object.fromEntries(
+      [...directoryEntries.entries()].map(([path, entries]) => [path, [...entries]]),
+    ),
   };
 }
 
@@ -250,10 +121,11 @@ export class MockFSService implements IFileSystemService {
   constructor(latencyMs = DEFAULT_DELAY, options: MockFSServiceOptions = {}) {
     this.latency = latencyMs;
     this.persistToLocalStorage = options.persist ?? false;
-    this.recentNotebooks = options.recentNotebooks ?? ['示例笔记本'];
+    const sampleName = createSampleNotebookSeed().directoryName;
+    this.recentNotebooks = options.recentNotebooks ?? ['/'];
     this.pickerResult =
       options.pickerResult === undefined
-        ? { rootPath: '/', name: '示例笔记本' }
+        ? { rootPath: '/', name: sampleName }
         : options.pickerResult;
     this.pickerError = options.pickerError ?? null;
     this.unavailableNotebookPaths = new Set(options.unavailableNotebookPaths ?? []);
@@ -261,7 +133,7 @@ export class MockFSService implements IFileSystemService {
   }
 
   private load(): MockFSData {
-    if (!this.persistToLocalStorage) return createSampleNotebook();
+    if (!this.persistToLocalStorage) return createLocalizedSampleNotebook();
 
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -274,7 +146,7 @@ export class MockFSService implements IFileSystemService {
       console.error('[MockFSService] localStorage data is invalid, resetting sample notebook:', e);
     }
 
-    const sample = createSampleNotebook();
+    const sample = createLocalizedSampleNotebook();
     this.persist(sample);
     return sample;
   }
@@ -299,7 +171,7 @@ export class MockFSService implements IFileSystemService {
     await delay(this.latency);
     const normalized = normalizePath(path);
     const file = this.data.files[normalized];
-    if (!file) throw new Error(`文件不存在: ${normalized}`);
+    if (!file) throw createCommandError('not_found', undefined, normalized);
     return file.content;
   }
 
@@ -324,7 +196,7 @@ export class MockFSService implements IFileSystemService {
     await delay(this.latency);
     const normalized = normalizePath(path);
     const file = this.data.files[normalized];
-    if (!file) throw new Error(`文件不存在: ${normalized}`);
+    if (!file) throw createCommandError('not_found', undefined, normalized);
     const content = file.content;
     return { content, revision: await textRevision(content) };
   }
@@ -407,11 +279,11 @@ export class MockFSService implements IFileSystemService {
     const oldNormalized = normalizePath(oldPath);
     const newNormalized = normalizePath(newPath);
     const file = this.data.files[oldNormalized];
-    if (!file) throw new Error(`文件不存在: ${oldNormalized}`);
+    if (!file) throw createCommandError('not_found', undefined, oldNormalized);
 
     if (oldNormalized === newNormalized) return;
     if (this.data.files[newNormalized] || this.data.dirs[newNormalized]) {
-      throw new Error(`目标路径已存在: ${newNormalized}`);
+      throw createCommandError('already_exists', undefined, newNormalized);
     }
 
     delete this.data.files[oldNormalized];
@@ -472,7 +344,7 @@ export class MockFSService implements IFileSystemService {
       })
       .sort((a, b) => {
         if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-        return a.name.localeCompare(b.name, 'zh-CN');
+        return createLocaleCollator({}, currentLocale.value).compare(a.name, b.name);
       });
   }
 
@@ -481,7 +353,7 @@ export class MockFSService implements IFileSystemService {
     const normalized = normalizePath(path);
     const file = this.data.files[normalized];
     const isDirectory = normalized in this.data.dirs;
-    if (!file && !isDirectory) throw new Error(`路径不存在: ${normalized}`);
+    if (!file && !isDirectory) throw createCommandError('not_found', undefined, normalized);
     return {
       path: normalized,
       size: file?.size ?? 0,
@@ -514,7 +386,8 @@ export class MockFSService implements IFileSystemService {
 
   async selectNotebook(): Promise<NotebookHandle | null> {
     await delay(this.latency);
-    if (this.pickerError) throw new Error(this.pickerError);
+    if (this.pickerError)
+      throw createCommandError('permission_denied', undefined, this.pickerError);
     return this.pickerResult ? { ...this.pickerResult } : null;
   }
 
@@ -526,9 +399,17 @@ export class MockFSService implements IFileSystemService {
   async openNotebookAt(path: string): Promise<NotebookHandle> {
     await delay(this.latency);
     if (this.unavailableNotebookPaths.has(path)) {
-      throw new Error(`笔记本不可用: ${path}`);
+      throw createCommandError('not_found', undefined, path);
     }
-    return { rootPath: '/', name: '示例笔记本' };
+    const rootPath = path || '/';
+    const name =
+      rootPath === '/'
+        ? createSampleNotebookSeed().directoryName
+        : (rootPath
+            .replace(/[\\/]+$/u, '')
+            .split(/[\\/]/u)
+            .pop() ?? rootPath);
+    return { rootPath, name };
   }
 
   async getRecentNotebooks(): Promise<string[]> {

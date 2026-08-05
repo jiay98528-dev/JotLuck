@@ -18,8 +18,8 @@
           <button
             v-if="t.closable"
             class="toast-close"
-            :aria-label="'关闭通知：' + t.message"
-            title="关闭"
+            :aria-label="tr('common.closeNotification', { message: t.message })"
+            :title="tr('common.close')"
             @click="dismissToast(t.id)"
           >
             &times;
@@ -129,6 +129,7 @@ export function useToast(): ToastAPI {
  * can call `useToast()` regardless of component hierarchy.
  */
 import { onBeforeUnmount } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 withDefaults(
   defineProps<{
@@ -145,6 +146,8 @@ const emit = defineEmits<{
   close: [toastId: number];
   action: [toastId: number, toast: ToastItem];
 }>();
+
+const { t: tr } = useI18n();
 
 const defaultIcons: Record<ToastType, string> = {
   info: 'ℹ',

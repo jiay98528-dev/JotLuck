@@ -28,6 +28,7 @@ import {
 } from '@jotluck/renderer';
 import type { RendererOptions } from '@jotluck/renderer';
 import DOMPurify from 'dompurify';
+import { translate } from '@/i18n';
 import { normalizeUrl } from '@/utils/urlUtils';
 
 // ---- HTML 转义 ----
@@ -643,7 +644,10 @@ function renderBlockHtml(
         // CSS ::before pseudo-elements + adjacent selectors connect them visually.
         const raw = renderBlock(block.raw, block.type, refDefs, options);
         const checked = /^\s*[-*+]\s+\[[xX]\]\s/.test(block.raw);
-        const toggle = `<input type="checkbox" class="cm-task-toggle" aria-label="${checked ? '标记为未完成' : '标记为完成'}" ${checked ? 'checked ' : ''}/>`;
+        const toggleLabel = checked
+          ? translate('program.taskIncomplete')
+          : translate('program.taskComplete');
+        const toggle = `<input type="checkbox" class="cm-task-toggle" aria-label="${escapeAttr(toggleLabel)}" ${checked ? 'checked ' : ''}/>`;
         const inner = raw
           .replace(/<\/?ul>\n?/g, '')
           .replace(/<\/?li>/g, '')
@@ -1370,11 +1374,11 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         for (const [, warn] of unclosedWarnings) {
           const label =
             warn.type === 'codeFenceLine'
-              ? ' 代码块缺少结束标记，在行首输入 ``` 闭合'
+              ? ` ${translate('program.unclosedCode')}`
               : warn.type === 'frontmatterLine'
-                ? ' 开头信息缺少结束标记，在行首输入 --- 闭合'
+                ? ` ${translate('program.unclosedFrontmatter')}`
                 : warn.type === 'tableRow'
-                  ? ' 表格缺少分隔行，请在第二行输入 |---| 定义列'
+                  ? ` ${translate('program.tableSeparator')}`
                   : '';
           if (!label) continue;
           decos.push(

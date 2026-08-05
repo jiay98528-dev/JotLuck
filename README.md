@@ -36,9 +36,9 @@ It opens and renders Markdown in seconds, beautifully. Read-only preview or full
 
 For everyone who works with text, and everyone who works with AI.
 
-Current status: `v0.10.0-rc.1`, a Windows release candidate. Tested, usable, unsigned.
+Current status: `v0.11.0`, an unpublished, unsigned signing candidate for Windows x64. It is not a public release until the exact installer is signed and the signature is verified.
 
-> **Download notice:** Official installers appear only on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases). Nothing is there yet, and `v0.10.0-rc.1` is unsigned. Please don't download JotLuck from anywhere else.
+> **Download notice:** Official installers appear only on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases). Nothing is there yet, and the `v0.11.0` signing candidate must not be redistributed before signing. Please don't download JotLuck from anywhere else.
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck workspace with recent notes, a Markdown editor, outline, and backlinks">
@@ -60,15 +60,16 @@ Every note is an ordinary file: `.md`, `.markdown`, `.mdx`, or `.txt`. Any edito
 
 ## Get started in three steps
 
-1. **Get the app.** The first public installer lands on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases) — the only official source. Developers can build from source below.
-2. **Open a folder.** Any folder. It becomes your notebook. `Ctrl/Cmd+O` switches anytime.
-3. **Start writing.** Notes save as you type, straight into that folder.
+1. **Get the app.** The first signed public installer lands on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases) — the only official source. Developers can build from source below.
+2. **Choose file opening on the Welcome screen.** Markdown is suggested; text, Word, PDF, and Excel remain unchecked. Windows applies only the choices you confirm in Default Apps.
+3. **Open a folder.** The Open Notebook gate turns any folder into a notebook. `Ctrl/Cmd+O` switches anytime, and notes save directly into that folder.
 
-The installer offers `.md`, `.markdown`, `.mdx`, and `.txt` as optional "Open with" choices. Your defaults stay untouched.
+The installer registers `.md`, `.markdown`, `.mdx`, `.txt`, `.docx`, `.pdf`, `.xlsx`, and `.xls` as optional Open With choices. Installation and upgrade never replace a Windows default application.
 
 ## What it's like to write in JotLuck
 
 - **Instant from the first second.** Double-click a Markdown file and read it beautifully rendered. Editing is optional; the workspace is yours to arrange.
+- **Bring documents without locking them in.** Open `.docx`, `.pdf`, `.xlsx`, or `.xls` in a read-only semantic preview, continue in the detected professional editor, or save a new Markdown copy for editing in JotLuck. The source document is never overwritten.
 - **A focused editor.** CodeMirror 6, Live Preview, block-level editing, keyboard-first.
 - **Notes that know each other.** `[[Wiki-links]]`, aliases, backlinks, tags, outlines.
 - **Find anything.** Local search by keyword, regex, tag, date, or folder.
@@ -92,15 +93,16 @@ See the full [Privacy Policy](./PRIVACY.md) and the identity and integrity proce
 
 ## Current release scope
 
-| Item              | Current scope                                                                      |
-| ----------------- | ---------------------------------------------------------------------------------- |
-| Current version   | `v0.10.0-rc.1`                                                                     |
-| Release stage     | Release candidate; not a stable release                                            |
-| Verified platform | Windows x64                                                                        |
-| Desktop runtime   | Tauri 2 and Microsoft Edge WebView2                                                |
-| Note formats      | `.md`, `.markdown`, `.mdx`, `.txt`                                                 |
-| File associations | All four extensions are optional Open With choices; no Windows default is replaced |
-| License           | MIT                                                                                |
+| Item                     | Current scope                                                                                                                 |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| Current version          | `v0.11.0`                                                                                                                     |
+| Release stage            | Unpublished, unsigned signing candidate; not a stable release                                                                 |
+| Candidate platform       | Windows x64                                                                                                                   |
+| Desktop runtime          | Tauri 2 and Microsoft Edge WebView2                                                                                           |
+| Editable note formats    | `.md`, `.markdown`, `.mdx`, `.txt`                                                                                            |
+| Read-only import formats | `.docx`, `.pdf`, `.xlsx`, `.xls`; semantic Markdown preview, not pixel-perfect Office/PDF layout                              |
+| File associations        | All eight extensions are optional Open With choices; installation and upgrade never replace the user's Windows default choice |
+| License                  | MIT                                                                                                                           |
 
 macOS and Linux packages have not completed host-specific packaging, signing, and release validation. Read [Known Limitations](./KNOWN_LIMITATIONS.md) and the notes attached to each release before installing.
 
@@ -149,7 +151,7 @@ Point JotLuck at it and start reading. Keep a backup first.
 
 - Node.js 20+
 - pnpm 9+; the repository currently pins pnpm 11.x
-- Rust 1.77.2+ for desktop development and packaging
+- Rust 1.88+ for desktop development and packaging
 - Tauri and WebView2 build dependencies on Windows
 
 ### Start the web development build

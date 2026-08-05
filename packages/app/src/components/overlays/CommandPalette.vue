@@ -10,7 +10,7 @@
         @click.self="close"
         @keydown="handleKeydown"
       >
-        <div class="palette" role="dialog" aria-label="命令面板" aria-modal="true">
+        <div class="palette" role="dialog" :aria-label="t('command.aria')" aria-modal="true">
           <!-- ===== Search Input ===== -->
           <div class="palette-search">
             <svg
@@ -32,7 +32,7 @@
               class="search-input"
               type="text"
               :placeholder="searchPlaceholder"
-              aria-label="搜索笔记"
+              :aria-label="t('command.searchAria')"
               autocomplete="off"
               spellcheck="false"
               @input="onQueryChange"
@@ -41,7 +41,12 @@
           </div>
 
           <!-- ===== Results List ===== -->
-          <div ref="resultsListRef" class="palette-results" role="listbox" aria-label="搜索结果">
+          <div
+            ref="resultsListRef"
+            class="palette-results"
+            role="listbox"
+            :aria-label="t('command.resultsAria')"
+          >
             <button
               v-for="(result, index) in displayResults"
               :key="result.notePath"
@@ -72,7 +77,7 @@
             <!-- Empty State -->
             <div v-if="query.length > 0 && displayResults.length === 0" class="no-results">
               <span class="no-results-icon">--</span>
-              <span>无匹配结果</span>
+              <span>{{ t('command.noMatch') }}</span>
             </div>
           </div>
 
@@ -82,7 +87,7 @@
             <div class="quick-actions">
               <button
                 class="quick-action-btn"
-                title="新建笔记 (Ctrl+N)"
+                :title="t('command.newNoteTitle')"
                 @click="$emit('quick-action', 'new-note')"
               >
                 <svg
@@ -97,11 +102,11 @@
                   <line x1="12" y1="5" x2="12" y2="19" stroke-linecap="round" />
                   <line x1="5" y1="12" x2="19" y2="12" stroke-linecap="round" />
                 </svg>
-                <span>新建笔记</span>
+                <span>{{ t('command.newNote') }}</span>
               </button>
               <button
                 class="quick-action-btn"
-                title="导出当前笔记"
+                :title="t('command.exportCurrentTitle')"
                 @click="$emit('quick-action', 'export')"
               >
                 <svg
@@ -125,11 +130,11 @@
                   />
                   <line x1="12" y1="15" x2="12" y2="3" stroke-linecap="round" />
                 </svg>
-                <span>导出当前</span>
+                <span>{{ t('command.exportCurrent') }}</span>
               </button>
               <button
                 class="quick-action-btn"
-                title="设置"
+                :title="t('command.settings')"
                 @click="$emit('quick-action', 'settings')"
               >
                 <svg
@@ -146,7 +151,7 @@
                     d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
                   />
                 </svg>
-                <span>设置</span>
+                <span>{{ t('command.settings') }}</span>
               </button>
             </div>
           </div>
@@ -171,6 +176,7 @@ import { useSearch } from '@/composables/useSearch';
 import type { SearchResult } from '@/types';
 import DOMPurify from 'dompurify';
 import { useDialogFocus } from '@/composables/useDialogFocus';
+import { useI18n } from 'vue-i18n';
 
 // ============================================================
 // Props & Emits
@@ -179,6 +185,7 @@ import { useDialogFocus } from '@/composables/useDialogFocus';
 const props = defineProps<{
   visible: boolean;
 }>();
+const { t } = useI18n();
 
 const emit = defineEmits<{
   'update:visible': [value: boolean];
@@ -221,11 +228,11 @@ const displayResults = computed<SearchResult[]>(() => {
 
 const resultCountLabel = computed(() => {
   const total = searchStore.results.length;
-  if (total === 0) return '无结果';
-  return `${total} 条结果`;
+  if (total === 0) return t('command.noResults');
+  return t('command.resultCount', { count: total });
 });
 
-const searchPlaceholder = '搜索笔记... (支持 tag:xxx /regex/ date:YYYY-MM..YYYY-MM)';
+const searchPlaceholder = computed(() => t('command.placeholder'));
 
 // ============================================================
 // Methods

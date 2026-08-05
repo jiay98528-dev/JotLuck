@@ -1,5 +1,5 @@
 <template>
-  <nav class="breadcrumb" aria-label="文件路径导航">
+  <nav class="breadcrumb" :aria-label="t('shell.breadcrumb')">
     <button
       v-for="(seg, i) in segments"
       :key="seg.path"
@@ -22,6 +22,9 @@
  * @see milestones.md M1-14 (FileTree 增强)
  */
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   currentDir: string;

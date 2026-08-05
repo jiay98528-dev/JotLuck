@@ -4,6 +4,8 @@ type MockNotebookConfig = NonNullable<Window['__jotluck_e2e']>['mockNotebook'];
 
 async function openWithMockNotebook(page: Page, config: MockNotebookConfig): Promise<void> {
   await page.addInitScript((mockNotebook) => {
+    localStorage.setItem('jotluck:welcome:completed', '1');
+    localStorage.setItem('jotluck:locale:v1', 'zh-CN');
     window.__jotluck_e2e = { mockNotebook };
   }, config);
   await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -52,9 +54,9 @@ test.describe('workspace open gate', () => {
     });
 
     await page.getByTestId('open-notebook-button').click();
-    await expect(page.getByTestId('notebook-open-gate').getByRole('alert')).toContainText(
-      '该文件夹不可读',
-    );
+    const alert = page.getByTestId('notebook-open-gate').getByRole('alert');
+    await expect(alert).toContainText('没有访问权限');
+    await expect(alert).not.toContainText('该文件夹不可读');
     await expect(page.getByTestId('open-notebook-button')).toBeEnabled();
   });
 
@@ -119,7 +121,10 @@ test.describe('workspace open gate', () => {
     await expect(page.locator('.split-pane .cm-content')).toBeVisible();
     await page.keyboard.press('Control+o');
     await expect
-      .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().isNotebookOpening))
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().isNotebookOpening), {
+        intervals: [10, 10, 20],
+        timeout: 2000,
+      })
       .toBe(true);
     await page.evaluate((content) => window.__jotluck_e2e?.editor?.setContent(content), lateMarker);
 

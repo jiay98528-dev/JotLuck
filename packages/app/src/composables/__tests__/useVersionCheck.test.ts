@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { APP_VERSION } from '@/config/app-meta';
+import { translate } from '@/i18n';
 
 const nextMajorVersion = `${Number(APP_VERSION.split('.')[0]) + 1}.0.0`;
 
@@ -50,6 +51,7 @@ describe('useVersionCheck', () => {
 
     expect(versionCheck.hasUpdate.value).toBe(false);
     expect(versionCheck.latestVersion.value).toBe('');
-    expect(versionCheck.error.value).toContain('invalid release tag');
+    expect(versionCheck.error.value).toBe(translate('settings.updates.failed'));
+    expect(versionCheck.error.value).not.toContain('invalid release tag');
   });
 });

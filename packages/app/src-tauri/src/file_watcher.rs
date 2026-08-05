@@ -4,6 +4,7 @@
 // events to the frontend. The watcher is a replaceable singleton so switching
 // notebooks does not leak OS watcher handles.
 
+use crate::command_error::CommandResult;
 use crate::fs_ops::{ExternalAccessGrants, NotebookRoot};
 use crate::window_session::WindowSessionRegistry;
 use notify::event::{CreateKind, ModifyKind, RemoveKind, RenameMode};
@@ -411,14 +412,14 @@ pub fn start_file_watcher(
     notebook_root: State<'_, NotebookRoot>,
     _external_grants: State<'_, ExternalAccessGrants>,
     sessions: State<'_, WindowSessionRegistry>,
-) -> Result<u64, String> {
+) -> CommandResult<u64> {
     sessions.assert_workspace(window.label())?;
     let (canonical, notebook_allowed, external_allowed) = if access_token.is_some() {
-        return Err("external file windows cannot start directory watchers".to_string());
+        return Err("external file windows cannot start directory watchers".into());
     } else {
         let path = PathBuf::from(&root_path);
         if !path.exists() || !path.is_dir() {
-            return Err(format!("invalid watcher root path: {root_path}"));
+            return Err(format!("invalid watcher root path: {root_path}").into());
         }
         let canonical = path
             .canonicalize()
@@ -431,9 +432,7 @@ pub fn start_file_watcher(
         (canonical, notebook_allowed, false)
     };
     if !notebook_allowed && !external_allowed {
-        return Err(
-            "watcher root is not an active notebook or authorized external root".to_string(),
-        );
+        return Err("watcher root is not an active notebook or authorized external root".into());
     }
     // Stop and join the previous OS watcher before creating the replacement.
     // This prevents overlapping roots from racing events during a notebook switch.
@@ -453,7 +452,7 @@ pub fn start_file_watcher(
 pub fn stop_file_watcher(
     window: WebviewWindow,
     state: State<'_, FileWatcherState>,
-) -> Result<(), String> {
+) -> CommandResult<()> {
     let _ = state.stop_for(window.label())?;
     Ok(())
 }

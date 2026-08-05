@@ -1,9 +1,118 @@
+use crate::command_error::CommandResult;
 use crate::fs_ops::{ExternalAccessGrants, ExternalFileHandle, NotebookRoot};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::UNIX_EPOCH;
 use tauri::{State, WebviewWindow};
+
+pub const MAX_IMPORTED_SOURCE_BYTES: u64 = 200 * 1024 * 1024;
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ImportedDocumentKind {
+    Docx,
+    Pdf,
+    Xlsx,
+    Xls,
+}
+
+impl ImportedDocumentKind {
+    pub fn from_path(path: &Path) -> Option<Self> {
+        match path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_ascii_lowercase())
+            .as_deref()
+        {
+            Some("docx") => Some(Self::Docx),
+            Some("pdf") => Some(Self::Pdf),
+            Some("xlsx") => Some(Self::Xlsx),
+            Some("xls") => Some(Self::Xls),
+            _ => None,
+        }
+    }
+
+    pub fn extension(self) -> &'static str {
+        match self {
+            Self::Docx => "docx",
+            Self::Pdf => "pdf",
+            Self::Xlsx => "xlsx",
+            Self::Xls => "xls",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceRevision {
+    pub sha256: String,
+    pub size: u64,
+    pub modified_at_ms: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentImportBootstrapSource {
+    pub file_name: String,
+    pub kind: ImportedDocumentKind,
+    pub revision: SourceRevision,
+}
+
+#[derive(Clone, Debug)]
+pub struct DocumentImportSource {
+    pub absolute_path: PathBuf,
+    pub file_name: String,
+    pub kind: ImportedDocumentKind,
+    pub revision: SourceRevision,
+}
+
+pub fn source_revision(path: &Path) -> Result<SourceRevision, String> {
+    let mut file =
+        File::open(path).map_err(|error| format!("unable to open source file: {error}"))?;
+    let metadata = file
+        .metadata()
+        .map_err(|error| format!("unable to read source metadata: {error}"))?;
+    if !metadata.is_file() {
+        return Err("document import source is not a regular file".to_string());
+    }
+    if metadata.len() > MAX_IMPORTED_SOURCE_BYTES {
+        return Err(format!(
+            "document import source exceeds the 200 MiB limit ({:.1} MiB)",
+            metadata.len() as f64 / (1024.0 * 1024.0)
+        ));
+    }
+    let mut digest = Sha256::new();
+    // This function runs during desktop bootstrap on the Windows GUI thread, whose
+    // default stack is too small for a 1 MiB local array. Keep the bounded read
+    // buffer on the heap so importing a document cannot terminate the process with
+    // STATUS_STACK_OVERFLOW before the reader is shown.
+    let mut buffer = vec![0_u8; 1024 * 1024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .map_err(|error| format!("unable to read source file: {error}"))?;
+        if read == 0 {
+            break;
+        }
+        digest.update(&buffer[..read]);
+    }
+    let modified_at_ms = metadata
+        .modified()
+        .ok()
+        .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+        .map(|value| value.as_millis().min(u64::MAX as u128) as u64)
+        .unwrap_or_default();
+    Ok(SourceRevision {
+        sha256: format!("{:x}", digest.finalize()),
+        size: metadata.len(),
+        modified_at_ms,
+    })
+}
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,12 +150,16 @@ pub enum WindowBootstrapPayload {
         #[serde(rename = "openedFile")]
         opened_file: ExternalOpenedFile,
     },
+    DocumentImportReadonly {
+        source: DocumentImportBootstrapSource,
+    },
 }
 
 #[derive(Clone, Debug)]
 struct WindowSession {
     payload: WindowBootstrapPayload,
     path_key: Option<String>,
+    document_source: Option<DocumentImportSource>,
 }
 
 #[derive(Default)]
@@ -76,6 +189,7 @@ impl WindowSessionRegistry {
                     initial_relative_path: None,
                 },
                 path_key: None,
+                document_source: None,
             });
     }
 
@@ -106,6 +220,53 @@ impl WindowSessionRegistry {
                     opened_file: handle.into(),
                 },
                 path_key: Some(path_key),
+                document_source: None,
+            },
+        );
+        Ok(())
+    }
+
+    pub fn register_document_import(&self, window_label: &str, path: &Path) -> Result<(), String> {
+        let absolute_path = canonicalize_opened_file(path)?;
+        let kind = ImportedDocumentKind::from_path(&absolute_path)
+            .ok_or_else(|| "unsupported document import extension".to_string())?;
+        let revision = source_revision(&absolute_path)?;
+        let file_name = absolute_path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| "document import file name is not valid Unicode".to_string())?
+            .to_string();
+        let path_key = canonical_path_key(&absolute_path)?;
+        let source = DocumentImportSource {
+            absolute_path,
+            file_name: file_name.clone(),
+            kind,
+            revision: revision.clone(),
+        };
+        let mut state = self
+            .0
+            .lock()
+            .map_err(|_| "window session registry lock poisoned".to_string())?;
+        if let Some(existing) = state.labels_by_path.get(&path_key) {
+            if existing != window_label {
+                return Err(format!("document is already open in window {existing}"));
+            }
+        }
+        state
+            .labels_by_path
+            .insert(path_key.clone(), window_label.to_string());
+        state.sessions.insert(
+            window_label.to_string(),
+            WindowSession {
+                payload: WindowBootstrapPayload::DocumentImportReadonly {
+                    source: DocumentImportBootstrapSource {
+                        file_name,
+                        kind,
+                        revision,
+                    },
+                },
+                path_key: Some(path_key),
+                document_source: Some(source),
             },
         );
         Ok(())
@@ -148,6 +309,9 @@ impl WindowSessionRegistry {
             | WindowBootstrapPayload::ExternalEdit { opened_file } => opened_file.clone(),
             WindowBootstrapPayload::Workspace { .. } => {
                 return Err("workspace window is not an external-file session".to_string())
+            }
+            WindowBootstrapPayload::DocumentImportReadonly { .. } => {
+                return Err("imported documents cannot be edited in place by JotLuck".to_string())
             }
         };
         session.payload = WindowBootstrapPayload::ExternalEdit { opened_file };
@@ -213,6 +377,9 @@ impl WindowSessionRegistry {
             WindowBootstrapPayload::ExternalReadonly { .. } => {
                 Err("read-only external files cannot be saved as a copy".to_string())
             }
+            WindowBootstrapPayload::DocumentImportReadonly { .. } => {
+                Err("document imports must use save_converted_document_as".to_string())
+            }
         }
     }
 
@@ -231,7 +398,98 @@ impl WindowSessionRegistry {
             WindowBootstrapPayload::Workspace { .. } => {
                 Err("workspace window is not an external-file session".to_string())
             }
+            WindowBootstrapPayload::DocumentImportReadonly { .. } => {
+                Err("document imports do not expose external note grants".to_string())
+            }
         }
+    }
+
+    pub fn document_source_for(&self, window_label: &str) -> Result<DocumentImportSource, String> {
+        let state = self
+            .0
+            .lock()
+            .map_err(|_| "window session registry lock poisoned".to_string())?;
+        let session = state
+            .sessions
+            .get(window_label)
+            .ok_or_else(|| "window has no startup session".to_string())?;
+        if !matches!(
+            session.payload,
+            WindowBootstrapPayload::DocumentImportReadonly { .. }
+        ) {
+            return Err("window is not a document import session".to_string());
+        }
+        session
+            .document_source
+            .clone()
+            .ok_or_else(|| "document import source authorization is unavailable".to_string())
+    }
+
+    pub fn update_document_revision(
+        &self,
+        window_label: &str,
+        revision: SourceRevision,
+    ) -> Result<(), String> {
+        let mut state = self
+            .0
+            .lock()
+            .map_err(|_| "window session registry lock poisoned".to_string())?;
+        let session = state
+            .sessions
+            .get_mut(window_label)
+            .ok_or_else(|| "window has no startup session".to_string())?;
+        let source = session
+            .document_source
+            .as_mut()
+            .ok_or_else(|| "window is not a document import session".to_string())?;
+        source.revision = revision.clone();
+        session.payload = WindowBootstrapPayload::DocumentImportReadonly {
+            source: DocumentImportBootstrapSource {
+                file_name: source.file_name.clone(),
+                kind: source.kind,
+                revision,
+            },
+        };
+        Ok(())
+    }
+
+    pub fn replace_document_with_external_edit(
+        &self,
+        window_label: &str,
+        handle: ExternalFileHandle,
+    ) -> Result<(), String> {
+        let new_key = canonical_path_key(Path::new(&handle.absolute_path))?;
+        let mut state = self
+            .0
+            .lock()
+            .map_err(|_| "window session registry lock poisoned".to_string())?;
+        let old_key = state
+            .sessions
+            .get(window_label)
+            .and_then(|session| session.path_key.clone())
+            .ok_or_else(|| "window is not a document import session".to_string())?;
+        if let Some(existing) = state.labels_by_path.get(&new_key) {
+            if existing != window_label {
+                return Err(format!(
+                    "saved Markdown file is already open in window {existing}"
+                ));
+            }
+        }
+        state.labels_by_path.remove(&old_key);
+        state
+            .labels_by_path
+            .insert(new_key.clone(), window_label.to_string());
+        state.sessions.insert(
+            window_label.to_string(),
+            WindowSession {
+                payload: WindowBootstrapPayload::ExternalEdit {
+                    opened_file: handle.into(),
+                },
+                path_key: Some(new_key),
+                document_source: None,
+            },
+        );
+        Ok(())
     }
 
     pub fn promote_external<T>(
@@ -252,6 +510,9 @@ impl WindowSessionRegistry {
             | WindowBootstrapPayload::ExternalEdit { opened_file } => opened_file.clone(),
             WindowBootstrapPayload::Workspace { .. } => {
                 return Err("workspace window is not an external-file session".to_string())
+            }
+            WindowBootstrapPayload::DocumentImportReadonly { .. } => {
+                return Err("document imports cannot be promoted to notebooks".to_string())
             }
         };
         let promoted = promote_grant(&opened_file)?;
@@ -295,7 +556,7 @@ pub fn enable_external_edit(
     window: WebviewWindow,
     sessions: State<'_, WindowSessionRegistry>,
     access: State<'_, ExternalAccessGrants>,
-) -> Result<(), String> {
+) -> CommandResult<()> {
     let opened_file = sessions.external_file_for(window.label())?;
     access.enable_file_write(
         &opened_file.access_token,
@@ -304,7 +565,7 @@ pub fn enable_external_edit(
     )?;
     if let Err(error) = sessions.enable_external_edit(window.label()) {
         access.disable_file_write(&opened_file.access_token);
-        return Err(error);
+        return Err(error.into());
     }
     Ok(())
 }
@@ -315,7 +576,7 @@ pub fn promote_external_file_to_notebook(
     sessions: State<'_, WindowSessionRegistry>,
     access: State<'_, ExternalAccessGrants>,
     notebook_root: State<'_, NotebookRoot>,
-) -> Result<PromotedNotebookPayload, String> {
+) -> CommandResult<PromotedNotebookPayload> {
     let snapshot = sessions.external_file_for(window.label())?;
     access.assert_owner(&snapshot.access_token, window.label())?;
     let prepared = access.prepare_notebook_promotion(&snapshot.access_token, window.label())?;
@@ -482,6 +743,79 @@ mod tests {
             registry.label_for_path(&second).unwrap().as_deref(),
             Some("second-window")
         );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn document_import_session_exposes_no_note_grant_and_transitions_only_after_save() {
+        let root =
+            std::env::temp_dir().join(format!("JotLuck-document-session-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("report.docx");
+        let saved = root.join("report.md");
+        std::fs::write(&source, b"read-only source bytes").unwrap();
+        std::fs::write(&saved, b"# Converted").unwrap();
+
+        let registry = WindowSessionRegistry::new();
+        registry
+            .register_document_import("document-window", &source)
+            .unwrap();
+        assert!(registry
+            .register_document_import("other-window", &source)
+            .is_err());
+
+        let payload = serde_json::to_value(registry.payload_for("document-window")).unwrap();
+        assert_eq!(payload["mode"], "document-import-readonly");
+        assert_eq!(payload["source"]["fileName"], "report.docx");
+        assert!(payload["source"].get("absolutePath").is_none());
+        assert!(registry.external_file_for("document-window").is_err());
+        assert!(registry.enable_external_edit("document-window").is_err());
+        assert!(registry.assert_save_as_allowed("document-window").is_err());
+        assert!(registry
+            .promote_external::<()>("document-window", |_| Ok(()))
+            .is_err());
+        assert!(registry.document_source_for("other-window").is_err());
+
+        let access = ExternalAccessGrants::new();
+        let saved_handle = access
+            .grant_for_saved_file(&saved.to_string_lossy(), "document-window")
+            .unwrap();
+        registry
+            .replace_document_with_external_edit("document-window", saved_handle.clone())
+            .unwrap();
+        assert!(registry.document_source_for("document-window").is_err());
+        assert!(registry
+            .assert_external_edit("document-window", &saved_handle.access_token)
+            .is_ok());
+        assert!(registry.label_for_path(&source).unwrap().is_none());
+        assert_eq!(
+            registry.label_for_path(&saved).unwrap().as_deref(),
+            Some("document-window")
+        );
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn document_source_hashing_is_safe_on_a_small_gui_style_stack() {
+        let root =
+            std::env::temp_dir().join(format!("JotLuck-source-hash-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("report.pdf");
+        std::fs::write(&source, vec![0x5a; 1024 * 1024 + 17]).unwrap();
+        let source_for_thread = source.clone();
+
+        let revision = std::thread::Builder::new()
+            .name("gui-stack-source-hash".to_string())
+            .stack_size(512 * 1024)
+            .spawn(move || source_revision(&source_for_thread))
+            .unwrap()
+            .join()
+            .expect("source hashing must not overflow a GUI-sized stack")
+            .unwrap();
+
+        assert_eq!(revision.size, 1024 * 1024 + 17);
+        assert_eq!(revision.sha256.len(), 64);
         std::fs::remove_dir_all(root).unwrap();
     }
 

@@ -199,6 +199,7 @@ test.describe('M-R3 responsive, accessibility, and visual release gates', () => 
 
     await page.locator('.wing-settings-btn').click();
     const settingsDialog = page.locator('.modal-card[role="dialog"]');
+    await settingsDialog.getByRole('button', { name: '编辑器', exact: true }).click();
     const settingsSwitches = settingsDialog.getByRole('switch');
     await expect(settingsSwitches.first()).toBeVisible();
     await assertMinimumTouchTargets(settingsSwitches);
@@ -229,6 +230,7 @@ test.describe('M-R3 responsive, accessibility, and visual release gates', () => 
     await page.locator('.wing-settings-btn').click();
     const mobileSettingsDialog = page.locator('.modal-card[role="dialog"]');
     await expect(mobileSettingsDialog).toBeVisible();
+    await mobileSettingsDialog.getByRole('button', { name: '编辑器', exact: true }).click();
     await assertMinimumTouchTargets(mobileSettingsDialog.getByRole('switch'));
     await page.keyboard.press('Escape');
     await expect(mobileSettingsDialog).toHaveCount(0);
