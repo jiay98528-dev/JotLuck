@@ -6,9 +6,22 @@ import type { SiteContent } from './types';
  */
 export const zh: SiteContent = {
   meta: {
-    title: 'JotLuck — 落字为安',
+    title: 'JotLuck — 落字为安 · 本地优先 Markdown 笔记',
     description:
       '一款轻量、本地优先、离线可用的 Markdown 笔记工具。每一条笔记都是纯文本文件，文件夹即笔记本。',
+    pageTitles: {
+      download: '下载 · JotLuck — 本地优先 Markdown 笔记（Windows）',
+      themes: '主题 · JotLuck — 本地优先 Markdown 笔记',
+      studio: '工作室 · JotLuck — 本地优先 Markdown 笔记',
+    },
+    pageDescriptions: {
+      download:
+        '下载 JotLuck Windows x64 版。本地优先、离线可用的 Markdown 笔记工具：每条笔记都是纯文本文件，文件夹即笔记本。首个公开版本 2026 年 8 月 15 日发布。',
+      themes:
+        'JotLuck 工作区主题：Paper 纸、Halo Canvas、Lumen Field 三套主题，重新塑造写作区本身——主题不只是换一层颜色。',
+      studio:
+        'LeankomStudio 是鸰湖科技的产品工作室。让想法越过类型，找到最适合它的形状——JotLuck 本地 Markdown 笔记是我们向外展开的第一页。',
+    },
   },
   localeName: '中文',
   header: {
@@ -123,7 +136,7 @@ export const zh: SiteContent = {
     },
     sampleNote: {
       title: '主题示例笔记',
-      intro: 'MarkLuck 保持纯文本文件的自由，同时提供实时预览、反链和标签整理。',
+      intro: 'JotLuck 保持纯文本文件的自由，同时提供实时预览、反链和标签整理。',
       section: '今日整理',
       bullets: [
         '打开本地文件夹后，笔记会自动进入最近列表',

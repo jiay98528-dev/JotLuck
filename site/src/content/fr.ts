@@ -6,9 +6,22 @@ import type { SiteContent } from './types';
  */
 export const fr: SiteContent = {
   meta: {
-    title: 'JotLuck — Posez les mots, en confiance',
+    title: "JotLuck — Écrire en paix · Notes Markdown, local d'abord",
     description:
       "Un outil de notes Markdown léger, local d'abord, utilisable hors ligne. Chaque note est un fichier texte brut ; chaque dossier est un carnet.",
+    pageTitles: {
+      download: 'Téléchargement · JotLuck — Notes Markdown locales (Windows)',
+      themes: "Thèmes · JotLuck — Notes Markdown, local d'abord",
+      studio: "Studio · JotLuck — Notes Markdown, local d'abord",
+    },
+    pageDescriptions: {
+      download:
+        "Téléchargez JotLuck pour Windows x64. Un outil de notes Markdown léger, local d'abord, utilisable hors ligne. Première version publique : 15 août 2026.",
+      themes:
+        "Les thèmes de JotLuck — Paper, Halo Canvas et Lumen Field. Un thème n'est pas qu'une couche de peinture : il remodèle l'espace de travail lui-même.",
+      studio:
+        "LeankomStudio aide les idées à traverser les genres et à trouver la forme qui leur convient. JotLuck, l'outil de notes Markdown local, est notre première page.",
+    },
   },
   localeName: 'Français',
   header: {
@@ -141,7 +154,7 @@ export const fr: SiteContent = {
     sampleNote: {
       title: 'Exemple de note du thème',
       intro:
-        "MarkLuck conserve la liberté du texte brut tout en offrant l'aperçu en direct, les rétroliens et le classement par étiquettes.",
+        "JotLuck conserve la liberté du texte brut tout en offrant l'aperçu en direct, les rétroliens et le classement par étiquettes.",
       section: 'Rangement du jour',
       bullets: [
         "Ouvrez un dossier local et les notes rejoignent la liste récente d'elles-mêmes",

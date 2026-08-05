@@ -19,3 +19,11 @@ export const EXTERNAL = {
 
 /** 全局默认社卡片（宣传片/02-视觉素材/社交预览/social-preview.png 转正，1280×640 中英双语） */
 export const SOCIAL_CARD = '/assets/brand/social-preview.png';
+
+/** 社卡片无障碍描述（og:image:alt；卡面本身为中英双语，alt 统一英文） */
+export const SOCIAL_CARD_ALT =
+  'JotLuck social card: brand mark and editor screenshot with the tagline "Files are notes. Folders are notebooks."';
+
+/** 法律主体（页脚 copyright 与 JSON-LD Organization.name 的唯一事实源）；品牌呈现方 = LeankomStudio */
+export const LEGAL_ENTITY = '鸰湖科技（深圳）有限公司';
+export const STUDIO_NAME = 'LeankomStudio';

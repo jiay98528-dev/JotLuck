@@ -6,7 +6,7 @@
   "description": "JotLuck official website — The Winged Press. 5 locales (zh/ja/ko/en/fr), per-locale SSG.",
   "scripts": {
     "dev": "vite-ssg dev",
-    "build": "vite-ssg build",
+    "build": "vite-ssg build && node scripts/postbuild.mjs",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit"
   },

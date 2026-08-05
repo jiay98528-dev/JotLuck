@@ -6,9 +6,22 @@ import type { SiteContent } from './types';
  */
 export const ja: SiteContent = {
   meta: {
-    title: 'JotLuck — 書き留める、安心して',
+    title: 'JotLuck — 書き留める、安心して · ローカルファーストの Markdown ノート',
     description:
       '軽量で、ローカルファースト、オフラインでも使える Markdown ノートツール。すべてのノートはプレーンテキストファイルであり、フォルダはそのままノートブックです。',
+    pageTitles: {
+      download: 'ダウンロード · JotLuck — ローカルファーストの Markdown ノート（Windows）',
+      themes: 'テーマ · JotLuck — ローカルファーストの Markdown ノート',
+      studio: 'スタジオ · JotLuck — ローカルファーストの Markdown ノート',
+    },
+    pageDescriptions: {
+      download:
+        'JotLuck Windows x64 版をダウンロード。軽量でローカルファースト、オフラインでも使える Markdown ノートツールです。ノートはプレーンテキストファイル、フォルダーがそのままノートブック。最初の公開版は 2026 年 8 月 15 日です。',
+      themes:
+        'JotLuck のワークスペーステーマ——Paper・Halo Canvas・Lumen Field の 3 種類。テーマは単なる塗り替えではなく、ワークスペースそのものを再形成します。',
+      studio:
+        'LeankomStudio は鸰湖科技のプロダクトスタジオです。アイデアがカテゴリを越え、いちばん合う形に出会うように——JotLuck は私たちが外に向かって開いた最初のページです。',
+    },
   },
   localeName: '日本語',
   header: {
@@ -135,7 +148,7 @@ export const ja: SiteContent = {
     sampleNote: {
       title: 'テーマのサンプルノート',
       intro:
-        'MarkLuck はプレーンテキストファイルの自由を保ちつつ、ライブプレビュー、バックリンク、タグによる整理を提供します。',
+        'JotLuck はプレーンテキストファイルの自由を保ちつつ、ライブプレビュー、バックリンク、タグによる整理を提供します。',
       section: '今日の整理',
       bullets: [
         'ローカルフォルダーを開くと、ノートは自動的に最近のリストに入ります',

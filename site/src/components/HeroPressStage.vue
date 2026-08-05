@@ -19,6 +19,13 @@ const props = defineProps<{ locale: Locale; hero: HeroContent; preview: ThemePre
 const inkReady = ref(false);
 const inkImg = ref<HTMLImageElement | null>(null);
 
+/**
+ * 水合标记：SSG/无 JS 态 H1 渲染连续纯文本行（爬虫/屏幕阅读器读到不断词、不重复的
+ * 唯一版本——字符 span 化曾致行边界断词「wasmeant」，sr-only 副本方案会留重复文本）；
+ * 水合后切换为 sr-only 连续文本 + 逐字落版字符动画（字符 span 全部 aria-hidden）。
+ */
+const mounted = ref(false);
+
 /** 把强调段按 highlight 子串切成 前/高亮/后 三段；无 highlight 或未命中时 before 为整句 */
 const emphasisParts = computed(() => {
   const text = props.hero.emphasis;
@@ -39,7 +46,15 @@ const lineChars = computed(() => {
   });
 });
 
+/**
+ * 行尾分隔符：相邻块级 span 在 HTML 中无空白，文本抽取会在行边界粘连断词
+ *（en「wasmeant」实测）。每个 display-line 末尾渲染 lineSep 真实文本节点——
+ * 块级容器内尾空格视觉不可见；zh/ja 无空格语言用 ''，ko/en/fr 用 ' '（谚文分词靠空格）。
+ */
+const lineSep = computed(() => (props.locale === 'zh' || props.locale === 'ja' ? '' : ' '));
+
 onMounted(async () => {
+  mounted.value = true;
   const img = inkImg.value;
   if (!img) return;
   try {
@@ -58,20 +73,31 @@ onMounted(async () => {
         <span class="eyebrow-tick" aria-hidden="true"></span>{{ hero.eyebrow }}
       </p>
       <h1 class="statement">
-        <span
-          v-for="(chars, li) in lineChars"
-          :key="li"
-          class="display-line"
-          :aria-label="hero.lines[li]"
-          ><span
-            v-for="(c, ci) in chars"
-            :key="ci"
-            class="ch"
-            aria-hidden="true"
-            :style="{ animationDelay: c.delay + 'ms' }"
-            >{{ c.ch === ' ' ? ' ' : c.ch }}</span
-          ></span
-        >
+        <!-- SSG/无 JS 态：连续纯文本行（爬虫与屏幕阅读器读到的唯一版本）。
+             行间补 lineSep 真实空格文本节点：相邻块级 span 无空白会在文本抽取时粘连断词 -->
+        <template v-if="!mounted">
+          <span v-for="(line, li) in hero.lines" :key="li" class="display-line"
+            >{{ line }}{{ lineSep }}</span
+          >
+        </template>
+        <!-- 水合后：逐字落版动画（字符 span 全部 aria-hidden，行级 aria-label 供屏幕阅读器；
+             行尾 lineSep 空格文本节点防渲染态文本抽取行边界粘连） -->
+        <template v-else>
+          <span
+            v-for="(chars, li) in lineChars"
+            :key="li"
+            class="display-line"
+            :aria-label="hero.lines[li]"
+            ><span
+              v-for="(c, ci) in chars"
+              :key="ci"
+              class="ch"
+              aria-hidden="true"
+              :style="{ animationDelay: c.delay + 'ms' }"
+              >{{ c.ch === ' ' ? ' ' : c.ch }}</span
+            >{{ lineSep }}</span
+          >
+        </template>
         <span class="emphasis-wrap">
           <img
             ref="inkImg"
@@ -80,6 +106,9 @@ onMounted(async () => {
             alt=""
             aria-hidden="true"
             draggable="false"
+            width="1672"
+            height="729"
+            decoding="async"
           />
           <!-- 三段必须同行书写：模板空白压缩会在中文句中引入多余空格 -->
           <strong class="emphasis"

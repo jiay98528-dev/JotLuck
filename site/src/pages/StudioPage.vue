@@ -59,7 +59,14 @@ onMounted(() => {
             />
           </svg>
           <span class="stamp">
-            <img src="/assets/brand/studio-leankom-mark.png" alt="" width="96" height="96" />
+            <img
+              src="/assets/brand/studio-leankom-mark.png"
+              alt=""
+              width="96"
+              height="96"
+              loading="lazy"
+              decoding="async"
+            />
           </span>
         </div>
         <p class="addr-lines" aria-hidden="true"><i></i><i></i><i></i></p>

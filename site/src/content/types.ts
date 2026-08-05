@@ -141,7 +141,14 @@ export interface StudioContent {
 }
 
 export interface SiteContent {
-  meta: { title: string; description: string };
+  meta: {
+    title: string;
+    description: string;
+    /** 子页 <title>：栏目词 · JotLuck — 类别短句（≤60 字符，SEO 差异化，2026-08-05 裁决 23） */
+    pageTitles: Record<'download' | 'themes' | 'studio', string>;
+    /** 子页搜索摘要（70–160 字符，不复用视觉 lead——lead 过短/过长失衡，裁决 24） */
+    pageDescriptions: Record<'download' | 'themes' | 'studio', string>;
+  };
   localeName: string;
   header: {
     nav: { home: string; download: string; themes: string; studio: string };

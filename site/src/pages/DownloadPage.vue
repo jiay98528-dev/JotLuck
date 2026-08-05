@@ -31,7 +31,7 @@ onMounted(() => {
     <!-- 发布状态：邮戳日期卡 + 黄书签。日期是承诺，用等宽字体盖章 -->
     <section class="release-status" aria-labelledby="rs-title">
       <div class="status-card paper-sheet tex-2">
-        <span class="status-bookmark" aria-hidden="true">{{ d().statusLabel }}</span>
+        <span id="rs-title" class="status-bookmark">{{ d().statusLabel }}</span>
         <p class="status-value">{{ d().statusValue }}</p>
         <p class="status-stamp" aria-hidden="true">
           <span>{{ d().statusDate }}</span>

@@ -6,9 +6,22 @@ import type { SiteContent } from './types';
  */
 export const ko: SiteContent = {
   meta: {
-    title: 'JotLuck — 마음 편히 적어내려가다',
+    title: 'JotLuck — 마음 편히 적어내려가다 · 로컬 우선 Markdown 노트',
     description:
       '가볍고, 로컬 우선이며, 오프라인에서도 쓸 수 있는 Markdown 노트 도구입니다. 모든 노트는 순수 텍스트 파일이고, 폴더가 곧 노트북입니다.',
+    pageTitles: {
+      download: '다운로드 · JotLuck — 로컬 우선 Markdown 노트（Windows）',
+      themes: '테마 · JotLuck — 로컬 우선 Markdown 노트',
+      studio: '스튜디오 · JotLuck — 로컬 우선 Markdown 노트',
+    },
+    pageDescriptions: {
+      download:
+        'Windows x64용 JotLuck을 다운로드하세요. 가볍고 로컬 우선이며 오프라인에서도 쓸 수 있는 Markdown 노트 도구입니다. 모든 노트는 순수 텍스트 파일이고, 폴더가 곧 노트북입니다. 첫 공개 버전은 2026년 8월 15일 출시 예정입니다.',
+      themes:
+        'JotLuck 작업 공간 테마——Paper, Halo Canvas, Lumen Field 세 가지. 테마는 단순한 페인트칠 이상으로, 작업 공간 자체를 다시 만듭니다.',
+      studio:
+        'LeankomStudio는 鸰湖科技의 제품 스튜디오입니다. 아이디어가 범주를 넘어, 가장 잘 어울리는 형태를 만나게 하세요——JotLuck은 우리가 바깥으로 펼쳐 낸 첫 번째 페이지입니다.',
+    },
   },
   localeName: '한국어',
   header: {
@@ -136,7 +149,7 @@ export const ko: SiteContent = {
     sampleNote: {
       title: '테마 샘플 노트',
       intro:
-        'MarkLuck은 순수 텍스트 파일의 자유를 지키면서 실시간 미리보기, 백링크와 태그 정리를 제공합니다.',
+        'JotLuck은 순수 텍스트 파일의 자유를 지키면서 실시간 미리보기, 백링크와 태그 정리를 제공합니다.',
       section: '오늘의 정리',
       bullets: [
         '로컬 폴더를 열면 노트가 자동으로 최근 목록에 올라옵니다',

@@ -6,9 +6,22 @@ import type { SiteContent } from './types';
  */
 export const en: SiteContent = {
   meta: {
-    title: 'JotLuck — Set words down, at ease',
+    title: 'JotLuck — Set words down · Local-first Markdown notes',
     description:
       'A lightweight, local-first, offline-capable Markdown note tool. Every note is a plain-text file; every folder is a notebook.',
+    pageTitles: {
+      download: 'Download · JotLuck — Local-first Markdown notes for Windows',
+      themes: 'Themes · JotLuck — Local-first Markdown notes',
+      studio: 'Studio · JotLuck — Local-first Markdown notes',
+    },
+    pageDescriptions: {
+      download:
+        'Download JotLuck for Windows x64 — a lightweight, local-first Markdown note tool. Every note is a plain-text file; every folder a notebook. First public build: August 15, 2026.',
+      themes:
+        'JotLuck workspace themes — Paper, Halo Canvas and Lumen Field. A theme is more than a new coat of paint: it reshapes the workspace itself.',
+      studio:
+        'LeankomStudio helps ideas cross genres and find the shape that fits them best. JotLuck, a local-first Markdown note tool, is the first page we unfold outward.',
+    },
   },
   localeName: 'English',
   header: {
@@ -136,7 +149,7 @@ export const en: SiteContent = {
     sampleNote: {
       title: 'Theme sample note',
       intro:
-        'MarkLuck keeps plain-text freedom while offering live preview, backlinks and tag tidying.',
+        'JotLuck keeps plain-text freedom while offering live preview, backlinks and tag tidying.',
       section: "Today's tidy-up",
       bullets: [
         'Open a local folder and notes join the recent list on their own',

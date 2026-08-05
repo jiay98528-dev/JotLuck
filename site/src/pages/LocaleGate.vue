@@ -3,7 +3,7 @@ import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useHead } from '@unhead/vue';
 import { LOCALES, LOCALE_TAGS, getContent, type Locale } from '../content';
-import { SITE_URL, SOCIAL_CARD } from '../release';
+import { SITE_URL, SOCIAL_CARD, SOCIAL_CARD_ALT } from '../release';
 
 /**
  * 语言门页（`/`）：客户端按浏览器语言重定向到五语之一；
@@ -26,7 +26,10 @@ useHead({
     { property: 'og:image', content: `${SITE_URL}${SOCIAL_CARD}` },
     { property: 'og:image:width', content: '1280' },
     { property: 'og:image:height', content: '640' },
+    { property: 'og:image:alt', content: SOCIAL_CARD_ALT },
     { name: 'twitter:card', content: 'summary_large_image' },
+    { name: 'twitter:title', content: 'JotLuck' },
+    { name: 'twitter:description', content: en.meta.description },
     { name: 'twitter:image', content: `${SITE_URL}${SOCIAL_CARD}` },
   ],
   link: [
@@ -54,12 +57,20 @@ function detect(): Locale {
 }
 
 onMounted(() => {
+  // 自动跳转只做一次性：sessionStorage 记忆后访客可稳定停留在语言门页
+  //（Google 多语言指南：避免基于推测语言的强制重定向妨碍查看其他语言版本）
+  try {
+    if (sessionStorage.getItem('jl-gate-redirected')) return;
+    sessionStorage.setItem('jl-gate-redirected', '1');
+  } catch {
+    /* 隐私模式下 storage 不可写：照常跳转一次 */
+  }
   router.replace(`/${detect()}/`);
 });
 </script>
 
 <template>
-  <main class="locale-gate">
+  <div class="locale-gate">
     <header class="gate-brand">
       <img src="/assets/brand/jotluck-icon.png" alt="JotLuck" width="72" height="72" />
       <h1>JotLuck</h1>
@@ -74,7 +85,7 @@ onMounted(() => {
         </li>
       </ul>
     </nav>
-  </main>
+  </div>
 </template>
 
 <style scoped>
