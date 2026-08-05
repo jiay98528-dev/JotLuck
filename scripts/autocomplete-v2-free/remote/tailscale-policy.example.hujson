@@ -1,0 +1,35 @@
+// Replace operator@example.com with the single accountable operator before use.
+// This example deliberately exposes no public port and grants no shell through Tailscale SSH.
+{
+  "groups": {
+    "group:jotluck-training-operators": ["operator@example.com"],
+  },
+  "tagOwners": {
+    "tag:jotluck-training-node": ["group:jotluck-training-operators"],
+    "tag:jotluck-training-relay": ["group:jotluck-training-operators"],
+  },
+  "grants": [
+    {
+      "src": ["group:jotluck-training-operators"],
+      "dst": ["tag:jotluck-training-node"],
+      "ip": ["tcp:22"],
+    },
+    {
+      "src": ["tag:jotluck-training-node"],
+      "dst": ["tag:jotluck-training-relay"],
+      "app": {
+        "tailscale.com/cap/relay": [],
+      },
+    },
+  ],
+  "tests": [
+    {
+      "src": "operator@example.com",
+      "accept": ["tag:jotluck-training-node:22"],
+    },
+    {
+      "src": "tag:jotluck-training-node",
+      "deny": ["operator@example.com:22"],
+    },
+  ],
+}
