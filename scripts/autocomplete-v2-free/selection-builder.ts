@@ -6,6 +6,7 @@ import { V2_FREE_TRAINING_POOL_LIMIT_BYTES, type V2FreeSha256 } from './contract
 import { loadV2FreeHoldoutContent, type V2FreeHoldoutDescriptor } from './holdout-validator';
 
 export const V2_FREE_LICENSED_CORPUS_SCHEMA = 'jotluck.autocomplete.v2-free-licensed-corpus.v1';
+export const V2_FREE_SUPPLEMENT_SCHEMA = 'jotluck.autocomplete.v2-free-supplement.v1';
 export const V2_FREE_CORPUS_GOVERNANCE_VERSION = 3;
 export const V2_FREE_DEVELOPMENT_FRACTION = 0.05;
 export const V2_FREE_FORMAL_SMOKE_MINIMUM_BYTES = 32 * 1024 * 1024;
@@ -21,10 +22,54 @@ interface V2RSourceRecord {
   licenseSpdx: 'MIT' | 'CC0-1.0';
   licenseEvidencePath: string;
   contentTreeSha256: string;
-  collectedAt: string;
-  cleanerVersion: string;
+  collectedAt?: string;
+  cleanerVersion?: string;
   generatorVersion?: string;
   generatorSeed?: string;
+}
+
+export interface V2FreeSupplementSourceRecord {
+  id: string;
+  kind: 'project-owned' | 'tatoeba-cc0';
+  language: 'zh' | 'en';
+  category: string;
+  contentRoot: string;
+  licenseSpdx: 'MIT' | 'CC0-1.0';
+  licenseEvidencePath: string;
+  licenseEvidenceBytes: number;
+  licenseEvidenceSha256: string;
+  cleanerVersion?: string;
+  generatorVersion?: string;
+  generatorSeed?: string;
+}
+
+export interface V2FreeSupplementDocumentRecord {
+  documentId: string;
+  sourceId: string;
+  language: 'zh' | 'en';
+  category: string;
+  relativePath: string;
+  bytes: number;
+  sha256: string;
+  normalizedSha256: string;
+}
+
+export interface V2FreeSupplementManifest {
+  schema: typeof V2_FREE_SUPPLEMENT_SCHEMA;
+  schemaVersion: 1;
+  datasetId: string;
+  sources: V2FreeSupplementSourceRecord[];
+  documents: V2FreeSupplementDocumentRecord[];
+  selectedBytes: number;
+  sourceBytes: Record<string, number>;
+  languageBytes: Record<'zh' | 'en', number>;
+  categoryBytes: Record<string, number>;
+  inputTreeSha256: string;
+}
+
+interface SourceAuditCandidate extends V2RSourceRecord {
+  expectedLicenseEvidenceBytes?: number;
+  expectedLicenseEvidenceSha256?: string;
 }
 
 interface V2RDocumentRecord {
@@ -74,7 +119,9 @@ export interface V2FreeLicensedCorpusSelection {
   datasetId: string;
   createdAt: string;
   sourceSelectionSha256: V2FreeSha256;
+  sourceSelectionManifestSha256: V2FreeSha256;
   sourceRegistrySha256: V2FreeSha256;
+  supplementManifestSha256s: V2FreeSha256[];
   licenseAuditSha256: V2FreeSha256;
   inputTreeSha256: V2FreeSha256;
   selectedBytes: number;
@@ -98,6 +145,7 @@ export interface BuildV2FreeSelectionOptions {
   workspaceRoot: string;
   selectionPath: string;
   sourceRegistryPath: string;
+  supplementPaths?: readonly string[];
   validationHoldouts?: readonly V2FreeValidationInput[];
   createdAt?: string;
 }
@@ -136,7 +184,41 @@ export async function buildV2FreeLicensedCorpusSelection(
     for (const target of holdout.targets) validationTexts.add(normalizeText(target.text));
   }
 
-  const sources = await auditSources(root, registry);
+  const supplements: Array<{
+    manifest: V2FreeSupplementManifest;
+    manifestSha256: V2FreeSha256;
+  }> = [];
+  for (const supplementValue of options.supplementPaths ?? []) {
+    const supplementPath = await resolveExistingInside(
+      root,
+      supplementValue,
+      'supplement manifest',
+    );
+    const bytes = await readFile(supplementPath);
+    const manifest = parseV2FreeSupplementManifest(bytes);
+    assertSupplementManifestIdentity(manifest);
+    supplements.push({ manifest, manifestSha256: sha256(bytes) });
+  }
+
+  const sourceCandidates: SourceAuditCandidate[] = registry.map((source) => ({ ...source }));
+  const candidateDocuments: Array<V2RDocumentRecord | V2FreeSupplementDocumentRecord> =
+    selection.documents.filter((document) => document.split === 'train');
+  for (const { manifest } of supplements) {
+    for (const source of manifest.sources) {
+      const sourceDocuments = manifest.documents.filter(
+        (document) => document.sourceId === source.id,
+      );
+      sourceCandidates.push({
+        ...source,
+        contentTreeSha256: computeSupplementSourceTreeSha256(sourceDocuments),
+        expectedLicenseEvidenceBytes: source.licenseEvidenceBytes,
+        expectedLicenseEvidenceSha256: source.licenseEvidenceSha256,
+      });
+    }
+    candidateDocuments.push(...manifest.documents);
+  }
+
+  const sources = await auditSources(root, sourceCandidates);
   const sourceById = new Map(sources.map((source) => [source.id, source]));
   const documents: V2FreeSelectionDocument[] = [];
   const documentIds = new Set<string>();
@@ -146,8 +228,7 @@ export async function buildV2FreeLicensedCorpusSelection(
   const categoryBytes: Record<string, number> = {};
   let selectedBytes = 0;
 
-  for (const document of selection.documents) {
-    if (document.split !== 'train') continue;
+  for (const document of candidateDocuments) {
     const source = sourceById.get(document.sourceId);
     if (!source) throw new Error(`Training document has unknown source: ${document.sourceId}.`);
     if (document.language !== source.language || document.category !== source.category) {
@@ -238,7 +319,9 @@ export async function buildV2FreeLicensedCorpusSelection(
     datasetId: `public-v2-free-${selection.datasetId}`,
     createdAt: canonicalIso(options.createdAt ?? new Date().toISOString()),
     sourceSelectionSha256: selection.selectionSha256 as V2FreeSha256,
+    sourceSelectionManifestSha256: sha256(selectionBytes),
     sourceRegistrySha256: sha256(registryBytes),
+    supplementManifestSha256s: supplements.map(({ manifestSha256 }) => manifestSha256),
     licenseAuditSha256,
     inputTreeSha256,
     selectedBytes,
@@ -275,15 +358,41 @@ export function assertV2FreeSelectionStage(
     throw new Error('V2 free governed selection contract is invalid.');
   }
   assertSha256(selection.sourceSelectionSha256, 'source selection identity');
+  assertSha256(selection.sourceSelectionManifestSha256, 'source selection manifest identity');
   assertSha256(selection.sourceRegistrySha256, 'source registry identity');
+  if (!Array.isArray(selection.supplementManifestSha256s)) {
+    throw new Error('V2 free supplement manifest identities are invalid.');
+  }
+  for (const identity of selection.supplementManifestSha256s) {
+    assertSha256(identity, 'supplement manifest identity');
+  }
   assertSha256(selection.licenseAuditSha256, 'license audit identity');
   assertSha256(selection.inputTreeSha256, 'input tree identity');
 
   const expectedDevelopmentIds = selectDevelopmentDocumentIds(selection.documents);
   const documentIds = new Set<string>();
   const normalizedIdentities = new Set<string>();
+  const sourceIds = new Set<string>();
+  for (const source of selection.sources) {
+    assertSafeIdentifier(source.id, 'source id');
+    if (sourceIds.has(source.id)) throw new Error('V2 free selection has duplicate sources.');
+    sourceIds.add(source.id);
+    if (
+      (source.kind !== 'project-owned' && source.kind !== 'tatoeba-cc0') ||
+      (source.kind === 'project-owned' &&
+        (source.licenseSpdx !== 'MIT' || !source.generatorVersion || !source.generatorSeed)) ||
+      (source.kind === 'tatoeba-cc0' &&
+        (source.licenseSpdx !== 'CC0-1.0' || !source.cleanerVersion))
+    ) {
+      throw new Error('V2 free selection has an unsupported source license.');
+    }
+    assertSha256(source.licenseEvidenceSha256, `${source.id}.licenseEvidenceSha256`);
+  }
   const splitBytes = { train: 0, development: 0 };
   const splitDocuments = { train: 0, development: 0 };
+  const sourceBytes: Record<string, number> = {};
+  const languageBytes: Record<'zh' | 'en', number> = { zh: 0, en: 0 };
+  const categoryBytes: Record<string, number> = {};
   let selectedBytes = 0;
   for (const document of selection.documents) {
     assertSafeIdentifier(document.documentId, 'document id');
@@ -297,6 +406,10 @@ export function assertV2FreeSelectionStage(
     ) {
       throw new Error('V2 free selection split contains duplicate or invalid documents.');
     }
+    const source = selection.sources.find(({ id }) => id === document.sourceId);
+    if (!source || document.language !== source.language || document.category !== source.category) {
+      throw new Error('V2 free selection document provenance is invalid.');
+    }
     documentIds.add(document.documentId);
     normalizedIdentities.add(document.normalizedSha256);
     const expectedSplit = expectedDevelopmentIds.has(document.documentId) ? 'development' : 'train';
@@ -309,16 +422,26 @@ export function assertV2FreeSelectionStage(
     selectedBytes += document.bytes;
     splitBytes[document.split] += document.bytes;
     splitDocuments[document.split] += 1;
+    sourceBytes[document.sourceId] = (sourceBytes[document.sourceId] ?? 0) + document.bytes;
+    languageBytes[document.language] += document.bytes;
+    categoryBytes[document.category] = (categoryBytes[document.category] ?? 0) + document.bytes;
   }
   if (
     splitDocuments.train < 1 ||
     splitDocuments.development < 1 ||
     selectedBytes !== selection.selectedBytes ||
     canonicalJson(splitBytes) !== canonicalJson(selection.splitBytes) ||
-    canonicalJson(splitDocuments) !== canonicalJson(selection.splitDocuments)
+    canonicalJson(splitDocuments) !== canonicalJson(selection.splitDocuments) ||
+    canonicalJson(sourceBytes) !== canonicalJson(selection.sourceBytes) ||
+    canonicalJson(languageBytes) !== canonicalJson(selection.languageBytes) ||
+    canonicalJson(categoryBytes) !== canonicalJson(selection.categoryBytes) ||
+    languageBytes.zh < 1 ||
+    languageBytes.en < 1
   ) {
     throw new Error('V2 free selection requires disjoint, non-empty train/development splits.');
   }
+  assertDistribution(sourceBytes, selectedBytes, 0.2, 'source');
+  assertDistribution(categoryBytes, selectedBytes, 0.4, 'category');
   if (computeV2FreeInputTreeSha256(selection.documents) !== selection.inputTreeSha256) {
     throw new Error('V2 free selection split/input-tree identity mismatch.');
   }
@@ -364,7 +487,7 @@ function selectDevelopmentDocumentIds(
 
 async function auditSources(
   root: string,
-  sources: readonly V2RSourceRecord[],
+  sources: readonly SourceAuditCandidate[],
 ): Promise<V2FreeSelectionSource[]> {
   const ids = new Set<string>();
   const audited: V2FreeSelectionSource[] = [];
@@ -381,8 +504,8 @@ async function auditSources(
         );
       }
     } else if (source.kind === 'tatoeba-cc0') {
-      if (source.licenseSpdx !== 'CC0-1.0') {
-        throw new Error(`Tatoeba source must be CC0-1.0: ${source.id}.`);
+      if (source.licenseSpdx !== 'CC0-1.0' || !source.cleanerVersion) {
+        throw new Error(`Tatoeba source must be CC0-1.0 with a cleaner version: ${source.id}.`);
       }
     } else {
       throw new Error(`Unsupported V2 free source kind: ${String(source.kind)}.`);
@@ -394,15 +517,176 @@ async function auditSources(
     );
     const evidence = await readFile(evidencePath);
     if (evidence.byteLength === 0) throw new Error(`License evidence is empty: ${source.id}.`);
+    const evidenceSha256 = sha256(evidence);
+    if (
+      (source.expectedLicenseEvidenceBytes !== undefined &&
+        source.expectedLicenseEvidenceBytes !== evidence.byteLength) ||
+      (source.expectedLicenseEvidenceSha256 !== undefined &&
+        source.expectedLicenseEvidenceSha256 !== evidenceSha256)
+    ) {
+      throw new Error(`License evidence identity mismatch: ${source.id}.`);
+    }
+    const {
+      expectedLicenseEvidenceBytes: _expectedLicenseEvidenceBytes,
+      expectedLicenseEvidenceSha256: _expectedLicenseEvidenceSha256,
+      ...publicSource
+    } = source;
     audited.push({
-      ...source,
+      ...publicSource,
       contentRoot: normalizeRelativePath(source.contentRoot),
       licenseEvidencePath: toRepositoryPath(root, evidencePath),
-      licenseEvidenceSha256: sha256(evidence),
+      licenseEvidenceSha256: evidenceSha256,
       licenseEvidenceBytes: evidence.byteLength,
     });
   }
   return audited;
+}
+
+function parseV2FreeSupplementManifest(bytes: Buffer): V2FreeSupplementManifest {
+  const value = parseJson(bytes, 'V2 free supplement') as Partial<V2FreeSupplementManifest>;
+  if (
+    value.schema !== V2_FREE_SUPPLEMENT_SCHEMA ||
+    value.schemaVersion !== 1 ||
+    typeof value.datasetId !== 'string' ||
+    !value.datasetId ||
+    !Array.isArray(value.sources) ||
+    value.sources.length === 0 ||
+    !Array.isArray(value.documents) ||
+    value.documents.length === 0 ||
+    !Number.isSafeInteger(value.selectedBytes) ||
+    !value.sourceBytes ||
+    !value.languageBytes ||
+    !value.categoryBytes
+  ) {
+    throw new Error('Unsupported V2 free supplement manifest.');
+  }
+  assertSafeIdentifier(value.datasetId, 'supplement dataset id');
+  assertSha256(value.inputTreeSha256, 'supplement input tree identity');
+  return value as V2FreeSupplementManifest;
+}
+
+function assertSupplementManifestIdentity(manifest: V2FreeSupplementManifest): void {
+  const sourceIds = new Set<string>();
+  for (const source of manifest.sources) {
+    assertSafeIdentifier(source.id, 'supplement source id');
+    assertSafeIdentifier(source.category, 'supplement source category');
+    if (sourceIds.has(source.id)) {
+      throw new Error(`Supplement has a duplicate source id: ${source.id}.`);
+    }
+    sourceIds.add(source.id);
+    if (source.language !== 'zh' && source.language !== 'en') {
+      throw new Error(`Supplement source language is invalid: ${source.id}.`);
+    }
+    normalizeRelativePath(source.contentRoot);
+    normalizeRelativePath(source.licenseEvidencePath);
+    if (!Number.isSafeInteger(source.licenseEvidenceBytes) || source.licenseEvidenceBytes < 1) {
+      throw new Error(`Supplement license evidence byte count is invalid: ${source.id}.`);
+    }
+    assertSha256(source.licenseEvidenceSha256, `${source.id}.licenseEvidenceSha256`);
+    if (source.kind === 'project-owned') {
+      if (source.licenseSpdx !== 'MIT' || !source.generatorVersion || !source.generatorSeed) {
+        throw new Error(`Supplement project-owned source is invalid: ${source.id}.`);
+      }
+    } else if (source.kind === 'tatoeba-cc0') {
+      if (source.licenseSpdx !== 'CC0-1.0' || !source.cleanerVersion) {
+        throw new Error(`Supplement Tatoeba source is invalid: ${source.id}.`);
+      }
+    } else {
+      throw new Error(`Unsupported V2 free source kind: ${String(source.kind)}.`);
+    }
+  }
+
+  const documentIds = new Set<string>();
+  const normalizedIdentities = new Set<string>();
+  const sourceBytes: Record<string, number> = {};
+  const languageBytes: Record<'zh' | 'en', number> = { zh: 0, en: 0 };
+  const categoryBytes: Record<string, number> = {};
+  let selectedBytes = 0;
+  for (const document of manifest.documents) {
+    assertSafeIdentifier(document.documentId, 'supplement document id');
+    if (documentIds.has(document.documentId)) {
+      throw new Error(`Supplement has a duplicate document id: ${document.documentId}.`);
+    }
+    documentIds.add(document.documentId);
+    if (normalizedIdentities.has(document.normalizedSha256)) {
+      throw new Error('Supplement has a duplicate normalized identity.');
+    }
+    normalizedIdentities.add(document.normalizedSha256);
+    const source = manifest.sources.find(({ id }) => id === document.sourceId);
+    if (!source) throw new Error(`Supplement document has unknown source: ${document.sourceId}.`);
+    if (document.language !== source.language || document.category !== source.category) {
+      throw new Error(
+        `Supplement document provenance disagrees with source: ${document.documentId}.`,
+      );
+    }
+    if (!Number.isSafeInteger(document.bytes) || document.bytes < 1) {
+      throw new Error(`Supplement document byte count is invalid: ${document.documentId}.`);
+    }
+    assertSha256(document.sha256, `${document.documentId}.sha256`);
+    assertSha256(document.normalizedSha256, `${document.documentId}.normalizedSha256`);
+    normalizeRelativePath(document.relativePath);
+    selectedBytes += document.bytes;
+    sourceBytes[document.sourceId] = (sourceBytes[document.sourceId] ?? 0) + document.bytes;
+    languageBytes[document.language] += document.bytes;
+    categoryBytes[document.category] = (categoryBytes[document.category] ?? 0) + document.bytes;
+  }
+  if (manifest.sources.some((source) => !sourceBytes[source.id])) {
+    throw new Error('Supplement source has no documents.');
+  }
+  if (
+    selectedBytes !== manifest.selectedBytes ||
+    canonicalJson(sourceBytes) !== canonicalJson(manifest.sourceBytes) ||
+    canonicalJson(languageBytes) !== canonicalJson(manifest.languageBytes) ||
+    canonicalJson(categoryBytes) !== canonicalJson(manifest.categoryBytes) ||
+    computeV2FreeSupplementInputTreeSha256(manifest.documents) !== manifest.inputTreeSha256
+  ) {
+    throw new Error('V2 free supplement manifest identity or byte summaries do not match.');
+  }
+}
+
+export function computeV2FreeSupplementInputTreeSha256(
+  documents: readonly V2FreeSupplementDocumentRecord[],
+): V2FreeSha256 {
+  return canonicalSha256(
+    [...documents]
+      .sort((left, right) => left.documentId.localeCompare(right.documentId))
+      .map(
+        ({
+          documentId,
+          sourceId,
+          language,
+          category,
+          relativePath,
+          bytes,
+          sha256: documentSha256,
+          normalizedSha256,
+        }) => ({
+          documentId,
+          sourceId,
+          language,
+          category,
+          relativePath: normalizeRelativePath(relativePath),
+          bytes,
+          sha256: documentSha256,
+          normalizedSha256,
+        }),
+      ),
+  );
+}
+
+function computeSupplementSourceTreeSha256(
+  documents: readonly V2FreeSupplementDocumentRecord[],
+): V2FreeSha256 {
+  return canonicalSha256(
+    [...documents]
+      .sort((left, right) => left.documentId.localeCompare(right.documentId))
+      .map(({ documentId, relativePath, bytes, sha256: documentSha256 }) => ({
+        documentId,
+        relativePath: normalizeRelativePath(relativePath),
+        bytes,
+        sha256: documentSha256,
+      })),
+  );
 }
 
 function parseV2RSelection(bytes: Buffer): V2RSelectionManifest {

@@ -34,6 +34,7 @@ JotLuck 的离线补全不是一个单模型系统。结构化补全、当前文
 | V2.2 训练/评测入口 | `scripts/autocomplete-v2-free/`                                                                   | selection、训练、JLFDQ02、评测、final pair ledger |
 | 幻15节点操作边界   | `scripts/autocomplete-v2-free/remote/README.md`                                                   | 只描述显式人工初始化、传输、任务与状态合同        |
 | Tatoeba 清洗与许可 | `scripts/corpus/tatoeba-cc0-cleaning-report.json`、`scripts/corpus/licenses/tatoeba-cc0.md`       | 固定 CC0 子集、清洗结果和许可证证据               |
+| V2.2 补量来源审查  | `scripts/corpus/licenses/v2-free-public-source-review.md`                                         | 官方端点观察、采用/拒绝理由和 manifest 义务       |
 | 训练缓存           | `scripts/corpus/_web-cache/`                                                                      | 可删除、可再生、Git ignored；不得单独作为放行证据 |
 | 正式公共入口       | `packages/app/public/autocomplete/autocomplete-public.manifest.json`                              | 未来发布时只能有这一份 canonical manifest         |
 
@@ -77,6 +78,18 @@ V2R/V2S 固定 selection 只允许以下来源：
 `provenance.json` 中的 curated/synthetic-v1 只属于 v4 历史来源，不得混入 V2R/V2S selection。Common Voice 没有批准快照，不得自动补入。网页、小说、未知许可证正文、产品规格、E2E holdout 和补全评测样本不得进入训练。
 
 V2.2 selection 可以从现有约 24.9MiB、哈希完整且许可证仍有效的 V2R train 文档重新物化；任何补充来源都必须是项目自有或具有明确 SPDX/许可证据的公开数据。每篇文档固定记录 source、许可证据、语言、类别、字节数、内容 SHA-256、生成/清洗版本和 seed。训练阶段固定为 32MiB 全链路 smoke、128MiB 四候选矩阵；只有全部失败且最佳候选距离每项 Oracle 门槛均不超过 5 个百分点时，才允许扩到 256MiB 重跑完整矩阵，否则 architecture-stop。清洗池硬上限 512MiB。
+
+2026-08-05 的公开来源补量审查只批准以下低风险工程组合进入新的 V2.2 selection 构建；这不是对来源许可证的法律意见：
+
+- 复用项目已经固定、已绑定 raw SHA 和清洗报告的 Tatoeba English CC0 内容中尚未进入当前 V2.2 selection 的合格文档；2026-08-01 上游周快照只能作为来源仍可获取的观察事实，因其字节身份与已固定快照不同，不得静默替换。
+- 以 project-owned v1 确定性生成器补齐剩余容量，但必须在 V2.2 下重新绑定 generator version、recipe、seed 和逐文档 SHA；不得直接把历史 v4 selection 当作 V2.2 输入，也不得引入 holdout、测试答案或自指补全文案。
+- 两类补充合计至少 9MiB，并在构建后重新执行许可、隐私、重复、分布和 overlap 治理；32MiB 是清洗后 selection 正文容量，不是下载包、压缩包、链接表或 manifest 的文件大小。
+
+Tatoeba `cmn` CC0 周快照只有 102 bytes，不能作为中文补量来源。普通 `cmn` 句子导出和全局 links 表不属于本轮 CC0 冻结输入；links 表是关系 ID 而非正文，不得把其 149,039,032 个压缩 bytes 计入训练正文。Wikipedia/Wikimedia dump 因归因、相同方式共享/GFDL 等需要单独审查的义务以及多 GiB 原始体积，本轮不采用。逐项官方 URL、HTTP 元数据、事实边界和未来 manifest 义务见 `scripts/corpus/licenses/v2-free-public-source-review.md`。
+
+本次补量只服务 `public-v2-free-decoder-v1` 的 DEVELOPMENT 训练，不删除、覆盖或重新解释 V2R/V2S 的 architecture-stop，也不授权读取 final、写入 production public 或切换默认引擎。
+
+固定补量入口为 `scripts/corpus/autocomplete-v2-free-supplement.json` 与 `scripts/autocomplete-v2-free/supplement.ts`。2026-08-05 首次物化得到 13,024 篇、9,444,087 bytes（中文 4,846,791；英文 4,597,296），supplement input tree 为 `49d4074202ebceb57a8539b6635aeed0276f89ca6d67fb7b2117340cffc1a1e5`，manifest SHA-256 为 `008ee8e2f315b3d92fa6d4d4e82e9fe1eb45dc831167b02499cf906a7ee936e0`。与固定 V2R train 基线合流后，`formal-32mib-smoke` selection 为 93,637 篇、34,361,458 bytes（中文 17,181,255；英文 17,180,203），input tree 为 `90fc47e1086ff740a0f479b2e718e45aeb57decf876b94325fb3e03708f8d2f8`；确定性 5% development split 为 4,682 篇、1,689,738 bytes。物化正文、supplement manifest 和 selection manifest 均位于 Git ignored 的 `_web-cache`，可由固定配置重建，不是发布资产。
 
 ### 4.2 永久隔离
 

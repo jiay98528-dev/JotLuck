@@ -38,7 +38,7 @@ export async function runV2FreeCli(argv: readonly string[]): Promise<number> {
         '  check-oracle <report.json>',
         '  assess <evidence.json>',
         '  select <evidence.json...>',
-        '  build-selection --workspace-root <path> --v2r-selection <path> --source-registry <path> --output <path> [--stage governance|formal-32mib-smoke]',
+        '  build-selection --workspace-root <path> --v2r-selection <path> --source-registry <path> [--supplement <path> ...] --output <path> [--stage governance|formal-32mib-smoke]',
         '  validate-selection-stage --selection <path> --stage governance|formal-32mib-smoke',
         '  validate-holdout --workspace-root <path> --descriptor <path> [--content <path>]',
         '  evaluate --workspace-root <path> --worker <exe> --manifest <path> --descriptor <path> --content <path> --output-dir <path>',
@@ -114,6 +114,7 @@ async function buildSelectionCommand(argv: readonly string[]): Promise<number> {
     workspaceRoot,
     selectionPath: requiredArgument(argv, '--v2r-selection'),
     sourceRegistryPath: requiredArgument(argv, '--source-registry'),
+    supplementPaths: repeatedArguments(argv, '--supplement'),
     validationHoldouts,
   });
   const stage = parseSelectionStage(readArgument(argv, '--stage') ?? 'governance');

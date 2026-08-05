@@ -1,0 +1,85 @@
+{
+  "schema": "jotluck.autocomplete.v2-free-supplement-plan.v1",
+  "schemaVersion": 1,
+  "datasetId": "public-v2-free-supplement-20260805-v1",
+  "materializerVersion": "jotluck-v2-free-supplement-materializer-v1",
+  "selectionSeed": "20260805",
+  "baselineSelection": {
+    "path": "scripts/corpus/_web-cache/autocomplete-v2-free/selection-development-v3.json",
+    "bytes": 46760771,
+    "sha256": "ceb94240570f60921ae9c2c76651e829ddadbdc03da1b4aee5107f44c4ac8f16",
+    "inputTreeSha256": "30eadc9cd2ceefdd8038e200927b982f140ead63996f1669036e7b7bd8deeeeb"
+  },
+  "outputRoot": "scripts/corpus/_web-cache/autocomplete-v2-free/supplement-20260805-v1",
+  "outputManifest": "scripts/corpus/_web-cache/autocomplete-v2-free/supplement-20260805-v1.manifest.json",
+  "targets": {
+    "minimumTotalBytes": 9437184,
+    "languageBytes": {
+      "zh": 4842814,
+      "en": 4594370
+    }
+  },
+  "projectOwned": {
+    "metadata": {
+      "path": "scripts/corpus/_web-cache/generated-project-owned/_metadata.json",
+      "bytes": 9320,
+      "sha256": "cd093a51705b7340b314da00699f8e6d1f8d47357e377c6d8892f52024d93864"
+    },
+    "licenseEvidence": {
+      "path": "LICENSE",
+      "bytes": 1132,
+      "sha256": "dc8251d67dabb6548a08609af2b7797f1abec9d84ca2bfaac9116b170ead9167",
+      "spdx": "MIT"
+    },
+    "sources": [
+      {
+        "metadataSourceId": "synthetic-natural-zh",
+        "outputSourceId": "supplement-v1-natural-zh",
+        "targetBytes": 1614272
+      },
+      {
+        "metadataSourceId": "synthetic-project-zh",
+        "outputSourceId": "supplement-v1-project-zh",
+        "targetBytes": 1614271
+      },
+      {
+        "metadataSourceId": "synthetic-technical-zh",
+        "outputSourceId": "supplement-v1-technical-zh",
+        "targetBytes": 1614271
+      },
+      {
+        "metadataSourceId": "synthetic-workflow-en",
+        "outputSourceId": "supplement-v1-workflow-en",
+        "targetBytes": 2022185
+      },
+      {
+        "metadataSourceId": "synthetic-technical-en",
+        "outputSourceId": "supplement-v1-technical-en",
+        "targetBytes": 2022185
+      }
+    ]
+  },
+  "tatoeba": {
+    "outputSourceId": "supplement-v1-tatoeba-en",
+    "language": "en",
+    "category": "reading-note",
+    "targetBytes": 550000,
+    "cleaned": {
+      "path": "scripts/corpus/_web-cache/autocomplete-v2r/external/tatoeba/eng_sentences_CC0.cleaned.jsonl",
+      "bytes": 2900641,
+      "sha256": "fbf253c75015a27f8a32f73dd430a6c73347bfc7c9ca188f0025a8c59f0c7a25"
+    },
+    "cleaningReport": {
+      "path": "scripts/corpus/_web-cache/autocomplete-v2r/external/tatoeba/cleaning-report.json",
+      "bytes": 497,
+      "sha256": "7f536032beea5eab4c755f3598014d5321e1a455b615fb0227058d48e9523c7c"
+    },
+    "licenseEvidence": {
+      "path": "scripts/corpus/licenses/tatoeba-cc0.md",
+      "bytes": 663,
+      "sha256": "1520298835fd30c00c050280d901084a8b59036d123cc07190ed35b333d598e9",
+      "spdx": "CC0-1.0"
+    },
+    "cleanerVersion": "jotluck-tatoeba-cc0-cleaner-v1"
+  }
+}
