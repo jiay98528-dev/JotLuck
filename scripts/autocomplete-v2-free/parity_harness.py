@@ -290,7 +290,9 @@ def torch_trace(model: Any, token_ids: Sequence[int]) -> dict[str, np.ndarray[An
         trace: dict[str, np.ndarray[Any, Any]] = {
             "embeddingLast": as_f32(hidden[0, -1])
         }
-        causal_mask = torch.triu(torch.full((length, length), float("-inf")), diagonal=1)
+        causal_mask = torch.triu(
+            torch.ones((length, length), dtype=torch.bool), diagonal=1
+        )
         padding_mask = tokens.eq(0)
         for index, block in enumerate(model.blocks.layers):
             hidden = block(hidden, src_mask=causal_mask, src_key_padding_mask=padding_mask)

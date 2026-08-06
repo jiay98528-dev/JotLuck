@@ -23,7 +23,7 @@ struct TokenizerAsset {
 #[serde(rename_all = "camelCase")]
 struct SpecialIds {
     pad: usize,
-    unknown: usize,
+    unk: usize,
     bos: usize,
     eos: usize,
 }
@@ -118,7 +118,7 @@ impl UnigramTokenizer {
         }
         let special = [
             asset.special_ids.pad,
-            asset.special_ids.unknown,
+            asset.special_ids.unk,
             asset.special_ids.bos,
             asset.special_ids.eos,
         ];
@@ -150,7 +150,7 @@ impl UnigramTokenizer {
             .collect::<Option<Vec<_>>>()
             .ok_or_else(|| "decoder tokenizer ids are not contiguous".to_string())?;
         if pieces[asset.special_ids.pad].kind != PieceKind::Control
-            || pieces[asset.special_ids.unknown].kind != PieceKind::Unknown
+            || pieces[asset.special_ids.unk].kind != PieceKind::Unknown
             || pieces[asset.special_ids.bos].kind != PieceKind::Control
             || pieces[asset.special_ids.eos].kind != PieceKind::Control
         {
@@ -193,7 +193,7 @@ impl UnigramTokenizer {
             trie,
             byte_ids,
             pad_id: asset.special_ids.pad,
-            unknown_id: asset.special_ids.unknown,
+            unknown_id: asset.special_ids.unk,
             bos_id: asset.special_ids.bos,
             eos_id: asset.special_ids.eos,
             dummy_prefix: asset.dummy_prefix,
@@ -444,7 +444,7 @@ mod tests {
             collapse_whitespace: true,
             special_ids: SpecialIds {
                 pad: 0,
-                unknown: 1,
+                unk: 1,
                 bos: 2,
                 eos: 3,
             },
@@ -473,5 +473,21 @@ mod tests {
             [2, 5].into_iter().chain(expected_bytes).collect::<Vec<_>>()
         );
         assert_eq!(tokenizer.decode(&cat[1..]), "猫");
+    }
+
+    #[test]
+    fn special_ids_deserialize_the_exported_unk_field() {
+        let asset: TokenizerAsset = serde_json::from_value(serde_json::json!({
+            "schema": TOKENIZER_SCHEMA,
+            "vocabularySize": EXPECTED_VOCABULARY_SIZE,
+            "normalization": "nfkc",
+            "dummyPrefix": true,
+            "collapseWhitespace": true,
+            "specialIds": { "pad": 0, "unk": 1, "bos": 2, "eos": 3 },
+            "pieces": []
+        }))
+        .unwrap();
+
+        assert_eq!(asset.special_ids.unk, 1);
     }
 }
