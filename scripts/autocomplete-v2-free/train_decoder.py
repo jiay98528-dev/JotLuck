@@ -148,7 +148,7 @@ class DecoderOnlyModel(nn.Module):
         length = tokens.shape[1]
         hidden = self.token_embedding(tokens) + self.position_embedding(self.positions[:length])
         causal_mask = torch.triu(
-            torch.full((length, length), float("-inf"), device=tokens.device), diagonal=1
+            torch.ones((length, length), dtype=torch.bool, device=tokens.device), diagonal=1
         )
         padding_mask = tokens.eq(0)
         hidden = self.blocks(hidden, mask=causal_mask, src_key_padding_mask=padding_mask)
@@ -262,6 +262,7 @@ def resolve_device(requested: str) -> torch.device:
 def configure_determinism(config: Config) -> None:
     os.environ["OMP_NUM_THREADS"] = str(config.threads)
     os.environ["MKL_NUM_THREADS"] = str(config.threads)
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     random.seed(config.seed)
     np.random.seed(config.seed)
     torch.manual_seed(config.seed)

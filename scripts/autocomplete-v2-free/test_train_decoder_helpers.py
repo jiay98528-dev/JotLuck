@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from unittest import mock
 
@@ -45,6 +46,26 @@ class TrainDecoderHelperTests(unittest.TestCase):
         self.assertAlmostEqual(trainer.scheduled_learning_rate(base, 0, 100, 2), base / 2)
         self.assertAlmostEqual(trainer.scheduled_learning_rate(base, 1, 100, 2), base)
         self.assertAlmostEqual(trainer.scheduled_learning_rate(base, 99, 100, 2), 0.0)
+
+    def test_deterministic_cuda_contract_sets_cublas_workspace_before_training(self) -> None:
+        config = type("Config", (), {"threads": 1, "seed": 7})()
+        with mock.patch.dict(
+            trainer.os.environ, {"CUBLAS_WORKSPACE_CONFIG": "unexpected"}, clear=False
+        ):
+            trainer.configure_determinism(config)
+            self.assertEqual(trainer.os.environ["CUBLAS_WORKSPACE_CONFIG"], ":4096:8")
+            self.assertTrue(trainer.torch.are_deterministic_algorithms_enabled())
+
+    def test_decoder_uses_matching_boolean_attention_masks(self) -> None:
+        model = trainer.DecoderOnlyModel(width=16, layers=1, heads=4, feed_forward=32)
+        tokens = trainer.torch.tensor([[2, 4, 0]], dtype=trainer.torch.long)
+        with warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter("always")
+            logits = model(tokens)
+        self.assertEqual(tuple(logits.shape), (1, 3, trainer.VOCABULARY_SIZE))
+        self.assertFalse(
+            any("mismatched src_key_padding_mask and mask" in str(item.message) for item in captured)
+        )
 
     def test_formal_microbatch_defaults_and_oom_chains_keep_global_batch_128(self) -> None:
         self.assertEqual(trainer.default_micro_batch_size("16m-q4"), 8)
