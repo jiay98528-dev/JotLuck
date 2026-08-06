@@ -142,6 +142,8 @@ describe('remote V2 free training runtime policies', () => {
     expect(bootstrap).toContain('#requires -RunAsAdministrator');
     expect(bootstrap).toContain('ExpectedRunnerSha256');
     expect(bootstrap).toContain('ExpectedJobSha256');
+    expect(bootstrap).toContain('ExpectedTrainingPythonSha256');
+    expect(bootstrap).toContain('ExpectedGitSha256');
     expect(bootstrap).toContain('-LogonType S4U -RunLevel Limited');
     expect(bootstrap).toContain("'AllSigned'");
     expect(bootstrap).toContain('set --unattended=true');
@@ -177,14 +179,38 @@ describe('remote V2 free training runtime policies', () => {
     expect(initialize).toContain("$TAILSCALE_WINGET_ID = 'Tailscale.Tailscale'");
     expect(initialize).toContain("$PYTORCH_VERSION = '2.8.0'");
     expect(initialize).toContain("$PYTORCH_CUDA_VERSION = '12.6'");
+    expect(initialize).toContain("$NUMPY_VERSION = '2.1.3'");
+    expect(initialize).toContain("$SENTENCEPIECE_VERSION = '0.2.1'");
+    expect(initialize).toContain("$PYTHON_INDEX_URL = 'https://pypi.org/simple'");
     expect(initialize).toContain("$PYTORCH_INDEX_URL = 'https://download.pytorch.org/whl/cu126'");
     expect(initialize).toContain(
-      '-InstallTrainingEnvironment requires -ApprovePyTorchDownloadSource',
+      '-InstallTrainingEnvironment requires both approved fixed Python and PyTorch package sources',
     );
+    expect(initialize).toContain('numpy==$NUMPY_VERSION');
+    expect(initialize).toContain('sentencepiece==$SENTENCEPIECE_VERSION');
     expect(initialize).toContain("'show', '--id', $PackageId, '--exact', '--source', 'winget'");
     expect(initialize).toContain("@('/query')");
     expect(initialize).toContain("@('/duplicatescheme', $activeMatch.Value)");
     expect(initialize).toContain('automaticRestartPerformed = $false');
+  });
+
+  it('installs initial training tools only after explicit apply and verifies every publisher', () => {
+    const installer = script('Install-Fx15TrainingTools.ps1');
+    expect(installer).toContain('#requires -Version 5.1');
+    expect(installer).toContain('[switch]$Apply');
+    expect(installer).toContain('if (-not $Apply -or $WhatIfPreference)');
+    expect(installer).toContain("$POWERSHELL_VERSION = '7.6.4'");
+    expect(installer).toContain(
+      "$POWERSHELL_ARCHIVE_SHA256 = '80832551c52809301e6071c8bac977beb5a2f1ec953eb4db9f94deb953333793'",
+    );
+    expect(installer).toContain("$PYTHON_VERSION = '3.12.10'");
+    expect(installer).toContain('*Python Software Foundation*');
+    expect(installer).toContain("$GIT_TAG = 'v2.54.0.windows.1'");
+    expect(installer).toContain("'^sha256:[a-f0-9]{64}$'");
+    expect(installer).toContain('[IO.Path]::IsPathRooted');
+    expect(installer).not.toContain('IsPathFullyQualified');
+    expect(installer).not.toContain('SetEnvironmentVariable');
+    expect(installer).not.toMatch(/(?:New-NetFirewallRule|Set-Service|Restart-Service)/u);
   });
 
   it('makes the scheduled runner durable and verifies atomic bundle promotion', () => {
@@ -194,6 +220,9 @@ describe('remote V2 free training runtime policies', () => {
     expect(runner).toContain('Job deadline exceeded.');
     expect(runner).toContain('Get-FileHash');
     expect(runner).toContain("'HEAD^{tree}'");
+    expect(runner).toContain('ExpectedTrainingPythonSha256');
+    expect(runner).toContain('ExpectedGitSha256');
+    expect(runner).toContain("'.py' { $trainingPythonExecutable }");
     expect(runner).toContain('standalone 16m-q8 is forbidden');
     expect(runner).toContain('JOTLUCK_REMOTE_CANDIDATE_MATRIX_IDS');
 

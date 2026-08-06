@@ -11,7 +11,9 @@ param(
     [switch]$InstallPackages,
     [switch]$EnableTailscaleUnattended,
     [switch]$InstallTrainingEnvironment,
+    [switch]$ApprovePythonPackageSource,
     [switch]$ApprovePyTorchDownloadSource,
+    [string]$BasePythonPath,
     [switch]$ConfigureAcPowerPolicy
 )
 
@@ -24,8 +26,11 @@ $OPENSSH_CAPABILITY = 'OpenSSH.Server~~~~0.0.1.0'
 $PYTHON_WINGET_ID = 'Python.Python.3.12'
 $TAILSCALE_WINGET_ID = 'Tailscale.Tailscale'
 $PYTHON_REQUIRED_PREFIX = '3.12.'
+$NUMPY_VERSION = '2.1.3'
+$SENTENCEPIECE_VERSION = '0.2.1'
 $PYTORCH_VERSION = '2.8.0'
 $PYTORCH_CUDA_VERSION = '12.6'
+$PYTHON_INDEX_URL = 'https://pypi.org/simple'
 $PYTORCH_INDEX_URL = 'https://download.pytorch.org/whl/cu126'
 $FIREWALL_RULE_NAME = 'JotLuck-FX15-Tailscale-SSH-In'
 $AUTHORIZED_KEYS_NAME = 'jotluck-train_authorized_keys'
@@ -148,13 +153,17 @@ $plan = [ordered]@{
         installPackages = [bool]$InstallPackages
         enableTailscaleUnattended = [bool]$EnableTailscaleUnattended
         installTrainingEnvironment = [bool]$InstallTrainingEnvironment
+        approvedPythonSource = [bool]$ApprovePythonPackageSource
         approvedPyTorchSource = [bool]$ApprovePyTorchDownloadSource
         configureAcPowerPolicy = [bool]$ConfigureAcPowerPolicy
     }
     fixedVersions = [ordered]@{
         python = $PYTHON_REQUIRED_PREFIX + 'x'
+        numpy = $NUMPY_VERSION
+        sentencepiece = $SENTENCEPIECE_VERSION
         pytorch = $PYTORCH_VERSION
         cuda = $PYTORCH_CUDA_VERSION
+        pythonIndex = $PYTHON_INDEX_URL
         pytorchIndex = $PYTORCH_INDEX_URL
     }
     willNot = @('accept private keys', 'accept auth keys or VPS tokens', 'open public SSH', 'configure public ports', 'restart Windows')
@@ -174,8 +183,8 @@ $publicKey = Get-PublicKeyLine -Path $PublicKeyPath
 $fx15Address = ConvertTo-TailscaleIPv4 -Value $Fx15TailscaleIPv4 -Label 'Fx15TailscaleIPv4'
 $controlAddress = ConvertTo-TailscaleIPv4 -Value $ControlTailscaleIPv4 -Label 'ControlTailscaleIPv4'
 if ($fx15Address -eq $controlAddress) { throw 'FX15 and control Tailscale addresses must differ.' }
-if ($InstallTrainingEnvironment -and -not $ApprovePyTorchDownloadSource) {
-    throw '-InstallTrainingEnvironment requires -ApprovePyTorchDownloadSource for the fixed PyTorch cu126 index.'
+if ($InstallTrainingEnvironment -and (-not $ApprovePythonPackageSource -or -not $ApprovePyTorchDownloadSource)) {
+    throw '-InstallTrainingEnvironment requires both approved fixed Python and PyTorch package sources.'
 }
 if (-not $PSCmdlet.ShouldProcess([Environment]::MachineName, 'Apply one-time FX15 training initialization')) {
     return
@@ -315,25 +324,40 @@ if ($EnableTailscaleUnattended) {
 
 $venvLockSha256 = $null
 if ($InstallTrainingEnvironment) {
+    if ($PYTHON_INDEX_URL -ne 'https://pypi.org/simple') { throw 'Unapproved Python package source.' }
     if ($PYTORCH_INDEX_URL -ne 'https://download.pytorch.org/whl/cu126') { throw 'Unapproved PyTorch download source.' }
-    $pythonLauncher = (Get-Command py.exe -ErrorAction Stop).Source
-    $pythonVersion = (Invoke-NativeChecked -FilePath $pythonLauncher -Arguments @('-3.12', '-c', 'import platform; print(platform.python_version())') -Label 'Verify Python 3.12')[0].Trim()
+    $pythonLauncher = $null
+    $pythonArguments = @()
+    if (-not [string]::IsNullOrWhiteSpace($BasePythonPath)) {
+        $pythonLauncher = (Resolve-Path -LiteralPath $BasePythonPath -ErrorAction Stop).Path
+    }
+    else {
+        $pythonLauncher = (Get-Command py.exe -ErrorAction Stop).Source
+        $pythonArguments = @('-3.12')
+    }
+    $pythonVersion = (Invoke-NativeChecked -FilePath $pythonLauncher -Arguments ($pythonArguments + @('-c', 'import platform; print(platform.python_version())')) -Label 'Verify Python 3.12')[0].Trim()
     if (-not $pythonVersion.StartsWith($PYTHON_REQUIRED_PREFIX, [StringComparison]::Ordinal)) {
         throw "Expected Python $PYTHON_REQUIRED_PREFIX, received $pythonVersion."
     }
     $venvRoot = Join-Path $trainingRootFull 'venv\pytorch-2.8.0-cu126'
     if ([IO.Directory]::Exists($venvRoot)) { throw 'Pinned training venv already exists; refusing to overwrite it.' }
-    [void](Invoke-NativeChecked -FilePath $pythonLauncher -Arguments @('-3.12', '-m', 'venv', $venvRoot) -Label 'Create pinned training venv')
+    [void](Invoke-NativeChecked -FilePath $pythonLauncher -Arguments ($pythonArguments + @('-m', 'venv', $venvRoot)) -Label 'Create pinned training venv')
     $venvPython = Join-Path $venvRoot 'Scripts\python.exe'
+    [void](Invoke-NativeChecked -FilePath $venvPython -Arguments @(
+        '-m', 'pip', 'install', '--only-binary=:all:', '--index-url', $PYTHON_INDEX_URL,
+        "numpy==$NUMPY_VERSION", "sentencepiece==$SENTENCEPIECE_VERSION"
+    ) -Label 'Install pinned tokenizer dependencies')
     [void](Invoke-NativeChecked -FilePath $venvPython -Arguments @(
         '-m', 'pip', 'install', '--only-binary=:all:', '--index-url', $PYTORCH_INDEX_URL,
         "torch==$PYTORCH_VERSION"
     ) -Label 'Install pinned PyTorch cu126')
     $torchIdentityJson = (Invoke-NativeChecked -FilePath $venvPython -Arguments @(
-        '-c', 'import json, torch; print(json.dumps({"torch": torch.__version__, "cuda": torch.version.cuda}))'
+        '-c', 'import json, numpy, sentencepiece, torch; print(json.dumps({"numpy": numpy.__version__, "sentencepiece": sentencepiece.__version__, "torch": torch.__version__, "cuda": torch.version.cuda}))'
     ) -Label 'Verify PyTorch identity')[-1]
     $torchIdentity = $torchIdentityJson | ConvertFrom-Json
-    if (-not ([string]$torchIdentity.torch).StartsWith($PYTORCH_VERSION, [StringComparison]::Ordinal) -or
+    if ([string]$torchIdentity.numpy -ne $NUMPY_VERSION -or
+        [string]$torchIdentity.sentencepiece -ne $SENTENCEPIECE_VERSION -or
+        -not ([string]$torchIdentity.torch).StartsWith($PYTORCH_VERSION, [StringComparison]::Ordinal) -or
         [string]$torchIdentity.cuda -ne $PYTORCH_CUDA_VERSION) {
         throw "Unexpected PyTorch identity: $torchIdentityJson"
     }
@@ -374,6 +398,7 @@ if ($ConfigureAcPowerPolicy) {
     firewallRule = $FIREWALL_RULE_NAME
     backupRoot = $backupRoot
     venvLockSha256 = $venvLockSha256
+    trainingPythonPath = if ($InstallTrainingEnvironment) { $venvPython } else { $null }
     powerBackupScheme = $powerBackupScheme
     restartNeeded = [bool]$restartNeeded
     automaticRestartPerformed = $false

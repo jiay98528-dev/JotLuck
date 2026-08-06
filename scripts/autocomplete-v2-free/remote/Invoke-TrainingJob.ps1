@@ -3,6 +3,10 @@
 param(
     [Parameter(Mandatory)][string]$JobPath,
     [Parameter(Mandatory)][ValidatePattern('^[a-f0-9]{64}$')][string]$ExpectedJobSha256,
+    [Parameter(Mandatory)][string]$TrainingPythonPath,
+    [Parameter(Mandatory)][ValidatePattern('^[a-f0-9]{64}$')][string]$ExpectedTrainingPythonSha256,
+    [Parameter(Mandatory)][string]$GitPath,
+    [Parameter(Mandatory)][ValidatePattern('^[a-f0-9]{64}$')][string]$ExpectedGitSha256,
     [Parameter(Mandatory)][string]$WorkspaceRoot,
     [Parameter(Mandatory)][string]$StateRoot,
     [ValidateRange(5, 300)][int]$HeartbeatSeconds = 15
@@ -99,7 +103,11 @@ function Quote-ProcessArgument {
 $workspace = (Resolve-Path -LiteralPath $WorkspaceRoot -ErrorAction Stop).Path
 $stateRootResolved = (Resolve-Path -LiteralPath $StateRoot -ErrorAction Stop).Path
 $jobFile = (Resolve-Path -LiteralPath $JobPath -ErrorAction Stop).Path
+$trainingPythonExecutable = (Resolve-Path -LiteralPath $TrainingPythonPath -ErrorAction Stop).Path
+$gitExecutable = (Resolve-Path -LiteralPath $GitPath -ErrorAction Stop).Path
 Assert-Sha256 -Path $jobFile -ExpectedSha256 $ExpectedJobSha256 -Label 'Training job file'
+Assert-Sha256 -Path $trainingPythonExecutable -ExpectedSha256 $ExpectedTrainingPythonSha256 -Label 'Training Python executable'
+Assert-Sha256 -Path $gitExecutable -ExpectedSha256 $ExpectedGitSha256 -Label 'Git executable'
 $script:job = Get-Content -Raw -Encoding utf8 -LiteralPath $jobFile | ConvertFrom-Json -Depth 20
 if ($job.schema -ne 'jotluck.autocomplete.v2-free.remote-training-job.v1') { throw 'Unsupported job schema.' }
 if ($job.jobId -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$') { throw 'Invalid job ID.' }
@@ -152,10 +160,9 @@ try {
         Assert-Sha256 -Path $inputPath -ExpectedSha256 ([string]$inputReference.sha256) -Label "Input $($inputReference.id)"
     }
 
-    $git = Get-Command git.exe -ErrorAction Stop
-    $actualCommit = (& $git.Source -C $workspace rev-parse 'HEAD^{commit}').Trim()
+    $actualCommit = (& $gitExecutable -C $workspace rev-parse 'HEAD^{commit}').Trim()
     if ($LASTEXITCODE -ne 0 -or $actualCommit -ne $job.sourceTree.commit) { throw 'Source commit mismatch.' }
-    $actualTree = (& $git.Source -C $workspace rev-parse 'HEAD^{tree}').Trim()
+    $actualTree = (& $gitExecutable -C $workspace rev-parse 'HEAD^{tree}').Trim()
     if ($LASTEXITCODE -ne 0 -or $actualTree -ne $job.sourceTree.tree) { throw 'Source tree mismatch.' }
 
     $outputRoot = Resolve-ChildPath -Root $workspace -RelativePath ([string]$job.output.rootDirectory)
@@ -175,7 +182,7 @@ try {
     $extension = [IO.Path]::GetExtension($recipePath).ToLowerInvariant()
     $trainingHost = switch ($extension) {
         '.ps1' { (Get-Command pwsh.exe -ErrorAction Stop).Source }
-        '.py' { (Get-Command python.exe -ErrorAction Stop).Source }
+        '.py' { $trainingPythonExecutable }
         { $_ -in @('.js', '.mjs', '.cjs') } { (Get-Command node.exe -ErrorAction Stop).Source }
         '.exe' { $recipePath }
         default { throw "Unsupported recipe extension: $extension" }

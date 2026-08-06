@@ -14,14 +14,15 @@
 ## 建议执行顺序
 
 1. 普通用户运行 `Probe-Fx15.ps1`。该脚本只把机器、GPU、磁盘、命令和服务的观察结果写到 stdout；保存报告由调用者显式重定向完成。
-2. 在 FX15 物理控制台打开 PowerShell 7 管理员终端，先不带 `-Apply` 运行 `Initialize-Fx15.ps1` 并审查 JSON 计划。确认 Tailscale 地址、软件下载源、目录与可选动作后，再决定是否执行下节的一次性初始化。
-3. 在控制机生成完整训练包与 job JSON；冻结文件字节后再计算 SHA-256。源包必须在传输前已包含全部语料，训练期间不从互联网拉取数据。
-4. 经 Tailscale 内网的普通 Microsoft OpenSSH/SCP 上传到目标根目录下的临时目录：`.最终目录名.upload-传输ID.tmp`。Windows 不使用 Tailscale SSH server；不要给 `0.0.0.0:22` 添加入站规则。
-5. 在 FX15 本地调用 `Finalize-VerifiedUpload.ps1`，同时传入 manifest 文件 SHA-256 和 manifest 内部 bundle SHA-256。脚本检查路径穿越、junction/symlink、意外文件、字节数与逐文件 SHA-256，全部通过后才用同卷 `Directory.Move` 原子转正；已存在的正式目录绝不覆盖。
-6. 管理员审查探针和路径后，显式以 `Bootstrap-Fx15.ps1 -Apply` 注册一次计划任务。模板拒绝覆盖同名任务，并在注册前复核 runner/job 文件 SHA-256。
-7. 计划任务使用现有专用非管理员账号、`S4U`、`RunLevel Limited`、开机触发、失败重启和无限任务时限。实际训练由任务进程持有，不依赖 SSH 会话，因此控制连接断开后继续运行。
-8. `Invoke-TrainingJob.ps1` 再次验证 job、recipe、所有输入、Git commit/tree、续训包和 deadline；训练过程每 15 秒原子更新状态与心跳，超期或非零退出写 `failed`。成功只有在输出 manifest 与逐文件内容复核后才写 `completed`。
-9. 训练配方每次写 checkpoint 后生成冻结的 checkpoint index。对该 index 计算 SHA-256，再显式运行 `Invoke-CheckpointRetention.ps1 -Apply`，只保留最近两份与 validation 最优一份。脚本会先复核所有 checkpoint 的路径、字节数和 SHA-256；删除不可恢复，索引必须先归档。
+2. 若机器没有 PowerShell 7、Python 3.12 或 Git，先在管理员终端运行 `Install-Fx15TrainingTools.ps1` 的默认 plan；显式 `-Apply` 后它只向专用训练根目录安装固定 PowerShell、Python 与 MinGit，不修改 PATH、SSH、防火墙或账号。PowerShell 使用发布页固定 SHA，Python 必须通过 Python Software Foundation Authenticode 签名，MinGit 使用固定 GitHub release asset digest。
+3. 在 FX15 物理控制台打开 PowerShell 7 管理员终端，先不带 `-Apply` 运行 `Initialize-Fx15.ps1` 并审查 JSON 计划。确认 Tailscale 地址、软件下载源、目录与可选动作后，再决定是否执行下节的一次性初始化。
+4. 在控制机生成完整训练包与 job JSON；冻结文件字节后再计算 SHA-256。源包必须在传输前已包含全部语料，训练期间不从互联网拉取数据。
+5. 经 Tailscale 内网的普通 Microsoft OpenSSH/SCP 上传到目标根目录下的临时目录：`.最终目录名.upload-传输ID.tmp`。Windows 不使用 Tailscale SSH server；不要给 `0.0.0.0:22` 添加入站规则。
+6. 在 FX15 本地调用 `Finalize-VerifiedUpload.ps1`，同时传入 manifest 文件 SHA-256 和 manifest 内部 bundle SHA-256。脚本检查路径穿越、junction/symlink、意外文件、字节数与逐文件 SHA-256，全部通过后才用同卷 `Directory.Move` 原子转正；已存在的正式目录绝不覆盖。
+7. 管理员审查探针和路径后，显式以 `Bootstrap-Fx15.ps1 -Apply` 注册一次计划任务。模板拒绝覆盖同名任务，并在注册前复核 runner/job 文件 SHA-256。
+8. 计划任务使用现有专用非管理员账号、`S4U`、`RunLevel Limited`、开机触发、失败重启和无限任务时限。实际训练由任务进程持有，不依赖 SSH 会话，因此控制连接断开后继续运行。
+9. `Invoke-TrainingJob.ps1` 再次验证 job、recipe、所有输入、Git commit/tree、续训包和 deadline；训练过程每 15 秒原子更新状态与心跳，超期或非零退出写 `failed`。成功只有在输出 manifest 与逐文件内容复核后才写 `completed`。
+10. 训练配方每次写 checkpoint 后生成冻结的 checkpoint index。对该 index 计算 SHA-256，再显式运行 `Invoke-CheckpointRetention.ps1 -Apply`，只保留最近两份与 validation 最优一份。脚本会先复核所有 checkpoint 的路径、字节数和 SHA-256；删除不可恢复，索引必须先归档。
 
 ## FX15 一次性初始化
 
@@ -48,7 +49,7 @@ pwsh -NoProfile -File .\Initialize-Fx15.ps1 -Apply `
 
 - `-InstallPackages`：先用 `winget show --source winget` 复核，再按精确 ID 安装 Tailscale 与 Python 3.12。
 - `-EnableTailscaleUnattended`：仅执行 `tailscale set --unattended=true`，不接收或生成 auth key。
-- `-InstallTrainingEnvironment -ApprovePyTorchDownloadSource`：两开关必须同时提供，只允许 `https://download.pytorch.org/whl/cu126`，创建独立 venv、安装 `torch==2.8.0`、验证 CUDA `12.6`，并写 `requirements.resolved.lock.txt` 及 SHA-256。
+- `-InstallTrainingEnvironment -ApprovePythonPackageSource -ApprovePyTorchDownloadSource`：三个开关必须同时提供。只允许从 `https://pypi.org/simple` 安装 `numpy==2.1.3`、`sentencepiece==0.2.1`，从 `https://download.pytorch.org/whl/cu126` 安装 `torch==2.8.0`；创建独立 venv、验证全部版本与 CUDA `12.6`，并写 `requirements.resolved.lock.txt` 及 SHA-256。没有 `py.exe` 时可通过 `-BasePythonPath` 显式指定已核验的 Python 3.12。
 - `-ConfigureAcPowerPolicy`：先保存完整 `powercfg /query` 并复制当前电源方案，再只修改接电状态的睡眠、休眠和合盖策略。
 
 脚本从不自动重启 Windows。输出的 `restartNeeded=true` 表示用户应停止并人工重启；不能绕过重启继续注册训练任务。
@@ -62,6 +63,8 @@ pwsh -NoProfile -File .\Initialize-Fx15.ps1 -Apply `
 - 人工重启后重新运行 `Probe-Fx15.ps1` 和初始化 plan，执行 `sshd -t`，确认 sshd 仅监听 FX15 Tailscale 地址、默认 OpenSSH 入站规则保持禁用、唯一自定义规则的远端地址为控制机 `/32`，再从控制机用公钥登录。公网/局域网非控制地址连接必须失败。
 
 计划任务动作使用 `-ExecutionPolicy AllSigned`，所以 runner 应由本机信任的代码签名证书签名并在注册前验证签名。模板不生成证书，也不会弱化执行策略。专用训练账号需要“作为批处理作业登录”，但不应加入 Administrators、Remote Desktop Users 或 SSH 操作员组。
+
+注册计划任务时必须把 venv 的 `python.exe` 和用于复核 source commit/tree 的 `git.exe` 作为显式路径传给 `Bootstrap-Fx15.ps1`，并同时提供各自 SHA-256。bootstrap 会复算后把路径与哈希写入任务参数；runner 再次复算，Python 配方只允许使用这份 venv 解释器。不得依赖管理员或训练账号的交互式 `PATH`。
 
 ## 最小权限划分
 
