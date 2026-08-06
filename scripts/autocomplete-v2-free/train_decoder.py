@@ -15,10 +15,12 @@ import json
 import math
 import os
 import random
+import re
 import shutil
 import struct
 import tempfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -54,6 +56,8 @@ WARMUP_RATIO = 0.02
 DEV_FRACTION_FALLBACK = 0.05
 LAYER_NORM_EPSILON = 1e-5
 OOM_STATE_SCHEMA = "jotluck.autocomplete.v2-free-oom-state.v1"
+REMOTE_BUNDLE_SCHEMA = "jotluck.autocomplete.v2-free.remote-bundle.v1"
+REMOTE_JOB_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 # matrix id -> width, layers, heads, feed-forward, primary quantization
 MATRIX: dict[str, tuple[int, int, int, int, str]] = {
@@ -1204,6 +1208,7 @@ def main() -> None:
         (staging / "training-report.json").write_text(
             json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
+        write_remote_bundle_manifest_from_environment(staging)
         staging.rename(config.output_dir)
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
@@ -1220,6 +1225,79 @@ def resolve_inside(root: Path, value: Path) -> Path:
 
 def canonical_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+def remote_bundle_role(path: Path) -> str:
+    name = path.name
+    if name.endswith(".decoder.bin"):
+        return "model"
+    if name in {"tokenizer.runtime.json", "tokenizer.unigram.model"}:
+        return "tokenizer"
+    if name.endswith(".pt"):
+        return "checkpoint"
+    if name == "training-report.json":
+        return "evidence"
+    if name.startswith("candidate.") and name.endswith(".manifest.json"):
+        return "metadata"
+    raise ValueError(f"remote bundle contains an unclassified file: {path.as_posix()}")
+
+
+def create_remote_bundle_manifest(
+    staging: Path, job_id: str, source_job_sha256: str, created_at: str
+) -> dict[str, Any]:
+    if REMOTE_JOB_ID_PATTERN.fullmatch(job_id) is None:
+        raise ValueError("remote job ID is invalid")
+    if not is_sha256(source_job_sha256):
+        raise ValueError("remote source job SHA-256 is invalid")
+    manifest_path = staging / "manifest.json"
+    if manifest_path.exists():
+        raise FileExistsError("remote bundle manifest already exists")
+
+    files: list[dict[str, Any]] = []
+    for path in sorted(staging.rglob("*"), key=lambda value: value.as_posix()):
+        if path.is_dir():
+            continue
+        if path.is_symlink() or not path.is_file():
+            raise ValueError(f"remote bundle contains an invalid file: {path}")
+        relative = path.relative_to(staging).as_posix()
+        asset = asset_record(path)
+        files.append(
+            {
+                "relativePath": relative,
+                "role": remote_bundle_role(path),
+                "bytes": asset["bytes"],
+                "sha256": asset["sha256"],
+            }
+        )
+    if not files:
+        raise ValueError("remote bundle has no files")
+
+    base = {
+        "schema": REMOTE_BUNDLE_SCHEMA,
+        "jobId": job_id,
+        "sourceJobSha256": source_job_sha256,
+        "createdAt": created_at,
+        "files": files,
+        "totalBytes": sum(file["bytes"] for file in files),
+    }
+    return {
+        **base,
+        "bundleSha256": hashlib.sha256(canonical_json(base).encode("utf-8")).hexdigest(),
+    }
+
+
+def write_remote_bundle_manifest_from_environment(staging: Path) -> None:
+    job_id = os.environ.get("JOTLUCK_REMOTE_JOB_ID")
+    source_job_sha256 = os.environ.get("JOTLUCK_REMOTE_JOB_SHA256")
+    if job_id is None and source_job_sha256 is None:
+        return
+    if not job_id or not source_job_sha256:
+        raise ValueError("remote bundle identity environment is incomplete")
+    created_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace(
+        "+00:00", "Z"
+    )
+    manifest = create_remote_bundle_manifest(staging, job_id, source_job_sha256, created_at)
+    atomic_json_write(manifest, staging / "manifest.json")
 
 
 def candidate_artifact_identity(

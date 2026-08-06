@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 DEPENDENCIES_AVAILABLE = all(
@@ -180,6 +182,42 @@ class TrainDecoderHelperTests(unittest.TestCase):
                     "measuredPeakMemoryBytes": False,
                 },
             )
+
+    def test_remote_bundle_manifest_binds_sorted_files_and_job_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "candidate.q4.manifest.json").write_text("{}\n", encoding="utf-8")
+            (root / "smoke.q4.decoder.bin").write_bytes(b"model")
+            (root / "smoke.best.float.pt").write_bytes(b"checkpoint")
+            (root / "tokenizer.runtime.json").write_text("{}\n", encoding="utf-8")
+            (root / "tokenizer.unigram.model").write_bytes(b"tokenizer")
+            (root / "training-report.json").write_text("{}\n", encoding="utf-8")
+
+            manifest = trainer.create_remote_bundle_manifest(
+                root, "smoke-16m", "a" * 64, "2026-08-06T00:00:00.000Z"
+            )
+            paths = [file["relativePath"] for file in manifest["files"]]
+            self.assertEqual(paths, sorted(paths))
+            self.assertNotIn("manifest.json", paths)
+            self.assertEqual(manifest["jobId"], "smoke-16m")
+            self.assertEqual(manifest["sourceJobSha256"], "a" * 64)
+            base = {key: value for key, value in manifest.items() if key != "bundleSha256"}
+            expected = hashlib.sha256(trainer.canonical_json(base).encode("utf-8")).hexdigest()
+            self.assertEqual(manifest["bundleSha256"], expected)
+            self.assertEqual(
+                manifest["totalBytes"], sum(file["bytes"] for file in manifest["files"])
+            )
+
+    def test_remote_bundle_environment_fails_closed_when_partial(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with mock.patch.dict(
+                trainer.os.environ,
+                {"JOTLUCK_REMOTE_JOB_ID": "smoke-16m"},
+                clear=True,
+            ):
+                with self.assertRaisesRegex(ValueError, "environment is incomplete"):
+                    trainer.write_remote_bundle_manifest_from_environment(root)
 
     def test_explicit_cuda_fails_closed_when_unavailable(self) -> None:
         if trainer.torch.cuda.is_available():

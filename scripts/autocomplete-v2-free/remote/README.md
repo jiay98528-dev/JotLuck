@@ -49,7 +49,7 @@ pwsh -NoProfile -File .\Initialize-Fx15.ps1 -Apply `
 
 - `-InstallPackages`：先用 `winget show --source winget` 复核，再按精确 ID 安装 Tailscale 与 Python 3.12。
 - `-EnableTailscaleUnattended`：仅执行 `tailscale set --unattended=true`，不接收或生成 auth key。
-- `-InstallTrainingEnvironment -ApprovePythonPackageSource -ApprovePyTorchDownloadSource`：三个开关必须同时提供。只允许从 `https://pypi.org/simple` 安装 `numpy==2.1.3`、`sentencepiece==0.2.1`，从 `https://download.pytorch.org/whl/cu126` 安装 `torch==2.8.0`；创建独立 venv、验证全部版本与 CUDA `12.6`，并写 `requirements.resolved.lock.txt` 及 SHA-256。没有 `py.exe` 时可通过 `-BasePythonPath` 显式指定已核验的 Python 3.12。
+- `-InstallTrainingEnvironment -ApprovePythonPackageSource -ApprovePyTorchDownloadSource`：三个开关必须同时提供。只允许从 `https://pypi.org/simple` 安装 `numpy==2.3.2`、`sentencepiece==0.2.1`，从 `https://download.pytorch.org/whl/cu126` 安装 `torch==2.8.0`；版本与仓库根 `requirements.lock.txt` 保持一致，创建独立 venv、验证全部版本与 CUDA `12.6`，并写 `requirements.resolved.lock.txt` 及 SHA-256。没有 `py.exe` 时可通过 `-BasePythonPath` 显式指定已核验的 Python 3.12。
 - `-ConfigureAcPowerPolicy`：先保存完整 `powercfg /query` 并复制当前电源方案，再只修改接电状态的睡眠、休眠和合盖策略。
 
 脚本从不自动重启 Windows。输出的 `restartNeeded=true` 表示用户应停止并人工重启；不能绕过重启继续注册训练任务。
