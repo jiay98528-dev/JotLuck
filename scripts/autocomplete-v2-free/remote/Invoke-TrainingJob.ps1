@@ -128,7 +128,7 @@ $actualCandidates = @($job.selection.candidateMatrixIds | ForEach-Object { [stri
 if ([int64]$job.selection.parameterCount -ne [int64]$expectedSelection.parameterCount -or
     [string]$job.selection.quantization -ne 'q4' -or
     $actualCandidates.Count -ne $expectedSelection.candidates.Count -or
-    (Compare-Object -ReferenceObject $expectedSelection.candidates -DifferenceObject $actualCandidates -SyncWindow 0).Count -ne 0) {
+    @(Compare-Object -ReferenceObject $expectedSelection.candidates -DifferenceObject $actualCandidates -SyncWindow 0).Count -ne 0) {
     throw 'Training selection outputs do not match the fixed recipe matrix.'
 }
 

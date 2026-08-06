@@ -225,6 +225,7 @@ describe('remote V2 free training runtime policies', () => {
     expect(runner).toContain("'.py' { $trainingPythonExecutable }");
     expect(runner).toContain('standalone 16m-q8 is forbidden');
     expect(runner).toContain('JOTLUCK_REMOTE_CANDIDATE_MATRIX_IDS');
+    expect(runner).toContain('@(Compare-Object');
     expect(runner).toContain("$job.resume.mode -eq 'never'");
     expect(runner).toContain("$job.resume.mode -eq 'required'");
     expect(runner).not.toContain('[IO.Directory]::CreateDirectory($checkpointRoot)');
