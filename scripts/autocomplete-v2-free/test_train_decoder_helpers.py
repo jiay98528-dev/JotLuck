@@ -128,6 +128,32 @@ class TrainDecoderHelperTests(unittest.TestCase):
             self.assertEqual(adjusted_signature["globalBatchSize"], 128)
             self.assertEqual(adjusted_signature["oomAdjustments"], [adjustment])
 
+    def test_remote_resume_mode_preserves_fresh_and_recoverable_startup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            checkpoint_dir = Path(directory) / "candidate.checkpoints"
+            with mock.patch.dict(
+                trainer.os.environ, {"JOTLUCK_REMOTE_RESUME_MODE": "if-available"}
+            ):
+                self.assertIsNone(trainer.resolve_resume_request(None, checkpoint_dir))
+                checkpoint_dir.mkdir()
+                self.assertEqual(
+                    trainer.resolve_resume_request(None, checkpoint_dir), "auto"
+                )
+
+            with mock.patch.dict(
+                trainer.os.environ, {"JOTLUCK_REMOTE_RESUME_MODE": "required"}
+            ):
+                self.assertEqual(
+                    trainer.resolve_resume_request(None, checkpoint_dir), "auto"
+                )
+                with self.assertRaisesRegex(ValueError, "cannot both"):
+                    trainer.resolve_resume_request("auto", checkpoint_dir)
+
+            with mock.patch.dict(
+                trainer.os.environ, {"JOTLUCK_REMOTE_RESUME_MODE": "never"}
+            ):
+                self.assertIsNone(trainer.resolve_resume_request(None, checkpoint_dir))
+
     def test_checkpoint_retention_keeps_last_two_without_touching_best(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

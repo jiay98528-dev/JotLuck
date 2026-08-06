@@ -168,7 +168,13 @@ try {
     $outputRoot = Resolve-ChildPath -Root $workspace -RelativePath ([string]$job.output.rootDirectory)
     [IO.Directory]::CreateDirectory($outputRoot) | Out-Null
     $checkpointRoot = Resolve-ChildPath -Root $workspace -RelativePath ([string]$job.resume.checkpointDirectory)
-    [IO.Directory]::CreateDirectory($checkpointRoot) | Out-Null
+    $checkpointRootExists = [IO.Directory]::Exists($checkpointRoot)
+    if ($job.resume.mode -eq 'never' -and $checkpointRootExists) {
+        throw 'Fresh training checkpoint directory already exists.'
+    }
+    if ($job.resume.mode -eq 'required' -and -not $checkpointRootExists) {
+        throw 'Required checkpoint directory is missing.'
+    }
     $checkpointBundle = [IO.Path]::Combine($checkpointRoot, 'checkpoint-bundle.json')
     if ($job.resume.mode -eq 'required' -and -not [IO.File]::Exists($checkpointBundle)) {
         throw 'Required checkpoint bundle is missing.'

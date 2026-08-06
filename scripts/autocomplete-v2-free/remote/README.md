@@ -21,7 +21,7 @@
 6. 在 FX15 本地调用 `Finalize-VerifiedUpload.ps1`，同时传入 manifest 文件 SHA-256 和 manifest 内部 bundle SHA-256。脚本检查路径穿越、junction/symlink、意外文件、字节数与逐文件 SHA-256，全部通过后才用同卷 `Directory.Move` 原子转正；已存在的正式目录绝不覆盖。
 7. 管理员审查探针和路径后，显式以 `Bootstrap-Fx15.ps1 -Apply` 注册一次计划任务。模板拒绝覆盖同名任务，并在注册前复核 runner/job 文件 SHA-256。
 8. 计划任务使用现有专用非管理员账号、`S4U`、`RunLevel Limited`、开机触发、失败重启和无限任务时限。实际训练由任务进程持有，不依赖 SSH 会话，因此控制连接断开后继续运行。
-9. `Invoke-TrainingJob.ps1` 再次验证 job、recipe、所有输入、Git commit/tree、续训包和 deadline；训练过程每 15 秒原子更新状态与心跳，超期或非零退出写 `failed`。成功只有在输出 manifest 与逐文件内容复核后才写 `completed`。
+9. `Invoke-TrainingJob.ps1` 再次验证 job、recipe、所有输入、Git commit/tree、续训包和 deadline；fresh job 不预建 checkpoint 目录，`if-available` 只在目录已存在时恢复，`required` 则要求已验证的续训目录。训练过程每 15 秒原子更新状态与心跳，超期或非零退出写 `failed`。成功只有在输出 manifest 与逐文件内容复核后才写 `completed`。
 10. 训练配方每次写 checkpoint 后生成冻结的 checkpoint index。对该 index 计算 SHA-256，再显式运行 `Invoke-CheckpointRetention.ps1 -Apply`，只保留最近两份与 validation 最优一份。脚本会先复核所有 checkpoint 的路径、字节数和 SHA-256；删除不可恢复，索引必须先归档。
 
 ## FX15 一次性初始化
@@ -92,7 +92,7 @@ VPS 只在 peer relay 或后续明确批准的 WireGuard 方案中转密文，�
 
 ## 恢复、心跳与停止条件
 
-- `resume.mode=required` 时，`checkpointDirectory/checkpoint-bundle.json` 必须存在且匹配 job 中的 SHA-256；`never` 不得携带 checkpoint 哈希。
+- `resume.mode=never` 要求 checkpoint 目录尚不存在，由 trainer 原子建立 fresh 状态；`if-available` 在目录不存在时 fresh 启动、存在时自动选择最新 step；`required` 时 `checkpointDirectory/checkpoint-bundle.json` 必须存在且匹配 job 中的 SHA-256。runner 不得为了检查路径而预先创建 checkpoint 目录。
 - 监控方应把超过 `3 × HeartbeatSeconds` 未更新视为 stale，再结合计划任务状态、进程退出码和 stderr 判断；不能仅凭 SSH 断线认定训练失败。
 - deadline 到达、输入/recipe/commit/tree/hash 不一致、损坏模型、输出 manifest 缺失、路径逃逸或 reparse point 都必须失败关闭，不能降级继续。
 - `last two + best` 最多保留三份：若最优项同时属于最近两份，则只保留两份。删除前必须保留 checkpoint index 及其 SHA-256 作为可复核记录。

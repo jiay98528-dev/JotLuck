@@ -58,6 +58,7 @@ LAYER_NORM_EPSILON = 1e-5
 OOM_STATE_SCHEMA = "jotluck.autocomplete.v2-free-oom-state.v1"
 REMOTE_BUNDLE_SCHEMA = "jotluck.autocomplete.v2-free.remote-bundle.v1"
 REMOTE_JOB_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+REMOTE_RESUME_MODES = {"never", "if-available", "required"}
 
 # matrix id -> width, layers, heads, feed-forward, primary quantization
 MATRIX: dict[str, tuple[int, int, int, int, str]] = {
@@ -232,6 +233,7 @@ def parse_args() -> Config:
     if output == allowed or allowed not in output.parents:
         parser.error("output-dir must be a child of the isolated V2 free candidate root")
     checkpoint_dir = output.parent / f".{args.candidate_id}.checkpoints"
+    resume = resolve_resume_request(args.resume, checkpoint_dir)
     return Config(
         workspace_root=root,
         selection_path=resolve_inside(root, args.selection),
@@ -239,7 +241,7 @@ def parse_args() -> Config:
         candidate_id=args.candidate_id,
         output_dir=output,
         checkpoint_dir=checkpoint_dir,
-        resume=args.resume,
+        resume=resume,
         device=args.device,
         seed=args.seed,
         epochs=args.epochs,
@@ -247,6 +249,21 @@ def parse_args() -> Config:
         learning_rate=args.learning_rate,
         threads=args.threads,
     )
+
+
+def resolve_resume_request(cli_resume: str | None, checkpoint_dir: Path) -> str | None:
+    remote_mode = os.environ.get("JOTLUCK_REMOTE_RESUME_MODE")
+    if remote_mode is None:
+        return cli_resume
+    if remote_mode not in REMOTE_RESUME_MODES:
+        raise ValueError("unsupported remote resume mode")
+    if cli_resume is not None:
+        raise ValueError("remote resume mode and --resume cannot both be specified")
+    if remote_mode == "never":
+        return None
+    if remote_mode == "required":
+        return "auto"
+    return "auto" if checkpoint_dir.is_dir() else None
 
 
 def resolve_device(requested: str) -> torch.device:
