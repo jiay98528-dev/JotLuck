@@ -75,6 +75,7 @@ def build_bundle(
             "trainDocuments": len(train_paths),
             "vocabularySize": trainer.VOCABULARY_SIZE,
             "byteFallback": True,
+            "trainingRecipe": trainer.tokenizer_training_recipe(),
             "assets": {
                 "model": trainer.asset_record(model_path),
                 "runtime": trainer.asset_record(runtime_path),

@@ -46,6 +46,14 @@ MODEL_SCHEMA = "jotluck.autocomplete.quantized-decoder.v2"
 MANIFEST_SCHEMA = "jotluck.autocomplete.public-free-decoder.v1"
 MODEL_MAGIC = b"JLFDQ02\0"
 VOCABULARY_SIZE = 8_000
+TOKENIZER_MODEL_TYPE = "unigram"
+TOKENIZER_CHARACTER_COVERAGE = 0.9995
+TOKENIZER_BYTE_FALLBACK = True
+TOKENIZER_NORMALIZATION_RULE = "identity"
+TOKENIZER_SHUFFLE_INPUT_SENTENCE = False
+TOKENIZER_THREADS = 1
+TOKENIZER_HARD_VOCAB_LIMIT = True
+TOKENIZER_SENTENCEPIECE_VERSION = "0.2.1"
 MAX_CONTEXT_TOKENS = 256
 MAX_TRAINING_POOL_BYTES = 512 * 1024 * 1024
 FORMAL_MATRIX_MINIMUM_BYTES = 128 * 1024 * 1024
@@ -523,24 +531,44 @@ def train_tokenizer_assets(output_dir: Path, train_paths: Iterable[Path]) -> tup
         spm.SentencePieceTrainer.train(
             input=str(corpus),
             model_prefix=str(prefix),
-            model_type="unigram",
+            model_type=TOKENIZER_MODEL_TYPE,
             vocab_size=VOCABULARY_SIZE,
-            byte_fallback=True,
-            character_coverage=1.0,
-            normalization_rule_name="identity",
+            byte_fallback=TOKENIZER_BYTE_FALLBACK,
+            character_coverage=TOKENIZER_CHARACTER_COVERAGE,
+            normalization_rule_name=TOKENIZER_NORMALIZATION_RULE,
             pad_id=0,
             unk_id=1,
             bos_id=2,
             eos_id=3,
-            shuffle_input_sentence=False,
-            num_threads=1,
-            hard_vocab_limit=True,
+            shuffle_input_sentence=TOKENIZER_SHUFFLE_INPUT_SENTENCE,
+            num_threads=TOKENIZER_THREADS,
+            hard_vocab_limit=TOKENIZER_HARD_VOCAB_LIMIT,
         )
         (output_dir / "tokenizer.unigram.vocab").unlink()
         export_sentencepiece_runtime(model_path, runtime_path)
     finally:
         corpus.unlink(missing_ok=True)
     return model_path, runtime_path
+
+
+def tokenizer_training_recipe() -> dict[str, Any]:
+    actual_version = getattr(spm, "__version__", None)
+    if actual_version != TOKENIZER_SENTENCEPIECE_VERSION:
+        raise RuntimeError(
+            "SentencePiece version does not match the locked tokenizer recipe: "
+            f"{actual_version!r} != {TOKENIZER_SENTENCEPIECE_VERSION!r}"
+        )
+    return {
+        "modelType": TOKENIZER_MODEL_TYPE,
+        "vocabularySize": VOCABULARY_SIZE,
+        "characterCoverage": TOKENIZER_CHARACTER_COVERAGE,
+        "byteFallback": TOKENIZER_BYTE_FALLBACK,
+        "hardVocabLimit": TOKENIZER_HARD_VOCAB_LIMIT,
+        "normalizationRuleName": TOKENIZER_NORMALIZATION_RULE,
+        "shuffleInputSentence": TOKENIZER_SHUFFLE_INPUT_SENTENCE,
+        "numThreads": TOKENIZER_THREADS,
+        "sentencepieceVersion": actual_version,
+    }
 
 
 def verify_shared_tokenizer(model_path: Path, runtime_path: Path) -> None:

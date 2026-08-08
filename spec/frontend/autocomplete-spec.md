@@ -536,7 +536,7 @@ v5 migration 将 v4 personal 模型与 accepted lexicon 放入 `legacyAccepted`�
 - ID：`public-v2-free-decoder-v1`；协议、manifest、缓存和候选目录全部新建。
 - 固定矩阵：16M/24M/32M Q4，16M Q8；8K Unigram + byte fallback；训练池 ≤512MiB。
 - 正式 128MiB selection：复用已治理的 32MiB smoke 基线并加入四个固定到 2026-08-01 的 Wikimedia DEVELOPMENT 自然文本来源；每来源 ≤20%、每类别 ≤40%、中英文 byte share 差 ≤1%。正文按 256–2,048 UTF-8 bytes 切段，经 exact dedup、128-value MinHash/32×4 LSH 候选召回、真实 shingle Jaccard ≥0.80 判重，并与 validation/final 的 32 中文字符/12 英文 token 连续窗口指纹零重叠。
-- tokenizer 只从正式 train split 冻结一次；16M/24M/32M 的 job 同时绑定同一 model/runtime tokenizer SHA，禁止每个 job 重新训练。正式远程任务统一 `resume.mode=if-available`，匹配的完成态必须幂等。
+- tokenizer 只从正式 train split 冻结一次；配方固定为 8K Unigram、`character_coverage=0.9995`、完整 256-byte fallback。极低频 Unicode 字符通过 byte token 无损回退，不扩大词表。16M/24M/32M 的 job 同时绑定同一 model/runtime tokenizer SHA，禁止每个 job 重新训练。正式远程任务统一 `resume.mode=if-available`，匹配的完成态必须幂等。
 - 输入：标题链、当前段落、前一段尾部、最多一个无路径检索片段；总计 ≤256 tokens。
 - 输出：中文默认 ≤8 code points；英文 ≤12 code points且完整成词；单行、非 mixed、非循环、不得越过 Markdown 边界。
 - Windows/Tauri：同一签名 exe 的隐藏常驻 completion worker；长度帧、request ID、latest-only、取消、deadline、崩溃重启上限与 Job Object 资源约束必须测试。

@@ -262,6 +262,44 @@ class TrainDecoderHelperTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "provided together"):
             trainer.validate_shared_tokenizer_paths(None, runtime)
 
+    def test_tokenizer_training_uses_fixed_rare_character_fallback_contract(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_train(**arguments: object) -> None:
+            captured.update(arguments)
+            prefix = Path(str(arguments["model_prefix"]))
+            Path(f"{prefix}.model").write_bytes(b"model")
+            Path(f"{prefix}.vocab").write_text("fixture\n", encoding="utf-8")
+
+        def fake_export(_model: Path, runtime: Path) -> None:
+            runtime.write_text("{}\n", encoding="utf-8")
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "train.txt"
+            source.write_text("常见中文 and common English", encoding="utf-8")
+            with (
+                mock.patch.object(
+                    trainer.spm.SentencePieceTrainer, "train", side_effect=fake_train
+                ),
+                mock.patch.object(
+                    trainer, "export_sentencepiece_runtime", side_effect=fake_export
+                ),
+                mock.patch.object(
+                    trainer.UnigramRuntimeTokenizer, "from_path", return_value=object()
+                ),
+            ):
+                trainer.train_tokenizer_assets(root / "tokenizer", [source])
+
+        self.assertEqual(captured["model_type"], "unigram")
+        self.assertEqual(captured["vocab_size"], 8_000)
+        self.assertEqual(captured["character_coverage"], 0.9995)
+        self.assertIs(captured["byte_fallback"], True)
+        self.assertIs(captured["hard_vocab_limit"], True)
+        self.assertEqual(captured["normalization_rule_name"], "identity")
+        self.assertIs(captured["shuffle_input_sentence"], False)
+        self.assertEqual(captured["num_threads"], 1)
+
     def test_shared_tokenizer_bundle_binds_selection_and_both_assets(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -310,6 +348,20 @@ class TrainDecoderHelperTests(unittest.TestCase):
 
             self.assertEqual(manifest["inputTreeSha256"], "a" * 64)
             self.assertEqual(manifest["trainDocuments"], 1)
+            self.assertEqual(
+                manifest["trainingRecipe"],
+                {
+                    "modelType": "unigram",
+                    "vocabularySize": 8_000,
+                    "characterCoverage": 0.9995,
+                    "byteFallback": True,
+                    "hardVocabLimit": True,
+                    "normalizationRuleName": "identity",
+                    "shuffleInputSentence": False,
+                    "numThreads": 1,
+                    "sentencepieceVersion": "0.2.1",
+                },
+            )
             self.assertEqual(
                 manifest["selectionStageReceiptSha256"], trainer.sha256_file(receipt)
             )
