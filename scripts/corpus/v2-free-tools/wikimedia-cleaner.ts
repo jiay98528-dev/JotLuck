@@ -11,6 +11,7 @@ import {
   canonicalSha256,
   decodeUtf8,
   isSha256,
+  normalizeV2FreeTextIdentity,
   publishStagedDirectory,
   readPinnedFile,
   resolveCorpusOutput,
@@ -403,6 +404,14 @@ function parsePages(
       rejected[key] = (rejected[key] ?? 0) + 1;
       continue;
     }
+    if (!normalizeFingerprintEligibleText(text)) {
+      rejected['url-only'] = (rejected['url-only'] ?? 0) + 1;
+      continue;
+    }
+    if (!hasDeclaredLanguageShingle(text, plan.language)) {
+      rejected['segment-language-mismatch'] = (rejected['segment-language-mismatch'] ?? 0) + 1;
+      continue;
+    }
     const identity = sha256(normalizeArticle(text));
     if (identities.has(identity)) {
       rejected['exact-duplicate'] = (rejected['exact-duplicate'] ?? 0) + 1;
@@ -495,7 +504,17 @@ function decodeXml(value: string): string {
 }
 
 function normalizeArticle(value: string): string {
-  return value.normalize('NFKC').replace(/\s+/gu, ' ').trim();
+  return normalizeV2FreeTextIdentity(value);
+}
+
+function normalizeFingerprintEligibleText(value: string): string {
+  return normalizeArticle(value.replace(/https?:\/\/\S+/gu, ' '));
+}
+
+function hasDeclaredLanguageShingle(value: string, language: 'zh' | 'en'): boolean {
+  const normalized = normalizeFingerprintEligibleText(value);
+  if (language === 'en') return (normalized.match(/[a-z0-9]+/gu)?.length ?? 0) >= 5;
+  return (normalized.match(/\p{Script=Han}/gu)?.length ?? 0) >= 12;
 }
 
 function isHttpsUrl(value: string): boolean {

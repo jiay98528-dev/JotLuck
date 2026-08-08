@@ -73,9 +73,17 @@ impl DecoderModel {
                         return Err("decoder quantized tensor scale is invalid".to_string());
                     }
                     let values = slice(payload, offset, length)?;
-                    TensorStorage::Dequantized(dequantize_tensor(
-                        bits, group_size, &scales, values, elements,
-                    )?)
+                    if bits == 4 {
+                        TensorStorage::PackedQ4(PackedQ4Tensor::new(
+                            scales,
+                            values.to_vec(),
+                            elements,
+                        )?)
+                    } else {
+                        TensorStorage::Dequantized(dequantize_tensor(
+                            bits, group_size, &scales, values, elements,
+                        )?)
+                    }
                 }
                 _ => return Err("decoder runtime tensor dtype is invalid".to_string()),
             };
@@ -266,25 +274,29 @@ impl DecoderModel {
         let head_width = self.width / self.heads;
         let scale = (head_width as f32).sqrt().recip();
         let mut output = vec![vec![0.0; self.width]; queries.len()];
-        for position in 0..queries.len() {
-            if position % 8 == 0 && should_stop() {
-                return Err("decoder inference cancelled or expired".to_string());
-            }
-            for head in 0..self.heads {
-                let start = head * head_width;
-                let end = start + head_width;
-                let mut scores = Vec::with_capacity(position + 1);
-                for key in keys.iter().take(position + 1) {
-                    scores.push(dot(&queries[position][start..end], &key[start..end])? * scale);
+        output
+            .par_iter_mut()
+            .enumerate()
+            .try_for_each(|(position, output)| {
+                if position % 8 == 0 && should_stop() {
+                    return Err("decoder inference cancelled or expired".to_string());
                 }
-                softmax_in_place(&mut scores)?;
-                for (source, probability) in values.iter().take(position + 1).zip(scores) {
-                    for offset in 0..head_width {
-                        output[position][start + offset] += probability * source[start + offset];
+                for head in 0..self.heads {
+                    let start = head * head_width;
+                    let end = start + head_width;
+                    let mut scores = Vec::with_capacity(position + 1);
+                    for key in keys.iter().take(position + 1) {
+                        scores.push(dot(&queries[position][start..end], &key[start..end])? * scale);
+                    }
+                    softmax_in_place(&mut scores)?;
+                    for (source, probability) in values.iter().take(position + 1).zip(scores) {
+                        for offset in 0..head_width {
+                            output[start + offset] += probability * source[start + offset];
+                        }
                     }
                 }
-            }
-        }
+                Ok::<(), String>(())
+            })?;
         Ok(output)
     }
 
@@ -343,6 +355,9 @@ impl DecoderModel {
             return Err(format!("decoder matrix shape mismatch: {name}"));
         }
         let rows = tensor.shape[0];
+        if let TensorStorage::PackedQ4(storage) = &tensor.storage {
+            return storage.matvec(rows, input.len(), input, should_stop);
+        }
         if rows >= PARALLEL_MATVEC_MIN_ROWS
             && rows.saturating_mul(input.len()) >= PARALLEL_MATVEC_MIN_OPERATIONS
         {
@@ -381,7 +396,7 @@ impl DecoderModel {
         }
         match &tensor.storage {
             TensorStorage::Float(values) => Ok(values),
-            TensorStorage::Dequantized(_) => {
+            TensorStorage::PackedQ4(_) | TensorStorage::Dequantized(_) => {
                 Err(format!("decoder vector storage is invalid: {name}"))
             }
         }

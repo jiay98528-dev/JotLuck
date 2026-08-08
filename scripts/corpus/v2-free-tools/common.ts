@@ -4,6 +4,20 @@ import * as path from 'node:path';
 
 export type Sha256 = string;
 
+// Unicode White_Space (PropList.txt) plus U+FEFF, which ECMAScript also
+// treats as whitespace. Keeping the set explicit avoids Python/JavaScript
+// `\s` disagreements for U+0085 and embedded BOMs.
+const V2_FREE_CANONICAL_WHITESPACE =
+  /[\u0009-\u000D\u0020\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]+/gu;
+
+export function collapseV2FreeCanonicalWhitespace(value: string): string {
+  return value.replace(V2_FREE_CANONICAL_WHITESPACE, ' ').trim();
+}
+
+export function normalizeV2FreeTextIdentity(value: string): string {
+  return collapseV2FreeCanonicalWhitespace(value.normalize('NFKC').toLocaleLowerCase('en-US'));
+}
+
 export function sha256(value: Uint8Array | string): Sha256 {
   return createHash('sha256').update(value).digest('hex');
 }

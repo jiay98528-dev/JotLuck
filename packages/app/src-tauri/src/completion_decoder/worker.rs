@@ -157,68 +157,84 @@ pub(super) fn run_decoder_inference(
     if request_is_stale(request_id, request, latest_request) {
         return Ok(None);
     }
+    runtime.begin_performance_profile();
     let should_stop = || request_is_stale(request_id, request, latest_request);
-    let capsule = serialized_capsule(&request.context_capsule);
-    let tokens = runtime.encode_generation_context(&capsule, MAX_GENERATED_TOKENS);
+    let capsule = {
+        let _profile = runtime.performance_profile_span("worker.capsule");
+        serialized_capsule(&request.context_capsule)
+    };
+    let tokens = {
+        let _profile = runtime.performance_profile_span("worker.tokenize");
+        runtime.encode_generation_context(&capsule, MAX_GENERATED_TOKENS)
+    };
     if tokens.is_empty() {
         return Err("decoder tokenizer returned an empty context".to_string());
     }
     if request.max_candidates == 0 {
         return Ok(Some(empty_generate_response(request)));
     }
-    let beams = match run_beam_search(runtime, &tokens, &request.language_hint, &should_stop) {
-        Ok(beams) => beams,
-        Err(_) if should_stop() => return Ok(None),
-        Err(error) => return Err(error),
+    let beams = {
+        let _profile = runtime.performance_profile_span("worker.beam_total");
+        match run_beam_search(runtime, &tokens, &request.language_hint, &should_stop) {
+            Ok(beams) => beams,
+            Err(_) if should_stop() => return Ok(None),
+            Err(error) => return Err(error),
+        }
     };
     if should_stop() {
         return Ok(None);
     }
-    let mut seen = HashSet::new();
-    let mut candidates = Vec::new();
-    for beam in beams {
-        if beam.token_ids.is_empty()
-            || beam
-                .token_ids
-                .first()
-                .is_some_and(|token_id| runtime.is_terminal(*token_id))
-        {
-            continue;
+    let candidates = {
+        let _profile = runtime.performance_profile_span("worker.candidate_postprocess");
+        let mut seen = HashSet::new();
+        let mut candidates = Vec::new();
+        for beam in beams {
+            if beam.token_ids.is_empty()
+                || beam
+                    .token_ids
+                    .first()
+                    .is_some_and(|token_id| runtime.is_terminal(*token_id))
+            {
+                continue;
+            }
+            let decoded = beam
+                .decoded
+                .unwrap_or_else(|| runtime.decode_tokens(&beam.token_ids));
+            let Some((text, language)) = normalize_model_candidate(
+                &decoded,
+                &request.language_hint,
+                request.context_capsule.max_tokens,
+            ) else {
+                continue;
+            };
+            if !seen.insert(text.clone()) {
+                continue;
+            }
+            let rank = candidates.len();
+            candidates.push(DecoderRawCandidate {
+                candidate_id: format!("{}-{rank}", request_id),
+                text,
+                confidence: f64::from(beam.normalized_score.exp().clamp(0.0, 1.0)),
+                model_score: f64::from(beam.normalized_score),
+                gate_score: f64::from(beam.normalized_score.exp().clamp(0.0, 1.0)),
+                language,
+            });
+            if candidates.len() >= request.max_candidates.min(BEAM_WIDTH) {
+                break;
+            }
         }
-        let decoded = beam
-            .decoded
-            .unwrap_or_else(|| runtime.decode_tokens(&beam.token_ids));
-        let Some((text, language)) = normalize_model_candidate(
-            &decoded,
-            &request.language_hint,
-            request.context_capsule.max_tokens,
-        ) else {
-            continue;
-        };
-        if !seen.insert(text.clone()) {
-            continue;
-        }
-        let rank = candidates.len();
-        candidates.push(DecoderRawCandidate {
-            candidate_id: format!("{}-{rank}", request_id),
-            text,
-            confidence: f64::from(beam.normalized_score.exp().clamp(0.0, 1.0)),
-            model_score: f64::from(beam.normalized_score),
-            gate_score: f64::from(beam.normalized_score.exp().clamp(0.0, 1.0)),
-            language,
-        });
-        if candidates.len() >= request.max_candidates.min(BEAM_WIDTH) {
-            break;
-        }
-    }
-    Ok(Some(DecoderGenerateResponse {
+        candidates
+    };
+    let response = DecoderGenerateResponse {
         protocol_version: PROTOCOL_VERSION,
         engine_epoch: request.engine_epoch,
         workspace_scope: request.workspace_scope.clone(),
         document_version: request.document_version.clone(),
         cursor_pos: request.cursor_pos,
         candidates,
-    }))
+    };
+    runtime.emit_performance_profile(request_id, &request.language_hint);
+    Ok(Some(response))
 }
 
 fn empty_generate_response(request: &DecoderGenerateRequest) -> DecoderGenerateResponse {
@@ -238,7 +254,10 @@ fn run_beam_search(
     language_hint: &str,
     should_stop: &(impl Fn() -> bool + Sync),
 ) -> Result<Vec<SequenceBeam>, String> {
-    let prefill = runtime.prefill(context_tokens, should_stop)?;
+    let prefill = {
+        let _profile = runtime.performance_profile_span("beam.prefill");
+        runtime.prefill(context_tokens, should_stop)?
+    };
     let mut beams = vec![SequenceBeam {
         cache: Some(prefill.cache),
         logits: prefill.logits,
@@ -249,106 +268,139 @@ fn run_beam_search(
         finished: false,
     }];
 
-    for _ in 0..MAX_GENERATED_TOKENS {
+    for step in 0..MAX_GENERATED_TOKENS {
         if should_stop() {
             return Err("decoder inference cancelled or expired".to_string());
         }
-        let mut choices = Vec::with_capacity(BEAM_WIDTH * BEAM_BRANCHING);
-        for (parent_index, beam) in beams.iter().enumerate() {
-            if beam.finished {
-                choices.push(BeamChoice {
-                    parent_index,
-                    token: None,
-                    token_ids: beam.token_ids.clone(),
-                    decoded: beam.decoded.clone(),
-                    log_probability: beam.log_probability,
-                    normalized_score: beam.normalized_score,
-                    finished: true,
-                });
-                continue;
+        let mut choices = {
+            let _profile =
+                runtime.performance_profile_span_owned(format!("beam.step{step}.rank_and_expand"));
+            let mut choices = Vec::with_capacity(BEAM_WIDTH * BEAM_BRANCHING);
+            for (parent_index, beam) in beams.iter().enumerate() {
+                if beam.finished {
+                    choices.push(BeamChoice {
+                        parent_index,
+                        token: None,
+                        token_ids: beam.token_ids.clone(),
+                        decoded: beam.decoded.clone(),
+                        log_probability: beam.log_probability,
+                        normalized_score: beam.normalized_score,
+                        finished: true,
+                    });
+                    continue;
+                }
+                for score in runtime.rank_logits(&beam.logits, BEAM_BRANCHING)? {
+                    let mut token_ids = beam.token_ids.clone();
+                    token_ids.push(score.token_id);
+                    let log_probability = beam.log_probability + score.log_probability;
+                    let normalized_score =
+                        length_normalized_score(log_probability, token_ids.len());
+                    let finished = runtime.is_terminal(score.token_id)
+                        || token_ids.len() >= MAX_GENERATED_TOKENS;
+                    choices.push(BeamChoice {
+                        parent_index,
+                        token: Some(score),
+                        token_ids,
+                        decoded: None,
+                        log_probability,
+                        normalized_score,
+                        finished,
+                    });
+                }
             }
-            for score in runtime.rank_logits(&beam.logits, BEAM_BRANCHING)? {
-                let mut token_ids = beam.token_ids.clone();
-                token_ids.push(score.token_id);
-                let log_probability = beam.log_probability + score.log_probability;
-                let normalized_score = length_normalized_score(log_probability, token_ids.len());
-                let finished =
-                    runtime.is_terminal(score.token_id) || token_ids.len() >= MAX_GENERATED_TOKENS;
-                choices.push(BeamChoice {
-                    parent_index,
-                    token: Some(score),
-                    token_ids,
-                    decoded: None,
-                    log_probability,
-                    normalized_score,
-                    finished,
-                });
-            }
+            choices
+        };
+        {
+            let _profile =
+                runtime.performance_profile_span_owned(format!("beam.step{step}.select"));
+            select_best_choices(&mut choices);
         }
-        select_best_choices(&mut choices);
-        for choice in &mut choices {
-            if choice.finished || choice.token.is_none() {
-                continue;
+        {
+            let _profile =
+                runtime.performance_profile_span_owned(format!("beam.step{step}.decode_boundary"));
+            for choice in &mut choices {
+                if choice.finished || choice.token.is_none() {
+                    continue;
+                }
+                let decoded = runtime.decode_tokens(&choice.token_ids);
+                if sequence_boundary_reached(&decoded, language_hint) {
+                    choice.finished = true;
+                }
+                choice.decoded = Some(decoded);
             }
-            let decoded = runtime.decode_tokens(&choice.token_ids);
-            if sequence_boundary_reached(&decoded, language_hint) {
-                choice.finished = true;
-            }
-            choice.decoded = Some(decoded);
         }
 
-        let mut active_children = vec![0_usize; beams.len()];
-        for choice in &choices {
-            if choice.token.is_some() && !choice.finished {
-                active_children[choice.parent_index] += 1;
+        let (tasks, mut next) = {
+            let _profile = runtime
+                .performance_profile_span_owned(format!("beam.step{step}.cache_clone_tasks"));
+            let mut active_children = vec![0_usize; beams.len()];
+            for choice in &choices {
+                if choice.token.is_some() && !choice.finished {
+                    active_children[choice.parent_index] += 1;
+                }
             }
-        }
-        let mut parent_caches: Vec<_> = beams.into_iter().map(|beam| beam.cache).collect();
-        let mut tasks = Vec::with_capacity(choices.len());
-        let mut next = Vec::with_capacity(choices.len());
-        for choice in choices {
-            let token_id = choice.token.map(|score| score.token_id);
-            let index = next.len();
-            next.push(SequenceBeam {
-                cache: None,
-                logits: Vec::new(),
-                token_ids: choice.token_ids,
-                decoded: choice.decoded,
-                log_probability: choice.log_probability,
-                normalized_score: choice.normalized_score,
-                finished: choice.finished,
-            });
-            let Some(token_id) = token_id else {
-                continue;
-            };
-            if choice.finished {
-                continue;
+            let mut parent_caches: Vec<_> = beams.into_iter().map(|beam| beam.cache).collect();
+            let mut tasks = Vec::with_capacity(choices.len());
+            let mut next = Vec::with_capacity(choices.len());
+            for choice in choices {
+                let token_id = choice.token.map(|score| score.token_id);
+                let index = next.len();
+                next.push(SequenceBeam {
+                    cache: None,
+                    logits: Vec::new(),
+                    token_ids: choice.token_ids,
+                    decoded: choice.decoded,
+                    log_probability: choice.log_probability,
+                    normalized_score: choice.normalized_score,
+                    finished: choice.finished,
+                });
+                let Some(token_id) = token_id else {
+                    continue;
+                };
+                if choice.finished {
+                    continue;
+                }
+                let remaining = &mut active_children[choice.parent_index];
+                let cache = if *remaining == 1 {
+                    parent_caches[choice.parent_index]
+                        .take()
+                        .ok_or_else(|| "decoder beam parent cache is missing".to_string())?
+                } else {
+                    parent_caches[choice.parent_index]
+                        .as_ref()
+                        .cloned()
+                        .ok_or_else(|| "decoder beam parent cache is missing".to_string())?
+                };
+                *remaining -= 1;
+                tasks.push(AdvanceTask {
+                    index,
+                    cache,
+                    token_id,
+                });
             }
-            let remaining = &mut active_children[choice.parent_index];
-            let cache = if *remaining == 1 {
-                parent_caches[choice.parent_index]
-                    .take()
-                    .ok_or_else(|| "decoder beam parent cache is missing".to_string())?
-            } else {
-                parent_caches[choice.parent_index]
-                    .as_ref()
-                    .cloned()
-                    .ok_or_else(|| "decoder beam parent cache is missing".to_string())?
-            };
-            *remaining -= 1;
-            tasks.push(AdvanceTask {
-                index,
-                cache,
-                token_id,
-            });
+            (tasks, next)
+        };
+        let task_count = tasks.len();
+        let results = {
+            let _profile = runtime.performance_profile_span_owned(format!(
+                "beam.step{step}.advance_batch{task_count}"
+            ));
+            advance_beams(runtime, tasks, should_stop)?
+        };
+        {
+            let _profile =
+                runtime.performance_profile_span_owned(format!("beam.step{step}.install"));
+            install_advance_results(&mut next, results)?;
         }
-        install_advance_results(&mut next, advance_beams(runtime, tasks, should_stop)?)?;
         beams = next;
         if beams.is_empty() || beams.iter().all(|beam| beam.finished) {
             break;
         }
     }
-    beams.sort_by(compare_beams);
+    {
+        let _profile = runtime.performance_profile_span("beam.final_sort");
+        beams.sort_by(compare_beams);
+    }
     Ok(beams)
 }
 

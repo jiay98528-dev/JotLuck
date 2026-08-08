@@ -28,6 +28,36 @@ from typing import Iterator
 CANONICAL_WHITESPACE_RE = re.compile(
     "[\u0009-\u000D\u0020\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]+"
 )
+FINGERPRINT_URL_RE = re.compile(r"https?://\S+")
+ENGLISH_FINGERPRINT_TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+# Unicode Script=Han ranges used by ECMAScript property escapes. The helper is
+# stdlib-only, so keep the ranges explicit instead of introducing a second
+# regex runtime whose Unicode version could drift independently.
+HAN_SCRIPT_RANGES = (
+    (0x2E80, 0x2E99),
+    (0x2E9B, 0x2EF3),
+    (0x2F00, 0x2FD5),
+    (0x3005, 0x3005),
+    (0x3007, 0x3007),
+    (0x3021, 0x3029),
+    (0x3038, 0x303B),
+    (0x3400, 0x4DBF),
+    (0x4E00, 0x9FFF),
+    (0xF900, 0xFA6D),
+    (0xFA70, 0xFAD9),
+    (0x16FE2, 0x16FE3),
+    (0x16FF0, 0x16FF1),
+    (0x20000, 0x2A6DF),
+    (0x2A700, 0x2B739),
+    (0x2B740, 0x2B81D),
+    (0x2B820, 0x2CEA1),
+    (0x2CEB0, 0x2EBE0),
+    (0x2EBF0, 0x2EE5D),
+    (0x2F800, 0x2FA1D),
+    (0x30000, 0x3134A),
+    (0x31350, 0x33479),
+)
 
 MIN_SEGMENT_BYTES = 256
 MAX_SEGMENT_BYTES = 2048
@@ -180,6 +210,26 @@ def normalize(value: str) -> str:
     ).strip().lower()
 
 
+def fingerprint_identity(value: str) -> str:
+    """Mirror fingerprintText's URL removal before canonical normalization."""
+    return normalize(FINGERPRINT_URL_RE.sub(" ", value))
+
+
+def is_han_script(character: str) -> bool:
+    codepoint = ord(character)
+    return any(start <= codepoint <= end for start, end in HAN_SCRIPT_RANGES)
+
+
+def segment_language_eligible(value: str, language: str) -> bool:
+    """Require the declared language's shortest fingerprint shingle window."""
+    normalized = fingerprint_identity(value)
+    if language == "en":
+        return len(ENGLISH_FINGERPRINT_TOKEN_RE.findall(normalized)) >= 5
+    if language == "zh":
+        return sum(1 for character in normalized if is_han_script(character)) >= 12
+    return False
+
+
 def reject_reason(
     title: str,
     namespace: str,
@@ -294,21 +344,30 @@ def classify_page_segments(
     page: ET.Element,
     language: str,
     source_id: str,
-) -> tuple[list[tuple[Candidate, str]], str | None]:
+) -> tuple[list[tuple[Candidate, str]], dict[str, int]]:
     title, namespace, page_id, revision_id, raw_text, redirect = page_fields(page)
     reason = reject_reason(title, namespace, page_id, revision_id, raw_text, redirect, language)
     if reason:
-        return [], reason
+        return [], {reason: 1}
     text = clean_wikitext(raw_text)
     reason = safety_reason(text)
     if reason:
-        return [], reason
+        return [], {reason: 1}
     segments = segment_text(text)
     if not segments:
-        return [], "no-eligible-segment"
+        return [], {"no-eligible-segment": 1}
     title_sha256 = hashlib.sha256(unicodedata.normalize("NFKC", title).encode("utf-8")).hexdigest()
     result: list[tuple[Candidate, str]] = []
+    rejected: dict[str, int] = {}
     for segment_index, segment in enumerate(segments):
+        if not fingerprint_identity(segment):
+            rejected["url-only"] = rejected.get("url-only", 0) + 1
+            continue
+        if not segment_language_eligible(segment, language):
+            rejected["segment-language-mismatch"] = (
+                rejected.get("segment-language-mismatch", 0) + 1
+            )
+            continue
         encoded = (segment + "\n").encode("utf-8")
         normalized_sha256 = hashlib.sha256(normalize(segment).encode("utf-8")).hexdigest()
         key = hashlib.sha256(
@@ -330,7 +389,7 @@ def classify_page_segments(
                 segment,
             )
         )
-    return result, None
+    return result, rejected
 
 
 def select_candidates(
@@ -347,10 +406,9 @@ def select_candidates(
     selected_bytes = 0
     rejected: dict[str, int] = {}
     for page in iter_pages(raw_path, close_truncated_root=close_truncated_root):
-        candidates, outcome = classify_page_segments(page, language, source_id)
-        if outcome is not None:
-            rejected[outcome] = rejected.get(outcome, 0) + 1
-            continue
+        candidates, outcomes = classify_page_segments(page, language, source_id)
+        for reason, count in outcomes.items():
+            rejected[reason] = rejected.get(reason, 0) + count
         for candidate, _ in candidates:
             existing_key = normalized.get(candidate.normalized_sha256)
             if existing_key is not None:

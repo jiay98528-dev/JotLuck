@@ -21,6 +21,9 @@ impl DecoderModel {
         let batch_size = inputs.len();
         let rows = tensor.shape[0];
         let columns = tensor.shape[1];
+        if let TensorStorage::PackedQ4(storage) = &tensor.storage {
+            return storage.matmul(rows, columns, inputs, should_stop);
+        }
         let input_elements = columns
             .checked_mul(batch_size)
             .ok_or_else(|| "decoder batch input size overflow".to_string())?;
@@ -97,74 +100,119 @@ impl DecoderModel {
             return Err("decoder token context length is invalid".to_string());
         }
         let vocabulary_size = self.vocabulary_size()?;
-        let mut hidden = Vec::with_capacity(tokens.len());
-        for (position, token_id) in tokens.iter().copied().enumerate() {
-            if token_id >= vocabulary_size {
-                return Err("decoder token id is invalid".to_string());
+        let mut hidden = {
+            let _profile = super::q4::profile_span("prefill.embedding");
+            let mut hidden = Vec::with_capacity(tokens.len());
+            for (position, token_id) in tokens.iter().copied().enumerate() {
+                if token_id >= vocabulary_size {
+                    return Err("decoder token id is invalid".to_string());
+                }
+                let mut value = self.matrix_row("token_embedding.weight", token_id)?;
+                let positional = self.matrix_row("position_embedding.weight", position)?;
+                add_in_place(&mut value, &positional)?;
+                hidden.push(value);
             }
-            let mut value = self.matrix_row("token_embedding.weight", token_id)?;
-            let positional = self.matrix_row("position_embedding.weight", position)?;
-            add_in_place(&mut value, &positional)?;
-            hidden.push(value);
-        }
+            hidden
+        };
 
         let mut prefix_layers = Vec::with_capacity(self.layers);
         for layer in 0..self.layers {
+            let _layer_profile =
+                super::q4::profile_span_owned(format!("prefill.layer{layer}.total"));
             if should_stop() {
                 return Err("decoder inference cancelled or expired".to_string());
             }
             let prefix = format!("blocks.layers.{layer}");
-            let normalized = self.layer_norm_batch(
-                &hidden,
-                &format!("{prefix}.norm1.weight"),
-                &format!("{prefix}.norm1.bias"),
-            )?;
-            let projected = self.linear_batch(
-                &format!("{prefix}.self_attn.in_proj_weight"),
-                &format!("{prefix}.self_attn.in_proj_bias"),
-                &normalized,
-                should_stop,
-            )?;
-            let (queries, keys, values) = split_qkv(projected, self.width)?;
-            let attended = self.causal_attention(&queries, &keys, &values, should_stop)?;
-            let mut attention_residual = self.linear_batch(
-                &format!("{prefix}.self_attn.out_proj.weight"),
-                &format!("{prefix}.self_attn.out_proj.bias"),
-                &attended,
-                should_stop,
-            )?;
-            add_batch_in_place(&mut attention_residual, &hidden)?;
+            let normalized = {
+                let _profile = super::q4::profile_span("prefill.norm1");
+                self.layer_norm_batch(
+                    &hidden,
+                    &format!("{prefix}.norm1.weight"),
+                    &format!("{prefix}.norm1.bias"),
+                )?
+            };
+            let projected = {
+                let _profile = super::q4::profile_span("prefill.qkv_linear");
+                self.linear_batch(
+                    &format!("{prefix}.self_attn.in_proj_weight"),
+                    &format!("{prefix}.self_attn.in_proj_bias"),
+                    &normalized,
+                    should_stop,
+                )?
+            };
+            let (queries, keys, values) = {
+                let _profile = super::q4::profile_span("prefill.qkv_split");
+                split_qkv(projected, self.width)?
+            };
+            let attended = {
+                let _profile = super::q4::profile_span("prefill.attention");
+                self.causal_attention(&queries, &keys, &values, should_stop)?
+            };
+            let mut attention_residual = {
+                let _profile = super::q4::profile_span("prefill.out_linear");
+                self.linear_batch(
+                    &format!("{prefix}.self_attn.out_proj.weight"),
+                    &format!("{prefix}.self_attn.out_proj.bias"),
+                    &attended,
+                    should_stop,
+                )?
+            };
+            {
+                let _profile = super::q4::profile_span("prefill.attention_residual");
+                add_batch_in_place(&mut attention_residual, &hidden)?;
+            }
 
-            let normalized = self.layer_norm_batch(
-                &attention_residual,
-                &format!("{prefix}.norm2.weight"),
-                &format!("{prefix}.norm2.bias"),
-            )?;
-            let mut feed_forward = self.linear_batch(
-                &format!("{prefix}.linear1.weight"),
-                &format!("{prefix}.linear1.bias"),
-                &normalized,
-                should_stop,
-            )?;
-            feed_forward
-                .iter_mut()
-                .flatten()
-                .for_each(|value| *value = gelu(*value));
-            hidden = self.linear_batch(
-                &format!("{prefix}.linear2.weight"),
-                &format!("{prefix}.linear2.bias"),
-                &feed_forward,
-                should_stop,
-            )?;
-            add_batch_in_place(&mut hidden, &attention_residual)?;
+            let normalized = {
+                let _profile = super::q4::profile_span("prefill.norm2");
+                self.layer_norm_batch(
+                    &attention_residual,
+                    &format!("{prefix}.norm2.weight"),
+                    &format!("{prefix}.norm2.bias"),
+                )?
+            };
+            let mut feed_forward = {
+                let _profile = super::q4::profile_span("prefill.ff1_linear");
+                self.linear_batch(
+                    &format!("{prefix}.linear1.weight"),
+                    &format!("{prefix}.linear1.bias"),
+                    &normalized,
+                    should_stop,
+                )?
+            };
+            {
+                let _profile = super::q4::profile_span("prefill.gelu");
+                feed_forward
+                    .iter_mut()
+                    .flatten()
+                    .for_each(|value| *value = gelu(*value));
+            }
+            hidden = {
+                let _profile = super::q4::profile_span("prefill.ff2_linear");
+                self.linear_batch(
+                    &format!("{prefix}.linear2.weight"),
+                    &format!("{prefix}.linear2.bias"),
+                    &feed_forward,
+                    should_stop,
+                )?
+            };
+            {
+                let _profile = super::q4::profile_span("prefill.ff_residual");
+                add_batch_in_place(&mut hidden, &attention_residual)?;
+            }
             prefix_layers.push(LayerKeyValueCache { keys, values });
         }
 
         let final_hidden = hidden
             .last()
             .ok_or_else(|| "decoder hidden state is empty".to_string())?;
-        let normalized = self.layer_norm(final_hidden, "final_norm.weight", "final_norm.bias")?;
-        let logits = self.matvec("output.weight", &normalized, should_stop)?;
+        let normalized = {
+            let _profile = super::q4::profile_span("prefill.final_norm");
+            self.layer_norm(final_hidden, "final_norm.weight", "final_norm.bias")?
+        };
+        let logits = {
+            let _profile = super::q4::profile_span("prefill.output_head");
+            self.matvec("output.weight", &normalized, should_stop)?
+        };
         if should_stop() {
             return Err("decoder inference cancelled or expired".to_string());
         }
@@ -196,93 +244,140 @@ impl DecoderModel {
             return Ok(Vec::new());
         }
         let vocabulary_size = self.vocabulary_size()?;
+        let _advance_profile = super::q4::profile_span("advance.runtime_total");
         let mut hidden = Vec::with_capacity(caches.len());
         let mut key_validity = Vec::with_capacity(caches.len());
-        for (cache, token_id) in caches.iter().zip(token_ids.iter().copied()) {
-            self.validate_cache(cache)?;
-            let position = cache.prefix.key_validity.len() + cache.key_validity.len();
-            if position >= self.maximum_context_tokens || token_id >= vocabulary_size {
-                return Err("decoder token append is outside the model context".to_string());
+        {
+            let _profile = super::q4::profile_span("advance.embedding_validate");
+            for (cache, token_id) in caches.iter().zip(token_ids.iter().copied()) {
+                self.validate_cache(cache)?;
+                let position = cache.prefix.key_validity.len() + cache.key_validity.len();
+                if position >= self.maximum_context_tokens || token_id >= vocabulary_size {
+                    return Err("decoder token append is outside the model context".to_string());
+                }
+                let mut value = self.matrix_row("token_embedding.weight", token_id)?;
+                let positional = self.matrix_row("position_embedding.weight", position)?;
+                add_in_place(&mut value, &positional)?;
+                hidden.push(value);
+                key_validity.push(token_id != 0);
             }
-            let mut value = self.matrix_row("token_embedding.weight", token_id)?;
-            let positional = self.matrix_row("position_embedding.weight", position)?;
-            add_in_place(&mut value, &positional)?;
-            hidden.push(value);
-            key_validity.push(token_id != 0);
         }
 
         let mut pending: Vec<Vec<(Vec<f32>, Vec<f32>)>> = (0..caches.len())
             .map(|_| Vec::with_capacity(self.layers))
             .collect();
         for layer in 0..self.layers {
+            let _layer_profile =
+                super::q4::profile_span_owned(format!("advance.layer{layer}.total"));
             if should_stop() {
                 return Err("decoder inference cancelled or expired".to_string());
             }
             let prefix = format!("blocks.layers.{layer}");
-            let normalized = self.layer_norm_batch(
-                &hidden,
-                &format!("{prefix}.norm1.weight"),
-                &format!("{prefix}.norm1.bias"),
-            )?;
-            let projected = self.linear_batch(
-                &format!("{prefix}.self_attn.in_proj_weight"),
-                &format!("{prefix}.self_attn.in_proj_bias"),
-                &normalized,
-                should_stop,
-            )?;
-            let (queries, keys, values) = split_qkv(projected, self.width)?;
-            let mut attended = Vec::with_capacity(caches.len());
-            for index in 0..caches.len() {
-                attended.push(self.cached_attention(
-                    &queries[index],
-                    CachedAttentionContext {
-                        prefix: &caches[index].prefix.layers[layer],
-                        prefix_validity: &caches[index].prefix.key_validity,
-                        delta: &caches[index].layers[layer],
-                        delta_validity: &caches[index].key_validity,
-                        current_key: &keys[index],
-                        current_value: &values[index],
-                        current_is_valid: key_validity[index],
-                    },
-                )?);
+            let normalized = {
+                let _profile = super::q4::profile_span("advance.norm1");
+                self.layer_norm_batch(
+                    &hidden,
+                    &format!("{prefix}.norm1.weight"),
+                    &format!("{prefix}.norm1.bias"),
+                )?
+            };
+            let projected = {
+                let _profile = super::q4::profile_span("advance.qkv_linear");
+                self.linear_batch(
+                    &format!("{prefix}.self_attn.in_proj_weight"),
+                    &format!("{prefix}.self_attn.in_proj_bias"),
+                    &normalized,
+                    should_stop,
+                )?
+            };
+            let (queries, keys, values) = {
+                let _profile = super::q4::profile_span("advance.qkv_split");
+                split_qkv(projected, self.width)?
+            };
+            let attended = {
+                let _profile = super::q4::profile_span("advance.attention");
+                (0..caches.len())
+                    .into_par_iter()
+                    .map(|index| {
+                        self.cached_attention(
+                            &queries[index],
+                            CachedAttentionContext {
+                                prefix: &caches[index].prefix.layers[layer],
+                                prefix_validity: &caches[index].prefix.key_validity,
+                                delta: &caches[index].layers[layer],
+                                delta_validity: &caches[index].key_validity,
+                                current_key: &keys[index],
+                                current_value: &values[index],
+                                current_is_valid: key_validity[index],
+                            },
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?
+            };
+            let mut attention_residual = {
+                let _profile = super::q4::profile_span("advance.out_linear");
+                self.linear_batch(
+                    &format!("{prefix}.self_attn.out_proj.weight"),
+                    &format!("{prefix}.self_attn.out_proj.bias"),
+                    &attended,
+                    should_stop,
+                )?
+            };
+            {
+                let _profile = super::q4::profile_span("advance.attention_residual");
+                add_batch_in_place(&mut attention_residual, &hidden)?;
             }
-            let mut attention_residual = self.linear_batch(
-                &format!("{prefix}.self_attn.out_proj.weight"),
-                &format!("{prefix}.self_attn.out_proj.bias"),
-                &attended,
-                should_stop,
-            )?;
-            add_batch_in_place(&mut attention_residual, &hidden)?;
 
-            let normalized = self.layer_norm_batch(
-                &attention_residual,
-                &format!("{prefix}.norm2.weight"),
-                &format!("{prefix}.norm2.bias"),
-            )?;
-            let mut feed_forward = self.linear_batch(
-                &format!("{prefix}.linear1.weight"),
-                &format!("{prefix}.linear1.bias"),
-                &normalized,
-                should_stop,
-            )?;
-            feed_forward
-                .iter_mut()
-                .flatten()
-                .for_each(|value| *value = gelu(*value));
-            hidden = self.linear_batch(
-                &format!("{prefix}.linear2.weight"),
-                &format!("{prefix}.linear2.bias"),
-                &feed_forward,
-                should_stop,
-            )?;
-            add_batch_in_place(&mut hidden, &attention_residual)?;
+            let normalized = {
+                let _profile = super::q4::profile_span("advance.norm2");
+                self.layer_norm_batch(
+                    &attention_residual,
+                    &format!("{prefix}.norm2.weight"),
+                    &format!("{prefix}.norm2.bias"),
+                )?
+            };
+            let mut feed_forward = {
+                let _profile = super::q4::profile_span("advance.ff1_linear");
+                self.linear_batch(
+                    &format!("{prefix}.linear1.weight"),
+                    &format!("{prefix}.linear1.bias"),
+                    &normalized,
+                    should_stop,
+                )?
+            };
+            {
+                let _profile = super::q4::profile_span("advance.gelu");
+                feed_forward
+                    .iter_mut()
+                    .flatten()
+                    .for_each(|value| *value = gelu(*value));
+            }
+            hidden = {
+                let _profile = super::q4::profile_span("advance.ff2_linear");
+                self.linear_batch(
+                    &format!("{prefix}.linear2.weight"),
+                    &format!("{prefix}.linear2.bias"),
+                    &feed_forward,
+                    should_stop,
+                )?
+            };
+            {
+                let _profile = super::q4::profile_span("advance.ff_residual");
+                add_batch_in_place(&mut hidden, &attention_residual)?;
+            }
             for index in 0..pending.len() {
                 pending[index].push((keys[index].clone(), values[index].clone()));
             }
         }
 
-        let normalized = self.layer_norm_batch(&hidden, "final_norm.weight", "final_norm.bias")?;
-        let logits = self.matvec_batch("output.weight", &normalized, should_stop)?;
+        let normalized = {
+            let _profile = super::q4::profile_span("advance.final_norm");
+            self.layer_norm_batch(&hidden, "final_norm.weight", "final_norm.bias")?
+        };
+        let logits = {
+            let _profile = super::q4::profile_span("advance.output_head");
+            self.matvec_batch("output.weight", &normalized, should_stop)?
+        };
         if should_stop() {
             return Err("decoder inference cancelled or expired".to_string());
         }

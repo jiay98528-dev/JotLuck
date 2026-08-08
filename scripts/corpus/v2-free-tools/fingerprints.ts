@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 
 import {
   canonicalSha256,
+  collapseV2FreeCanonicalWhitespace,
   decodeUtf8,
   isSha256,
   readPinnedFile,
@@ -345,12 +346,12 @@ function verifyFingerprintRecord(record: FingerprintRecord): void {
 }
 
 function normalizeText(value: string): string {
-  return value
-    .normalize('NFKC')
-    .toLocaleLowerCase('en-US')
-    .replace(/https?:\/\/\S+/gu, ' ')
-    .replace(/\s+/gu, ' ')
-    .trim();
+  return collapseV2FreeCanonicalWhitespace(
+    value
+      .normalize('NFKC')
+      .toLocaleLowerCase('en-US')
+      .replace(/https?:\/\/\S+/gu, ' '),
+  );
 }
 
 function windows(tokens: readonly string[], size: number): string[] {

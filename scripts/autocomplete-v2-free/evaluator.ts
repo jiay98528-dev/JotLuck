@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { readFile, realpath } from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { normalizeV2FreeTextIdentity } from '../corpus/v2-free-tools/common';
 import type { V2FreeSha256 } from './contract';
 import {
   computeV2FreeEvaluatorTreeSha256,
@@ -542,7 +543,7 @@ function trimCodePoints(value: string, maximum: number): string {
 }
 
 function normalizeContinuation(value: string): string {
-  return value.normalize('NFKC').replace(/\s+/gu, ' ').trim().toLocaleLowerCase('en-US');
+  return normalizeV2FreeTextIdentity(value);
 }
 
 function percentile90(values: readonly number[]): number {

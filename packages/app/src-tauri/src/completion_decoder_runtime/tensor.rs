@@ -10,6 +10,9 @@ impl Tensor {
             .ok_or_else(|| "decoder matrix size overflow".to_string())?;
         let values = match &self.storage {
             TensorStorage::Float(values) | TensorStorage::Dequantized(values) => values,
+            TensorStorage::PackedQ4(_) => {
+                return Err("decoder packed q4 matrix has no float backing".to_string())
+            }
         };
         if values.len() != expected {
             return Err("decoder matrix storage length is invalid".to_string());
@@ -28,11 +31,27 @@ impl Tensor {
     }
 
     pub(super) fn row(&self, row: usize) -> Result<Vec<f32>, String> {
-        self.row_slice(row).map(<[f32]>::to_vec)
+        if self.shape.len() != 2 || row >= self.shape[0] {
+            return Err("decoder matrix row is invalid".to_string());
+        }
+        match &self.storage {
+            TensorStorage::PackedQ4(storage) => storage.row(row, self.shape[1]),
+            TensorStorage::Float(_) | TensorStorage::Dequantized(_) => {
+                self.row_slice(row).map(<[f32]>::to_vec)
+            }
+        }
     }
 
     pub(super) fn dot_row(&self, row: usize, input: &[f32]) -> Result<f32, String> {
-        dot(self.row_slice(row)?, input)
+        if self.shape.len() != 2 || row >= self.shape[0] {
+            return Err("decoder matrix row is invalid".to_string());
+        }
+        match &self.storage {
+            TensorStorage::PackedQ4(storage) => storage.dot_row(row, self.shape[1], input),
+            TensorStorage::Float(_) | TensorStorage::Dequantized(_) => {
+                dot(self.row_slice(row)?, input)
+            }
+        }
     }
 }
 

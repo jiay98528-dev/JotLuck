@@ -3,6 +3,7 @@ import { readFile, realpath } from 'node:fs/promises';
 import * as path from 'node:path';
 
 import { deduplicateSelectionDocuments } from '../corpus/v2-free-tools/fingerprints';
+import { normalizeV2FreeTextIdentity } from '../corpus/v2-free-tools/common';
 import { V2_FREE_TRAINING_POOL_LIMIT_BYTES, type V2FreeSha256 } from './contract';
 import { loadV2FreeHoldoutContent, type V2FreeHoldoutDescriptor } from './holdout-validator';
 
@@ -880,7 +881,7 @@ function assertDistribution(
 }
 
 function normalizeText(value: string): string {
-  return value.normalize('NFKC').replace(/\s+/gu, ' ').trim().toLocaleLowerCase('en-US');
+  return normalizeV2FreeTextIdentity(value);
 }
 
 function decodeUtf8(bytes: Buffer, label: string): string {

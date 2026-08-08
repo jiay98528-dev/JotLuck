@@ -5,6 +5,8 @@ import * as path from 'node:path';
 import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
 
+import { normalizeV2FreeTextIdentity } from '../corpus/v2-free-tools/common';
+
 import {
   V2_FREE_SUPPLEMENT_SCHEMA,
   computeV2FreeSupplementInputTreeSha256,
@@ -630,7 +632,7 @@ function assertAllowedText(text: string, id: string): void {
 }
 
 function normalizeText(value: string): string {
-  return value.normalize('NFKC').replace(/\s+/gu, ' ').trim().toLocaleLowerCase('en-US');
+  return normalizeV2FreeTextIdentity(value);
 }
 
 function createOutputDocumentId(sourceId: string, rawId: string): string {

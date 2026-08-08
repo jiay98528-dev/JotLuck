@@ -57,6 +57,7 @@ struct TensorDescriptor {
 
 #[derive(Debug)]
 enum TensorStorage {
+    PackedQ4(PackedQ4Tensor),
     Dequantized(Vec<f32>),
     Float(Vec<f32>),
 }
@@ -273,8 +274,10 @@ impl DecoderRuntime {
 mod batch;
 mod cache;
 mod model;
+mod q4;
 mod tensor;
 
+use q4::PackedQ4Tensor;
 use tensor::*;
 
 #[cfg(test)]
