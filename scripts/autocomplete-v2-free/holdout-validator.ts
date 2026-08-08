@@ -2,10 +2,13 @@ import { createHash } from 'node:crypto';
 import { readFile, realpath } from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { normalizeV2FreeTextIdentity } from '../corpus/v2-free-tools/common';
 import type { V2FreeSha256 } from './contract';
 
-export const V2_FREE_HOLDOUT_DESCRIPTOR_SCHEMA =
+export const V2_FREE_HOLDOUT_DESCRIPTOR_SCHEMA_V1 =
   'jotluck.autocomplete.v2-free-holdout-descriptor.v1';
+export const V2_FREE_HOLDOUT_DESCRIPTOR_SCHEMA =
+  'jotluck.autocomplete.v2-free-holdout-descriptor.v2';
 export const V2_FREE_HOLDOUT_SCHEMA = 'jotluck.autocomplete.v2-free-holdout.v1';
 export const V2_FREE_NOTE_CATEGORIES = Object.freeze([
   'field-observation',
@@ -33,9 +36,7 @@ export interface V2FreeHoldoutSummary {
   categoryCheckpoints: Record<V2FreeNoteCategory, number>;
 }
 
-export interface V2FreeHoldoutDescriptor {
-  schema: typeof V2_FREE_HOLDOUT_DESCRIPTOR_SCHEMA;
-  schemaVersion: 1;
+interface V2FreeHoldoutDescriptorCommon {
   datasetId: string;
   frozenAt: string;
   classification: V2FreeHoldoutClassification;
@@ -44,10 +45,37 @@ export interface V2FreeHoldoutDescriptor {
     sha256: V2FreeSha256;
   };
   summary: V2FreeHoldoutSummary;
-  humanReviewed: true;
-  reviewerIdentitySha256: V2FreeSha256;
   sealed: boolean;
 }
+
+export interface V2FreeHoldoutDescriptorV1 extends V2FreeHoldoutDescriptorCommon {
+  schema: typeof V2_FREE_HOLDOUT_DESCRIPTOR_SCHEMA_V1;
+  schemaVersion: 1;
+  humanReviewed: true;
+  reviewerIdentitySha256: V2FreeSha256;
+}
+
+export type V2FreeHoldoutReview =
+  | {
+      kind: 'human';
+      reviewedAt: string;
+      reviewArtifactSha256: V2FreeSha256;
+      reviewerIdentitySha256: V2FreeSha256;
+    }
+  | {
+      kind: 'independent-model';
+      reviewedAt: string;
+      reviewArtifactSha256: V2FreeSha256;
+    };
+
+export interface V2FreeHoldoutDescriptorV2 extends V2FreeHoldoutDescriptorCommon {
+  schema: typeof V2_FREE_HOLDOUT_DESCRIPTOR_SCHEMA;
+  schemaVersion: 2;
+  review: V2FreeHoldoutReview;
+  formalReleaseEvidence: boolean;
+}
+
+export type V2FreeHoldoutDescriptor = V2FreeHoldoutDescriptorV1 | V2FreeHoldoutDescriptorV2;
 
 export interface V2FreeHoldoutSupportDocument {
   id: string;
@@ -113,18 +141,29 @@ export function validateV2FreeHoldoutDescriptor(
 ): V2FreeHoldoutDescriptor {
   const expected = { ...DEFAULT_POLICY, ...policy };
   if (
-    descriptor.schema !== V2_FREE_HOLDOUT_DESCRIPTOR_SCHEMA ||
-    descriptor.schemaVersion !== 1 ||
     !isClassification(descriptor.classification) ||
     !isSafeIdentifier(descriptor.datasetId) ||
     !isCanonicalIso(descriptor.frozenAt) ||
-    descriptor.humanReviewed !== true ||
-    !isSha256(descriptor.reviewerIdentitySha256) ||
     !Number.isSafeInteger(descriptor.content.bytes) ||
     descriptor.content.bytes < 1 ||
     !isSha256(descriptor.content.sha256)
   ) {
     throw new Error('V2 free holdout descriptor identity is invalid.');
+  }
+  if (
+    descriptor.schema === V2_FREE_HOLDOUT_DESCRIPTOR_SCHEMA_V1 &&
+    descriptor.schemaVersion === 1
+  ) {
+    if (descriptor.humanReviewed !== true || !isSha256(descriptor.reviewerIdentitySha256)) {
+      throw new Error('V2 free holdout v1 descriptor review identity is invalid.');
+    }
+  } else if (
+    descriptor.schema === V2_FREE_HOLDOUT_DESCRIPTOR_SCHEMA &&
+    descriptor.schemaVersion === 2
+  ) {
+    validateDescriptorReview(descriptor);
+  } else {
+    throw new Error('V2 free holdout descriptor schema is invalid.');
   }
   const final = descriptor.classification.endsWith('-final-v1');
   if (descriptor.sealed !== final) {
@@ -192,6 +231,7 @@ export function validateV2FreeHoldoutContent(
   const allIds = new Set<string>();
   const allPaths = new Set<string>();
   const supportById = new Map<string, V2FreeHoldoutSupportDocument>();
+  const normalizedSupportById = new Map<string, string>();
   const patternSupport = new Map<string, Set<string>>();
   const normalizedSupportTexts = new Set<string>();
   for (const support of holdout.supportDocuments) {
@@ -200,11 +240,14 @@ export function validateV2FreeHoldoutContent(
     if (allPaths.has(support.path)) throw new Error('V2 free holdout paths must be unique.');
     allPaths.add(support.path);
     assertLanguage(support.language);
+    assertSafeHoldoutProse(support.text, `support ${support.id}`);
+    assertLanguageContent(support.text, support.language, `support ${support.id}`);
     const normalized = normalizeText(support.text);
     if (!normalized || normalizedSupportTexts.has(normalized)) {
       throw new Error('Workspace support documents must contain independent text.');
     }
     normalizedSupportTexts.add(normalized);
+    normalizedSupportById.set(support.id, normalized);
     const patterns = new Set(support.patternIds);
     if (patterns.size === 0 || patterns.size !== support.patternIds.length) {
       throw new Error(`Workspace support has invalid pattern identities: ${support.id}.`);
@@ -220,6 +263,8 @@ export function validateV2FreeHoldoutContent(
 
   const languageCheckpoints: Record<V2FreeLanguage, number> = { zh: 0, en: 0 };
   const categoryCheckpoints = emptyCategoryCounts();
+  const normalizedTargetTexts = new Set<string>();
+  const supportTargetOwners = new Map<string, string>();
   let checkpoints = 0;
   let completeCheckpoints = 0;
   let silenceCheckpoints = 0;
@@ -230,15 +275,22 @@ export function validateV2FreeHoldoutContent(
     allPaths.add(target.path);
     assertLanguage(target.language);
     assertCategory(target.category);
+    assertSafeHoldoutProse(target.text, `target ${target.id}`);
+    assertLanguageContent(target.text, target.language, `target ${target.id}`);
     if (!target.text || target.checkpoints.length !== expected.checkpointsPerTarget) {
       throw new Error(`Target ${target.id} has an invalid checkpoint count or empty text.`);
     }
+    const normalizedTarget = normalizeText(target.text);
+    if (normalizedTargetTexts.has(normalizedTarget)) {
+      throw new Error(`Target ${target.id} duplicates another target document.`);
+    }
+    normalizedTargetTexts.add(normalizedTarget);
     if ((target.headingTrail?.length ?? 0) > 6) {
       throw new Error(`Target ${target.id} has too many headings.`);
     }
     const targetSupportIds = new Set(target.workspaceSupportDocumentIds ?? []);
-    if (workspace && targetSupportIds.size < 2) {
-      throw new Error(`Workspace target ${target.id} requires at least two supports.`);
+    if (workspace && (targetSupportIds.size < 2 || targetSupportIds.size > 3)) {
+      throw new Error(`Workspace target ${target.id} requires two or three supports.`);
     }
     if (!workspace && targetSupportIds.size > 0) {
       throw new Error(`Cold target ${target.id} cannot bind support documents.`);
@@ -251,8 +303,15 @@ export function validateV2FreeHoldoutContent(
       if (normalizeText(support.text) === normalizeText(target.text)) {
         throw new Error(`Target ${target.id} duplicates a support document.`);
       }
+      const owner = supportTargetOwners.get(supportId);
+      if (owner !== undefined && owner !== target.id) {
+        throw new Error(`Workspace support ${supportId} is reused across targets.`);
+      }
+      supportTargetOwners.set(supportId, target.id);
     }
 
+    let targetCompleteCheckpoints = 0;
+    let targetSilenceCheckpoints = 0;
     for (const checkpoint of target.checkpoints) {
       assertUniqueId(checkpoint.id, allIds, 'checkpoint');
       validateCursor(target.text, checkpoint.cursorOffset, checkpoint.id);
@@ -261,6 +320,7 @@ export function validateV2FreeHoldoutContent(
       categoryCheckpoints[target.category]++;
       if (checkpoint.expectedBehavior === 'silence') {
         silenceCheckpoints++;
+        targetSilenceCheckpoints++;
         if (
           checkpoint.acceptableSuffixes.length !== 0 ||
           checkpoint.patternId !== undefined ||
@@ -274,17 +334,27 @@ export function validateV2FreeHoldoutContent(
         throw new Error(`Checkpoint ${checkpoint.id} has an invalid behavior.`);
       }
       completeCheckpoints++;
-      if (checkpoint.acceptableSuffixes.length < 3 || checkpoint.acceptableSuffixes.length > 5) {
-        throw new Error(`Completion checkpoint ${checkpoint.id} requires 3-5 references.`);
+      targetCompleteCheckpoints++;
+      if (checkpoint.acceptableSuffixes.length < 1 || checkpoint.acceptableSuffixes.length > 3) {
+        throw new Error(`Completion checkpoint ${checkpoint.id} requires 1-3 references.`);
       }
       const references = new Set<string>();
       const actualSuffix = normalizeContinuation(target.text.slice(checkpoint.cursorOffset));
       let matchesFrozenText = false;
       for (const suffix of checkpoint.acceptableSuffixes) {
+        assertSafeHoldoutProse(suffix, `checkpoint ${checkpoint.id} continuation`);
+        assertLanguageContent(suffix, target.language, `checkpoint ${checkpoint.id} continuation`);
         assertMeaningfulContinuation(suffix, target.language, checkpoint.id);
         const normalized = normalizeContinuation(suffix);
         if (references.has(normalized)) {
           throw new Error(`Checkpoint ${checkpoint.id} repeats a reference.`);
+        }
+        if (
+          [...references].some(
+            (reference) => reference.startsWith(normalized) || normalized.startsWith(reference),
+          )
+        ) {
+          throw new Error(`Checkpoint ${checkpoint.id} contains nested reference prefixes.`);
         }
         references.add(normalized);
         if (actualSuffix.startsWith(normalized)) matchesFrozenText = true;
@@ -295,8 +365,14 @@ export function validateV2FreeHoldoutContent(
       if (workspace) {
         assertPatternId(checkpoint.patternId);
         const supportIds = new Set(checkpoint.supportDocumentIds ?? []);
-        if (supportIds.size < 2 || (patternSupport.get(checkpoint.patternId)?.size ?? 0) < 2) {
-          throw new Error(`Checkpoint ${checkpoint.id} lacks two independent pattern supports.`);
+        if (
+          supportIds.size < 2 ||
+          supportIds.size > 3 ||
+          (patternSupport.get(checkpoint.patternId)?.size ?? 0) < 2
+        ) {
+          throw new Error(
+            `Checkpoint ${checkpoint.id} requires two or three independent pattern supports.`,
+          );
         }
         for (const supportId of supportIds) {
           const support = supportById.get(supportId);
@@ -309,12 +385,28 @@ export function validateV2FreeHoldoutContent(
             throw new Error(`Checkpoint ${checkpoint.id} has an invalid support reference.`);
           }
         }
+        for (const reference of references) {
+          if (
+            ![...supportIds].some((supportId) =>
+              normalizedSupportById.get(supportId)?.includes(reference),
+            )
+          ) {
+            throw new Error(
+              `Checkpoint ${checkpoint.id} reference cannot be recovered from its bound supports.`,
+            );
+          }
+        }
       } else if (
         checkpoint.patternId !== undefined ||
         (checkpoint.supportDocumentIds?.length ?? 0) > 0
       ) {
         throw new Error(`Cold checkpoint ${checkpoint.id} cannot bind workspace support.`);
       }
+    }
+    if (targetCompleteCheckpoints !== 3 || targetSilenceCheckpoints !== 1) {
+      throw new Error(
+        `Target ${target.id} must contain three complete and one silence checkpoint.`,
+      );
     }
   }
   const summary: V2FreeHoldoutSummary = {
@@ -402,12 +494,45 @@ function assertMeaningfulContinuation(
   if (value.includes('\n') || value.includes('\r')) {
     throw new Error(`Checkpoint ${checkpointId} has a multiline continuation.`);
   }
+  const codePointLength = Array.from(value).length;
+  const maximumCodePoints = language === 'zh' ? 8 : 12;
+  if (codePointLength < 1 || codePointLength > maximumCodePoints) {
+    throw new Error(
+      `Checkpoint ${checkpointId} continuation exceeds the visible host length boundary.`,
+    );
+  }
   if (language === 'zh') {
     if ((value.match(/[\p{Script=Han}]/gu)?.length ?? 0) < 3) {
       throw new Error(`Checkpoint ${checkpointId} has a short Chinese continuation.`);
     }
   } else if ((value.match(/[A-Za-z]/gu)?.length ?? 0) < 5 || !/^[\s\p{P}]*[A-Za-z]+/u.test(value)) {
     throw new Error(`Checkpoint ${checkpointId} has an invalid English continuation.`);
+  }
+}
+
+function assertSafeHoldoutProse(value: string, label: string): void {
+  if (
+    !value ||
+    /(^|\n)\s*(?:```|~~~)/u.test(value) ||
+    /^---\s*(?:\r?\n|$)/u.test(value) ||
+    value.includes('`') ||
+    /-----BEGIN [A-Z ]+PRIVATE KEY-----/u.test(value) ||
+    /\bAKIA[A-Z0-9]{16}\b/u.test(value) ||
+    /\b(?:api[_-]?key|client[_-]?secret|password|passwd|access[_-]?token|refresh[_-]?token)\s*[:=]\s*\S+/iu.test(
+      value,
+    )
+  ) {
+    throw new Error(`V2 free holdout ${label} contains code, frontmatter, or sensitive text.`);
+  }
+}
+
+function assertLanguageContent(value: string, language: V2FreeLanguage, label: string): void {
+  if (language === 'zh') {
+    if ((value.match(/[\p{Script=Han}]/gu)?.length ?? 0) < 3) {
+      throw new Error(`V2 free holdout ${label} does not contain Chinese prose.`);
+    }
+  } else if ((value.match(/[A-Za-z]+/gu)?.length ?? 0) < 1 || /[\p{Script=Han}]/u.test(value)) {
+    throw new Error(`V2 free holdout ${label} does not contain English-only prose.`);
   }
 }
 
@@ -451,11 +576,45 @@ function emptyCategoryCounts(): Record<V2FreeNoteCategory, number> {
 }
 
 function normalizeText(value: string): string {
-  return value.normalize('NFKC').replace(/\s+/gu, ' ').trim().toLocaleLowerCase('en-US');
+  return normalizeV2FreeTextIdentity(value);
 }
 
 function normalizeContinuation(value: string): string {
-  return value.normalize('NFKC').replace(/\s+/gu, ' ').trim().toLocaleLowerCase('en-US');
+  return normalizeV2FreeTextIdentity(value);
+}
+
+function validateDescriptorReview(descriptor: V2FreeHoldoutDescriptorV2): void {
+  if (
+    ['humanReviewed', 'reviewerIdentitySha256', 'reviewedAt', 'reviewArtifactSha256'].some(
+      (field) => Object.hasOwn(descriptor, field),
+    )
+  ) {
+    throw new Error('V2 free holdout v2 descriptor contains top-level legacy review fields.');
+  }
+  const review = descriptor.review;
+  if (
+    !review ||
+    !isCanonicalIso(review.reviewedAt) ||
+    !isSha256(review.reviewArtifactSha256) ||
+    typeof descriptor.formalReleaseEvidence !== 'boolean'
+  ) {
+    throw new Error('V2 free holdout v2 descriptor review identity is invalid.');
+  }
+  if (review.kind === 'human') {
+    if (!isSha256(review.reviewerIdentitySha256)) {
+      throw new Error('V2 free human review requires a reviewer identity.');
+    }
+    return;
+  }
+  if (
+    review.kind !== 'independent-model' ||
+    'reviewerIdentitySha256' in review ||
+    descriptor.formalReleaseEvidence !== false
+  ) {
+    throw new Error(
+      'V2 free independent-model review cannot impersonate a human or become formal release evidence.',
+    );
+  }
 }
 
 function isClassification(value: unknown): value is V2FreeHoldoutClassification {

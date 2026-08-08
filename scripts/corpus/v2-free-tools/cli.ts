@@ -15,6 +15,7 @@ import {
   authorFourHoldoutDrafts,
   createHoldoutAuthoringTemplate,
   freezeV2FreeHoldoutSet,
+  publishFrozenHoldoutEvidence,
   type HoldoutSetFreezePlan,
 } from './holdout-tools';
 import {
@@ -39,6 +40,7 @@ export async function runV2FreeCorpusCli(argv: readonly string[]): Promise<numbe
         '  holdout-template --classification <kind> --workspace-root <path> --output <path>',
         '  author-holdout-drafts --workspace-root <path> --output-root <path>',
         '  freeze-holdouts --workspace-root <path> --plan <path>',
+        '  publish-holdout-evidence --workspace-root <path> --frozen-root <path> --output-root <path>',
         '  register-wikimedia-raw --workspace-root <path> --source-id <id> --raw-root <path> --output <path>',
         '  clean-wikimedia --workspace-root <path> --plan <path> [--python <path>]',
         '  clean-wikimedia-fixture --workspace-root <path> --plan <path>',
@@ -51,6 +53,9 @@ export async function runV2FreeCorpusCli(argv: readonly string[]): Promise<numbe
   if (command === 'holdout-template') return holdoutTemplateCommand(argv.slice(1));
   if (command === 'author-holdout-drafts') return authorHoldoutDraftsCommand(argv.slice(1));
   if (command === 'freeze-holdouts') return freezeHoldoutsCommand(argv.slice(1));
+  if (command === 'publish-holdout-evidence') {
+    return publishHoldoutEvidenceCommand(argv.slice(1));
+  }
   if (command === 'register-wikimedia-raw') return registerWikimediaRawCommand(argv.slice(1));
   if (command === 'clean-wikimedia') return cleanWikimediaCommand(argv.slice(1));
   if (command === 'clean-wikimedia-fixture') return cleanWikimediaFixtureCommand(argv.slice(1));
@@ -80,6 +85,16 @@ async function freezeHoldoutsCommand(argv: readonly string[]): Promise<number> {
   const workspaceRoot = required(argv, '--workspace-root');
   const plan = await readJson<HoldoutSetFreezePlan>(workspaceRoot, required(argv, '--plan'));
   const result = await freezeV2FreeHoldoutSet({ workspaceRoot, plan });
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+  return 0;
+}
+
+async function publishHoldoutEvidenceCommand(argv: readonly string[]): Promise<number> {
+  const result = await publishFrozenHoldoutEvidence({
+    workspaceRoot: required(argv, '--workspace-root'),
+    frozenRoot: required(argv, '--frozen-root'),
+    outputRoot: required(argv, '--output-root'),
+  });
   process.stdout.write(`${JSON.stringify(result)}\n`);
   return 0;
 }

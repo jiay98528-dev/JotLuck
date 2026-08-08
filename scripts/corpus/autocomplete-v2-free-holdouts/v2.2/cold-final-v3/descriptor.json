@@ -1,0 +1,36 @@
+{
+  "schema": "jotluck.autocomplete.v2-free-holdout-descriptor.v2",
+  "schemaVersion": 2,
+  "datasetId": "jotluck-v2-2-cold-final-v3-new-20260808",
+  "frozenAt": "2026-08-08T11:34:07.612Z",
+  "classification": "cold-final-v1",
+  "content": {
+    "bytes": 73049,
+    "sha256": "cd0e20436d679d17dd1d5f911343e82410ee4d71a67ac60a8c87f737a9e4d4ec"
+  },
+  "summary": {
+    "targetDocuments": 50,
+    "supportDocuments": 0,
+    "checkpoints": 200,
+    "completeCheckpoints": 150,
+    "silenceCheckpoints": 50,
+    "languageCheckpoints": {
+      "zh": 100,
+      "en": 100
+    },
+    "categoryCheckpoints": {
+      "field-observation": 40,
+      "maintenance-log": 40,
+      "meeting-note": 40,
+      "reading-note": 40,
+      "household-plan": 40
+    }
+  },
+  "sealed": true,
+  "review": {
+    "kind": "independent-model",
+    "reviewedAt": "2026-08-08T11:34:07.612Z",
+    "reviewArtifactSha256": "58852073a7185e52a49a22932ea5bda6045c00f1153bccb240e0e2b88e77c2a0"
+  },
+  "formalReleaseEvidence": false
+}

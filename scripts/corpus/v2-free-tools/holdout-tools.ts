@@ -2,10 +2,14 @@ import { mkdir, readFile, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 
 import {
+  V2_FREE_HOLDOUT_DESCRIPTOR_SCHEMA,
   validateV2FreeHoldoutContent,
+  validateV2FreeHoldoutDescriptor,
   type V2FreeHoldoutClassification,
   type V2FreeHoldoutContent,
   type V2FreeHoldoutDescriptor,
+  type V2FreeHoldoutDescriptorV2,
+  type V2FreeHoldoutReview,
 } from '../../autocomplete-v2-free/holdout-validator';
 import {
   canonicalSha256,
@@ -20,7 +24,11 @@ import {
   writeExclusiveJson,
   type Sha256,
 } from './common';
-import { fingerprintDocuments, type HoldoutFingerprintInventory } from './fingerprints';
+import {
+  fingerprintDocuments,
+  verifyFingerprintInventory,
+  type HoldoutFingerprintInventory,
+} from './fingerprints';
 
 const CLASSIFICATIONS = Object.freeze([
   'cold-validation-v1',
@@ -33,22 +41,32 @@ export interface HoldoutFreezeInput {
   classification: V2FreeHoldoutClassification;
   datasetId: string;
   contentPath: string;
-  reviewerIdentitySha256: Sha256;
   frozenAt: string;
+  review: V2FreeHoldoutReview;
+  formalReleaseEvidence: boolean;
 }
 
 export interface HoldoutSetFreezePlan {
-  schema: 'jotluck.autocomplete.v2-free-holdout-freeze-plan.v1';
-  schemaVersion: 1;
+  schema: 'jotluck.autocomplete.v2-free-holdout-freeze-plan.v2';
+  schemaVersion: 2;
   outputRoot: string;
   suites: HoldoutFreezeInput[];
 }
 
 export interface FrozenHoldoutSuite {
   classification: V2FreeHoldoutClassification;
-  descriptor: V2FreeHoldoutDescriptor;
+  descriptor: V2FreeHoldoutDescriptorV2;
   descriptorPath: string;
   contentPath: string;
+  fingerprintPath: string;
+  fingerprintInventorySha256: Sha256;
+}
+
+export interface PublishedHoldoutEvidence {
+  classification: V2FreeHoldoutClassification;
+  descriptorPath: string;
+  descriptorSha256: Sha256;
+  contentSha256: Sha256;
   fingerprintPath: string;
   fingerprintInventorySha256: Sha256;
 }
@@ -163,7 +181,7 @@ export function createHoldoutContentDraft(
       'Replace every bracketed placeholder with independently authored prose.',
       'Move each cursorOffset to a reviewed writing opportunity without splitting UTF-16.',
       'Replace all complete suffix references; silence checkpoints must remain empty.',
-      'Remove draftOnly by converting to the frozen content schema only after human review.',
+      'Remove draftOnly only after a truthful human or independent-model review is recorded.',
     ],
     supportDocuments,
     targets: Array.from({ length: 50 }, (_, index) => {
@@ -184,8 +202,8 @@ export function createHoldoutContentDraft(
         category: categories[index % categories.length]!,
         text: `[DRAFT: replace target ${index + 1} with independent ${language} prose]`,
         ...(workspace ? { workspaceSupportDocumentIds: supportIds } : {}),
-        checkpoints: [0, 1, 2]
-          .map((checkpoint) => ({
+        checkpoints: [
+          ...[0, 1, 2].map((checkpoint) => ({
             id: `draft-checkpoint-${index + 1}-${checkpoint + 1}`,
             cursorOffset: 0,
             expectedBehavior: 'complete' as const,
@@ -196,13 +214,14 @@ export function createHoldoutContentDraft(
                   supportDocumentIds: supportIds,
                 }
               : {}),
-          }))
-          .concat({
+          })),
+          {
             id: `draft-checkpoint-${index + 1}-4`,
             cursorOffset: 0,
             expectedBehavior: 'silence' as const,
             acceptableSuffixes: [],
-          }),
+          },
+        ],
       };
     }),
   };
@@ -227,7 +246,7 @@ export function createHoldoutAuthoringTemplate(
     instructions: [
       'Replace every draft target with independently authored prose.',
       'Each target needs four checkpoints: three complete and one silence.',
-      'Each complete checkpoint needs 3-5 human-reviewed acceptable suffixes.',
+      'Each complete checkpoint needs 1-3 independently reviewed, host-visible acceptable suffixes.',
       'Workspace checkpoints must cite two independent support documents with the same pattern id.',
       'This skeleton is never valid evaluation content and cannot be frozen unchanged.',
     ],
@@ -265,19 +284,19 @@ export async function freezeV2FreeHoldoutSet(options: {
       throw new Error(`Holdout input identity mismatch: ${suite.classification}.`);
     }
     const summary = validateV2FreeHoldoutContent(content);
-    const descriptorWithoutContent = {
-      schema: 'jotluck.autocomplete.v2-free-holdout-descriptor.v1' as const,
-      schemaVersion: 1 as const,
+    const descriptor: V2FreeHoldoutDescriptorV2 = {
+      schema: V2_FREE_HOLDOUT_DESCRIPTOR_SCHEMA,
+      schemaVersion: 2,
       datasetId: suite.datasetId,
       frozenAt: canonicalIso(suite.frozenAt),
       classification: suite.classification,
       content: { bytes: bytes.byteLength, sha256: sha256(bytes) },
       summary,
-      humanReviewed: true as const,
-      reviewerIdentitySha256: suite.reviewerIdentitySha256,
+      review: suite.review,
+      formalReleaseEvidence: suite.formalReleaseEvidence,
       sealed: suite.classification.endsWith('-final-v1'),
     };
-    const descriptor = descriptorWithoutContent satisfies V2FreeHoldoutDescriptor;
+    validateV2FreeHoldoutDescriptor(descriptor);
     const fingerprint = fingerprintDocuments({
       datasetId: suite.datasetId,
       classification: suite.classification,
@@ -323,6 +342,95 @@ export async function freezeV2FreeHoldoutSet(options: {
   }
 }
 
+export async function publishFrozenHoldoutEvidence(options: {
+  workspaceRoot: string;
+  frozenRoot: string;
+  outputRoot: string;
+}): Promise<PublishedHoldoutEvidence[]> {
+  const outputRoot = await resolveCorpusOutput(options.workspaceRoot, options.outputRoot);
+  if (await exists(outputRoot)) throw new Error('Published holdout evidence root already exists.');
+  const prepared: Array<{
+    classification: V2FreeHoldoutClassification;
+    descriptor: V2FreeHoldoutDescriptorV2;
+    descriptorBytes: Buffer;
+    fingerprint: HoldoutFingerprintInventory;
+    fingerprintBytes: Buffer;
+  }> = [];
+  for (const classification of CLASSIFICATIONS) {
+    const descriptorPath = await resolveWorkspaceInput(
+      options.workspaceRoot,
+      `${options.frozenRoot}/${classification}/descriptor.json`,
+    );
+    const fingerprintPath = await resolveWorkspaceInput(
+      options.workspaceRoot,
+      `${options.frozenRoot}/${classification}/fingerprints.json`,
+    );
+    const descriptorBytes = await readFile(descriptorPath);
+    const fingerprintBytes = await readFile(fingerprintPath);
+    const validatedDescriptor = validateV2FreeHoldoutDescriptor(
+      JSON.parse(
+        decodeUtf8(descriptorBytes, `${classification} descriptor`),
+      ) as V2FreeHoldoutDescriptor,
+    );
+    if (
+      validatedDescriptor.schema !== V2_FREE_HOLDOUT_DESCRIPTOR_SCHEMA ||
+      validatedDescriptor.schemaVersion !== 2
+    ) {
+      throw new Error('Holdout publisher refuses legacy v1 descriptors and false migrations.');
+    }
+    const descriptor: V2FreeHoldoutDescriptorV2 = validatedDescriptor;
+    const fingerprint = verifyFingerprintInventory(
+      JSON.parse(
+        decodeUtf8(fingerprintBytes, `${classification} fingerprint inventory`),
+      ) as HoldoutFingerprintInventory,
+    );
+    if (
+      descriptor.classification !== classification ||
+      fingerprint.classification !== classification
+    ) {
+      throw new Error(`Published holdout evidence classification mismatch: ${classification}.`);
+    }
+    verifyFrozenDescriptorFingerprintBinding({ descriptor, fingerprint });
+    prepared.push({
+      classification,
+      descriptor,
+      descriptorBytes,
+      fingerprint,
+      fingerprintBytes,
+    });
+  }
+
+  const staging = path.join(
+    path.dirname(outputRoot),
+    `.staging-${path.basename(outputRoot)}-${process.pid}-${Date.now()}`,
+  );
+  await mkdir(path.dirname(outputRoot), { recursive: true });
+  await mkdir(staging, { recursive: false });
+  try {
+    const result: PublishedHoldoutEvidence[] = [];
+    for (const item of prepared) {
+      const suiteRoot = path.join(staging, item.classification);
+      const descriptorPath = path.join(suiteRoot, 'descriptor.json');
+      const fingerprintPath = path.join(suiteRoot, 'fingerprints.json');
+      await writeExclusiveBytes(descriptorPath, item.descriptorBytes);
+      await writeExclusiveBytes(fingerprintPath, item.fingerprintBytes);
+      result.push({
+        classification: item.classification,
+        descriptorPath: `${options.outputRoot}/${item.classification}/descriptor.json`,
+        descriptorSha256: descriptorIdentitySha256(item.descriptor),
+        contentSha256: item.descriptor.content.sha256 as Sha256,
+        fingerprintPath: `${options.outputRoot}/${item.classification}/fingerprints.json`,
+        fingerprintInventorySha256: item.fingerprint.inventorySha256,
+      });
+    }
+    await publishStagedDirectory(staging, outputRoot);
+    return result;
+  } catch (error) {
+    if (await exists(staging)) await safeRemoveStagingDirectory(staging);
+    throw error;
+  }
+}
+
 export function verifyFrozenDescriptorFingerprintBinding(options: {
   descriptor: V2FreeHoldoutDescriptor;
   fingerprint: HoldoutFingerprintInventory;
@@ -338,8 +446,8 @@ export function verifyFrozenDescriptorFingerprintBinding(options: {
 
 function validatePlan(plan: HoldoutSetFreezePlan): void {
   if (
-    plan.schema !== 'jotluck.autocomplete.v2-free-holdout-freeze-plan.v1' ||
-    plan.schemaVersion !== 1 ||
+    plan.schema !== 'jotluck.autocomplete.v2-free-holdout-freeze-plan.v2' ||
+    plan.schemaVersion !== 2 ||
     !Array.isArray(plan.suites) ||
     plan.suites.length !== CLASSIFICATIONS.length
   ) {
@@ -352,12 +460,12 @@ function validatePlan(plan: HoldoutSetFreezePlan): void {
     if (
       classifications.has(suite.classification) ||
       !suite.datasetId ||
-      datasetIds.has(suite.datasetId) ||
-      !isSha256(suite.reviewerIdentitySha256)
+      datasetIds.has(suite.datasetId)
     ) {
       throw new Error('Holdout freeze suite identity is invalid.');
     }
     canonicalIso(suite.frozenAt);
+    validateReviewPlan(suite.review, suite.formalReleaseEvidence);
     classifications.add(suite.classification);
     datasetIds.add(suite.datasetId);
   }
@@ -378,6 +486,32 @@ function canonicalIso(value: string): string {
     throw new Error('Holdout freeze timestamp must be canonical UTC ISO.');
   }
   return value;
+}
+
+function validateReviewPlan(review: V2FreeHoldoutReview, formalReleaseEvidence: boolean): void {
+  if (
+    !review ||
+    !isSha256(review.reviewArtifactSha256) ||
+    typeof formalReleaseEvidence !== 'boolean'
+  ) {
+    throw new Error('Holdout freeze review contract is invalid.');
+  }
+  canonicalIso(review.reviewedAt);
+  if (review.kind === 'human') {
+    if (!isSha256(review.reviewerIdentitySha256)) {
+      throw new Error('Human holdout review requires a reviewer identity.');
+    }
+    return;
+  }
+  if (
+    review.kind !== 'independent-model' ||
+    'reviewerIdentitySha256' in review ||
+    formalReleaseEvidence !== false
+  ) {
+    throw new Error(
+      'Independent-model holdout review cannot impersonate a human or become release evidence.',
+    );
+  }
 }
 
 async function exists(value: string): Promise<boolean> {
