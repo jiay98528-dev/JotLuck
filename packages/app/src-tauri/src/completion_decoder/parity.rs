@@ -13,6 +13,12 @@ struct ParityRequest {
     token_ids: Option<Vec<usize>>,
     #[serde(default)]
     context: Option<String>,
+    #[serde(default)]
+    maximum_new_tokens: usize,
+    #[serde(default)]
+    include_beam_sequences: bool,
+    #[serde(default = "unknown_language_hint")]
+    language_hint: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -29,6 +35,8 @@ struct ParityResponse {
     final_norm_last: EncodedVector,
     logits: EncodedVector,
     top32: Vec<ParityTopToken>,
+    generation_steps: Vec<ParityGenerationStep>,
+    beam_sequences: Vec<ParityBeamSequence>,
 }
 
 #[derive(Debug, Serialize)]
@@ -65,6 +73,26 @@ struct ParityTopToken {
     token_id: usize,
     logit: f32,
     rank: usize,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ParityGenerationStep {
+    selected_token_id: usize,
+    decoded_text: String,
+    top32: Vec<ParityTopToken>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ParityBeamSequence {
+    token_ids: Vec<usize>,
+    decoded_text: String,
+    normalized_score: f32,
+}
+
+fn unknown_language_hint() -> String {
+    "unknown".to_string()
 }
 
 #[derive(Debug, Serialize)]
@@ -140,8 +168,38 @@ fn evaluate_request(
     if tokens.is_empty() || tokens.len() > 256 {
         return Err("parity token context length is invalid".to_string());
     }
+    if request.maximum_new_tokens > 8
+        || tokens
+            .len()
+            .saturating_add(request.maximum_new_tokens.saturating_sub(1))
+            > 256
+        || !matches!(request.language_hint.as_str(), "zh" | "en" | "unknown")
+        || (request.include_beam_sequences && tokens.len() > 232)
+    {
+        return Err("parity generation length is invalid".to_string());
+    }
     let trace = candidate.runtime.parity_trace(&tokens)?;
-    build_response(candidate, request.request_id, tokens, trace)
+    let generation =
+        candidate
+            .runtime
+            .greedy_trace(&tokens, request.maximum_new_tokens, &|| false)?;
+    let beam_sequences = if request.include_beam_sequences {
+        super::worker::beam_sequences_for_parity(
+            &candidate.runtime,
+            &tokens,
+            &request.language_hint,
+        )?
+    } else {
+        Vec::new()
+    };
+    build_response(
+        candidate,
+        request.request_id,
+        tokens,
+        trace,
+        generation,
+        beam_sequences,
+    )
 }
 
 fn build_response(
@@ -149,6 +207,8 @@ fn build_response(
     request_id: u64,
     tokens: Vec<usize>,
     trace: DecoderParityTrace,
+    generation: Vec<crate::completion_decoder_runtime::DecoderGenerationStep>,
+    beam_sequences: Vec<super::worker::BeamParitySequence>,
 ) -> Result<ParityResponse, String> {
     let mut indices: Vec<usize> = (0..trace.logits.len()).collect();
     indices.sort_unstable_by(|left, right| {
@@ -174,6 +234,35 @@ fn build_response(
             text: candidate.runtime.decode_tokens(&[item.token_id]),
         })
         .collect();
+    let mut generated_token_ids = Vec::with_capacity(generation.len());
+    let generation_steps = generation
+        .into_iter()
+        .map(|step| {
+            generated_token_ids.push(step.selected_token_id);
+            ParityGenerationStep {
+                selected_token_id: step.selected_token_id,
+                decoded_text: candidate.runtime.decode_tokens(&generated_token_ids),
+                top32: step
+                    .top_tokens
+                    .into_iter()
+                    .enumerate()
+                    .map(|(rank, token)| ParityTopToken {
+                        token_id: token.token_id,
+                        logit: token.logit,
+                        rank,
+                    })
+                    .collect(),
+            }
+        })
+        .collect();
+    let beam_sequences = beam_sequences
+        .into_iter()
+        .map(|sequence| ParityBeamSequence {
+            decoded_text: candidate.runtime.decode_tokens(&sequence.token_ids),
+            token_ids: sequence.token_ids,
+            normalized_score: sequence.normalized_score,
+        })
+        .collect();
     Ok(ParityResponse {
         schema: PARITY_SCHEMA,
         protocol_version: PROTOCOL_VERSION,
@@ -190,6 +279,8 @@ fn build_response(
         final_norm_last: encode_vector(&trace.final_norm_last)?,
         logits: encode_vector(&trace.logits)?,
         top32,
+        generation_steps,
+        beam_sequences,
     })
 }
 

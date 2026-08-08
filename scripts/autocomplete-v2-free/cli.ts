@@ -14,6 +14,8 @@ import {
 import { evaluateV2FreeHoldout } from './evaluator';
 import { claimV2FreeFinalPair, readV2FreeFinalPairClaim } from './holdout-ledger';
 import { promoteV2FreeOracle } from './oracle-promotion';
+import { runRemoteMatrixCli } from './remote/cli';
+import { measureV2FreeRuntime } from './runtime-measurement';
 import {
   loadV2FreeHoldoutContent,
   validateV2FreeHoldoutDescriptor,
@@ -38,11 +40,13 @@ export async function runV2FreeCli(argv: readonly string[]): Promise<number> {
         '  check-oracle <report.json>',
         '  assess <evidence.json>',
         '  select <evidence.json...>',
-        '  build-selection --workspace-root <path> --v2r-selection <path> --source-registry <path> [--supplement <path> ...] --output <path> [--stage governance|formal-32mib-smoke]',
-        '  validate-selection-stage --selection <path> --stage governance|formal-32mib-smoke',
+        '  build-selection --workspace-root <path> --v2r-selection <path> --source-registry <path> [--supplement <path> ...] --output <path> [--stage governance|formal-32mib-smoke|formal-128mib-matrix]',
+        '  validate-selection-stage --selection <path> --stage governance|formal-32mib-smoke|formal-128mib-matrix',
         '  validate-holdout --workspace-root <path> --descriptor <path> [--content <path>]',
         '  evaluate --workspace-root <path> --worker <exe> --manifest <path> --descriptor <path> --content <path> --output-dir <path>',
         '  promote-oracle --workspace-root <path> --candidate-root <path> --trained-manifest <path> --oracle-output-dir <path> --runtime-measurement <path> --worker <path>',
+        '  measure-runtime --workspace-root <path> --worker <relative> --runtime-baseline <relative> --manifest <relative> --output <relative>',
+        '  remote <prepare|upload|submit|status|pull> [options]',
         '  claim-final-pair --workspace-root <path> --cold-descriptor <path> --workspace-descriptor <path> --candidate-artifact-sha256 <sha> --baseline-sha256 <sha> --evaluator-tree-sha256 <sha>',
       ].join('\n') + '\n',
     );
@@ -79,8 +83,22 @@ export async function runV2FreeCli(argv: readonly string[]): Promise<number> {
   if (command === 'validate-holdout') return validateHoldoutCommand(argv.slice(1));
   if (command === 'evaluate') return evaluateCommand(argv.slice(1));
   if (command === 'promote-oracle') return promoteOracleCommand(argv.slice(1));
+  if (command === 'measure-runtime') return measureRuntimeCommand(argv.slice(1));
+  if (command === 'remote') return runRemoteMatrixCli(argv.slice(1));
   if (command === 'claim-final-pair') return claimFinalPairCommand(argv.slice(1));
   throw new Error(`Unknown autocomplete-v2-free command: ${command}`);
+}
+
+async function measureRuntimeCommand(argv: readonly string[]): Promise<number> {
+  const result = await measureV2FreeRuntime({
+    workspaceRoot: requiredArgument(argv, '--workspace-root'),
+    workerExecutablePath: requiredArgument(argv, '--worker'),
+    runtimeBaselineExecutablePath: requiredArgument(argv, '--runtime-baseline'),
+    candidateManifestPath: requiredArgument(argv, '--manifest'),
+    outputPath: requiredArgument(argv, '--output'),
+  });
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+  return 0;
 }
 
 async function promoteOracleCommand(argv: readonly string[]): Promise<number> {
@@ -141,7 +159,8 @@ async function validateSelectionStageCommand(argv: readonly string[]): Promise<n
 }
 
 function parseSelectionStage(value: string): V2FreeSelectionStage {
-  if (value === 'governance' || value === 'formal-32mib-smoke') return value;
+  if (value === 'governance' || value === 'formal-32mib-smoke' || value === 'formal-128mib-matrix')
+    return value;
   throw new Error(`Unsupported V2 free selection stage: ${value}.`);
 }
 

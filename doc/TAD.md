@@ -80,6 +80,8 @@ Vue 3 + Pinia + Vite
 - 训练控制面与 CUDA 数据面分离：当前工作站持有 selection、evaluator 和 final；幻15仅执行内容寻址、可恢复的训练 job。Tailscale direct 优先，VPS 只可作为端到端加密 Peer Relay；传输使用临时名 + SHA-256 + 同卷原子转正，final、用户数据和凭据不得上传训练节点或 VPS。
 - 公共上下文胶囊只包含标题链、当前段落、前一段尾部和至多一个无路径检索片段，最多 256 tokens；不得提供整篇正文、文件名或工作区清单。模型、8K Unigram+byte fallback tokenizer、manifest 与新增宿主总静态增量 ≤24MiB，增量峰值内存 ≤192MiB，模型推理 p90 ≤80ms。
 - 新公共路线固定 16M/24M/32M Q4 与 16M Q8；Oracle@8/32 预检必须分别 ≥45%/55%，且中英文 Oracle@8 各 ≥40%。不通过则停止，不训练 gate、不读取 final、不发布资产。双 final 与真实 Windows IME GUI 闭环前只允许 dev/E2E flag。
+- 正式矩阵的 128MiB selection 与单一共享 tokenizer 由当前工作站冻结；RemoteTrainingJob v2 同时绑定 corpus/selection/tokenizer model/tokenizer runtime/recipe/source tree，统一 `resume.mode=if-available`，匹配完成态幂等。ROG 只串行执行 16M→24M→32M CUDA 训练，不持有 final。
+- worker 序列生成采用一次 prefill、逐层 KV cache、beam width 32、每 beam Top-4、累计 log-probability 和 `alpha=0.6` 长度归一化；全局选出 Top-32 后才推进 cache。每步执行 latest-only/deadline 检查，超时只允许返回已完成序列。
 - Web/PWA 不运行下一版本公共 decoder，只保留结构化、Session、Personal、Notebook/Hybrid 的安全降级，不继承 Windows cold 质量声明。
 - Public V2S 的旧 canonical 入口与 v6 二进制仅属于停止实验记录，不再是目标架构。任何时刻仍不得同时发布两代公共资产，冻结 V1 只存在于隔离评测闭包。
 - 已停止的 `public-phrase-transformer-v1` 训练、语料治理、量化和证据代码保留在 `scripts/` 供复核；其 Worker、ONNX adapter、默认 factory 与 `onnxruntime-web` 已从生产依赖图移除。`autocomplete-v2r-architecture-stop.json` 继续阻断长训练、publisher 与 v5 verifier。

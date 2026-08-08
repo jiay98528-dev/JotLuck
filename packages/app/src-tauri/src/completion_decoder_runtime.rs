@@ -5,6 +5,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 
 const MODEL_MAGIC: &[u8; 8] = b"JLFDQ02\0";
 const MODEL_SCHEMA: &str = "jotluck.autocomplete.quantized-decoder.v2";
@@ -56,12 +57,7 @@ struct TensorDescriptor {
 
 #[derive(Debug)]
 enum TensorStorage {
-    Quantized {
-        bits: u8,
-        group_size: usize,
-        scales: Vec<f32>,
-        values: Vec<u8>,
-    },
+    Dequantized(Vec<f32>),
     Float(Vec<f32>),
 }
 
@@ -91,8 +87,39 @@ pub(crate) struct DecoderRuntime {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct TokenScore {
     pub(crate) token_id: usize,
+    pub(crate) logit: f32,
     pub(crate) log_probability: f32,
-    pub(crate) probability: f32,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct DecoderCache {
+    prefix: Arc<SharedKeyValuePrefix>,
+    key_validity: Vec<bool>,
+    layers: Vec<LayerKeyValueCache>,
+}
+
+#[derive(Debug, Default, PartialEq)]
+struct SharedKeyValuePrefix {
+    key_validity: Vec<bool>,
+    layers: Vec<LayerKeyValueCache>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+struct LayerKeyValueCache {
+    keys: Vec<Vec<f32>>,
+    values: Vec<Vec<f32>>,
+}
+
+#[derive(Debug)]
+pub(crate) struct DecoderPrefill {
+    pub(crate) cache: DecoderCache,
+    pub(crate) logits: Vec<f32>,
+}
+
+#[derive(Debug)]
+pub(crate) struct DecoderGenerationStep {
+    pub(crate) selected_token_id: usize,
+    pub(crate) top_tokens: Vec<TokenScore>,
 }
 
 #[derive(Debug)]
@@ -118,6 +145,19 @@ impl DecoderRuntime {
             .encode(value, self.model.maximum_context_tokens)
     }
 
+    pub(crate) fn encode_generation_context(
+        &self,
+        value: &str,
+        reserved_tokens: usize,
+    ) -> Vec<usize> {
+        let maximum = self
+            .model
+            .maximum_context_tokens
+            .saturating_sub(reserved_tokens)
+            .max(1);
+        self.tokenizer.encode(value, maximum)
+    }
+
     pub(crate) fn decode_tokens(&self, token_ids: &[usize]) -> String {
         self.tokenizer.decode(token_ids)
     }
@@ -126,15 +166,42 @@ impl DecoderRuntime {
         self.tokenizer.is_terminal(token_id)
     }
 
-    pub(crate) fn top_tokens(
+    pub(crate) fn prefill(
         &self,
         tokens: &[usize],
+        should_stop: &(impl Fn() -> bool + Sync),
+    ) -> Result<DecoderPrefill, String> {
+        self.model.prefill(tokens, should_stop)
+    }
+
+    pub(crate) fn advance(
+        &self,
+        cache: &mut DecoderCache,
+        token_id: usize,
+        should_stop: &(impl Fn() -> bool + Sync),
+    ) -> Result<Vec<f32>, String> {
+        self.model.advance(cache, token_id, should_stop)
+    }
+
+    pub(crate) fn advance_batch(
+        &self,
+        caches: &mut [DecoderCache],
+        token_ids: &[usize],
+        should_stop: &(impl Fn() -> bool + Sync),
+    ) -> Result<Vec<Vec<f32>>, String> {
+        self.model.advance_batch(caches, token_ids, should_stop)
+    }
+
+    pub(crate) fn rank_logits(
+        &self,
+        logits: &[f32],
         maximum: usize,
-        should_stop: &impl Fn() -> bool,
     ) -> Result<Vec<TokenScore>, String> {
-        let logits = self.model.next_token_logits(tokens, should_stop)?;
         if logits.is_empty() || maximum == 0 {
             return Ok(Vec::new());
+        }
+        if logits.iter().any(|value| !value.is_finite()) {
+            return Err("decoder logits are not finite".to_string());
         }
         let maximum_logit = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
         let denominator: f32 = logits
@@ -159,11 +226,43 @@ impl DecoderRuntime {
                 let log_probability = logits[token_id] - log_denominator;
                 TokenScore {
                     token_id,
+                    logit: logits[token_id],
                     log_probability,
-                    probability: log_probability.exp(),
                 }
             })
             .collect())
+    }
+
+    pub(crate) fn greedy_trace(
+        &self,
+        tokens: &[usize],
+        maximum_new_tokens: usize,
+        should_stop: &(impl Fn() -> bool + Sync),
+    ) -> Result<Vec<DecoderGenerationStep>, String> {
+        let mut prefill = self.prefill(tokens, should_stop)?;
+        let mut steps = Vec::with_capacity(maximum_new_tokens);
+        for step in 0..maximum_new_tokens {
+            if should_stop() {
+                return Err("decoder inference cancelled or expired".to_string());
+            }
+            let top_tokens = self.rank_logits(&prefill.logits, 32)?;
+            let selected_token_id = top_tokens
+                .first()
+                .map(|score| score.token_id)
+                .ok_or_else(|| "decoder logits produced no token".to_string())?;
+            steps.push(DecoderGenerationStep {
+                selected_token_id,
+                top_tokens,
+            });
+            if self.is_terminal(selected_token_id) {
+                break;
+            }
+            if step + 1 < maximum_new_tokens {
+                prefill.logits =
+                    self.advance(&mut prefill.cache, selected_token_id, should_stop)?;
+            }
+        }
+        Ok(steps)
     }
 
     pub(crate) fn parity_trace(&self, tokens: &[usize]) -> Result<DecoderParityTrace, String> {
@@ -171,6 +270,8 @@ impl DecoderRuntime {
     }
 }
 
+mod batch;
+mod cache;
 mod model;
 mod tensor;
 

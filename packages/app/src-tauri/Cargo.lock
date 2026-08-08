@@ -2346,6 +2346,7 @@ dependencies = [
  "log",
  "lopdf",
  "notify",
+ "rayon",
  "regex",
  "serde",
  "serde_json",

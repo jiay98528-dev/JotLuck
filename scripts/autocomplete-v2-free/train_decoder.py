@@ -48,6 +48,9 @@ MODEL_MAGIC = b"JLFDQ02\0"
 VOCABULARY_SIZE = 8_000
 MAX_CONTEXT_TOKENS = 256
 MAX_TRAINING_POOL_BYTES = 512 * 1024 * 1024
+FORMAL_MATRIX_MINIMUM_BYTES = 128 * 1024 * 1024
+FORMAL_STAGE_SCHEMA = "jotluck.autocomplete.v2-free-selection-stage.v1"
+FINGERPRINT_AUDIT_SCHEMA = "jotluck.autocomplete.v2-free-fingerprint-audit.v1"
 GLOBAL_BATCH_SIZE = 128
 QUANTIZATION_GROUP_SIZE = 64
 CHECKPOINT_INTERVAL_STEPS = 1_000
@@ -55,6 +58,13 @@ CHECKPOINTS_TO_KEEP = 2
 WARMUP_RATIO = 0.02
 DEV_FRACTION_FALLBACK = 0.05
 LAYER_NORM_EPSILON = 1e-5
+MODEL_INITIALIZATION = "normal-0.02-v1"
+EMBEDDING_INITIALIZATION_STD = 0.02
+Q4_SCALE_ALGORITHM = "groupwise-symmetric-mse-v1"
+Q8_SCALE_ALGORITHM = "groupwise-symmetric-maxabs-v1"
+Q4_SCALE_OPTIMIZATION_ITERATIONS = 4
+QUANTIZATION_CHUNK_GROUPS = 4_096
+QUANTIZATION_DIAGNOSTICS_SCHEMA = "jotluck.autocomplete.quantization-diagnostics.v1"
 OOM_STATE_SCHEMA = "jotluck.autocomplete.v2-free-oom-state.v1"
 REMOTE_BUNDLE_SCHEMA = "jotluck.autocomplete.v2-free.remote-bundle.v1"
 REMOTE_JOB_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -81,6 +91,10 @@ class Config:
     candidate_id: str
     output_dir: Path
     checkpoint_dir: Path
+    tokenizer_model_path: Path | None
+    tokenizer_runtime_path: Path | None
+    selection_stage_receipt_path: Path | None
+    fingerprint_audit_path: Path | None
     resume: str | None
     device: str
     seed: int
@@ -144,6 +158,29 @@ class DecoderOnlyModel(nn.Module):
         self.output = nn.Linear(width, VOCABULARY_SIZE, bias=False)
         self.output.weight = self.token_embedding.weight
         self.register_buffer("positions", torch.arange(MAX_CONTEXT_TOKENS), persistent=False)
+        self.reset_jotluck_embeddings()
+
+    def reset_jotluck_embeddings(self) -> None:
+        """Use the decoder recipe's small embedding distribution.
+
+        ``nn.Embedding`` otherwise defaults to a unit-normal distribution.  That
+        distribution is roughly 25-50x wider than the Transformer projections in
+        this model and makes a four-bit tied input/output embedding needlessly
+        destructive.  Keep the padding row exactly zero after initialization.
+        """
+
+        nn.init.normal_(
+            self.token_embedding.weight,
+            mean=0.0,
+            std=EMBEDDING_INITIALIZATION_STD,
+        )
+        nn.init.normal_(
+            self.position_embedding.weight,
+            mean=0.0,
+            std=EMBEDDING_INITIALIZATION_STD,
+        )
+        with torch.no_grad():
+            self.token_embedding.weight[0].zero_()
 
     def forward(self, tokens: Tensor) -> Tensor:
         length = tokens.shape[1]
@@ -188,6 +225,10 @@ def parse_args() -> Config:
     parser.add_argument("--matrix-id", required=True)
     parser.add_argument("--candidate-id", required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--tokenizer-model", type=Path)
+    parser.add_argument("--tokenizer-runtime", type=Path)
+    parser.add_argument("--selection-stage-receipt", type=Path)
+    parser.add_argument("--fingerprint-audit", type=Path)
     parser.add_argument("--resume", nargs="?", const="auto")
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
     parser.add_argument("--seed", type=int, default=20260805)
@@ -234,6 +275,13 @@ def parse_args() -> Config:
         parser.error("output-dir must be a child of the isolated V2 free candidate root")
     checkpoint_dir = output.parent / f".{args.candidate_id}.checkpoints"
     resume = resolve_resume_request(args.resume, checkpoint_dir)
+    try:
+        validate_shared_tokenizer_paths(args.tokenizer_model, args.tokenizer_runtime)
+        validate_formal_governance_paths(
+            args.selection_stage_receipt, args.fingerprint_audit
+        )
+    except ValueError as error:
+        parser.error(str(error))
     return Config(
         workspace_root=root,
         selection_path=resolve_inside(root, args.selection),
@@ -241,6 +289,24 @@ def parse_args() -> Config:
         candidate_id=args.candidate_id,
         output_dir=output,
         checkpoint_dir=checkpoint_dir,
+        tokenizer_model_path=(
+            resolve_inside(root, args.tokenizer_model) if args.tokenizer_model is not None else None
+        ),
+        tokenizer_runtime_path=(
+            resolve_inside(root, args.tokenizer_runtime)
+            if args.tokenizer_runtime is not None
+            else None
+        ),
+        selection_stage_receipt_path=(
+            resolve_inside(root, args.selection_stage_receipt)
+            if args.selection_stage_receipt is not None
+            else None
+        ),
+        fingerprint_audit_path=(
+            resolve_inside(root, args.fingerprint_audit)
+            if args.fingerprint_audit is not None
+            else None
+        ),
         resume=resume,
         device=args.device,
         seed=args.seed,
@@ -264,6 +330,16 @@ def resolve_resume_request(cli_resume: str | None, checkpoint_dir: Path) -> str 
     if remote_mode == "required":
         return "auto"
     return "auto" if checkpoint_dir.is_dir() else None
+
+
+def validate_shared_tokenizer_paths(model_path: Path | None, runtime_path: Path | None) -> None:
+    if (model_path is None) != (runtime_path is None):
+        raise ValueError("tokenizer-model and tokenizer-runtime must be provided together")
+
+
+def validate_formal_governance_paths(receipt_path: Path | None, audit_path: Path | None) -> None:
+    if (receipt_path is None) != (audit_path is None):
+        raise ValueError("selection-stage-receipt and fingerprint-audit must be provided together")
 
 
 def resolve_device(requested: str) -> torch.device:
@@ -293,7 +369,8 @@ def configure_determinism(config: Config) -> None:
 
 
 def load_selection(config: Config) -> tuple[dict[str, Any], list[Path], list[Path]]:
-    selection = json.loads(config.selection_path.read_text(encoding="utf-8"))
+    selection_bytes = config.selection_path.read_bytes()
+    selection = json.loads(selection_bytes.decode("utf-8"))
     if selection.get("schema") != SELECTION_SCHEMA or selection.get("schemaVersion") != 1:
         raise ValueError("unsupported V2 free licensed-corpus selection")
     documents = selection.get("documents")
@@ -324,6 +401,9 @@ def load_selection(config: Config) -> tuple[dict[str, Any], list[Path], list[Pat
     if selection.get("selectedBytes") != total:
         raise ValueError("selection byte total is invalid")
 
+    if total >= FORMAL_MATRIX_MINIMUM_BYTES:
+        validate_formal_selection_governance(config, selection, selection_bytes)
+
     train_paths = [path for path, split, _ in records if split == "train"]
     dev_paths = [path for path, split, _ in records if split == "development"]
     if not train_paths:
@@ -344,41 +424,155 @@ def load_selection(config: Config) -> tuple[dict[str, Any], list[Path], list[Pat
     return selection, train_paths, dev_paths
 
 
+def validate_formal_selection_governance(
+    config: Config, selection: dict[str, Any], selection_bytes: bytes
+) -> dict[str, str]:
+    receipt_path = config.selection_stage_receipt_path
+    audit_path = config.fingerprint_audit_path
+    if receipt_path is None or audit_path is None:
+        raise ValueError(
+            "formal matrix training requires a selection stage receipt and fingerprint audit"
+        )
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    if not isinstance(receipt, dict) or not isinstance(audit, dict):
+        raise ValueError("formal governance artifacts must be JSON objects")
+    receipt_hash = receipt.get("receiptSha256")
+    receipt_without_hash = dict(receipt)
+    receipt_without_hash.pop("receiptSha256", None)
+    audit_hash = audit.get("reportSha256")
+    audit_without_hash = dict(audit)
+    audit_without_hash.pop("reportSha256", None)
+    selection_sha256 = hashlib.sha256(selection_bytes).hexdigest()
+    if (
+        receipt.get("schema") != FORMAL_STAGE_SCHEMA
+        or receipt.get("schemaVersion") != 1
+        or receipt.get("stage") != "formal-128mib-matrix"
+        or receipt.get("passed") is not True
+        or not is_sha256(receipt_hash)
+        or hashlib.sha256(canonical_json(receipt_without_hash).encode("utf-8")).hexdigest()
+        != receipt_hash
+        or receipt.get("selectionManifestSha256") != selection_sha256
+        or receipt.get("selectionInputTreeSha256") != selection.get("inputTreeSha256")
+        or receipt.get("datasetId") != selection.get("datasetId")
+        or receipt.get("selectedBytes") != selection.get("selectedBytes")
+        or receipt.get("trainBytes") != selection.get("splitBytes", {}).get("train")
+        or receipt.get("developmentBytes")
+        != selection.get("splitBytes", {}).get("development")
+        or receipt.get("languages") != selection.get("languageBytes")
+    ):
+        raise ValueError("formal selection stage receipt does not bind the selection")
+    required_holdouts = {
+        "cold-validation-v1",
+        "workspace-validation-v1",
+        "cold-final-v1",
+        "workspace-final-v1",
+    }
+    checked_holdouts = receipt.get("checkedHoldoutClassifications")
+    if not isinstance(checked_holdouts, list) or not required_holdouts.issubset(
+        set(checked_holdouts)
+    ) or receipt.get("finalFingerprintInventoriesRead") is not True:
+        raise ValueError("formal selection receipt is missing holdout fingerprints")
+    audit_inventories = audit.get("holdoutInventories")
+    audit_holdouts = {
+        item.get("classification")
+        for item in audit_inventories
+        if isinstance(item, dict)
+    } if isinstance(audit_inventories, list) else set()
+    if (
+        audit.get("schema") != FINGERPRINT_AUDIT_SCHEMA
+        or audit.get("schemaVersion") != 1
+        or audit.get("passed") is not True
+        or audit.get("finalContentRead") is not False
+        or not is_sha256(audit_hash)
+        or hashlib.sha256(canonical_json(audit_without_hash).encode("utf-8")).hexdigest()
+        != audit_hash
+        or receipt.get("fingerprintAuditSha256") != audit_hash
+        or audit.get("selectionManifestSha256") != selection_sha256
+        or audit.get("selectionInputTreeSha256") != selection.get("inputTreeSha256")
+        or audit.get("exactDuplicatePairs") != 0
+        or audit.get("nearDuplicatePairs") != 0
+        or audit.get("nearDuplicateDocumentRate") != 0
+        or audit.get("exactHoldoutOverlaps") != 0
+        or audit.get("nearHoldoutOverlaps") != 0
+        or audit.get("longWindowLeakages") != 0
+        or not required_holdouts.issubset(audit_holdouts)
+        or not isinstance(audit.get("inputNearDuplicateDocumentRate"), (int, float))
+        or audit["inputNearDuplicateDocumentRate"] < 0
+        or audit["inputNearDuplicateDocumentRate"] > 0.03
+    ):
+        raise ValueError("formal selection fingerprint audit is invalid")
+    return {
+        "selectionStageReceiptSha256": sha256_file(receipt_path),
+        "fingerprintAuditSha256": sha256_file(audit_path),
+        "fingerprintAuditReportSha256": audit_hash,
+    }
+
+
+def train_tokenizer_assets(output_dir: Path, train_paths: Iterable[Path]) -> tuple[Path, Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    model_path = output_dir / "tokenizer.unigram.model"
+    runtime_path = output_dir / "tokenizer.runtime.json"
+    corpus = output_dir / "tokenizer-corpus.txt"
+    with corpus.open("w", encoding="utf-8", newline="\n") as output:
+        for path in train_paths:
+            output.write(normalize_text(path.read_text(encoding="utf-8")))
+            output.write("\n")
+    prefix = output_dir / "tokenizer.unigram"
+    try:
+        spm.SentencePieceTrainer.train(
+            input=str(corpus),
+            model_prefix=str(prefix),
+            model_type="unigram",
+            vocab_size=VOCABULARY_SIZE,
+            byte_fallback=True,
+            character_coverage=1.0,
+            normalization_rule_name="identity",
+            pad_id=0,
+            unk_id=1,
+            bos_id=2,
+            eos_id=3,
+            shuffle_input_sentence=False,
+            num_threads=1,
+            hard_vocab_limit=True,
+        )
+        (output_dir / "tokenizer.unigram.vocab").unlink()
+        export_sentencepiece_runtime(model_path, runtime_path)
+    finally:
+        corpus.unlink(missing_ok=True)
+    return model_path, runtime_path
+
+
+def verify_shared_tokenizer(model_path: Path, runtime_path: Path) -> None:
+    UnigramRuntimeTokenizer.from_path(runtime_path)
+    with tempfile.TemporaryDirectory(prefix="jotluck-tokenizer-verify-") as directory:
+        regenerated = Path(directory) / "tokenizer.runtime.json"
+        export_sentencepiece_runtime(model_path, regenerated)
+        if regenerated.read_bytes() != runtime_path.read_bytes():
+            raise ValueError("shared tokenizer model and runtime assets disagree")
+
+
 def prepare_tokenizer(config: Config, train_paths: Iterable[Path]) -> tuple[Path, Path]:
+    validate_shared_tokenizer_paths(config.tokenizer_model_path, config.tokenizer_runtime_path)
     model_path = config.checkpoint_dir / "tokenizer.unigram.model"
     runtime_path = config.checkpoint_dir / "tokenizer.runtime.json"
     if config.resume is not None:
         if not model_path.is_file() or not runtime_path.is_file():
             raise FileNotFoundError("resume tokenizer artifacts are missing")
-        UnigramRuntimeTokenizer.from_path(runtime_path)
+        verify_shared_tokenizer(model_path, runtime_path)
+        if config.tokenizer_model_path is not None and config.tokenizer_runtime_path is not None:
+            if (
+                sha256_file(model_path) != sha256_file(config.tokenizer_model_path)
+                or sha256_file(runtime_path) != sha256_file(config.tokenizer_runtime_path)
+            ):
+                raise ValueError("resume tokenizer does not match the frozen shared tokenizer")
         return model_path, runtime_path
-
-    corpus = config.checkpoint_dir / "tokenizer-corpus.txt"
-    with corpus.open("w", encoding="utf-8", newline="\n") as output:
-        for path in train_paths:
-            output.write(normalize_text(path.read_text(encoding="utf-8")))
-            output.write("\n")
-    prefix = config.checkpoint_dir / "tokenizer.unigram"
-    spm.SentencePieceTrainer.train(
-        input=str(corpus),
-        model_prefix=str(prefix),
-        model_type="unigram",
-        vocab_size=VOCABULARY_SIZE,
-        byte_fallback=True,
-        character_coverage=1.0,
-        normalization_rule_name="identity",
-        pad_id=0,
-        unk_id=1,
-        bos_id=2,
-        eos_id=3,
-        shuffle_input_sentence=False,
-        num_threads=1,
-        hard_vocab_limit=True,
-    )
-    corpus.unlink()
-    (config.checkpoint_dir / "tokenizer.unigram.vocab").unlink()
-    export_sentencepiece_runtime(model_path, runtime_path)
-    return model_path, runtime_path
+    if config.tokenizer_model_path is not None and config.tokenizer_runtime_path is not None:
+        verify_shared_tokenizer(config.tokenizer_model_path, config.tokenizer_runtime_path)
+        shutil.copyfile(config.tokenizer_model_path, model_path)
+        shutil.copyfile(config.tokenizer_runtime_path, runtime_path)
+        return model_path, runtime_path
+    return train_tokenizer_assets(config.checkpoint_dir, train_paths)
 
 
 def tokenize_documents(tokenizer_path: Path, paths: Iterable[Path]) -> list[int]:
@@ -754,6 +948,7 @@ def oom_recipe_identity(
         "candidateId": config.candidate_id,
         "selectionSha256": selection_sha256,
         "seed": config.seed,
+        "modelInitialization": MODEL_INITIALIZATION,
         "epochs": config.epochs,
         "initialMicroBatchSize": initial_batch_size,
         "globalBatchSize": GLOBAL_BATCH_SIZE,
@@ -851,6 +1046,7 @@ def checkpoint_signature(
         "candidateId": config.candidate_id,
         "selectionSha256": selection_sha256,
         "seed": config.seed,
+        "modelInitialization": MODEL_INITIALIZATION,
         "epochs": config.epochs,
         "initialMicroBatchSize": initial_batch_size,
         "microBatchSize": batch_size,
@@ -937,14 +1133,19 @@ def export_quantized_model(
     target: Path,
     quantization: str,
     candidate_id: str,
-) -> tuple[int, int]:
+) -> tuple[int, int, dict[str, Any]]:
     if quantization not in {"q4", "q8"}:
         raise ValueError("unsupported decoder quantization")
     payload = bytearray()
     tensors: list[dict[str, Any]] = []
+    tensor_diagnostics: dict[str, dict[str, Any]] = {}
     unique_parameters: dict[int, str] = {}
     parameter_count = 0
-    for name, tensor in sorted(model.state_dict().items()):
+    state_items = sorted(
+        model.state_dict().items(),
+        key=lambda item: (0 if item[0] == "token_embedding.weight" else 1, item[0]),
+    )
+    for name, tensor in state_items:
         storage_id = tensor.untyped_storage().data_ptr()
         if storage_id in unique_parameters:
             tensors.append({"name": name, "aliasOf": unique_parameters[storage_id]})
@@ -953,7 +1154,13 @@ def export_quantized_model(
         array = tensor.detach().cpu().float().numpy()
         parameter_count += int(array.size)
         if array.ndim >= 2:
-            scale_payload, quantized_payload, groups = quantize_grouped_array(array, quantization)
+            (
+                scale_payload,
+                quantized_payload,
+                groups,
+                diagnostics,
+            ) = quantize_grouped_array_with_report(array, quantization)
+            tensor_diagnostics[name] = diagnostics
             scale_offset = len(payload)
             payload.extend(scale_payload)
             offset = len(payload)
@@ -984,6 +1191,9 @@ def export_quantized_model(
                     "bytes": len(encoded),
                 }
             )
+    quantization_diagnostics = summarize_quantization_diagnostics(
+        quantization, tensor_diagnostics
+    )
     width, layers, heads, feed_forward, _ = MATRIX[config.matrix_id]
     header = {
         "schema": MODEL_SCHEMA,
@@ -1001,8 +1211,10 @@ def export_quantized_model(
             "feedForward": feed_forward,
             "activation": "gelu",
             "tiedEmbedding": True,
+            "initialization": MODEL_INITIALIZATION,
             "layerNormEpsilon": LAYER_NORM_EPSILON,
         },
+        "quantizationDiagnostics": quantization_diagnostics,
         "payloadSha256": hashlib.sha256(payload).hexdigest(),
         "tensors": tensors,
     }
@@ -1014,40 +1226,260 @@ def export_quantized_model(
         output.write(payload)
         output.flush()
         os.fsync(output.fileno())
-    return parameter_count, len(payload)
+    return parameter_count, len(payload), quantization_diagnostics
 
 
-def quantize_grouped_array(array: np.ndarray[Any, Any], quantization: str) -> tuple[bytes, bytes, int]:
+def quantize_grouped_array(
+    array: np.ndarray[Any, Any], quantization: str
+) -> tuple[bytes, bytes, int]:
+    scales, encoded, groups, _ = quantize_grouped_array_with_report(array, quantization)
+    return scales, encoded, groups
+
+
+def quantization_integer_range(quantization: str) -> tuple[int, int]:
+    if quantization == "q4":
+        return -8, 7
+    if quantization == "q8":
+        return -127, 127
+    raise ValueError("unsupported decoder quantization")
+
+
+def optimized_group_scales(
+    values: np.ndarray[Any, Any], quantization: str
+) -> np.ndarray[Any, Any]:
+    """Return the exact F16 scales consumed by the JLFDQ02 runtime."""
+
+    qmin, qmax = quantization_integer_range(quantization)
+    minimum_scale = np.float16(np.finfo(np.float16).tiny)
+    if quantization == "q8":
+        maximum_absolute = np.max(np.abs(values), axis=1)
+        return np.maximum(maximum_absolute / qmax, float(minimum_scale)).astype("<f2")
+
+    # Q4 has an intentionally asymmetric signed code range (-8..7).  The old
+    # max(abs(x))/7 formula never used the extra negative level for scale
+    # selection.  Start with a no-clipping scale that covers each signed side,
+    # then minimize reconstruction MSE while repeatedly rounding the candidate
+    # scale to the F16 value that will actually be stored in JLFDQ02.
+    positive_scale = np.maximum(np.max(values, axis=1), 0.0) / qmax
+    negative_scale = np.maximum(-np.min(values, axis=1), 0.0) / -qmin
+    scales = np.maximum(
+        np.maximum(positive_scale, negative_scale), float(minimum_scale)
+    ).astype("<f2")
+    scale_values = scales.astype(np.float32)
+    quantized = np.clip(np.rint(values / scale_values[:, None]), qmin, qmax)
+    best_error = np.mean(
+        np.square(values - quantized * scale_values[:, None]), axis=1
+    )
+
+    for _ in range(Q4_SCALE_OPTIMIZATION_ITERATIONS):
+        denominator = np.sum(np.square(quantized), axis=1)
+        least_squares = np.divide(
+            np.sum(values * quantized, axis=1),
+            denominator,
+            out=scale_values.copy(),
+            where=denominator > 0,
+        )
+        candidate = np.maximum(least_squares, float(minimum_scale)).astype("<f2")
+        candidate_variants = (
+            candidate,
+            np.nextafter(candidate, np.full_like(candidate, np.inf)),
+            np.nextafter(candidate, np.zeros_like(candidate)),
+        )
+        for candidate_f16 in candidate_variants:
+            candidate_f16 = np.maximum(candidate_f16, minimum_scale).astype("<f2")
+            candidate_values = candidate_f16.astype(np.float32)
+            candidate_quantized = np.clip(
+                np.rint(values / candidate_values[:, None]), qmin, qmax
+            )
+            candidate_error = np.mean(
+                np.square(values - candidate_quantized * candidate_values[:, None]),
+                axis=1,
+            )
+            improved = candidate_error < best_error
+            scales[improved] = candidate_f16[improved]
+            best_error[improved] = candidate_error[improved]
+        scale_values = scales.astype(np.float32)
+        quantized = np.clip(np.rint(values / scale_values[:, None]), qmin, qmax)
+    return scales
+
+
+def quantize_grouped_array_with_report(
+    array: np.ndarray[Any, Any], quantization: str
+) -> tuple[bytes, bytes, int, dict[str, Any]]:
     flat = np.asarray(array, dtype=np.float32).reshape(-1)
+    if flat.size == 0 or not np.all(np.isfinite(flat)):
+        raise ValueError("decoder quantization requires a non-empty finite tensor")
     groups = math.ceil(flat.size / QUANTIZATION_GROUP_SIZE)
     scales = np.empty(groups, dtype="<f2")
     bytes_per_group = 32 if quantization == "q4" else 64
     encoded = bytearray(groups * bytes_per_group)
-    qmax = 7.0 if quantization == "q4" else 127.0
-    qmin = -8 if quantization == "q4" else -127
-    qmax_integer = 7 if quantization == "q4" else 127
-    minimum_scale = float(np.finfo(np.float16).tiny)
+    qmin, qmax = quantization_integer_range(quantization)
+    absolute_error_sum = 0.0
+    squared_error_sum = 0.0
+    maximum_error = 0.0
+    saturated_values = 0
+    endpoint_values = 0
 
-    for group_index in range(groups):
-        start = group_index * QUANTIZATION_GROUP_SIZE
-        values = flat[start : start + QUANTIZATION_GROUP_SIZE]
-        max_absolute = float(np.max(np.abs(values))) if values.size else 0.0
-        scale = np.float16(max(max_absolute / qmax, minimum_scale))
-        scales[group_index] = scale
-        padded = np.zeros(QUANTIZATION_GROUP_SIZE, dtype=np.int8)
-        padded[: values.size] = np.clip(
-            np.rint(values / float(scale)), qmin, qmax_integer
-        ).astype(np.int8)
-        target = group_index * bytes_per_group
+    for group_start in range(0, groups, QUANTIZATION_CHUNK_GROUPS):
+        group_end = min(groups, group_start + QUANTIZATION_CHUNK_GROUPS)
+        value_start = group_start * QUANTIZATION_GROUP_SIZE
+        value_end = min(flat.size, group_end * QUANTIZATION_GROUP_SIZE)
+        valid_values = flat[value_start:value_end]
+        padded_values = np.zeros(
+            (group_end - group_start) * QUANTIZATION_GROUP_SIZE,
+            dtype=np.float32,
+        )
+        padded_values[: valid_values.size] = valid_values
+        grouped_values = padded_values.reshape(-1, QUANTIZATION_GROUP_SIZE)
+        chunk_scales = optimized_group_scales(grouped_values, quantization)
+        scales[group_start:group_end] = chunk_scales
+        scale_values = chunk_scales.astype(np.float32)
+        rounded = np.rint(grouped_values / scale_values[:, None])
+        quantized = np.clip(rounded, qmin, qmax).astype(np.int8)
+        valid_rounded = rounded.reshape(-1)[: valid_values.size]
+        valid_quantized = quantized.reshape(-1)[: valid_values.size]
+        reconstruction = (
+            quantized.astype(np.float32) * scale_values[:, None]
+        ).reshape(-1)[: valid_values.size]
+        error = valid_values - reconstruction
+        absolute_error_sum += float(np.sum(np.abs(error), dtype=np.float64))
+        squared_error_sum += float(np.sum(np.square(error), dtype=np.float64))
+        maximum_error = max(maximum_error, float(np.max(np.abs(error))))
+        saturated_values += int(
+            np.count_nonzero((valid_rounded < qmin) | (valid_rounded > qmax))
+        )
+        endpoint_values += int(
+            np.count_nonzero((valid_quantized == qmin) | (valid_quantized == qmax))
+        )
+        target = group_start * bytes_per_group
         if quantization == "q4":
-            nibbles = (padded.astype(np.int16) + 8).astype(np.uint8)
+            nibbles = (quantized.astype(np.int16) + 8).astype(np.uint8).reshape(-1)
             packed = nibbles[0::2] | (nibbles[1::2] << 4)
-            encoded[target : target + bytes_per_group] = packed.tobytes()
+            encoded[target : target + packed.size] = packed.tobytes()
         elif quantization == "q8":
-            encoded[target : target + bytes_per_group] = padded.tobytes()
-        else:
-            raise ValueError("unsupported decoder quantization")
-    return scales.tobytes(), bytes(encoded), groups
+            flattened = quantized.reshape(-1)
+            encoded[target : target + flattened.size] = flattened.tobytes()
+
+    elements = int(flat.size)
+    source_mean = float(np.mean(flat, dtype=np.float64))
+    source_rms = math.sqrt(float(np.mean(np.square(flat), dtype=np.float64)))
+    report = {
+        "elements": elements,
+        "groups": groups,
+        "sourceMean": source_mean,
+        "sourceStandardDeviation": float(np.std(flat, dtype=np.float64)),
+        "sourceRootMeanSquare": source_rms,
+        "sourceMaximumAbsolute": float(np.max(np.abs(flat))),
+        "sourceP99Absolute": float(np.percentile(np.abs(flat), 99)),
+        "reconstructionMeanAbsoluteError": absolute_error_sum / elements,
+        "reconstructionRootMeanSquareError": math.sqrt(squared_error_sum / elements),
+        "reconstructionMaximumAbsoluteError": maximum_error,
+        "saturatedValues": saturated_values,
+        "saturationRate": saturated_values / elements,
+        "endpointValues": endpoint_values,
+        "endpointRate": endpoint_values / elements,
+        "scaleMinimum": float(np.min(scales)),
+        "scaleMaximum": float(np.max(scales)),
+    }
+    return scales.tobytes(), bytes(encoded), groups, report
+
+
+def summarize_quantization_diagnostics(
+    quantization: str, tensor_reports: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    qmin, qmax = quantization_integer_range(quantization)
+    elements = sum(int(report["elements"]) for report in tensor_reports.values())
+    groups = sum(int(report["groups"]) for report in tensor_reports.values())
+    source_sum = sum(
+        float(report["sourceMean"]) * int(report["elements"])
+        for report in tensor_reports.values()
+    )
+    source_square_sum = sum(
+        float(report["sourceRootMeanSquare"]) ** 2 * int(report["elements"])
+        for report in tensor_reports.values()
+    )
+    absolute_error_sum = sum(
+        float(report["reconstructionMeanAbsoluteError"]) * int(report["elements"])
+        for report in tensor_reports.values()
+    )
+    squared_error_sum = sum(
+        float(report["reconstructionRootMeanSquareError"]) ** 2
+        * int(report["elements"])
+        for report in tensor_reports.values()
+    )
+    saturated_values = sum(
+        int(report["saturatedValues"]) for report in tensor_reports.values()
+    )
+    endpoint_values = sum(int(report["endpointValues"]) for report in tensor_reports.values())
+    representative_names = (
+        "token_embedding.weight",
+        "position_embedding.weight",
+        "blocks.layers.0.self_attn.in_proj_weight",
+        "blocks.layers.0.linear1.weight",
+    )
+    aggregate_mean = source_sum / elements
+    aggregate = {
+        "tensors": len(tensor_reports),
+        "elements": elements,
+        "groups": groups,
+        "sourceMean": aggregate_mean,
+        "sourceStandardDeviation": math.sqrt(
+            max(0.0, source_square_sum / elements - aggregate_mean**2)
+        ),
+        "sourceRootMeanSquare": math.sqrt(source_square_sum / elements),
+        "sourceMaximumAbsolute": max(
+            float(report["sourceMaximumAbsolute"])
+            for report in tensor_reports.values()
+        ),
+        "reconstructionMeanAbsoluteError": absolute_error_sum / elements,
+        "reconstructionRootMeanSquareError": math.sqrt(squared_error_sum / elements),
+        "reconstructionMaximumAbsoluteError": max(
+            float(report["reconstructionMaximumAbsoluteError"])
+            for report in tensor_reports.values()
+        ),
+        "saturatedValues": saturated_values,
+        "saturationRate": saturated_values / elements,
+        "endpointValues": endpoint_values,
+        "endpointRate": endpoint_values / elements,
+    }
+    largest_errors = sorted(
+        (
+            {
+                "name": name,
+                "rootMeanSquareError": report[
+                    "reconstructionRootMeanSquareError"
+                ],
+                "maximumAbsoluteError": report[
+                    "reconstructionMaximumAbsoluteError"
+                ],
+            }
+            for name, report in tensor_reports.items()
+        ),
+        key=lambda item: float(item["rootMeanSquareError"]),
+        reverse=True,
+    )[:5]
+    return {
+        "schema": QUANTIZATION_DIAGNOSTICS_SCHEMA,
+        "quantization": quantization,
+        "scaleAlgorithm": (
+            Q4_SCALE_ALGORITHM if quantization == "q4" else Q8_SCALE_ALGORITHM
+        ),
+        "groupSize": QUANTIZATION_GROUP_SIZE,
+        "scaleDtype": "f16",
+        "integerRange": {
+            "minimum": qmin,
+            "maximum": qmax,
+            "zeroPoint": 0,
+            "storageBias": 8 if quantization == "q4" else 0,
+        },
+        "aggregate": aggregate,
+        "representativeTensors": {
+            name: tensor_reports[name]
+            for name in representative_names
+            if name in tensor_reports
+        },
+        "largestTensorErrors": largest_errors,
+    }
 
 
 def export_quantizations(config: Config) -> tuple[str, ...]:
@@ -1066,6 +1498,18 @@ def main() -> None:
     config = parse_args()
     configure_determinism(config)
     selection, train_paths, dev_paths = load_selection(config)
+    formal_governance = (
+        validate_formal_selection_governance(
+            config, selection, config.selection_path.read_bytes()
+        )
+        if selection["selectedBytes"] >= FORMAL_MATRIX_MINIMUM_BYTES
+        else None
+    )
+    if (
+        selection["selectedBytes"] >= FORMAL_MATRIX_MINIMUM_BYTES
+        and config.tokenizer_model_path is None
+    ):
+        raise ValueError("formal matrix training requires a frozen shared tokenizer")
     config.output_dir.parent.mkdir(parents=True, exist_ok=True)
     if config.output_dir.exists():
         raise FileExistsError("candidate output directory already exists")
@@ -1105,6 +1549,7 @@ def main() -> None:
                 "matrixId": config.matrix_id,
                 "bestStep": training.best_step,
                 "bestDevLoss": training.best_dev_loss,
+                "modelInitialization": MODEL_INITIALIZATION,
                 "initialMicroBatchSize": training.initial_micro_batch_size,
                 "microBatchSize": training.final_micro_batch_size,
                 "globalBatchSize": GLOBAL_BATCH_SIZE,
@@ -1120,7 +1565,7 @@ def main() -> None:
         for quantization in export_quantizations(config):
             exported_candidate_id = export_candidate_id(config, quantization)
             model_path = staging / f"{config.candidate_id}.{quantization}.decoder.bin"
-            current_parameters, payload_bytes = export_quantized_model(
+            current_parameters, payload_bytes, quantization_diagnostics = export_quantized_model(
                 training.model,
                 config,
                 model_path,
@@ -1134,6 +1579,7 @@ def main() -> None:
                 "candidateId": exported_candidate_id,
                 "model": asset_record(model_path),
                 "quantizedPayloadBytes": payload_bytes,
+                "quantizationDiagnostics": quantization_diagnostics,
             }
 
         _, _, _, _, primary_quantization = MATRIX[config.matrix_id]
@@ -1146,6 +1592,9 @@ def main() -> None:
                 export["model"],
                 tokenizer_asset,
                 selection["selectedBytes"],
+                selection_sha256,
+                selection["inputTreeSha256"],
+                formal_governance,
             )
             manifest_path = staging / f"candidate.{quantization}.manifest.json"
             manifest_path.write_text(
@@ -1172,13 +1621,21 @@ def main() -> None:
                 "magic": "JLFDQ02\\0",
                 "schema": MODEL_SCHEMA,
                 "groupSize": QUANTIZATION_GROUP_SIZE,
+                "initialization": MODEL_INITIALIZATION,
                 "layerNormEpsilon": LAYER_NORM_EPSILON,
+            },
+            "quantizationDiagnostics": {
+                quantization: export["quantizationDiagnostics"]
+                for quantization, export in exported.items()
             },
             "tokenizer": {
                 "kind": "unigram",
                 "vocabularySize": VOCABULARY_SIZE,
                 "byteFallback": True,
                 "runtimeSchema": "jotluck.autocomplete.unigram-runtime.v1",
+                "shared": config.tokenizer_model_path is not None,
+                "modelSha256": sha256_file(sentencepiece_target),
+                "runtimeSha256": tokenizer_asset["sha256"],
             },
             "maximumContextTokens": MAX_CONTEXT_TOKENS,
             "training": {
@@ -1207,6 +1664,8 @@ def main() -> None:
                 "resumedFrom": training.resumed_from,
                 "selectedBytes": selection["selectedBytes"],
                 "selectionSha256": selection_sha256,
+                "selectionInputTreeSha256": selection["inputTreeSha256"],
+                "formalGovernance": formal_governance,
                 "trainDocuments": len(train_paths),
                 "developmentDocuments": len(dev_paths),
             },
@@ -1345,6 +1804,9 @@ def build_trained_manifest(
     model_asset: dict[str, Any],
     tokenizer_asset: dict[str, Any],
     cleaned_pool_bytes: int,
+    selection_sha256: str,
+    selection_input_tree_sha256: str,
+    formal_governance: dict[str, str] | None,
 ) -> dict[str, Any]:
     identity = candidate_artifact_identity(
         config,
@@ -1382,6 +1844,9 @@ def build_trained_manifest(
         "training": {
             "cleanedPoolBytes": cleaned_pool_bytes,
             "licenseAuditPassed": True,
+            "selectionSha256": selection_sha256,
+            "selectionInputTreeSha256": selection_input_tree_sha256,
+            "formalGovernance": formal_governance,
         },
         "oraclePrecheck": {
             "checkpoints": 0,

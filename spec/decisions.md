@@ -18,6 +18,8 @@
 - **运行时**：Windows/Tauri 使用同一签名可执行文件的隐藏常驻 completion worker，采用长度帧、request ID、latest-only 取消和 Job Object 资源限制。模型输出是不可信文本，不能声明编辑区间、优先级、来源或学习策略，全部由宿主重新盖章和门控。
 - **量化与生命周期**：浮点权重导出为 `JLFDQ02`（group-size 64，Q4/Q8 分组 F16 scale、F16 vector）。候选只能按 `trained → oraclePassed → releaseEligible` 单向晋升；trainer 不得生成 Oracle 或 release 资格，publisher 不得接受缺少原始观察和双 final/GUI 哈希绑定的布尔声明。
 - **训练节点**：当前工作站保管 selection、evaluator 和 final，幻15只承担内容寻址的 CUDA job。Tailscale direct 优先，VPS Peer Relay 仅作加密转发；final、用户数据和凭据不得上传训练节点或 VPS。该分工不改变离线产品的数据边界。
+- **正式矩阵合同**：128MiB selection 固定四个 dated Wikimedia DEVELOPMENT 来源与近重复/泄漏门禁；8K tokenizer 只冻结一次并由全部 job 复用。RemoteTrainingJob v2 绑定 source tree、recipe、selection、corpus 与两份 tokenizer 资产，使用幂等 `if-available` resume。
+- **序列推理**：Rust/Python 共同采用一次 prefill、逐层 KV cache、beam width 32、Top-4 扩展、`alpha=0.6` 长度归一化和 token 序列稳定 tie-break；全局截宽后才执行下一步 forward，并在每步检查取消/deadline。
 - **预算**：模型、tokenizer、manifest 与新增推理宿主静态增量合计不超过 24MiB，增量峰值内存不超过 192MiB，模型推理 p90 不超过 80ms。Web/PWA 不继承桌面模型承诺，只保留结构化、个人和工作区安全降级。
 - **停止与放行**：训练 visibility gate 前，Oracle@8 必须 ≥45%、Oracle@32 ≥55%、中英文 Oracle@8 各 ≥40%；不通过即停止该路线且不读取 final。通过预检后，cold/workspace 两套各 200 checkpoint 的独立 final 仍必须同时达到 35%–42% 触发率、绝对可用率 ≥35%、silence false trigger ≤3%、mixed/跨行/超长为 0 和双 p90 ≤140ms，才允许 publisher 原子安装唯一 canonical 公共引擎。
 - **后果**：ADR-014/016 的 architecture-stop 原样有效；旧观察 holdout 只用于回归，新的 validation/final 必须重新冻结且 final 每套只消费一次。新引擎在双 final 与真实 Windows GUI/IME 闭环前只能由 dev/E2E flag 显式启用。

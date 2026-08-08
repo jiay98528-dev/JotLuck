@@ -100,6 +100,63 @@ function Quote-ProcessArgument {
     return '"' + $Value + '"'
 }
 
+function Get-RecipeArgumentValue {
+    param(
+        [Parameter(Mandatory)][object[]]$Arguments,
+        [Parameter(Mandatory)][string]$Name
+    )
+    $matches = @()
+    for ($index = 0; $index -lt $Arguments.Count; $index++) {
+        if ([string]$Arguments[$index] -eq $Name) {
+            if ($index + 1 -ge $Arguments.Count) { throw "Recipe argument $Name has no value." }
+            $matches += [string]$Arguments[$index + 1]
+        }
+    }
+    if ($matches.Count -ne 1) { throw "Recipe argument $Name must occur exactly once." }
+    return $matches[0]
+}
+
+function Get-Sha256Utf8Text {
+    param([Parameter(Mandatory)][string]$Value)
+    $bytes = [Text.UTF8Encoding]::new($false).GetBytes($Value)
+    return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+}
+
+function Get-VerifiedOutputBundle {
+    param(
+        [Parameter(Mandatory)]$Job,
+        [Parameter(Mandatory)][string]$Workspace,
+        [Parameter(Mandatory)][string]$JobSha256
+    )
+    $bundleRelativePath = ([string]$Job.output.rootDirectory).TrimEnd('/') + '/' + ([string]$Job.output.bundleName)
+    $bundleRoot = Resolve-ChildPath -Root $Workspace -RelativePath $bundleRelativePath -MustExist
+    $manifestPath = [IO.Path]::Combine($bundleRoot, 'manifest.json')
+    if (-not [IO.File]::Exists($manifestPath)) { throw 'Training output manifest is missing.' }
+    $manifest = Get-Content -Raw -Encoding utf8 -LiteralPath $manifestPath | ConvertFrom-Json -Depth 20
+    if ($manifest.schema -ne 'jotluck.autocomplete.v2-free.remote-bundle.v1' -or
+        $manifest.jobId -ne $Job.jobId -or $manifest.sourceJobSha256 -ne $JobSha256 -or
+        [string]$manifest.bundleSha256 -notmatch '^[a-f0-9]{64}$') {
+        throw 'Training output manifest identity is invalid.'
+    }
+    $verifiedBytes = [int64]0
+    foreach ($fileReference in @($manifest.files)) {
+        $filePath = Resolve-ChildPath -Root $bundleRoot -RelativePath ([string]$fileReference.relativePath) -MustExist
+        $fileInfo = Get-Item -LiteralPath $filePath
+        if ($fileInfo.PSIsContainer -or $fileInfo.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) {
+            throw "Bundle contains an invalid file: $($fileReference.relativePath)"
+        }
+        if ($fileInfo.Length -ne [int64]$fileReference.bytes) { throw 'Bundle file byte count mismatch.' }
+        Assert-Sha256 -Path $filePath -ExpectedSha256 ([string]$fileReference.sha256) -Label 'Bundle file'
+        $verifiedBytes += $fileInfo.Length
+    }
+    if ($verifiedBytes -ne [int64]$manifest.totalBytes) { throw 'Bundle total byte count mismatch.' }
+    return [ordered]@{
+        manifestPath = $bundleRelativePath + '/manifest.json'
+        bytes = $verifiedBytes
+        sha256 = [string]$manifest.bundleSha256
+    }
+}
+
 $workspace = (Resolve-Path -LiteralPath $WorkspaceRoot -ErrorAction Stop).Path
 $stateRootResolved = (Resolve-Path -LiteralPath $StateRoot -ErrorAction Stop).Path
 $jobFile = (Resolve-Path -LiteralPath $JobPath -ErrorAction Stop).Path
@@ -109,10 +166,46 @@ Assert-Sha256 -Path $jobFile -ExpectedSha256 $ExpectedJobSha256 -Label 'Training
 Assert-Sha256 -Path $trainingPythonExecutable -ExpectedSha256 $ExpectedTrainingPythonSha256 -Label 'Training Python executable'
 Assert-Sha256 -Path $gitExecutable -ExpectedSha256 $ExpectedGitSha256 -Label 'Git executable'
 $script:job = Get-Content -Raw -Encoding utf8 -LiteralPath $jobFile | ConvertFrom-Json -Depth 20
-if ($job.schema -ne 'jotluck.autocomplete.v2-free.remote-training-job.v1') { throw 'Unsupported job schema.' }
+if ($job.schema -ne 'jotluck.autocomplete.v2-free.remote-training-job.v2') { throw 'Unsupported job schema.' }
 if ($job.jobId -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$') { throw 'Invalid job ID.' }
 if ($job.model.engine -ne 'public-v2-free-decoder-v1' -or $job.model.format -ne 'JLFDQ02') {
     throw 'Job is not a V2 free decoder job.'
+}
+$inputReferences = @($job.inputs)
+$tokenizerInputs = @($inputReferences | Where-Object { [string]$_.role -eq 'tokenizer-seed' })
+$trainingCorpusInputs = @($inputReferences | Where-Object { [string]$_.role -eq 'training-corpus' })
+$recipeConfigInputs = @($inputReferences | Where-Object { [string]$_.role -eq 'recipe-config' })
+$stageReceiptInputs = @($inputReferences | Where-Object { [string]$_.role -eq 'selection-stage-receipt' })
+$fingerprintAuditInputs = @($inputReferences | Where-Object { [string]$_.role -eq 'fingerprint-audit' })
+$validationInputs = @($inputReferences | Where-Object { [string]$_.role -eq 'validation' })
+if ($tokenizerInputs.Count -ne 2 -or $trainingCorpusInputs.Count -ne 1 -or
+    $recipeConfigInputs.Count -ne 1 -or $stageReceiptInputs.Count -ne 1 -or
+    $fingerprintAuditInputs.Count -ne 1 -or
+    $validationInputs.Count -ne 0 -or
+    [string]$job.tokenizer.kind -ne 'unigram' -or [int]$job.tokenizer.vocabularySize -ne 8000 -or
+    [bool]$job.tokenizer.byteFallback -ne $true) {
+    throw 'Training job does not bind the fixed shared tokenizer inputs.'
+}
+$tokenizerModelInput = @($tokenizerInputs | Where-Object { [string]$_.id -eq [string]$job.tokenizer.modelInputId })
+$tokenizerRuntimeInput = @($tokenizerInputs | Where-Object { [string]$_.id -eq [string]$job.tokenizer.runtimeInputId })
+if ($tokenizerModelInput.Count -ne 1 -or $tokenizerRuntimeInput.Count -ne 1 -or
+    [string]$tokenizerModelInput[0].id -eq [string]$tokenizerRuntimeInput[0].id) {
+    throw 'Shared tokenizer input IDs are invalid.'
+}
+$tokenizerBindingJson = '{"byteFallback":true,"kind":"unigram","model":{"bytes":' +
+    [string][int64]$tokenizerModelInput[0].bytes + ',"sha256":"' + [string]$tokenizerModelInput[0].sha256 +
+    '"},"runtime":{"bytes":' + [string][int64]$tokenizerRuntimeInput[0].bytes + ',"sha256":"' +
+    [string]$tokenizerRuntimeInput[0].sha256 +
+    '"},"schema":"jotluck.autocomplete.v2-free.shared-tokenizer.v1","vocabularySize":8000}'
+if ((Get-Sha256Utf8Text -Value $tokenizerBindingJson) -ne [string]$job.tokenizer.bindingSha256) {
+    throw 'Shared tokenizer binding SHA-256 is invalid.'
+}
+$recipeArguments = @($job.recipe.arguments)
+if ((Get-RecipeArgumentValue -Arguments $recipeArguments -Name '--tokenizer-model') -ne [string]$tokenizerModelInput[0].relativePath -or
+    (Get-RecipeArgumentValue -Arguments $recipeArguments -Name '--tokenizer-runtime') -ne [string]$tokenizerRuntimeInput[0].relativePath -or
+    (Get-RecipeArgumentValue -Arguments $recipeArguments -Name '--selection-stage-receipt') -ne [string]$stageReceiptInputs[0].relativePath -or
+    (Get-RecipeArgumentValue -Arguments $recipeArguments -Name '--fingerprint-audit') -ne [string]$fingerprintAuditInputs[0].relativePath) {
+    throw 'Recipe tokenizer arguments do not match the bound shared tokenizer inputs.'
 }
 $trainingSelections = @{
     '16m-q4' = [ordered]@{ parameterCount = 16000000; candidates = @('16m-q4', '16m-q8') }
@@ -135,6 +228,26 @@ if ([int64]$job.selection.parameterCount -ne [int64]$expectedSelection.parameter
 $script:statusPath = Resolve-ChildPath -Root $stateRootResolved -RelativePath ([string]$job.output.statusPath)
 $script:heartbeatPath = Resolve-ChildPath -Root $stateRootResolved -RelativePath ([string]$job.output.heartbeatPath)
 if ($statusPath -eq $heartbeatPath) { throw 'Status and heartbeat paths must differ.' }
+$existingStatus = if ([IO.File]::Exists($statusPath)) {
+    Get-Content -Raw -Encoding utf8 -LiteralPath $statusPath | ConvertFrom-Json -Depth 20
+} else { $null }
+if ($null -ne $existingStatus) {
+    if ($existingStatus.schema -ne 'jotluck.autocomplete.v2-free.remote-training-result.v1' -or
+        $existingStatus.jobId -ne $job.jobId -or $existingStatus.jobFileSha256 -ne $ExpectedJobSha256) {
+        throw 'Existing training status belongs to a different job identity.'
+    }
+    if ([string]$existingStatus.status -ne 'completed') {
+        throw "Existing training status is not safely restartable: $($existingStatus.status)."
+    }
+    $verifiedExistingBundle = Get-VerifiedOutputBundle -Job $job -Workspace $workspace -JobSha256 $ExpectedJobSha256
+    if ($existingStatus.outputBundle.manifestPath -ne $verifiedExistingBundle.manifestPath -or
+        [int64]$existingStatus.outputBundle.bytes -ne [int64]$verifiedExistingBundle.bytes -or
+        $existingStatus.outputBundle.sha256 -ne $verifiedExistingBundle.sha256) {
+        throw 'Completed training status no longer matches its verified output bundle.'
+    }
+    $existingStatus | ConvertTo-Json -Depth 12
+    exit 0
+}
 $script:createdAt = [DateTimeOffset]::UtcNow.ToString('o')
 $queued = New-ResultState -Status 'queued'
 Write-StateAndHeartbeat -State $queued
@@ -229,37 +342,10 @@ try {
     }
     if ($process.ExitCode -ne 0) { throw "Training process exited with code $($process.ExitCode)." }
 
-    $bundleRelativePath = ([string]$job.output.rootDirectory).TrimEnd('/') + '/' + ([string]$job.output.bundleName)
-    $bundleRoot = Resolve-ChildPath -Root $workspace -RelativePath $bundleRelativePath -MustExist
-    $manifestPath = [IO.Path]::Combine($bundleRoot, 'manifest.json')
-    if (-not [IO.File]::Exists($manifestPath)) { throw 'Training output manifest is missing.' }
-    $manifest = Get-Content -Raw -Encoding utf8 -LiteralPath $manifestPath | ConvertFrom-Json -Depth 20
-    if ($manifest.schema -ne 'jotluck.autocomplete.v2-free.remote-bundle.v1' -or
-        $manifest.jobId -ne $job.jobId -or $manifest.sourceJobSha256 -ne $ExpectedJobSha256 -or
-        [string]$manifest.bundleSha256 -notmatch '^[a-f0-9]{64}$') {
-        throw 'Training output manifest identity is invalid.'
-    }
-    $verifiedBytes = [int64]0
-    foreach ($fileReference in @($manifest.files)) {
-        $filePath = Resolve-ChildPath -Root $bundleRoot -RelativePath ([string]$fileReference.relativePath) -MustExist
-        $fileInfo = Get-Item -LiteralPath $filePath
-        if ($fileInfo.PSIsContainer -or $fileInfo.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) {
-            throw "Bundle contains an invalid file: $($fileReference.relativePath)"
-        }
-        if ($fileInfo.Length -ne [int64]$fileReference.bytes) { throw 'Bundle file byte count mismatch.' }
-        Assert-Sha256 -Path $filePath -ExpectedSha256 ([string]$fileReference.sha256) -Label 'Bundle file'
-        $verifiedBytes += $fileInfo.Length
-    }
-    if ($verifiedBytes -ne [int64]$manifest.totalBytes) { throw 'Bundle total byte count mismatch.' }
-
     $completed = New-ResultState -Status 'completed'
     $completed.startedAt = $running.startedAt
     $completed.finishedAt = [DateTimeOffset]::UtcNow.ToString('o')
-    $completed.outputBundle = [ordered]@{
-        manifestPath = $bundleRelativePath + '/manifest.json'
-        bytes = $verifiedBytes
-        sha256 = [string]$manifest.bundleSha256
-    }
+    $completed.outputBundle = Get-VerifiedOutputBundle -Job $job -Workspace $workspace -JobSha256 $ExpectedJobSha256
     Write-StateAndHeartbeat -State $completed
 }
 catch {

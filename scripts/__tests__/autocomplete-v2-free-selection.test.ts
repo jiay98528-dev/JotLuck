@@ -247,7 +247,7 @@ describe('V2 free licensed corpus selection', () => {
     }
   });
 
-  it('rejects exact train/development leakage before partitioning', async () => {
+  it('reapplies source budgets after deterministic exact deduplication', async () => {
     const fixture = createSelectionFixture();
     try {
       const manifestPath = path.join(fixture.workspaceRoot, fixture.selectionPath);
@@ -276,7 +276,7 @@ describe('V2 free licensed corpus selection', () => {
           selectionPath: fixture.selectionPath,
           sourceRegistryPath: fixture.registryPath,
         }),
-      ).rejects.toThrow('exact duplicate');
+      ).rejects.toThrow('source dominance');
     } finally {
       rmSync(fixture.workspaceRoot, { recursive: true, force: true });
     }
@@ -365,7 +365,7 @@ describe('V2 free licensed corpus selection', () => {
     }
   });
 
-  it('rejects duplicate normalized identities across baseline and supplement manifests', async () => {
+  it('deterministically removes duplicate identities across baseline and supplements', async () => {
     const fixture = createSelectionFixture();
     const supplementPath = createSupplementFixture(
       fixture.workspaceRoot,
@@ -374,14 +374,17 @@ describe('V2 free licensed corpus selection', () => {
       'approved prose 0',
     );
     try {
-      await expect(
-        buildV2FreeLicensedCorpusSelection({
-          workspaceRoot: fixture.workspaceRoot,
-          selectionPath: fixture.selectionPath,
-          sourceRegistryPath: fixture.registryPath,
-          supplementPaths: [supplementPath],
-        }),
-      ).rejects.toThrow('exact duplicate');
+      const selection = await buildV2FreeLicensedCorpusSelection({
+        workspaceRoot: fixture.workspaceRoot,
+        selectionPath: fixture.selectionPath,
+        sourceRegistryPath: fixture.registryPath,
+        supplementPaths: [supplementPath],
+      });
+      expect(selection.documents).toHaveLength(9);
+      expect(
+        selection.documents.some(({ documentId }) => documentId === 'duplicate-document-0'),
+      ).toBe(false);
+      expect(selection.exactDuplicates).toBe(0);
     } finally {
       rmSync(fixture.workspaceRoot, { recursive: true, force: true });
     }

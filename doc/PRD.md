@@ -67,6 +67,7 @@ JotLuck 是本地优先、离线可用的 Markdown 笔记工具。数据以普�
 - 学习准入固定为 `persist | memoryOnly | skip`：普通工作区正文可持久化，临时/外部会话仅内存；密钥、密码、token、代码和 frontmatter 跳过。用户笔记、反馈和本地指标不得上传或进入公共模型训练。
 - V2R 固定短语 Transformer 与 V2S Subword MKN 的 architecture-stop 继续有效。下一版本免费公共引擎必须使用新 ID `public-v2-free-decoder-v1`、新 manifest 和新缓存，不得修改旧停止记录或并行加载第二公共引擎。
 - 免费公共引擎固定比较 16M/24M/32M Q4 与 16M Q8 decoder-only，使用单一 8K Unigram + byte fallback 双语 tokenizer、最多 256 tokens 上下文；训练池清洗后上限 512MiB。模型、tokenizer、manifest 与新增推理宿主静态增量合计不超过 24MiB，增量峰值内存不超过 192MiB，模型推理 p90 不超过 80ms。
+- V2.2 正式矩阵使用独立的 128MiB DEVELOPMENT selection 和一次冻结、全候选复用的 tokenizer；公开自然文本必须固定来源/许可/快照/页面 revision/清洗器/逐段哈希并通过近重复与 holdout 泄漏检查。训练准入不等于模型分发许可，Share-Alike 来源的发布处理必须另立评估。
 - Windows/Tauri 通过同一签名可执行文件的隐藏常驻 completion worker 推理。长度帧、request ID、latest-only 取消、deadline、崩溃隔离和 Job Object 资源限制必须 fail closed；模型只能返回不可信文本，插入区间、来源、优先级与学习策略由宿主决定。
 - 公共模型必须来自许可证明确、来源可追溯且通过隐私、样板、原始/残余重复、类别/来源占比和正式 holdout 重叠闸门的语料。上下文胶囊仅含标题链、当前段落、前段尾部和至多一个无路径检索片段，不提供整篇正文、文件名或工作区清单。
 - Oracle 预检必须先达到 Oracle@8 ≥45%、Oracle@32 ≥55%、中英文 Oracle@8 各 ≥40%；失败即停止，不训练 visibility gate、不读取 final、不发布资产。旧已观察 holdout 只作回归。

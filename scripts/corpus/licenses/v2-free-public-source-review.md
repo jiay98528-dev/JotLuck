@@ -1,47 +1,73 @@
 # V2.2 public corpus source review
 
-> Observed: 2026-08-05 (Asia/Shanghai)
-> Scope: `public-v2-free-decoder-v1` DEVELOPMENT corpus supplementation only
-> Decision: use the remaining eligible content from the already pinned Tatoeba English CC0 snapshot together with project-owned v1 deterministic generation; target at least 9MiB of additional cleaned document text
+> Frozen: 2026-08-08 (Asia/Shanghai)
+> Scope: `public-v2-free-decoder-v1` DEVELOPMENT training and validation research only
+> Decision: admit three exact Wikimedia 2026-08-01 dump objects plus one fixed, member-aligned range of the Chinese Wikisource dump as bounded natural-prose sources; this does not approve redistribution of a trained model
 
-This record captures engineering provenance and source-selection facts. It is not legal advice and does not claim rights beyond what the linked source declarations state. HTTP metadata below is an observation of the named upstream object, not a content identity: any adopted bytes still require a downloaded-byte SHA-256 and a versioned cleaning report.
+This record binds engineering provenance and the source-selection decision. It is not legal
+advice and does not claim rights beyond the upstream terms. The mutable `latest` aliases are
+discovery endpoints only. Training must use the exact filenames and hashes below and must fail
+closed if any byte identity changes.
 
-## Official observations
+## Approved frozen raw objects
 
-| Source/artifact                                     | Official URL                                                                                                                                                                                                                                                   | Observed HTTP metadata                                                           | Decision and reason                                                                                                                                                                                                                                                                                                                                                                  |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Tatoeba English CC0 sentences                       | [Tatoeba downloads](https://tatoeba.org/en/downloads); [English CC0 export](https://downloads.tatoeba.org/exports/per_language/eng/eng_sentences_CC0.tsv.bz2); [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)                                   | `Content-Length: 1,288,524`; `Last-Modified: Sat, 01 Aug 2026 06:30:21 GMT`      | Source remains available under the upstream CC0-specific export. Do not silently ingest this weekly object: it differs in bytes from the project-pinned 2026-07-12 object (`1,288,366` bytes, SHA-256 `14f975533e2f15257f674d6099b95cf6b2c3458a8baf7496935081ad862f4b91`). Adopt only remaining eligible documents derived from that pinned object and its existing cleaning report. |
-| Tatoeba Mandarin Chinese (`cmn`) CC0 sentences      | [Tatoeba downloads](https://tatoeba.org/en/downloads); [Mandarin CC0 export](https://downloads.tatoeba.org/exports/per_language/cmn/cmn_sentences_CC0.tsv.bz2)                                                                                                 | `Content-Length: 102`; `Last-Modified: Sat, 01 Aug 2026 06:30:21 GMT`            | Rejected for supplementation. The compressed object is only 102 bytes and supplies no material Chinese corpus capacity. Its bytes must not be extrapolated into an assumed text volume.                                                                                                                                                                                              |
-| Tatoeba global links table                          | [Tatoeba downloads](https://tatoeba.org/en/downloads); [links export](https://downloads.tatoeba.org/exports/links.tar.bz2)                                                                                                                                     | `Content-Length: 149,039,032`; `Last-Modified: Sat, 01 Aug 2026 06:15:11 GMT`    | Rejected. The export records sentence relations/IDs, not training prose. Its compressed file size is not corpus-text capacity. The general-download licensing/attribution path also differs from the already pinned CC0 sentence artifact and would require a separate review.                                                                                                       |
-| English Wikipedia/Wikimedia pages-and-articles dump | [Wikimedia dumps](https://dumps.wikimedia.org/); [English latest artifact](https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-pages-articles-multistream.xml.bz2); [Wikimedia licensing terms](https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use) | `Content-Length: 26,564,488,717`; `Last-Modified: Tue, 07 Jul 2026 20:59:03 GMT` | Rejected for this bounded supplementation. The 24.7GiB compressed artifact is disproportionate to a 9MiB target, and downstream attribution, CC BY-SA share-alike and GFDL handling would require a separate design and review.                                                                                                                                                      |
-| Chinese Wikipedia/Wikimedia pages-and-articles dump | [Wikimedia dumps](https://dumps.wikimedia.org/); [Chinese latest artifact](https://dumps.wikimedia.org/zhwiki/latest/zhwiki-latest-pages-articles-multistream.xml.bz2); [Wikimedia licensing terms](https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use) | `Content-Length: 3,559,343,816`; `Last-Modified: Tue, 04 Aug 2026 10:20:28 GMT`  | Rejected for the same bounded-scope reasons. The 3.3GiB compressed artifact and its downstream obligations are unnecessary for this smoke-stage gap.                                                                                                                                                                                                                                 |
+| Source ID                         | Exact upstream object                                                                                                                                                                    |       Bytes | Official SHA-1                                               | Controller SHA-256                                                 | Language/category             |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------: | ------------------------------------------------------------ | ------------------------------------------------------------------ | ----------------------------- |
+| `enwiki-partition-1`              | [enwiki 2026-08-01 partition 1](https://dumps.wikimedia.org/enwiki/20260801/enwiki-20260801-pages-articles-multistream1.xml-p1p41242.bz2)                                                | 299,138,062 | `c70c36ca1b892ed97b0dbce2bc889468f7abe858`                   | `856411e9a99bdc38f809ee36960ae05249a41815d56e08f015b138feaad8fe9f` | English / encyclopedic prose  |
+| `zhwiki-partition-1`              | [zhwiki 2026-08-01 partition 1](https://dumps.wikimedia.org/zhwiki/20260801/zhwiki-20260801-pages-articles-multistream1.xml-p1p187712.bz2)                                               | 255,349,033 | `18f50054deb180b806ac45bf15894b409c3bc3e1`                   | `6277a5bc5a833a8ec7e9a3d90a81d2eaa9400b52732223094e4bf2f5c595b4f2` | Chinese / encyclopedic prose  |
+| `enwikibooks-full`                | [enwikibooks 2026-08-01 pages/articles](https://dumps.wikimedia.org/enwikibooks/20260801/enwikibooks-20260801-pages-articles-multistream.xml.bz2)                                        | 207,199,592 | `726667a53896e6d43b692f916441086ae6382384`                   | `424f5b63febed2f3bc5979841ca4fb8bf3dbd57de959004c46d221611ff5c4dd` | English / instructional prose |
+| `zhwikisource-prefix-0-300313200` | [zhwikisource 2026-08-01 pages/articles](https://dumps.wikimedia.org/zhwikisource/20260801/zhwikisource-20260801-pages-articles-multistream.xml.bz2), inclusive byte range `0-300313200` | 300,313,201 | local range SHA-1 `56519f980146aa598b544598cb1276bb1a5d2130` | `ce51188c0b2d89e1386de81677f22df01dbabf174b3dc32f476d21d1a366c559` | Chinese / instructional prose |
 
-The Wikipedia/Wikimedia rejection is a scope and risk decision, not a conclusion that those sources cannot be used by another project or a later separately reviewed pipeline.
+The controller also retained the four official `dumpstatus.json` observations used to resolve
+the dated objects. Their local SHA-256 values are:
 
-## Approved supplementation identity
+- enwiki: `b6af0963c1376a54f96ddc2731fac76da614b2551e9751741ac8a3ab512925f4`
+- zhwiki: `c1d8ddc8c1aea6ae518237f019884e4c115b253ecf1ee1cff29a17da5fda9ea2`
+- enwikibooks: `74ba30923d33ac446ad318c2a6656e049661da6f336b04af26f1ce1c1acea4ee`
+- zhwikisource: the official parent object is 7,168,395,497 bytes with SHA-1
+  `61011491bf408e8e647eefc4560e531965df7e52`. Its dated multistream index is 53,342,750
+  bytes with official SHA-1 `02b44c4da1bc65dfa98ad65806eac4b421d04543` and controller
+  SHA-256 `9ddbea1e3f3f7c8072b74dbfab5f1205990780d0684368977c9fcc4b3de4f97b`.
+  The range ends immediately before the next indexed bzip2 member at offset 300,313,201,
+  so the retained prefix remains a complete concatenation of bzip2 members.
 
-The V2.2 supplementation builder may combine only:
+The exact `zhwikibooks-full` object was also reviewed and attempted: 19,924,402 bytes,
+official SHA-1 `3575564cc9c1fd11ae6c97330fa3d519d691a9e0`, controller SHA-256
+`0494eee9136ada51499af78d923477a629b04627d4af1e2ac49d24bcbb721aeb`.
+It yielded only 19,566,329 cleaned bytes, below the fixed 24 MiB allocation, so the plan's
+same-language Wikisource fallback was activated. The insufficient result is not part of the
+formal selection.
 
-1. Remaining eligible documents from the already pinned Tatoeba English CC0 raw object and its committed cleaning evidence in `scripts/corpus/tatoeba-cc0-cleaning-report.json` and `scripts/corpus/licenses/tatoeba-cc0.md`.
-2. Project-owned v1 deterministic generated prose, rematerialized under a V2.2-specific generator identity. Reuse of an old generated sentence is allowed only when the new manifest binds the exact generator version, recipe, seed and document content SHA-256.
+## License and use boundary
 
-The combined cleaned text addition must be at least 9MiB. Downloaded bytes, compressed bytes, archive headers, link/ID tables, license text and manifest JSON do not count toward that threshold.
+Wikimedia's [Terms of Use](https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use/en)
+describe text contributions as available under CC BY-SA 4.0, with some projects or content also
+subject to additional terms such as GFDL. The selection records `CC-BY-SA-4.0`, the exact dump
+URL/date, attribution URL, raw identity and cleaner identity. It does not erase page-level or
+project-level obligations.
 
-This approval does not change the V2R or V2S selections and does not modify either architecture-stop record. It also does not authorize final access, public asset installation, publisher execution or a default-engine switch.
+These sources are approved only for the current `packageMode=DEVELOPMENT` research candidate.
+Before any model or derived corpus is distributed, a separate license review must decide the
+required attribution and Share-Alike treatment. This record therefore does not make the
+candidate `releaseEligible` and does not authorize publisher execution, production installation,
+final access or a default-engine switch.
 
-## Required provenance-bundle obligations
+## Bounded cleaning and selection contract
 
-以下字段由已跟踪的补量计划、materializer 输出 manifest 和最终 selection manifest 共同绑定；不要求把上游下载元数据重复写入每一条文档记录：
+Each source may contribute at most 24 MiB of cleaned UTF-8 prose. Only namespace-0,
+non-redirect natural text is eligible. The cleaner removes templates, tables, references,
+navigation, categories, HTML, code/frontmatter, contact details and secret-shaped strings, then
+segments by article boundaries into 256–2,048-byte documents.
 
-Every adopted document must bind:
+Selection order is `SHA256(sourceId|pageId|segmentIndex|20260805)`. Every retained document binds
+source ID, page/revision identity, segment index, language, category, byte count, content SHA-256,
+normalized SHA-256 and cleaner version. Archive bytes, XML, indexes, license text and manifest
+bytes never count as training bytes.
 
-- source ID and the official source URL;
-- SPDX identifier or the exact upstream license declaration URL, without converting an ambiguous declaration into an asserted legal conclusion;
-- observation timestamp plus upstream `Content-Length` and `Last-Modified` when supplied;
-- downloaded raw bytes and SHA-256 for external material;
-- generator/cleaner name and version, recipe SHA and seed as applicable;
-- language, category, cleaned UTF-8 byte count and document content SHA-256;
-- selection split and proof that downloaded/archive/manifest/link-table bytes were excluded from corpus-size accounting;
-- deduplication, privacy and train-to-validation/final overlap results.
+The combined formal selection must additionally pass exact deduplication, 128-value MinHash with
+32×4 LSH candidate recall followed by exact shingle Jaccard threshold 0.80, source/category budgets, Chinese/English byte balance,
+and validation/final fingerprint leakage checks. User notes, Personal/Notebook data, feedback,
+local metrics, code, frontmatter, secrets and every holdout remain permanently excluded.
 
-If an upstream weekly object changes, the builder must fail closed until a new raw SHA, cleaning report and source review are explicitly recorded. A URL or HTTP header alone cannot stand in for frozen content identity.
+The Chinese Wikibooks shortfall is resolved only by the fixed Chinese Wikisource range recorded
+above. No mutable URL, unreviewed source or further range may be substituted silently.

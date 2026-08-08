@@ -1,4 +1,8 @@
 use super::*;
+use rayon::prelude::*;
+
+pub(super) const PARALLEL_MATVEC_MIN_ROWS: usize = 128;
+pub(super) const PARALLEL_MATVEC_MIN_OPERATIONS: usize = 128 * 1024;
 
 impl DecoderModel {
     pub(super) fn load(path: &Path) -> Result<Self, String> {
@@ -68,12 +72,10 @@ impl DecoderModel {
                     {
                         return Err("decoder quantized tensor scale is invalid".to_string());
                     }
-                    TensorStorage::Quantized {
-                        bits,
-                        group_size,
-                        scales,
-                        values: slice(payload, offset, length)?.to_vec(),
-                    }
+                    let values = slice(payload, offset, length)?;
+                    TensorStorage::Dequantized(dequantize_tensor(
+                        bits, group_size, &scales, values, elements,
+                    )?)
                 }
                 _ => return Err("decoder runtime tensor dtype is invalid".to_string()),
             };
@@ -108,10 +110,11 @@ impl DecoderModel {
             .ok_or_else(|| "decoder embedding shape is invalid".to_string())
     }
 
+    #[cfg(test)]
     pub(super) fn next_token_logits(
         &self,
         tokens: &[usize],
-        should_stop: &impl Fn() -> bool,
+        should_stop: &(impl Fn() -> bool + Sync),
     ) -> Result<Vec<f32>, String> {
         if tokens.is_empty() || tokens.len() > self.maximum_context_tokens {
             return Err("decoder token context length is invalid".to_string());
@@ -187,7 +190,7 @@ impl DecoderModel {
         &self,
         layer: usize,
         hidden: &[Vec<f32>],
-        should_stop: &impl Fn() -> bool,
+        should_stop: &(impl Fn() -> bool + Sync),
     ) -> Result<Vec<Vec<f32>>, String> {
         let prefix = format!("blocks.layers.{layer}");
         let normalized: Vec<Vec<f32>> = hidden
@@ -258,7 +261,7 @@ impl DecoderModel {
         queries: &[Vec<f32>],
         keys: &[Vec<f32>],
         values: &[Vec<f32>],
-        should_stop: &impl Fn() -> bool,
+        should_stop: &(impl Fn() -> bool + Sync),
     ) -> Result<Vec<Vec<f32>>, String> {
         let head_width = self.width / self.heads;
         let scale = (head_width as f32).sqrt().recip();
@@ -290,7 +293,7 @@ impl DecoderModel {
         weight: &str,
         bias: &str,
         input: &[f32],
-        should_stop: &impl Fn() -> bool,
+        should_stop: &(impl Fn() -> bool + Sync),
     ) -> Result<Vec<f32>, String> {
         let mut output = self.matvec(weight, input, should_stop)?;
         let bias = self.vector(bias)?;
@@ -333,14 +336,28 @@ impl DecoderModel {
         &self,
         name: &str,
         input: &[f32],
-        should_stop: &impl Fn() -> bool,
+        should_stop: &(impl Fn() -> bool + Sync),
     ) -> Result<Vec<f32>, String> {
         let tensor = self.tensor(name)?;
         if tensor.shape.len() != 2 || tensor.shape[1] != input.len() {
             return Err(format!("decoder matrix shape mismatch: {name}"));
         }
+        let rows = tensor.shape[0];
+        if rows >= PARALLEL_MATVEC_MIN_ROWS
+            && rows.saturating_mul(input.len()) >= PARALLEL_MATVEC_MIN_OPERATIONS
+        {
+            return (0..rows)
+                .into_par_iter()
+                .map(|row| {
+                    if row % 64 == 0 && should_stop() {
+                        return Err("decoder inference cancelled or expired".to_string());
+                    }
+                    tensor.dot_row(row, input)
+                })
+                .collect();
+        }
         let mut output = Vec::with_capacity(tensor.shape[0]);
-        for row in 0..tensor.shape[0] {
+        for row in 0..rows {
             if row % 64 == 0 && should_stop() {
                 return Err("decoder inference cancelled or expired".to_string());
             }
@@ -364,7 +381,7 @@ impl DecoderModel {
         }
         match &tensor.storage {
             TensorStorage::Float(values) => Ok(values),
-            TensorStorage::Quantized { .. } => {
+            TensorStorage::Dequantized(_) => {
                 Err(format!("decoder vector storage is invalid: {name}"))
             }
         }

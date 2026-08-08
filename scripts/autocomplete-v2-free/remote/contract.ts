@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 export const REMOTE_TRAINING_JOB_SCHEMA =
-  'jotluck.autocomplete.v2-free.remote-training-job.v1' as const;
+  'jotluck.autocomplete.v2-free.remote-training-job.v2' as const;
 export const TRAINING_RESULT_SCHEMA =
   'jotluck.autocomplete.v2-free.remote-training-result.v1' as const;
 export const REMOTE_BUNDLE_SCHEMA = 'jotluck.autocomplete.v2-free.remote-bundle.v1' as const;
@@ -19,7 +19,13 @@ export type V2FreeTrainingMatrixId = Exclude<V2FreeMatrixId, '16m-q8'>;
 
 export interface RemoteContentReference {
   id: string;
-  role: 'training-corpus' | 'validation' | 'tokenizer-seed' | 'recipe-config';
+  role:
+    | 'training-corpus'
+    | 'validation'
+    | 'tokenizer-seed'
+    | 'recipe-config'
+    | 'selection-stage-receipt'
+    | 'fingerprint-audit';
   relativePath: string;
   bytes: number;
   sha256: string;
@@ -44,6 +50,14 @@ export interface RemoteTrainingJob {
     parameterCount: 16_000_000 | 24_000_000 | 32_000_000;
     quantization: 'q4';
     candidateMatrixIds: V2FreeMatrixId[];
+  };
+  tokenizer: {
+    kind: 'unigram';
+    vocabularySize: 8_000;
+    byteFallback: true;
+    modelInputId: string;
+    runtimeInputId: string;
+    bindingSha256: string;
   };
   model: {
     engine: 'public-v2-free-decoder-v1';
@@ -124,6 +138,7 @@ export function parseRemoteTrainingJob(value: unknown): RemoteTrainingJob {
     'sourceTree',
     'recipe',
     'selection',
+    'tokenizer',
     'model',
     'seed',
     'inputs',
@@ -146,6 +161,22 @@ export function parseRemoteTrainingJob(value: unknown): RemoteTrainingJob {
   if (recipeArguments.some((argument) => argument.includes('\0'))) fail('recipe.arguments');
 
   const selection = parseSelection(root.selection);
+  const tokenizer = requireRecord(root.tokenizer, 'tokenizer');
+  requireExactKeys(tokenizer, [
+    'kind',
+    'vocabularySize',
+    'byteFallback',
+    'modelInputId',
+    'runtimeInputId',
+    'bindingSha256',
+  ]);
+  if (
+    tokenizer.kind !== 'unigram' ||
+    tokenizer.vocabularySize !== 8_000 ||
+    tokenizer.byteFallback !== true
+  ) {
+    fail('tokenizer');
+  }
   const model = requireRecord(root.model, 'model');
   requireExactKeys(model, ['engine', 'candidateId', 'format']);
   if (model.engine !== 'public-v2-free-decoder-v1' || model.format !== 'JLFDQ02') {
@@ -158,6 +189,48 @@ export function parseRemoteTrainingJob(value: unknown): RemoteTrainingJob {
   if (new Set(inputs.map((input) => input.id)).size !== inputs.length) fail('inputs.id');
   if (new Set(inputs.map((input) => input.relativePath)).size !== inputs.length) {
     fail('inputs.relativePath');
+  }
+  const modelInputId = requireIdentifier(tokenizer.modelInputId, 'tokenizer.modelInputId');
+  const runtimeInputId = requireIdentifier(tokenizer.runtimeInputId, 'tokenizer.runtimeInputId');
+  if (modelInputId === runtimeInputId) fail('tokenizer input ids');
+  const tokenizerModel = inputs.find((input) => input.id === modelInputId);
+  const tokenizerRuntime = inputs.find((input) => input.id === runtimeInputId);
+  if (
+    tokenizerModel?.role !== 'tokenizer-seed' ||
+    tokenizerRuntime?.role !== 'tokenizer-seed' ||
+    inputs.filter((input) => input.role === 'tokenizer-seed').length !== 2
+  ) {
+    fail('tokenizer inputs');
+  }
+  const tokenizerBindingSha256 = computeSharedTokenizerBindingSha256({
+    model: tokenizerModel,
+    runtime: tokenizerRuntime,
+  });
+  if (
+    requireSha256(tokenizer.bindingSha256, 'tokenizer.bindingSha256') !== tokenizerBindingSha256
+  ) {
+    fail('tokenizer binding');
+  }
+  if (
+    inputs.filter((input) => input.role === 'training-corpus').length !== 1 ||
+    inputs.filter((input) => input.role === 'recipe-config').length !== 1 ||
+    inputs.filter((input) => input.role === 'selection-stage-receipt').length !== 1 ||
+    inputs.filter((input) => input.role === 'fingerprint-audit').length !== 1 ||
+    inputs.some((input) => input.role === 'validation')
+  ) {
+    fail('training inputs');
+  }
+  if (
+    requireUniqueArgumentValue(recipeArguments, '--tokenizer-model') !==
+      tokenizerModel.relativePath ||
+    requireUniqueArgumentValue(recipeArguments, '--tokenizer-runtime') !==
+      tokenizerRuntime.relativePath ||
+    requireUniqueArgumentValue(recipeArguments, '--selection-stage-receipt') !==
+      inputs.find((input) => input.role === 'selection-stage-receipt')!.relativePath ||
+    requireUniqueArgumentValue(recipeArguments, '--fingerprint-audit') !==
+      inputs.find((input) => input.role === 'fingerprint-audit')!.relativePath
+  ) {
+    fail('recipe tokenizer arguments');
   }
 
   const resume = requireRecord(root.resume, 'resume');
@@ -192,6 +265,14 @@ export function parseRemoteTrainingJob(value: unknown): RemoteTrainingJob {
       arguments: recipeArguments,
     },
     selection,
+    tokenizer: {
+      kind: 'unigram',
+      vocabularySize: 8_000,
+      byteFallback: true,
+      modelInputId,
+      runtimeInputId,
+      bindingSha256: tokenizerBindingSha256,
+    },
     model: {
       engine: 'public-v2-free-decoder-v1',
       candidateId: requireIdentifier(model.candidateId, 'model.candidateId'),
@@ -330,6 +411,26 @@ export function computeRemoteTrainingJobSha256(job: RemoteTrainingJob): string {
   return sha256Canonical(parseRemoteTrainingJob(job));
 }
 
+export function computeSharedTokenizerBindingSha256(input: {
+  model: Pick<RemoteContentReference, 'bytes' | 'sha256'>;
+  runtime: Pick<RemoteContentReference, 'bytes' | 'sha256'>;
+}): string {
+  return sha256Canonical({
+    schema: 'jotluck.autocomplete.v2-free.shared-tokenizer.v1',
+    kind: 'unigram',
+    vocabularySize: 8_000,
+    byteFallback: true,
+    model: {
+      bytes: requireSafeInteger(input.model.bytes, 'tokenizer model bytes', 1),
+      sha256: requireSha256(input.model.sha256, 'tokenizer model sha256'),
+    },
+    runtime: {
+      bytes: requireSafeInteger(input.runtime.bytes, 'tokenizer runtime bytes', 1),
+      sha256: requireSha256(input.runtime.sha256, 'tokenizer runtime sha256'),
+    },
+  });
+}
+
 export function isSafeRelativePath(value: string): boolean {
   if (!value || value.includes('\0') || value.includes('\\') || value.startsWith('/')) return false;
   if (/^[A-Za-z]:/u.test(value)) return false;
@@ -391,6 +492,8 @@ function parseContentReference(value: unknown, index: number): RemoteContentRefe
     'validation',
     'tokenizer-seed',
     'recipe-config',
+    'selection-stage-receipt',
+    'fingerprint-audit',
   ];
   if (!roles.includes(item.role as RemoteContentReference['role'])) fail(`inputs[${index}].role`);
   return {
@@ -514,6 +617,16 @@ function requireSafeInteger(
 function requireStringArray(value: unknown, label: string): string[] {
   if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) fail(label);
   return [...value] as string[];
+}
+
+function requireUniqueArgumentValue(arguments_: readonly string[], name: string): string {
+  const indexes = arguments_
+    .map((value, index) => (value === name ? index : -1))
+    .filter((index) => index >= 0);
+  if (indexes.length !== 1 || indexes[0]! + 1 >= arguments_.length) {
+    fail(`recipe.arguments.${name}`);
+  }
+  return arguments_[indexes[0]! + 1]!;
 }
 
 function requireIsoTimestamp(value: unknown, label: string): string {

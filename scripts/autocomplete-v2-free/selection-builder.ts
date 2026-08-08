@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFile, realpath } from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { deduplicateSelectionDocuments } from '../corpus/v2-free-tools/fingerprints';
 import { V2_FREE_TRAINING_POOL_LIMIT_BYTES, type V2FreeSha256 } from './contract';
 import { loadV2FreeHoldoutContent, type V2FreeHoldoutDescriptor } from './holdout-validator';
 
@@ -10,37 +11,51 @@ export const V2_FREE_SUPPLEMENT_SCHEMA = 'jotluck.autocomplete.v2-free-supplemen
 export const V2_FREE_CORPUS_GOVERNANCE_VERSION = 3;
 export const V2_FREE_DEVELOPMENT_FRACTION = 0.05;
 export const V2_FREE_FORMAL_SMOKE_MINIMUM_BYTES = 32 * 1024 * 1024;
+export const V2_FREE_FORMAL_MATRIX_MINIMUM_BYTES = 128 * 1024 * 1024;
 
-export type V2FreeSelectionStage = 'governance' | 'formal-32mib-smoke';
+export type V2FreeSelectionStage = 'governance' | 'formal-32mib-smoke' | 'formal-128mib-matrix';
+
+type V2FreeSourceKind = 'project-owned' | 'tatoeba-cc0' | 'wikimedia-cc-by-sa';
+type V2FreeLicenseSpdx = 'MIT' | 'CC0-1.0' | 'CC-BY-SA-4.0';
 
 interface V2RSourceRecord {
   id: string;
-  kind: 'project-owned' | 'tatoeba-cc0';
+  kind: V2FreeSourceKind;
   language: 'zh' | 'en';
   category: string;
   contentRoot: string;
-  licenseSpdx: 'MIT' | 'CC0-1.0';
+  licenseSpdx: V2FreeLicenseSpdx;
   licenseEvidencePath: string;
   contentTreeSha256: string;
   collectedAt?: string;
   cleanerVersion?: string;
   generatorVersion?: string;
   generatorSeed?: string;
+  attributionUrl?: string;
+  upstreamDumpUrl?: string;
+  upstreamDumpDate?: string;
+  snapshotBytes?: number;
+  snapshotSha256?: string;
 }
 
 export interface V2FreeSupplementSourceRecord {
   id: string;
-  kind: 'project-owned' | 'tatoeba-cc0';
+  kind: V2FreeSourceKind;
   language: 'zh' | 'en';
   category: string;
   contentRoot: string;
-  licenseSpdx: 'MIT' | 'CC0-1.0';
+  licenseSpdx: V2FreeLicenseSpdx;
   licenseEvidencePath: string;
   licenseEvidenceBytes: number;
   licenseEvidenceSha256: string;
   cleanerVersion?: string;
   generatorVersion?: string;
   generatorSeed?: string;
+  attributionUrl?: string;
+  upstreamDumpUrl?: string;
+  upstreamDumpDate?: string;
+  snapshotBytes?: number;
+  snapshotSha256?: string;
 }
 
 export interface V2FreeSupplementDocumentRecord {
@@ -131,6 +146,7 @@ export interface V2FreeLicensedCorpusSelection {
   languageBytes: Record<'zh' | 'en', number>;
   categoryBytes: Record<string, number>;
   exactDuplicates: 0;
+  inputNearDuplicateDocumentRate: number;
   validationExactOverlaps: 0;
   sources: V2FreeSelectionSource[];
   documents: V2FreeSelectionDocument[];
@@ -222,7 +238,13 @@ export async function buildV2FreeLicensedCorpusSelection(
   const sourceById = new Map(sources.map((source) => [source.id, source]));
   const documents: V2FreeSelectionDocument[] = [];
   const documentIds = new Set<string>();
-  const identities = new Set<string>();
+  const validatedDocuments: Array<{
+    document: V2RDocumentRecord | V2FreeSupplementDocumentRecord;
+    source: V2FreeSelectionSource;
+    documentPath: string;
+    bytes: Buffer;
+    text: string;
+  }> = [];
   const sourceBytes: Record<string, number> = {};
   const languageBytes: Record<'zh' | 'en', number> = { zh: 0, en: 0 };
   const categoryBytes: Record<string, number> = {};
@@ -261,11 +283,29 @@ export async function buildV2FreeLicensedCorpusSelection(
     if (sha256(Buffer.from(identity, 'utf8')) !== document.normalizedSha256) {
       throw new Error(`Training document normalized identity mismatch: ${document.documentId}.`);
     }
-    if (identities.has(identity)) throw new Error(`Training corpus has an exact duplicate.`);
     if (validationTexts.has(identity)) {
       throw new Error(`Training corpus has an exact validation overlap.`);
     }
-    identities.add(identity);
+    validatedDocuments.push({ document, source, documentPath, bytes, text });
+  }
+
+  const exactIdentities = new Set<string>();
+  const exactDeduplicated = validatedDocuments
+    .sort((left, right) => left.document.documentId.localeCompare(right.document.documentId))
+    .filter(({ document }) => {
+      if (exactIdentities.has(document.normalizedSha256)) return false;
+      exactIdentities.add(document.normalizedSha256);
+      return true;
+    });
+  const nearDeduplication = deduplicateSelectionDocuments(
+    exactDeduplicated.map(({ document, text }) => ({ id: document.documentId, text })),
+  );
+  if (nearDeduplication.inputNearDuplicateDocumentRate > 0.03) {
+    throw new Error('Training corpus input near-duplicate rate exceeds 3%.');
+  }
+  const retainedDocumentIds = new Set(nearDeduplication.retainedDocumentIds);
+  for (const { document, source, documentPath, bytes } of exactDeduplicated) {
+    if (!retainedDocumentIds.has(document.documentId)) continue;
     selectedBytes += bytes.byteLength;
     if (selectedBytes > V2_FREE_TRAINING_POOL_LIMIT_BYTES) {
       throw new Error('V2 free cleaned training pool exceeds 512 MiB.');
@@ -332,6 +372,7 @@ export async function buildV2FreeLicensedCorpusSelection(
     categoryBytes,
     exactDuplicates: 0,
     validationExactOverlaps: 0,
+    inputNearDuplicateDocumentRate: nearDeduplication.inputNearDuplicateDocumentRate,
     sources,
     documents,
   };
@@ -357,6 +398,13 @@ export function assertV2FreeSelectionStage(
   ) {
     throw new Error('V2 free governed selection contract is invalid.');
   }
+  if (
+    !Number.isFinite(selection.inputNearDuplicateDocumentRate) ||
+    selection.inputNearDuplicateDocumentRate < 0 ||
+    selection.inputNearDuplicateDocumentRate > 0.03
+  ) {
+    throw new Error('V2 free selection input near-duplicate rate is invalid.');
+  }
   assertSha256(selection.sourceSelectionSha256, 'source selection identity');
   assertSha256(selection.sourceSelectionManifestSha256, 'source selection manifest identity');
   assertSha256(selection.sourceRegistrySha256, 'source registry identity');
@@ -378,11 +426,12 @@ export function assertV2FreeSelectionStage(
     if (sourceIds.has(source.id)) throw new Error('V2 free selection has duplicate sources.');
     sourceIds.add(source.id);
     if (
-      (source.kind !== 'project-owned' && source.kind !== 'tatoeba-cc0') ||
+      !isSupportedSourceKind(source.kind) ||
       (source.kind === 'project-owned' &&
         (source.licenseSpdx !== 'MIT' || !source.generatorVersion || !source.generatorSeed)) ||
       (source.kind === 'tatoeba-cc0' &&
-        (source.licenseSpdx !== 'CC0-1.0' || !source.cleanerVersion))
+        (source.licenseSpdx !== 'CC0-1.0' || !source.cleanerVersion)) ||
+      (source.kind === 'wikimedia-cc-by-sa' && !isValidWikimediaSource(source))
     ) {
       throw new Error('V2 free selection has an unsupported source license.');
     }
@@ -449,6 +498,16 @@ export function assertV2FreeSelectionStage(
     if (selection.selectedBytes < V2_FREE_FORMAL_SMOKE_MINIMUM_BYTES) {
       throw new Error('Formal 32 MiB smoke selection is undersized and must fail closed.');
     }
+  } else if (stage === 'formal-128mib-matrix') {
+    if (selection.selectedBytes < V2_FREE_FORMAL_MATRIX_MINIMUM_BYTES) {
+      throw new Error('Formal 128 MiB matrix selection is undersized and must fail closed.');
+    }
+    const languageDifference = Math.abs(
+      languageBytes.zh / selectedBytes - languageBytes.en / selectedBytes,
+    );
+    if (languageDifference > 0.01) {
+      throw new Error('Formal matrix Chinese/English byte-share difference exceeds 1%.');
+    }
   } else if (stage !== 'governance') {
     throw new Error(`Unsupported V2 free selection stage: ${String(stage)}.`);
   }
@@ -506,6 +565,10 @@ async function auditSources(
     } else if (source.kind === 'tatoeba-cc0') {
       if (source.licenseSpdx !== 'CC0-1.0' || !source.cleanerVersion) {
         throw new Error(`Tatoeba source must be CC0-1.0 with a cleaner version: ${source.id}.`);
+      }
+    } else if (source.kind === 'wikimedia-cc-by-sa') {
+      if (!isValidWikimediaSource(source)) {
+        throw new Error(`Wikimedia source provenance is invalid: ${source.id}.`);
       }
     } else {
       throw new Error(`Unsupported V2 free source kind: ${String(source.kind)}.`);
@@ -591,6 +654,10 @@ function assertSupplementManifestIdentity(manifest: V2FreeSupplementManifest): v
       if (source.licenseSpdx !== 'CC0-1.0' || !source.cleanerVersion) {
         throw new Error(`Supplement Tatoeba source is invalid: ${source.id}.`);
       }
+    } else if (source.kind === 'wikimedia-cc-by-sa') {
+      if (!isValidWikimediaSource(source)) {
+        throw new Error(`Supplement Wikimedia source is invalid: ${source.id}.`);
+      }
     } else {
       throw new Error(`Unsupported V2 free source kind: ${String(source.kind)}.`);
     }
@@ -641,6 +708,35 @@ function assertSupplementManifestIdentity(manifest: V2FreeSupplementManifest): v
     computeV2FreeSupplementInputTreeSha256(manifest.documents) !== manifest.inputTreeSha256
   ) {
     throw new Error('V2 free supplement manifest identity or byte summaries do not match.');
+  }
+}
+
+function isSupportedSourceKind(value: string): value is V2FreeSourceKind {
+  return value === 'project-owned' || value === 'tatoeba-cc0' || value === 'wikimedia-cc-by-sa';
+}
+
+function isValidWikimediaSource(source: V2FreeSupplementSourceRecord | V2RSourceRecord): boolean {
+  return (
+    source.kind === 'wikimedia-cc-by-sa' &&
+    source.licenseSpdx === 'CC-BY-SA-4.0' &&
+    Boolean(source.cleanerVersion) &&
+    isHttpsUrl(source.attributionUrl) &&
+    isHttpsUrl(source.upstreamDumpUrl) &&
+    typeof source.upstreamDumpDate === 'string' &&
+    /^\d{4}-\d{2}-\d{2}$/u.test(source.upstreamDumpDate) &&
+    Number.isSafeInteger(source.snapshotBytes) &&
+    Number(source.snapshotBytes) > 0 &&
+    typeof source.snapshotSha256 === 'string' &&
+    /^[a-f0-9]{64}$/u.test(source.snapshotSha256)
+  );
+}
+
+function isHttpsUrl(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
   }
 }
 

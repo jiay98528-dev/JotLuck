@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  REMOTE_TRAINING_JOB_SCHEMA,
   computeRemoteTrainingJobSha256,
+  computeSharedTokenizerBindingSha256,
   createRemoteBundleManifest,
   parseRemoteBundleManifest,
   parseRemoteTrainingJob,
@@ -16,21 +18,57 @@ const HASH_C = 'c'.repeat(64);
 const HASH_D = 'd'.repeat(64);
 
 function job(): RemoteTrainingJob {
+  const tokenizerModel = {
+    id: 'tokenizer-model-v1',
+    role: 'tokenizer-seed' as const,
+    relativePath: 'training/tokenizer.model',
+    bytes: 8192,
+    sha256: HASH_A,
+  };
+  const tokenizerRuntime = {
+    id: 'tokenizer-runtime-v1',
+    role: 'tokenizer-seed' as const,
+    relativePath: 'training/tokenizer.json',
+    bytes: 16384,
+    sha256: HASH_B,
+  };
   return {
-    schema: 'jotluck.autocomplete.v2-free.remote-training-job.v1',
+    schema: REMOTE_TRAINING_JOB_SCHEMA,
     jobId: 'v2-free-24m-q4-seed-42',
     sourceTree: { commit: '1'.repeat(40), tree: '2'.repeat(40), bundleSha256: HASH_A },
     recipe: {
       id: 'decoder-train-v1',
       relativePath: 'scripts/train-v2-free.mjs',
       sha256: HASH_B,
-      arguments: ['--matrix', '24m-q4'],
+      arguments: [
+        '--matrix',
+        '24m-q4',
+        '--tokenizer-model',
+        tokenizerModel.relativePath,
+        '--tokenizer-runtime',
+        tokenizerRuntime.relativePath,
+        '--selection-stage-receipt',
+        'training/selection-stage.json',
+        '--fingerprint-audit',
+        'training/fingerprint-audit.json',
+      ],
     },
     selection: {
       matrixId: '24m-q4',
       parameterCount: 24_000_000,
       quantization: 'q4',
       candidateMatrixIds: ['24m-q4'],
+    },
+    tokenizer: {
+      kind: 'unigram',
+      vocabularySize: 8_000,
+      byteFallback: true,
+      modelInputId: tokenizerModel.id,
+      runtimeInputId: tokenizerRuntime.id,
+      bindingSha256: computeSharedTokenizerBindingSha256({
+        model: tokenizerModel,
+        runtime: tokenizerRuntime,
+      }),
     },
     model: {
       engine: 'public-v2-free-decoder-v1',
@@ -44,6 +82,29 @@ function job(): RemoteTrainingJob {
         role: 'training-corpus',
         relativePath: 'training/corpus.jsonl',
         bytes: 4096,
+        sha256: HASH_C,
+      },
+      {
+        id: 'selection-v1',
+        role: 'recipe-config',
+        relativePath: 'training/selection.json',
+        bytes: 2048,
+        sha256: HASH_D,
+      },
+      tokenizerModel,
+      tokenizerRuntime,
+      {
+        id: 'selection-stage-v1',
+        role: 'selection-stage-receipt',
+        relativePath: 'training/selection-stage.json',
+        bytes: 1024,
+        sha256: HASH_A,
+      },
+      {
+        id: 'fingerprint-audit-v1',
+        role: 'fingerprint-audit',
+        relativePath: 'training/fingerprint-audit.json',
+        bytes: 1536,
         sha256: HASH_C,
       },
     ],

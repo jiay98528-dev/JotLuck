@@ -2,7 +2,8 @@
 """Numerical parity harness for trained JotLuck V2 free candidates.
 
 This tool never reads holdouts and never installs an asset. It compares one
-float checkpoint with its JLFDQ02 export and the hidden Rust evaluation path.
+float checkpoint with its JLFDQ02 export and the hidden Rust evaluation path,
+including deterministic multi-token cached decoding.
 """
 
 from __future__ import annotations
@@ -32,6 +33,10 @@ PARITY_SCHEMA = "jotluck.autocomplete.decoder-parity.v1"
 REPORT_SCHEMA = "jotluck.autocomplete.decoder-parity-report.v1"
 ENGINE_ID = "public-v2-free-decoder-v1"
 MAX_FRAME_BYTES = 128 * 1024
+BEAM_WIDTH = 32
+BEAM_BRANCHING = 4
+BEAM_LENGTH_ALPHA = 0.6
+MAX_GENERATED_TOKENS = 24
 MATRIX_ARCHITECTURES = {
     "16m-q4": (384, 8, 4, 1_024),
     "24m-q4": (448, 9, 7, 1_280),
@@ -56,8 +61,10 @@ class QuantizedAsset:
             return self.tensor(alias)
         shape = descriptor.get("shape")
         dtype = descriptor.get("dtype")
-        if not isinstance(shape, list) or not shape or not all(
-            isinstance(value, int) and value > 0 for value in shape
+        if (
+            not isinstance(shape, list)
+            or not shape
+            or not all(isinstance(value, int) and value > 0 for value in shape)
         ):
             raise ValueError(f"invalid tensor shape: {name}")
         elements = math.prod(shape)
@@ -66,7 +73,9 @@ class QuantizedAsset:
         if dtype == "f16":
             if length != elements * 2:
                 raise ValueError(f"invalid f16 tensor length: {name}")
-            values = np.frombuffer(self.payload, dtype="<f2", count=elements, offset=offset)
+            values = np.frombuffer(
+                self.payload, dtype="<f2", count=elements, offset=offset
+            )
         elif dtype in {"q4", "q8"}:
             values = self._dequantize(name, descriptor, elements, dtype)
         else:
@@ -84,25 +93,39 @@ class QuantizedAsset:
         scale_bytes = bounded_integer(descriptor, "scaleBytes")
         offset = bounded_integer(descriptor, "offset")
         length = bounded_integer(descriptor, "bytes")
-        if group_size != 64 or groups != math.ceil(elements / 64) or scale_bytes != groups * 2:
+        if (
+            group_size != 64
+            or groups != math.ceil(elements / 64)
+            or scale_bytes != groups * 2
+        ):
             raise ValueError(f"invalid quantization groups: {name}")
         scales = np.frombuffer(
             self.payload, dtype="<f2", count=groups, offset=scale_offset
         ).astype(np.float32)
-        if scales.size != groups or not np.all(np.isfinite(scales)) or np.any(scales <= 0):
+        if (
+            scales.size != groups
+            or not np.all(np.isfinite(scales))
+            or np.any(scales <= 0)
+        ):
             raise ValueError(f"invalid quantization scales: {name}")
         if dtype == "q4":
             if length != groups * 32:
                 raise ValueError(f"invalid q4 tensor length: {name}")
-            packed = np.frombuffer(self.payload, dtype=np.uint8, count=length, offset=offset)
+            packed = np.frombuffer(
+                self.payload, dtype=np.uint8, count=length, offset=offset
+            )
             quantized = np.empty(length * 2, dtype=np.int8)
             quantized[0::2] = (packed & 0x0F).astype(np.int8) - 8
             quantized[1::2] = (packed >> 4).astype(np.int8) - 8
         else:
             if length != groups * 64:
                 raise ValueError(f"invalid q8 tensor length: {name}")
-            quantized = np.frombuffer(self.payload, dtype=np.int8, count=length, offset=offset)
-        return quantized.astype(np.float32)[:elements] * np.repeat(scales, 64)[:elements]
+            quantized = np.frombuffer(
+                self.payload, dtype=np.int8, count=length, offset=offset
+            )
+        return (
+            quantized.astype(np.float32)[:elements] * np.repeat(scales, 64)[:elements]
+        )
 
 
 def parse_quantized_asset(path: Path) -> QuantizedAsset:
@@ -110,7 +133,11 @@ def parse_quantized_asset(path: Path) -> QuantizedAsset:
     if len(data) < 12 or data[:8] != MODEL_MAGIC:
         raise ValueError("invalid JLFDQ02 magic")
     header_length = struct.unpack_from("<I", data, 8)[0]
-    if header_length == 0 or header_length > 256 * 1024 or 12 + header_length > len(data):
+    if (
+        header_length == 0
+        or header_length > 256 * 1024
+        or 12 + header_length > len(data)
+    ):
         raise ValueError("invalid JLFDQ02 header length")
     header = json.loads(data[12 : 12 + header_length].decode("utf-8"))
     payload = data[12 + header_length :]
@@ -156,7 +183,11 @@ def verify_asset(parent: Path, record: Mapping[str, Any]) -> Path:
     name = record.get("file")
     expected_bytes = record.get("bytes")
     expected_sha = record.get("sha256")
-    if not isinstance(name, str) or Path(name).name != name or not isinstance(expected_bytes, int):
+    if (
+        not isinstance(name, str)
+        or Path(name).name != name
+        or not isinstance(expected_bytes, int)
+    ):
         raise ValueError("manifest asset descriptor is invalid")
     path = (parent / name).resolve()
     if path.parent != parent.resolve() or path.stat().st_size != expected_bytes:
@@ -166,7 +197,9 @@ def verify_asset(parent: Path, record: Mapping[str, Any]) -> Path:
     return path
 
 
-def load_trained_inputs(manifest_path: Path, float_checkpoint: Path) -> tuple[dict[str, Any], Path, Path]:
+def load_trained_inputs(
+    manifest_path: Path, float_checkpoint: Path
+) -> tuple[dict[str, Any], Path, Path]:
     reject_protected_path(manifest_path)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if (
@@ -200,11 +233,15 @@ def import_torch() -> Any:
         import torch
         from torch import nn
     except ImportError as error:
-        raise RuntimeError("locked parity dependency torch==2.8.0 is not installed") from error
+        raise RuntimeError(
+            "locked parity dependency torch==2.8.0 is not installed"
+        ) from error
     return torch, nn
 
 
-def build_model(architecture: Mapping[str, Any], vocabulary_size: int, maximum_context: int) -> Any:
+def build_model(
+    architecture: Mapping[str, Any], vocabulary_size: int, maximum_context: int
+) -> Any:
     torch, nn = import_torch()
     width = int(architecture["width"])
     layers = int(architecture["layers"])
@@ -237,6 +274,25 @@ def build_model(architecture: Mapping[str, Any], vocabulary_size: int, maximum_c
                 "positions", torch.arange(maximum_context), persistent=False
             )
 
+        def forward(self, tokens: Any) -> Any:
+            length = tokens.shape[1]
+            hidden = self.token_embedding(tokens) + self.position_embedding(
+                self.positions[:length]
+            )
+            causal_mask = torch.triu(
+                torch.ones((length, length), dtype=torch.bool, device=tokens.device),
+                diagonal=1,
+            )
+            return self.output(
+                self.final_norm(
+                    self.blocks(
+                        hidden,
+                        mask=causal_mask,
+                        src_key_padding_mask=tokens.eq(0),
+                    )
+                )
+            )
+
     return ParityModel()
 
 
@@ -249,14 +305,18 @@ def load_float_model(
 ) -> Any:
     torch, _ = import_torch()
     checkpoint = torch.load(path, map_location="cpu", weights_only=True)
-    if checkpoint.get("schema") != FLOAT_SCHEMA or checkpoint.get("engine") != ENGINE_ID:
+    if (
+        checkpoint.get("schema") != FLOAT_SCHEMA
+        or checkpoint.get("engine") != ENGINE_ID
+    ):
         raise ValueError("float checkpoint identity is invalid")
     training_candidate_id = checkpoint.get("candidateId")
-    if (
-        not isinstance(training_candidate_id, str)
-        or not expected_export_candidate_id.startswith(f"{training_candidate_id}.")
-    ):
-        raise ValueError("float checkpoint and trained manifest candidate identities disagree")
+    if not isinstance(
+        training_candidate_id, str
+    ) or not expected_export_candidate_id.startswith(f"{training_candidate_id}."):
+        raise ValueError(
+            "float checkpoint and trained manifest candidate identities disagree"
+        )
     expected = MATRIX_ARCHITECTURES.get(checkpoint.get("matrixId"))
     actual = tuple(
         int(architecture[key]) for key in ("width", "layers", "heads", "feedForward")
@@ -279,14 +339,21 @@ def load_quantized_model(asset: QuantizedAsset) -> Any:
     return model.eval()
 
 
-def torch_trace(model: Any, token_ids: Sequence[int]) -> dict[str, np.ndarray[Any, Any]]:
+def torch_trace(
+    model: Any, token_ids: Sequence[int]
+) -> dict[str, np.ndarray[Any, Any]]:
     torch, _ = import_torch()
     tokens = torch.tensor([list(token_ids)], dtype=torch.long)
-    if tokens.shape[1] == 0 or tokens.shape[1] > model.position_embedding.num_embeddings:
+    if (
+        tokens.shape[1] == 0
+        or tokens.shape[1] > model.position_embedding.num_embeddings
+    ):
         raise ValueError("token context length is invalid")
     with torch.no_grad():
         length = tokens.shape[1]
-        hidden = model.token_embedding(tokens) + model.position_embedding(model.positions[:length])
+        hidden = model.token_embedding(tokens) + model.position_embedding(
+            model.positions[:length]
+        )
         trace: dict[str, np.ndarray[Any, Any]] = {
             "embeddingLast": as_f32(hidden[0, -1])
         }
@@ -295,7 +362,9 @@ def torch_trace(model: Any, token_ids: Sequence[int]) -> dict[str, np.ndarray[An
         )
         padding_mask = tokens.eq(0)
         for index, block in enumerate(model.blocks.layers):
-            hidden = block(hidden, src_mask=causal_mask, src_key_padding_mask=padding_mask)
+            hidden = block(
+                hidden, src_mask=causal_mask, src_key_padding_mask=padding_mask
+            )
             trace[f"layer{index}Last"] = as_f32(hidden[0, -1])
         normalized = model.final_norm(hidden)
         trace["finalNormLast"] = as_f32(normalized[0, -1])
@@ -303,12 +372,157 @@ def torch_trace(model: Any, token_ids: Sequence[int]) -> dict[str, np.ndarray[An
     return trace
 
 
+def torch_generation_trace(
+    model: Any,
+    token_ids: Sequence[int],
+    maximum_new_tokens: int,
+    tokenizer: Any,
+) -> list[dict[str, Any]]:
+    current = list(token_ids)
+    maximum_context = int(model.position_embedding.num_embeddings)
+    steps: list[dict[str, Any]] = []
+    generated: list[int] = []
+    for _ in range(maximum_new_tokens):
+        logits = torch_trace(model, current)["logits"]
+        top32 = stable_top(logits)
+        selected = top32[0]
+        generated.append(selected)
+        steps.append(
+            {
+                "selectedTokenId": selected,
+                "decodedText": decode_token_sequence(tokenizer, generated),
+                "top32": top32,
+                "top32Logits": np.asarray(logits[top32], dtype="<f4"),
+            }
+        )
+        if selected in {tokenizer.pad_id, tokenizer.eos_id}:
+            break
+        if len(current) >= maximum_context:
+            raise ValueError("generation exceeds the decoder context")
+        current.append(selected)
+    return steps
+
+
+def sequence_boundary_reached(value: str, language_hint: str) -> bool:
+    trimmed = value.lstrip()
+    if not trimmed:
+        return False
+    has_chinese = any(
+        0x3400 <= ord(character) <= 0x4DBF
+        or 0x4E00 <= ord(character) <= 0x9FFF
+        or 0xF900 <= ord(character) <= 0xFAFF
+        or 0x20000 <= ord(character) <= 0x2FA1F
+        for character in trimmed
+    )
+    has_english = any(
+        character.isascii() and character.isalpha() for character in trimmed
+    )
+    if language_hint == "zh" or (
+        language_hint == "unknown" and has_chinese and not has_english
+    ):
+        return len(trimmed) >= 8
+    if language_hint == "en" or (
+        language_hint == "unknown" and has_english and not has_chinese
+    ):
+        words = trimmed.split()
+        return len(words) > 1 or len(words[0]) >= 12
+    return len(trimmed) >= 12
+
+
+def length_normalized_score(log_probability: np.float32, length: int) -> np.float32:
+    denominator = np.float32(length) ** np.float32(BEAM_LENGTH_ALPHA)
+    return np.float32(log_probability / denominator)
+
+
+def torch_beam_sequences(
+    model: Any,
+    context_token_ids: Sequence[int],
+    tokenizer: Any,
+    language_hint: str,
+) -> list[dict[str, Any]]:
+    torch, _ = import_torch()
+    beams: list[dict[str, Any]] = [
+        {
+            "tokenIds": [],
+            "logProbability": np.float32(0.0),
+            "normalizedScore": np.float32(0.0),
+            "finished": False,
+        }
+    ]
+    for _ in range(MAX_GENERATED_TOKENS):
+        active = [
+            (index, beam) for index, beam in enumerate(beams) if not beam["finished"]
+        ]
+        logits_by_parent: dict[int, np.ndarray[Any, Any]] = {}
+        if active:
+            batch = torch.tensor(
+                [list(context_token_ids) + beam["tokenIds"] for _, beam in active],
+                dtype=torch.long,
+            )
+            with torch.no_grad():
+                batch_logits = as_f32(model(batch)[:, -1])
+            for (parent_index, _), logits in zip(active, batch_logits, strict=True):
+                logits_by_parent[parent_index] = np.asarray(logits, dtype="<f4")
+
+        choices: list[dict[str, Any]] = []
+        for parent_index, beam in enumerate(beams):
+            if beam["finished"]:
+                choices.append(dict(beam))
+                continue
+            logits = logits_by_parent[parent_index]
+            maximum = np.float32(np.max(logits))
+            denominator = np.sum(np.exp(logits - maximum), dtype=np.float32)
+            log_denominator = np.float32(maximum + np.log(denominator))
+            for token_id in stable_top(logits, BEAM_BRANCHING):
+                token_ids = [*beam["tokenIds"], token_id]
+                log_probability = np.float32(
+                    beam["logProbability"]
+                    + np.float32(logits[token_id] - log_denominator)
+                )
+                decoded = decode_token_sequence(tokenizer, token_ids)
+                choices.append(
+                    {
+                        "parentIndex": parent_index,
+                        "tokenIds": token_ids,
+                        "logProbability": log_probability,
+                        "normalizedScore": length_normalized_score(
+                            log_probability, len(token_ids)
+                        ),
+                        "finished": token_id in {tokenizer.pad_id, tokenizer.eos_id}
+                        or sequence_boundary_reached(decoded, language_hint)
+                        or len(token_ids) >= MAX_GENERATED_TOKENS,
+                    }
+                )
+        choices.sort(
+            key=lambda choice: (
+                -float(choice["normalizedScore"]),
+                -float(choice["logProbability"]),
+                tuple(choice["tokenIds"]),
+            )
+        )
+        beams = choices[:BEAM_WIDTH]
+        if not beams or all(beam["finished"] for beam in beams):
+            break
+    return [
+        {
+            "tokenIds": beam["tokenIds"],
+            "decodedText": decode_token_sequence(tokenizer, beam["tokenIds"]),
+            "normalizedScore": float(beam["normalizedScore"]),
+        }
+        for beam in beams
+    ]
+
+
 def as_f32(value: Any) -> np.ndarray[Any, np.dtype[np.float32]]:
     return np.asarray(value.detach().cpu().float().numpy(), dtype="<f4").copy()
 
 
-def invoke_rust(binary: Path, manifest: Path, request: Mapping[str, Any]) -> dict[str, Any]:
-    payload = json.dumps(request, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+def invoke_rust(
+    binary: Path, manifest: Path, request: Mapping[str, Any]
+) -> dict[str, Any]:
+    payload = json.dumps(request, ensure_ascii=False, separators=(",", ":")).encode(
+        "utf-8"
+    )
     if not payload or len(payload) > MAX_FRAME_BYTES:
         raise ValueError("parity request exceeds the Rust frame budget")
     framed = struct.pack("<I", len(payload)) + payload
@@ -326,7 +540,9 @@ def invoke_rust(binary: Path, manifest: Path, request: Mapping[str, Any]) -> dic
         creationflags=creation_flags,
     )
     if len(process.stdout) < 4:
-        raise RuntimeError(f"Rust parity returned no frame: {process.stderr.decode(errors='replace')}")
+        raise RuntimeError(
+            f"Rust parity returned no frame: {process.stderr.decode(errors='replace')}"
+        )
     length = struct.unpack_from("<I", process.stdout)[0]
     if length == 0 or length > MAX_FRAME_BYTES or len(process.stdout) != length + 4:
         raise RuntimeError("Rust parity returned an invalid length frame")
@@ -341,7 +557,11 @@ def invoke_rust(binary: Path, manifest: Path, request: Mapping[str, Any]) -> dic
 def decode_vector(record: Mapping[str, Any]) -> np.ndarray[Any, np.dtype[np.float32]]:
     raw = base64.b64decode(record["f32LeBase64"], validate=True)
     count = record.get("count")
-    if not isinstance(count, int) or len(raw) != count * 4 or sha256_bytes(raw) != record.get("sha256"):
+    if (
+        not isinstance(count, int)
+        or len(raw) != count * 4
+        or sha256_bytes(raw) != record.get("sha256")
+    ):
         raise ValueError("Rust parity vector identity mismatch")
     return np.frombuffer(raw, dtype="<f4").copy()
 
@@ -359,7 +579,9 @@ def vector_summary(values: np.ndarray[Any, Any]) -> dict[str, Any]:
     }
 
 
-def error_metrics(reference: np.ndarray[Any, Any], candidate: np.ndarray[Any, Any]) -> dict[str, float]:
+def error_metrics(
+    reference: np.ndarray[Any, Any], candidate: np.ndarray[Any, Any]
+) -> dict[str, float]:
     if reference.shape != candidate.shape:
         raise ValueError("parity vector shapes disagree")
     difference = np.abs(reference.astype(np.float64) - candidate.astype(np.float64))
@@ -388,11 +610,115 @@ def decode_single_token(tokenizer: Any, token_id: int) -> str:
     return piece.piece.replace("▁", " ").lstrip()
 
 
+def decode_token_sequence(tokenizer: Any, token_ids: Sequence[int]) -> str:
+    raw = bytearray()
+    text_parts: list[str] = []
+    for token_id in token_ids:
+        if token_id in {tokenizer.pad_id, tokenizer.eos_id}:
+            break
+        piece = tokenizer.pieces[token_id]
+        if piece.type == "byte":
+            raw.append(int(piece.piece[3:5], 16))
+            continue
+        if raw:
+            text_parts.append(raw.decode("utf-8", errors="replace"))
+            raw.clear()
+        if piece.type in {"normal", "userDefined"}:
+            text_parts.append(piece.piece)
+        elif piece.type == "unknown":
+            text_parts.append("�")
+    if raw:
+        text_parts.append(raw.decode("utf-8", errors="replace"))
+    return "".join(text_parts).replace("▁", " ").lstrip()
+
+
+def compare_generation_steps(
+    python_steps: Sequence[Mapping[str, Any]],
+    rust_steps: Sequence[Mapping[str, Any]],
+    maximum_absolute: float,
+    mean_absolute: float,
+) -> tuple[dict[str, Any], bool]:
+    if len(python_steps) != len(rust_steps):
+        return {
+            "stepCountEqual": False,
+            "pythonSteps": len(python_steps),
+            "rustSteps": len(rust_steps),
+        }, False
+    observations: list[dict[str, Any]] = []
+    passed = True
+    for index, (python, rust) in enumerate(zip(python_steps, rust_steps, strict=True)):
+        rust_top = [int(item["tokenId"]) for item in rust.get("top32", [])]
+        rust_logits = np.asarray(
+            [float(item["logit"]) for item in rust.get("top32", [])], dtype="<f4"
+        )
+        python_top = [int(value) for value in python["top32"]]
+        error = error_metrics(np.asarray(python["top32Logits"]), rust_logits)
+        step_passed = (
+            python_top == rust_top
+            and int(python["selectedTokenId"]) == int(rust.get("selectedTokenId", -1))
+            and python["decodedText"] == rust.get("decodedText")
+            and error["maximumAbsolute"] <= maximum_absolute
+            and error["meanAbsolute"] <= mean_absolute
+        )
+        passed = passed and step_passed
+        observations.append(
+            {
+                "step": index,
+                "top32OrderEqual": python_top == rust_top,
+                "selectedTokenEqual": int(python["selectedTokenId"])
+                == int(rust.get("selectedTokenId", -1)),
+                "decodedTextEqual": python["decodedText"] == rust.get("decodedText"),
+                "top32Logits": error,
+                "passed": step_passed,
+            }
+        )
+    return {"stepCountEqual": True, "steps": observations}, passed
+
+
+def compare_beam_sequences(
+    python_sequences: Sequence[Mapping[str, Any]],
+    rust_sequences: Sequence[Mapping[str, Any]],
+    maximum_absolute: float,
+) -> tuple[dict[str, Any], bool]:
+    if len(python_sequences) != len(rust_sequences):
+        return {
+            "sequenceCountEqual": False,
+            "pythonSequences": len(python_sequences),
+            "rustSequences": len(rust_sequences),
+        }, False
+    observations: list[dict[str, Any]] = []
+    passed = True
+    for rank, (python, rust) in enumerate(
+        zip(python_sequences, rust_sequences, strict=True)
+    ):
+        token_ids_equal = list(python["tokenIds"]) == list(rust.get("tokenIds", []))
+        decoded_equal = python["decodedText"] == rust.get("decodedText")
+        score_error = abs(
+            float(python["normalizedScore"])
+            - float(rust.get("normalizedScore", math.inf))
+        )
+        sequence_passed = (
+            token_ids_equal and decoded_equal and score_error <= maximum_absolute
+        )
+        passed = passed and sequence_passed
+        observations.append(
+            {
+                "rank": rank,
+                "tokenIdsEqual": token_ids_equal,
+                "decodedTextEqual": decoded_equal,
+                "normalizedScoreAbsoluteError": score_error,
+                "passed": sequence_passed,
+            }
+        )
+    return {"sequenceCountEqual": True, "sequences": observations}, passed
+
+
 def compare_traces(
     float_trace: Mapping[str, np.ndarray[Any, Any]],
     quantized_trace: Mapping[str, np.ndarray[Any, Any]],
     rust: Mapping[str, Any],
     tokenizer: Any,
+    quantized_generation: Sequence[Mapping[str, Any]],
     maximum_absolute: float,
     mean_absolute: float,
 ) -> tuple[dict[str, Any], bool]:
@@ -424,11 +750,18 @@ def compare_traces(
     )
     top_order_equal = python_top == rust_top
     top_set_equal = set(python_top) == set(rust_top)
+    generation_comparison, generation_passed = compare_generation_steps(
+        quantized_generation,
+        rust.get("generationSteps", []),
+        maximum_absolute,
+        mean_absolute,
+    )
     passed = (
         final_error["maximumAbsolute"] <= maximum_absolute
         and final_error["meanAbsolute"] <= mean_absolute
         and top_order_equal
         and decoded_matches
+        and generation_passed
     )
     return (
         {
@@ -445,6 +778,7 @@ def compare_traces(
                     "maximumAbsolute": maximum_absolute,
                     "meanAbsolute": mean_absolute,
                 },
+                "multiTokenCachedGeneration": generation_comparison,
             },
         },
         passed,
@@ -453,8 +787,14 @@ def compare_traces(
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--manifest", type=Path, required=True)
-    parser.add_argument("--float-checkpoint", type=Path, required=True)
+    parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--float-checkpoint", type=Path)
+    parser.add_argument(
+        "--real-32mib-smoke-bundle",
+        type=Path,
+        help="derive the trained manifest and float checkpoint from a local 32 MiB smoke bundle",
+    )
+    parser.add_argument("--smoke-quantization", choices=("q4", "q8"), default="q4")
     parser.add_argument("--rust-binary", type=Path, required=True)
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument("--context")
@@ -462,7 +802,32 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--maximum-absolute-error", type=float, default=2e-3)
     parser.add_argument("--mean-absolute-error", type=float, default=2e-4)
+    parser.add_argument("--maximum-new-tokens", type=int, default=4)
+    parser.add_argument(
+        "--language-hint", choices=("zh", "en", "unknown"), default="unknown"
+    )
     return parser.parse_args()
+
+
+def resolve_input_paths(args: argparse.Namespace) -> tuple[Path, Path]:
+    smoke_bundle = args.real_32mib_smoke_bundle
+    if smoke_bundle is None:
+        if args.manifest is None or args.float_checkpoint is None:
+            raise ValueError(
+                "explicit parity requires --manifest and --float-checkpoint, or use the real smoke bundle"
+            )
+        return args.manifest.resolve(), args.float_checkpoint.resolve()
+    if args.manifest is not None or args.float_checkpoint is not None:
+        raise ValueError(
+            "real smoke bundle cannot be combined with explicit model paths"
+        )
+    bundle = smoke_bundle.resolve()
+    reject_protected_path(bundle)
+    manifest = bundle / f"candidate.{args.smoke_quantization}.manifest.json"
+    checkpoints = sorted(bundle.glob("*.best.float.pt"))
+    if not manifest.is_file() or len(checkpoints) != 1:
+        raise ValueError("real 32 MiB smoke bundle is incomplete or ambiguous")
+    return manifest, checkpoints[0]
 
 
 def recorded_command(arguments: Sequence[str]) -> tuple[list[str], bool]:
@@ -471,15 +836,18 @@ def recorded_command(arguments: Sequence[str]) -> tuple[list[str], bool]:
     for index, value in enumerate(result[:-1]):
         if value == "--context":
             raw = result[index + 1].encode("utf-8")
-            result[index + 1] = f"<redacted utf8Bytes={len(raw)} sha256={sha256_bytes(raw)}>"
+            result[index + 1] = (
+                f"<redacted utf8Bytes={len(raw)} sha256={sha256_bytes(raw)}>"
+            )
             redacted = True
     return result, redacted
 
 
 def main() -> int:
     args = parse_arguments()
-    manifest_path = args.manifest.resolve()
-    checkpoint_path = args.float_checkpoint.resolve()
+    if not 1 <= args.maximum_new_tokens <= 8:
+        raise ValueError("maximum new tokens must be in 1..8")
+    manifest_path, checkpoint_path = resolve_input_paths(args)
     binary_path = args.rust_binary.resolve()
     report_path = args.report.resolve()
     reject_protected_path(report_path)
@@ -487,10 +855,9 @@ def main() -> int:
         manifest_path, checkpoint_path
     )
     asset = parse_quantized_asset(model_path)
-    if (
-        asset.header.get("candidateId") != manifest.get("candidateId")
-        or asset.header.get("quantization") != manifest.get("quantization")
-    ):
+    if asset.header.get("candidateId") != manifest.get(
+        "candidateId"
+    ) or asset.header.get("quantization") != manifest.get("quantization"):
         raise ValueError("manifest and JLFDQ02 candidate identities disagree")
     from tokenizer_runtime import UnigramRuntimeTokenizer
 
@@ -501,19 +868,31 @@ def main() -> int:
             "protocolVersion": 1,
             "requestId": 1,
             "context": args.context,
+            "maximumNewTokens": args.maximum_new_tokens,
+            "includeBeamSequences": True,
+            "languageHint": args.language_hint,
         }
     else:
         try:
             token_ids = [int(value) for value in args.token_ids.split(",")]
         except ValueError as error:
-            raise ValueError("token IDs must be comma-separated decimal integers") from error
+            raise ValueError(
+                "token IDs must be comma-separated decimal integers"
+            ) from error
         rust_request = {
             "protocolVersion": 1,
             "requestId": 1,
             "tokenIds": token_ids,
+            "maximumNewTokens": args.maximum_new_tokens,
+            "includeBeamSequences": True,
+            "languageHint": args.language_hint,
         }
     if not token_ids or len(token_ids) > 256:
         raise ValueError("parity input must contain 1..256 tokens")
+    if len(token_ids) + args.maximum_new_tokens - 1 > 256:
+        raise ValueError(
+            "parity input leaves insufficient context for multi-token generation"
+        )
     float_model = load_float_model(
         checkpoint_path,
         asset.header["architecture"],
@@ -524,6 +903,15 @@ def main() -> int:
     quantized_model = load_quantized_model(asset)
     float_trace = torch_trace(float_model, token_ids)
     quantized_trace = torch_trace(quantized_model, token_ids)
+    float_generation = torch_generation_trace(
+        float_model, token_ids, args.maximum_new_tokens, tokenizer
+    )
+    quantized_generation = torch_generation_trace(
+        quantized_model, token_ids, args.maximum_new_tokens, tokenizer
+    )
+    quantized_beam_sequences = torch_beam_sequences(
+        quantized_model, token_ids, tokenizer, args.language_hint
+    )
     rust = invoke_rust(binary_path, manifest_path, rust_request)
     if rust.get("tokenIds") != token_ids:
         raise ValueError("Python and Rust tokenizer token IDs disagree")
@@ -532,9 +920,17 @@ def main() -> int:
         quantized_trace,
         rust,
         tokenizer,
+        quantized_generation,
         args.maximum_absolute_error,
         args.mean_absolute_error,
     )
+    beam_comparison, beam_passed = compare_beam_sequences(
+        quantized_beam_sequences,
+        rust.get("beamSequences", []),
+        args.maximum_absolute_error,
+    )
+    comparisons["pythonQuantizedToRust"]["beam32Top4Alpha06"] = beam_comparison
+    passed = passed and beam_passed
     command, command_redacted = recorded_command(sys.argv)
     report = {
         "schema": REPORT_SCHEMA,
@@ -548,7 +944,10 @@ def main() -> int:
         "command": command,
         "commandRedacted": command_redacted,
         "files": {
-            "manifest": {"path": str(manifest_path), "sha256": sha256_file(manifest_path)},
+            "manifest": {
+                "path": str(manifest_path),
+                "sha256": sha256_file(manifest_path),
+            },
             "floatCheckpoint": {
                 "path": str(checkpoint_path),
                 "sha256": sha256_file(checkpoint_path),
@@ -558,11 +957,22 @@ def main() -> int:
                 "path": str(tokenizer_path),
                 "sha256": sha256_file(tokenizer_path),
             },
-            "rustBinary": {"path": str(binary_path), "sha256": sha256_file(binary_path)},
+            "rustBinary": {
+                "path": str(binary_path),
+                "sha256": sha256_file(binary_path),
+            },
         },
-        "input": {"tokenIds": token_ids, "contextProvided": args.context is not None},
+        "input": {
+            "tokenIds": token_ids,
+            "contextProvided": args.context is not None,
+            "maximumNewTokens": args.maximum_new_tokens,
+            "languageHint": args.language_hint,
+            "real32MiBSmokeBundle": args.real_32mib_smoke_bundle is not None,
+        },
         "summaries": {
-            "pythonFloat": {stage: vector_summary(value) for stage, value in float_trace.items()},
+            "pythonFloat": {
+                stage: vector_summary(value) for stage, value in float_trace.items()
+            },
             "pythonQuantized": {
                 stage: vector_summary(value) for stage, value in quantized_trace.items()
             },
@@ -572,6 +982,17 @@ def main() -> int:
             },
         },
         "comparisons": comparisons,
+        "generation": {
+            "pythonFloatSelectedTokens": [
+                int(step["selectedTokenId"]) for step in float_generation
+            ],
+            "pythonQuantizedSelectedTokens": [
+                int(step["selectedTokenId"]) for step in quantized_generation
+            ],
+            "rustSelectedTokens": [
+                int(step["selectedTokenId"]) for step in rust.get("generationSteps", [])
+            ],
+        },
         "passed": passed,
     }
     report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -582,7 +1003,9 @@ def main() -> int:
         output.write("\n")
         temporary = Path(output.name)
     os.replace(temporary, report_path)
-    print(json.dumps({"report": str(report_path), "passed": passed}, ensure_ascii=False))
+    print(
+        json.dumps({"report": str(report_path), "passed": passed}, ensure_ascii=False)
+    )
     return 0 if passed else 1
 
 

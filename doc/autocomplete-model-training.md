@@ -79,13 +79,15 @@ V2R/V2S 固定 selection 只允许以下来源：
 
 V2.2 selection 可以从现有约 24.9MiB、哈希完整且许可证仍有效的 V2R train 文档重新物化；任何补充来源都必须是项目自有或具有明确 SPDX/许可证据的公开数据。每篇文档固定记录 source、许可证据、语言、类别、字节数、内容 SHA-256、生成/清洗版本和 seed。训练阶段固定为 32MiB 全链路 smoke、128MiB 四候选矩阵；只有全部失败且最佳候选距离每项 Oracle 门槛均不超过 5 个百分点时，才允许扩到 256MiB 重跑完整矩阵，否则 architecture-stop。清洗池硬上限 512MiB。
 
-2026-08-05 的公开来源补量审查只批准以下低风险工程组合进入新的 V2.2 selection 构建；这不是对来源许可证的法律意见：
+2026-08-05 的补量组合只用于 32MiB smoke。2026-08-08 的独立 DEVELOPMENT 审查为 128MiB 正式矩阵追加四个固定 Wikimedia 2026-08-01 自然文本快照；这不是对来源许可证的法律意见：
 
 - 复用项目已经固定、已绑定 raw SHA 和清洗报告的 Tatoeba English CC0 内容中尚未进入当前 V2.2 selection 的合格文档；2026-08-01 上游周快照只能作为来源仍可获取的观察事实，因其字节身份与已固定快照不同，不得静默替换。
 - 以 project-owned v1 确定性生成器补齐剩余容量，但必须在 V2.2 下重新绑定 generator version、recipe、seed 和逐文档 SHA；不得直接把历史 v4 selection 当作 V2.2 输入，也不得引入 holdout、测试答案或自指补全文案。
-- 两类补充合计至少 9MiB，并在构建后重新执行许可、隐私、重复、分布和 overlap 治理；32MiB 是清洗后 selection 正文容量，不是下载包、压缩包、链接表或 manifest 的文件大小。
+- 32MiB smoke 的两类补充合计至少 9MiB，并在构建后重新执行许可、隐私、重复、分布和 overlap 治理；32MiB 是清洗后 selection 正文容量，不是下载包、压缩包、链接表或 manifest 的文件大小。
+- 128MiB 矩阵使用 exact-dated 的 enwiki、zhwiki、enwikibooks、zhwikibooks 四份快照，各最多贡献 24MiB 清洗正文。只允许 namespace 0 自然段，按文章边界切成 256–2,048 UTF-8 bytes，并以 `SHA256(sourceId|pageId|segmentIndex|20260805)` 排序选择。
+- Wikimedia 文本按 CC BY-SA 4.0 和上游附加条款记录归因、dump 日期、页面/revision、raw SHA、清洗器与逐段 SHA；只批准 DEVELOPMENT 研究。模型分发所需的 attribution/Share-Alike 处理必须另行审查，不能从训练准入推导 `releaseEligible`。
 
-Tatoeba `cmn` CC0 周快照只有 102 bytes，不能作为中文补量来源。普通 `cmn` 句子导出和全局 links 表不属于本轮 CC0 冻结输入；links 表是关系 ID 而非正文，不得把其 149,039,032 个压缩 bytes 计入训练正文。Wikipedia/Wikimedia dump 因归因、相同方式共享/GFDL 等需要单独审查的义务以及多 GiB 原始体积，本轮不采用。逐项官方 URL、HTTP 元数据、事实边界和未来 manifest 义务见 `scripts/corpus/licenses/v2-free-public-source-review.md`。
+Tatoeba `cmn` CC0 周快照只有 102 bytes，不能作为中文补量来源。普通 `cmn` 句子导出和全局 links 表不属于本轮 CC0 冻结输入；links 表是关系 ID 而非正文，不得把其 149,039,032 个压缩 bytes 计入训练正文。Wikimedia 只允许使用 `scripts/corpus/licenses/v2-free-public-source-review.md` 中四个 exact-dated 对象，不得回退到 mutable `latest`。若 Wikibooks 清洗后不足，必须先在该记录中新增同语言 Wikisource 固定快照审查，不能静默替换。
 
 本次补量只服务 `public-v2-free-decoder-v1` 的 DEVELOPMENT 训练，不删除、覆盖或重新解释 V2R/V2S 的 architecture-stop，也不授权读取 final、写入 production public 或切换默认引擎。
 
@@ -130,15 +132,33 @@ Gate 不会改变候选文本或重新排列 Top-1。训练 Gate 前，生成器
 - engine：`public-v2-free-decoder-v1`；
 - 候选矩阵：16M Q4、16M Q8、24M Q4、32M Q4；16M 只训练一份 float checkpoint，再从同一权重分别导出 Q4/Q8；
 - tokenizer：单一 8K Unigram、完整 256-byte fallback、NFKC 与训练/Rust runtime golden parity；
+- tokenizer 身份：128MiB train split 只冻结一次 `tokenizer.unigram.model` 与 `tokenizer.runtime.json`；四个候选的 RemoteTrainingJob 必须同时绑定两份输入及组合 SHA，trainer 禁止按 job 重新训练 tokenizer；
 - 模型：decoder-only、context 256、seed `20260805`、AdamW betas `0.9/0.95`、weight decay `0.1`、peak LR `3e-4`、2% warmup + cosine、FP16 GradScaler、clip `1.0`、global batch 128；
 - 量化：`JLFDQ02` / `jotluck.autocomplete.quantized-decoder.v2`，group-size 64，Q4/Q8 分组 F16 scale，F16 vector；model header、payload 和每个 tensor 都绑定哈希与完整覆盖；
 - checkpoint：每 1,000 optimizer step 原子写入，可 resume，只保留最近两个与 best；最多 3 epochs，以 dev loss 选择 best；
+- 远程任务：正式矩阵只使用 `resume.mode=if-available`；已完成且 job/manifest/hash 完全匹配时幂等返回 completed，计划任务重跑不得覆盖成功状态；
+- 解码：一次 prefill 后使用逐层 KV cache，固定 beam width 32、每 beam Top-4、累计 log-probability、长度归一化 `alpha=0.6`；全局截宽后只对入选 beam 执行下一步 forward，相同分数按 token ID 序列稳定排序；每步检查 latest-only cancellation 与 deadline；
 - 生命周期：`trained` 只能 dev/E2E 加载且 Oracle 全零；`oraclePassed` 才允许 calibration/validation；`releaseEligible` 只可能由双 final 与 Windows GUI/IME 证据齐备后的唯一 publisher 生成；
 - 预算：model + tokenizer + manifest + 新增 runtime 静态增量 ≤24MiB，峰值增量内存 ≤192MiB，模型推理 p90 ≤80ms。
 
 本机负责源码、selection、评测、Rust parity 和 final 保管；幻15只执行哈希绑定的 CUDA 训练 job。final 不上传幻15或 VPS。传输必须先写临时名，复核 bytes/SHA-256 后同卷原子转正；SSH 断开不得终止由计划任务托管的训练。Tailscale direct 达到 20Mbps 时保持直连，否则才评估 VPS Peer Relay；Peer Relay 低于 10Mbps或不稳定才另行决定 WireGuard。任何系统账户、OpenSSH、Tailscale、防火墙、计划任务或 VPS 变更都必须由用户在目标机器上显式执行，仓库脚本不得自动远程施加配置。
 
-### 5.3 历史停止态命令
+### 5.3 2026-08-08 V2.2 实施停止点
+
+32MiB/16M smoke 已证明 float 训练、JLFDQ02 Q4/Q8 导出和 Python quantized→Rust 单步 parity 可以运行，但旧 checkpoint 使用了约 `std=1.0` 的 embedding 初始化，Q4 误差会逐层放大，不能直接成为正式候选。trainer 已改为 `std=0.02` 初始化、共享 embedding/output、padding row 归零，并为 Q4 增加在实际 F16 scale 上的分组 MSE 优化和量化诊断；正式候选仍必须重新训练。
+
+Rust worker 已实现一次 prefill、逐层 KV cache、固定 beam width 32 / Top-4 / `alpha=0.6` 的确定性多步解码。当前 K×B 批处理与逐 beam scalar 的 logits/cache 精确等价，取消保持事务性；真实 smoke 权重的 25 条候选语义哈希在调度改造前后相同。内存门禁通过，但延迟门禁失败：
+
+- 默认 `opt-level=s`：prefill `42.286ms`，单次 batch32 advance `60.411ms`；仅这两段已为 `102.697ms`，尚未包含后续多步解码；
+- 完整固定中文请求：`518.6–544.7ms`，peak Working Set `82,907,136B`；
+- `opt-level=3` 更慢；隔离 SGEMM 探针最好为 prefill `26.654ms`、batch32 `40.852ms`，仍不是足以让多步完整请求达到 `80ms` 的数量级提升，因此实验依赖已回退；
+- 未运行 10 warmup + 100 measurement，未把单样本伪装成 p90，也未启动 ROG 正式矩阵。
+
+四份固定 Wikimedia DEVELOPMENT 来源已清洗出 `100,662,801` bytes / `63,487` docs，中英文只差 `243` bytes。正式 selection 首次验证在内嵌 `U+FEFF` 的跨语言空白归一化差异上 fail closed；修复已锁定显式空白码点集合和跨语言 golden，但 supplement 尚未按新 cleaner identity 重新物化。新的 validation/final fingerprint inventory 也尚未冻结。
+
+因此本轮在运行时 80ms 前置门禁处停止：不得连接 ROG、不得生成正式训练 job、不得读取 final、不得运行 publisher。后续只有在新的运行时方案能以相同 Beam32/Top-4/长度边界通过完整请求 80ms 门禁后，才允许重新物化 selection、冻结 holdout/tokenizer并启动矩阵。
+
+### 5.4 历史停止态命令
 
 当前只允许只读检查：
 

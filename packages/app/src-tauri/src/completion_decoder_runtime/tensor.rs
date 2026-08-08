@@ -1,46 +1,38 @@
 use super::*;
 
 impl Tensor {
-    pub(super) fn row(&self, row: usize) -> Result<Vec<f32>, String> {
-        let columns = self.shape[1];
-        let mut output = vec![0.0; columns];
-        match &self.storage {
-            TensorStorage::Float(values) => {
-                output.copy_from_slice(&values[row * columns..(row + 1) * columns]);
-            }
-            TensorStorage::Quantized {
-                bits,
-                group_size,
-                scales,
-                values,
-            } => {
-                for (column, output) in output.iter_mut().enumerate() {
-                    let index = row * columns + column;
-                    *output = quantized_value(*bits, *group_size, scales, values, index)?;
-                }
-            }
+    pub(super) fn matrix_values(&self) -> Result<&[f32], String> {
+        if self.shape.len() != 2 {
+            return Err("decoder matrix shape is invalid".to_string());
         }
-        Ok(output)
+        let expected = self.shape[0]
+            .checked_mul(self.shape[1])
+            .ok_or_else(|| "decoder matrix size overflow".to_string())?;
+        let values = match &self.storage {
+            TensorStorage::Float(values) | TensorStorage::Dequantized(values) => values,
+        };
+        if values.len() != expected {
+            return Err("decoder matrix storage length is invalid".to_string());
+        }
+        Ok(values)
+    }
+
+    pub(super) fn row_slice(&self, row: usize) -> Result<&[f32], String> {
+        if self.shape.len() != 2 || row >= self.shape[0] {
+            return Err("decoder matrix row is invalid".to_string());
+        }
+        let columns = self.shape[1];
+        self.matrix_values()?
+            .get(row * columns..(row + 1) * columns)
+            .ok_or_else(|| "decoder matrix row escapes storage".to_string())
+    }
+
+    pub(super) fn row(&self, row: usize) -> Result<Vec<f32>, String> {
+        self.row_slice(row).map(<[f32]>::to_vec)
     }
 
     pub(super) fn dot_row(&self, row: usize, input: &[f32]) -> Result<f32, String> {
-        let columns = self.shape[1];
-        match &self.storage {
-            TensorStorage::Float(values) => dot(&values[row * columns..(row + 1) * columns], input),
-            TensorStorage::Quantized {
-                bits,
-                group_size,
-                scales,
-                values,
-            } => {
-                let mut result = 0.0;
-                for (column, value) in input.iter().enumerate() {
-                    let index = row * columns + column;
-                    result += *value * quantized_value(*bits, *group_size, scales, values, index)?;
-                }
-                Ok(result)
-            }
-        }
+        dot(self.row_slice(row)?, input)
     }
 }
 
@@ -148,6 +140,20 @@ pub(super) fn quantized_value(
             .ok_or_else(|| "decoder q8 index is invalid".to_string())?]))
     };
     Ok(quantized as f32 * scale)
+}
+
+pub(super) fn dequantize_tensor(
+    bits: u8,
+    group_size: usize,
+    scales: &[f32],
+    values: &[u8],
+    elements: usize,
+) -> Result<Vec<f32>, String> {
+    let mut output = Vec::with_capacity(elements);
+    for index in 0..elements {
+        output.push(quantized_value(bits, group_size, scales, values, index)?);
+    }
+    Ok(output)
 }
 
 pub(super) fn add_in_place(target: &mut [f32], source: &[f32]) -> Result<(), String> {
