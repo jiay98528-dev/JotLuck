@@ -81,7 +81,9 @@ $arguments = @(
     '-NoProfile'
     '-NonInteractive'
     '-ExecutionPolicy'
-    'AllSigned'
+    # Execution policy is not a trust boundary.  The bootstrap and runner bind the
+    # runner, job, Python, Git, source tree, recipe, and inputs by hash before use.
+    'Bypass'
     '-File'
     (Quote-TaskArgument -Value $runner)
     '-JobPath'

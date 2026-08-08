@@ -145,7 +145,8 @@ describe('remote V2 free training runtime policies', () => {
     expect(bootstrap).toContain('ExpectedTrainingPythonSha256');
     expect(bootstrap).toContain('ExpectedGitSha256');
     expect(bootstrap).toContain('-LogonType S4U -RunLevel Limited');
-    expect(bootstrap).toContain("'AllSigned'");
+    expect(bootstrap).toContain("'Bypass'");
+    expect(bootstrap).not.toContain("'AllSigned'");
     expect(bootstrap).toContain('set --unattended=true');
   });
 

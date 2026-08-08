@@ -62,7 +62,7 @@ pwsh -NoProfile -File .\Initialize-Fx15.ps1 -Apply `
 - 电源策略回滚使用结果中的 `powerBackupScheme` 执行 `powercfg /setactive <GUID>`。venv、账号、目录或 winget capability 的卸载均是独立破坏性动作，不由脚本自动执行。
 - 人工重启后重新运行 `Probe-Fx15.ps1` 和初始化 plan，执行 `sshd -t`，确认 sshd 仅监听 FX15 Tailscale 地址、默认 OpenSSH 入站规则保持禁用、唯一自定义规则的远端地址为控制机 `/32`，再从控制机用公钥登录。公网/局域网非控制地址连接必须失败。
 
-计划任务动作使用 `-ExecutionPolicy AllSigned`，所以 runner 应由本机信任的代码签名证书签名并在注册前验证签名。模板不生成证书，也不会弱化执行策略。专用训练账号需要“作为批处理作业登录”，但不应加入 Administrators、Remote Desktop Users 或 SSH 操作员组。
+计划任务动作使用 `-ExecutionPolicy Bypass`。PowerShell execution policy 不是此控制面的安全边界；bootstrap 在注册前复核 runner、job、Python 与 Git 的 SHA-256，runner 启动后还会复核 source commit/tree、recipe、全部输入和 deadline，因此不再要求代码签名证书。专用训练账号需要“作为批处理作业登录”，但不应加入 Administrators、Remote Desktop Users 或 SSH 操作员组。
 
 注册计划任务时必须把 venv 的 `python.exe` 和用于复核 source commit/tree 的 `git.exe` 作为显式路径传给 `Bootstrap-Fx15.ps1`，并同时提供各自 SHA-256。bootstrap 会复算后把路径与哈希写入任务参数；runner 再次复算，Python 配方只允许使用这份 venv 解释器。不得依赖管理员或训练账号的交互式 `PATH`。
 
