@@ -293,7 +293,7 @@ class TrainDecoderHelperTests(unittest.TestCase):
 
         self.assertEqual(captured["model_type"], "unigram")
         self.assertEqual(captured["vocab_size"], 8_000)
-        self.assertEqual(captured["character_coverage"], 0.9995)
+        self.assertEqual(captured["character_coverage"], 0.997)
         self.assertIs(captured["byte_fallback"], True)
         self.assertIs(captured["hard_vocab_limit"], True)
         self.assertEqual(captured["normalization_rule_name"], "identity")
@@ -353,7 +353,7 @@ class TrainDecoderHelperTests(unittest.TestCase):
                 {
                     "modelType": "unigram",
                     "vocabularySize": 8_000,
-                    "characterCoverage": 0.9995,
+                    "characterCoverage": 0.997,
                     "byteFallback": True,
                     "hardVocabLimit": True,
                     "normalizationRuleName": "identity",

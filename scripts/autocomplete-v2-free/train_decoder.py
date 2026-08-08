@@ -47,7 +47,10 @@ MANIFEST_SCHEMA = "jotluck.autocomplete.public-free-decoder.v1"
 MODEL_MAGIC = b"JLFDQ02\0"
 VOCABULARY_SIZE = 8_000
 TOKENIZER_MODEL_TYPE = "unigram"
-TOKENIZER_CHARACTER_COVERAGE = 0.9995
+# The formal 128 MiB train split selects about 4,273 direct characters at
+# 0.997, leaving about 3,467 of the 8K vocabulary for learned Unigram pieces
+# after the 256 byte and four special pieces.
+TOKENIZER_CHARACTER_COVERAGE = 0.997
 TOKENIZER_BYTE_FALLBACK = True
 TOKENIZER_NORMALIZATION_RULE = "identity"
 TOKENIZER_SHUFFLE_INPUT_SENTENCE = False

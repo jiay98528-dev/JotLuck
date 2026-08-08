@@ -131,7 +131,7 @@ Gate 不会改变候选文本或重新排列 Top-1。训练 Gate 前，生成器
 
 - engine：`public-v2-free-decoder-v1`；
 - 候选矩阵：16M Q4、16M Q8、24M Q4、32M Q4；16M 只训练一份 float checkpoint，再从同一权重分别导出 Q4/Q8；
-- tokenizer：单一 8K Unigram、固定 `character_coverage=0.9995`、完整 256-byte fallback、NFKC 与训练/Rust runtime golden parity；极低频 Unicode 字符必须走 byte fallback，不得为保留全字符而扩大词表；
+- tokenizer：单一 8K Unigram、固定 `character_coverage=0.997`、完整 256-byte fallback、NFKC 与训练/Rust runtime golden parity；正式 train split 在该覆盖率下直接保留约 4,273 个字符，并为可学习 Unigram piece 保留约 3,467 个位置；其余低频 Unicode 字符走 byte fallback，不得为保留全字符而扩大词表；
 - tokenizer 身份：128MiB train split 只冻结一次 `tokenizer.unigram.model` 与 `tokenizer.runtime.json`；四个候选的 RemoteTrainingJob 必须同时绑定两份输入及组合 SHA，trainer 禁止按 job 重新训练 tokenizer；
 - 模型：decoder-only、context 256、seed `20260805`、AdamW betas `0.9/0.95`、weight decay `0.1`、peak LR `3e-4`、2% warmup + cosine、FP16 GradScaler、clip `1.0`、global batch 128；
 - 量化：`JLFDQ02` / `jotluck.autocomplete.quantized-decoder.v2`，group-size 64，Q4/Q8 分组 F16 scale，F16 vector；model header、payload 和每个 tensor 都绑定哈希与完整覆盖；
