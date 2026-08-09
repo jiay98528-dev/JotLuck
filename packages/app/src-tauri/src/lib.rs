@@ -136,24 +136,27 @@ fn attach_window_cleanup(window: &WebviewWindow) {
     });
 }
 
-fn cloned_window_config(
-    app: &tauri::AppHandle,
-    label: String,
-) -> Result<tauri::utils::config::WindowConfig, String> {
-    let mut config = app
-        .config()
-        .app
-        .windows
-        .first()
-        .cloned()
-        .ok_or_else(|| "missing desktop window configuration".to_string())?;
-    config.label = label;
-    config.title = "JotLuck".to_string();
-    Ok(config)
+fn desktop_window_config(label: String) -> tauri::utils::config::WindowConfig {
+    // 窗口配置由 tauri.conf.json 迁入代码：主窗口也必须经 build_window 创建，
+    // 下方的 CDP 重注入（additional_browser_args）才会作用于主窗口 WebView2。
+    // 字段值与原 tauri.conf.json windows[0] 完全一致（fullscreen/decorations
+    // 等取 WindowConfig 默认值，与原配置相同）。
+    tauri::utils::config::WindowConfig {
+        label,
+        title: "JotLuck".to_string(),
+        width: 1280.0,
+        height: 800.0,
+        min_width: Some(800.0),
+        min_height: Some(600.0),
+        resizable: true,
+        maximized: true,
+        center: true,
+        ..Default::default()
+    }
 }
 
 fn build_window(app: &tauri::AppHandle, label: &str) -> Result<WebviewWindow, String> {
-    let config = cloned_window_config(app, label.to_string())?;
+    let config = desktop_window_config(label.to_string());
     let builder = WebviewWindowBuilder::from_config(app, &config)
         .map_err(|error| error.to_string())?;
     // CDP 环境变量重注入（Windows）：提权进程（CI runner 全程高完整性）中
@@ -297,9 +300,10 @@ pub fn run() {
                     .build(),
             )?;
 
-            let main = app
-                .get_webview_window("main")
-                .ok_or("missing main window")?;
+            // 主窗口在 setup 内经 build_window 创建（tauri.conf.json 不再自动创建），
+            // 使 additional_browser_args 重注入覆盖主窗口——config 自动创建路径
+            // 会绕过注入（2026-08-09 CI 探针实锤：浏览器进程命令行无调试端口）。
+            let main = build_window(app.handle(), "main")?;
             if let Some(first) = startup_files.first() {
                 open_external_file_in_window(app.handle(), first, Some("main"))?;
             } else {
