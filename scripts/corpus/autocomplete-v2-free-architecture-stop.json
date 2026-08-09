@@ -3,11 +3,11 @@
   "schemaVersion": 1,
   "engine": "public-v2-free-decoder-v1",
   "architectureId": "decoder-only-cpu-beam32-top4-v1",
-  "status": "superseded",
+  "status": "architecture-blocked",
   "formalResult": false,
   "releaseEvidence": false,
-  "stopFurtherTraining": false,
-  "reasonCode": "windows-worker-runtime-p90",
+  "stopFurtherTraining": true,
+  "reasonCode": "observed-regression-zero-oracle-degenerate-output",
   "recordedAt": "2026-08-09T09:16:00.322Z",
   "runtimeGate": {
     "modelP90MaximumMs": 80,
@@ -120,5 +120,91 @@
     "oraclePrecheckRun": false,
     "finalHoldoutsRead": false,
     "publisherRun": false
+  },
+  "qualityStop": {
+    "recordedAt": "2026-08-09T11:17:29.266Z",
+    "decision": "development-regression-failed-before-formal-oracle",
+    "evaluationSourceCommit": "ca0580c42bc27e9e704f76900dc12a7df335671f",
+    "evaluatorTreeSha256": "47cf1e63fa9eb7d5697d81da46a3584bc2afcaf8614ece2803ccd2a1ba44c35f",
+    "workerExecutableSha256": "4d54cc593765897e93ab41d769cce34e1f305abce2ffe41829ae8461b2e5ed42",
+    "dataset": {
+      "datasetId": "legacy-observed-formal-holdout-v2-diagnostic-ca0580c",
+      "contentSha256": "676439cd6c26cf41fb47dbf63928f2d666ee5dcd09c61d2b7a9796e45c0f2850",
+      "observedRegressionOnly": true,
+      "formalValidation": false,
+      "releaseEvidence": false,
+      "checkpoints": 200,
+      "completeCheckpoints": 150,
+      "silenceCheckpoints": 50
+    },
+    "runtimeMeasurements": {
+      "16m-q4": {
+        "modelP90Ms": 198.69490000000042,
+        "peakMemoryBytes": 35725312,
+        "conservativeStaticBytes": 20259342,
+        "reportSha256": "2cdb9d82549ef071cf8a014920ddcd123ffb8a2dd579a218ecc3f023f5ac4843"
+      },
+      "24m-q4": {
+        "modelP90Ms": 173.69070000000102,
+        "peakMemoryBytes": 39776256,
+        "conservativeStaticBytes": 24038706,
+        "reportSha256": "a3fa27ff801c3dbf8a5faa7f7fcdd2197517a21453dbc9ef875f0f4489bd6659"
+      }
+    },
+    "candidateResults": [
+      {
+        "variant": "16m-q4",
+        "oracleAt8": 0,
+        "oracleAt32": 0,
+        "triggerRate": 0.525,
+        "silenceFalseTriggerRate": 0.54,
+        "requestP90Ms": 253.37680000000182,
+        "reportSha256": "9ed511cf24d121d545998e484f4e8e972c02cd80cb7d3d2d896fa01ac4a294fb",
+        "observationsFileSha256": "a9b047da431168dac8289fff5675b420e31b1ef515829edc44ceaaf2a6d8ef0e"
+      },
+      {
+        "variant": "16m-q8",
+        "oracleAt8": 0,
+        "oracleAt32": 0,
+        "triggerRate": 0.525,
+        "silenceFalseTriggerRate": 0.52,
+        "requestP90Ms": 1457.7347000000009,
+        "reportSha256": "a035d74c47c7c6ef41b5bdaffdf21ae64363b35221ebae2046967f91e5f44571",
+        "observationsFileSha256": "701a8e0a7d2e6980c886a0feb8b2d75dc525f5b628c60b2144d6451459a2b448"
+      },
+      {
+        "variant": "24m-q4",
+        "oracleAt8": 0,
+        "oracleAt32": 0,
+        "triggerRate": 0.555,
+        "silenceFalseTriggerRate": 0.54,
+        "requestP90Ms": 281.31730000000243,
+        "reportSha256": "31a5028cde405e444b7e475f4a7c4d3acd85d6841d7572b436d15f516f5f9f21",
+        "observationsFileSha256": "8c83a9ea8daa92c6dde4770c2069f03f74b30a63f99ee349438deea3d12474dc"
+      },
+      {
+        "variant": "32m-q4",
+        "oracleAt8": 0,
+        "oracleAt32": 0,
+        "triggerRate": 0.745,
+        "silenceFalseTriggerRate": 0.74,
+        "requestP90Ms": 453.27809999999954,
+        "reportSha256": "6595345601c23515c22bf4e0a0ab26823a5baf8b31084c305dcfcdbf062dd891",
+        "observationsFileSha256": "592b27c42f65a0d4fa615096818195a2867f3d6240c46df1b4a3eea19882acac"
+      }
+    ],
+    "diagnosis": {
+      "q8RestoredQuality": false,
+      "largerModelRestoredQuality": false,
+      "degenerateOutputObserved": true,
+      "examples": ["c/c/c/c/c/c", "公方公方公方公方", "鹭鹭鹭鹭鹭鹭"],
+      "likelyFailureLayer": "training-objective-or-corpus-distribution",
+      "quantizationOnlyFailure": false
+    },
+    "formalOraclePrecheckRun": false,
+    "finalHoldoutsRead": false,
+    "publisherRun": false,
+    "productionDefaultChanged": false,
+    "requiredNextStep": "Do not expand the corpus or repeat this matrix. Any continuation must first redesign the training objective and demonstrate non-degenerate FP32 continuations on a small development probe before quantization, worker timing, or new holdout consumption."
   }
 }

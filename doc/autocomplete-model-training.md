@@ -2,7 +2,7 @@
 
 > 版本：v2.0
 > 日期：2026-08-05
-> 状态：Public V2R、Public V2S 继续停止；`public-v2-free-decoder-v1` 的 DEVELOPMENT 正式矩阵已完成，Windows worker 预算已调整为 200ms 并恢复候选评测；公共 L3 默认未绑定；本文是模型训练与证据流程的唯一操作说明
+> 状态：Public V2R、Public V2S 继续停止；`public-v2-free-decoder-v1` 的 DEVELOPMENT 正式矩阵已完成，但全部候选在已观察自然写作回归集上 Oracle@8/@32 为 0 并出现退化输出，路线已在 formal Oracle 前停止；公共 L3 默认未绑定；本文是模型训练与证据流程的唯一操作说明
 
 ## 1. 当前结论
 
@@ -12,8 +12,8 @@ JotLuck 的离线补全不是一个单模型系统。结构化补全、当前文
 
 - `public-phrase-transformer-v1`（V2R）受 `scripts/corpus/autocomplete-v2r-architecture-stop.json` 阻断。固定短语输出空间无法覆盖真实写作 continuation。
 - `public-v2s-mkn-v1`（V2S）受 `scripts/corpus/autocomplete-v2s-architecture-stop.json` 阻断。固定矩阵的 development Oracle 未达到预登记架构门槛。
-- `public-v2-free-decoder-v1`（V2.2）的正式矩阵权重与多步 parity 已完成。其 `80ms` 停止记录保留为历史测量，但 2026-08-09 的产品预算决策已将 Windows worker 门禁调整为 `200ms`，最快的 24M Q4 以 p90 `173.4854ms` 通过该项并恢复 Oracle 前评测。
-- V2R/V2S 两份 stop 继续阻断对应历史架构；V2.2 的 superseded 记录不是当前阻断，也不是模型质量 PASS。
+- `public-v2-free-decoder-v1`（V2.2）的正式矩阵权重与多步 parity 已完成。产品负责人把 Windows worker 模型请求门禁调整为 `200ms` 后，16M/24M Q4 固定探针分别以 p90 `198.6949ms`/`173.6907ms` 通过；但同一 worker 在 200 个自然笔记回归 checkpoint 上的 Oracle@8/@32 均为 0，且出现重复字符、重复词组和单位循环。
+- 16M Q8 同样为 Oracle 0，排除“仅 Q4 量化破坏质量”；32M Q4 仍为 Oracle 0 且 silence 误触发升至 74%，排除“仅模型容量不足”。V2R/V2S 与 V2.2 三条路线当前均停止，但 V2.2 的结论只属于 DEVELOPMENT 回归失败，不冒充 formal Oracle 或发行证据。
 - `packages/app/public/autocomplete/` 当前没有可运行的 canonical Public L3。生产 `MarkdownPredictor` 不自动导入已停止的 V2S Worker。
 - RC 的预期结果是 code `10`。不得删除 stop、修改资格布尔值或降低阈值来改变结果。
 - 新 engine `public-v2-free-decoder-v1` 已获准在独立 DEVELOPMENT 切片训练，但只允许形成 `trained` 或经 Oracle 后的 `oraclePassed` 候选；不得写 production public、切换默认引擎、读取 final 或改变当前 RC。
@@ -30,7 +30,7 @@ JotLuck 的离线补全不是一个单模型系统。结构化补全、当前文
 | 架构演进记录       | `plans/autocomplete-engine-v2.md`                                                                 | V2、V2R、V2S 的历史决策和结果                     |
 | V2R 停止事实       | `scripts/corpus/autocomplete-v2r-architecture-stop.json`                                          | 不可改写的历史停止记录                            |
 | V2S 停止事实       | `scripts/corpus/autocomplete-v2s-architecture-stop.json`                                          | 当前公共训练入口的硬停止记录                      |
-| V2.2 预算变更历史  | `scripts/corpus/autocomplete-v2-free-architecture-stop.json`                                      | 80ms 停止及 200ms supersession 记录               |
+| V2.2 停止事实      | `scripts/corpus/autocomplete-v2-free-architecture-stop.json`                                      | 80ms 历史、200ms supersession 与质量停止记录      |
 | v4 来源批准事实    | `scripts/corpus/provenance.json`、`scripts/corpus/SOURCES.md`                                     | 旧 curated/synthetic 来源与永久排除项             |
 | V2R/V2S 来源事实   | `scripts/corpus/autocomplete-v2r-generator.json`、`scripts/corpus/autocomplete-v2r-external.json` | v3.1 生成器、外部来源和选择身份                   |
 | V2.2 训练/评测入口 | `scripts/autocomplete-v2-free/`                                                                   | selection、训练、JLFDQ02、评测、final pair ledger |
@@ -175,7 +175,18 @@ ROG 正式矩阵使用同一 128MiB selection、同一 8K Unigram tokenizer 和 
 
 清理一个遗留的 JotLuck 只读诊断进程后，最快 24M Q4 又执行了 10 warmup + 100 measured：p90 `173.4854ms`，100 个样本全部位于 `160.0487–179.8037ms`，峰值工作集 `39,653,376B`。它未达到当时的 `80ms` 门槛，因此先停止并且没有读取 Oracle/final。
 
-2026-08-09 产品负责人将 Windows worker 模型请求门禁调整为 `200ms`。24M Q4 的既有 100 样本结果因此通过运行时和内存门禁，`scripts/corpus/autocomplete-v2-free-architecture-stop.json` 已标记为 superseded；不再重复训练，直接恢复静态体积核算与 Oracle 前评测。质量、许可、静态体积、final 和 GUI 门禁均未降低。
+2026-08-09 产品负责人将 Windows worker 模型请求门禁调整为 `200ms`。使用正确 UTF-8 请求、10 warmup + 100 measured 和“整份 worker 全额计入静态增量”的保守核算后：16M Q4 p90 `198.6949ms`、峰值 `35,725,312B`、静态 `20,259,342B`；24M Q4 p90 `173.6907ms`、峰值 `39,776,256B`、静态 `24,038,706B`。两者通过固定探针的 200ms/192MiB/24MiB 门禁。
+
+随后在仓库已有、已观察但自然度较高的 50-target/200-checkpoint 回归集上执行四候选横向诊断。该集合只可阻断，不能支持 `oraclePassed`：
+
+| 候选   | Oracle@8 | Oracle@32 | 触发率 | silence false |  请求 p90 |
+| ------ | -------: | --------: | -----: | ------------: | --------: |
+| 16M Q4 |       0% |        0% |  52.5% |           54% |  253.38ms |
+| 16M Q8 |       0% |        0% |  52.5% |           52% | 1457.73ms |
+| 24M Q4 |       0% |        0% |  55.5% |           54% |  281.32ms |
+| 32M Q4 |       0% |        0% |  74.5% |           74% |  453.28ms |
+
+原始 observations 包含 `c/c/c/c/c/c`、`公方公方公方公方`、重复单位等退化候选。Q8 没有恢复质量，32M 也没有随更低 dev loss 获得真实续写命中，因此根因定位到训练目标或语料分布，而非单纯 Q4 量化或参数量。按预登记停止规则，不再扩到 256MiB、不重复矩阵、不读取 final；任何后续路线必须先在小型 FP32 development probe 上证明非退化续写，再进行量化和 worker 评测。
 
 ### 5.5 历史停止态命令
 

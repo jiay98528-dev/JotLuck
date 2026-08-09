@@ -6,7 +6,7 @@
 
 ## 当前状态
 
-- V2R 与 V2S 的 architecture stop 继续有效。V2.2 正式矩阵已完成；原 80ms stop 在产品预算调整为 200ms 后标记为 superseded，24M Q4 已恢复 Oracle 前评测。final 与 publisher 仍未授权。
+- V2R 与 V2S 的 architecture stop 继续有效。V2.2 正式矩阵已完成；原 80ms stop 曾由 200ms 产品预算取代，但 16M Q4/Q8、24M Q4、32M Q4 在已观察自然写作回归集上的 Oracle@8/@32 全部为 0 并出现退化输出，因此路线已在 formal Oracle 前重新停止。不得继续扩语料、训练、final 或 publisher。
 - Public L3 默认未绑定，RC `--autocomplete-only` 预期返回 code 10。
 - `_web-cache/` 是可再生、Git ignored 的本地缓存，不能单独作为发布或放行证据。
 - `novel-zh/` 永久硬隔离，即使文件仍在仓库也不得进入 selection。
