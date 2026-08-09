@@ -13,14 +13,17 @@ export const zh: SiteContent = {
       download: '下载 · JotLuck — 本地优先 Markdown 笔记（Windows）',
       themes: '主题 · JotLuck — 本地优先 Markdown 笔记',
       studio: '工作室 · JotLuck — 本地优先 Markdown 笔记',
+      privacy: '隐私 · JotLuck — 本地优先 Markdown 笔记',
     },
     pageDescriptions: {
       download:
-        '下载 JotLuck Windows x64 版。本地优先、离线可用的 Markdown 笔记工具：每条笔记都是纯文本文件，文件夹即笔记本。首个公开版本 2026 年 8 月 15 日发布。',
+        '下载 JotLuck Windows x64 版：Preview 预览版已上架，正式签名版 2026 年 8 月 15 日发布。本地优先、离线可用的 Markdown 笔记工具，每条笔记都是纯文本文件。',
       themes:
-        'JotLuck 工作区主题：Paper 纸、Halo Canvas、Lumen Field 三套主题，重新塑造写作区本身——主题不只是换一层颜色。',
+        'JotLuck 工作区主题：Paper 纸、Halo Canvas、Lumen Field 三套主题——主题重新塑造工作区本身，从纸墨颜色到窗口布局。',
       studio:
         'LeankomStudio 是鸰湖科技的产品工作室。让想法越过类型，找到最适合它的形状——JotLuck 本地 Markdown 笔记是我们向外展开的第一页。',
+      privacy:
+        'JotLuck 隐私说明：笔记以纯文本文件保存在你自己的文件夹中，应用完全离线运行——写作无需账号、无遥测。本站为静态网站，不使用 Cookie 与分析追踪。',
     },
   },
   localeName: '中文',
@@ -34,7 +37,7 @@ export const zh: SiteContent = {
     emphasis: '把生态留在纸页之外。',
     emphasisHighlight: '生态',
     subline: '从一个文件开始，沿着思绪写下去。写下的一切，依然可以随你远行。',
-    action: '查看发布进度',
+    action: '立刻下载',
     dateLine: 'Windows x64 公开版本预计 2026 年 8 月 15 日发布',
     dateQuip: '保守估计——说不定更早。',
   },
@@ -73,23 +76,29 @@ export const zh: SiteContent = {
   },
   download: {
     eyebrow: '下载',
-    title: '发布日期已定。',
-    lead: '首个 Windows x64 版本 2026 年 8 月 15 日发布。macOS 与 Linux 随后跟进——纯文本从不挑平台，你的笔记在任何系统上都是本地文件。',
+    title: 'Preview 已上架。',
+    lead: 'Windows x64 预览版现在即可下载，正式签名版 2026 年 8 月 15 日发布。macOS 与 Linux 随后跟进——纯文本从不挑平台，你的笔记在任何系统上都是本地文件。',
     statusLabel: '首发平台',
     statusValue: 'Windows x64',
     statusDate: '2026-08-15',
-    statusQuip: '保守估计——说不定更早。',
+    statusQuip: '保守估计——说不定更早。预览版果然更早。',
     platformTitle: '平台',
     platforms: [
-      { name: 'Windows x64', state: '2026-08-15 首个公开版' },
+      { name: 'Windows x64', state: 'Preview 已上架 · 正式版 2026-08-15' },
       { name: 'macOS', state: '随后跟进' },
       { name: 'Linux', state: '随后跟进' },
     ],
-    honestyTitle: '8 月 15 日，正式上架。',
+    honestyTitle: '预览版先行，正式版 8 月 15 日。',
     honestyBody:
-      '公开版发布当天，本页与 GitHub Releases 同步上架正式安装包——你下载到的每一份，都是可核验的完整版本。',
-    countdownLabel: '距离首个公开版',
+      '预览版安装包已上架 GitHub Releases——可下载、可校验、可回退。正式签名版将于 8 月 15 日同步上架本页与 Releases，每一份仍是可核验的完整版本。',
+    countdownLabel: '距离正式签名版',
     countdownUnit: '天',
+    previewTitle: 'v0.11.0 Preview',
+    downloadBtn: '下载 Preview（Windows x64）',
+    releaseBtn: 'Release 说明与校验',
+    signNote:
+      '预览版未签名。Windows SmartScreen 可能提示风险，安装前请核对 SHA-256 与 Release 页一致。',
+    signPolicyLink: '代码签名政策',
     notesTitle: '值得知道',
     notes: [
       '笔记保存在你选择的文件夹中，无需注册账号',
@@ -100,7 +109,7 @@ export const zh: SiteContent = {
   themes: {
     eyebrow: '主题',
     title: '创作空间，也值得被塑造。',
-    lead: '主题不只是换一层颜色——它重新塑造工作区本身。',
+    lead: '主题重新塑造工作区本身，从纸墨颜色到窗口布局。',
     items: [
       { id: 'paper', name: 'Paper 纸', blurb: '默认主题。和纸暖调，墨色文字，工具退后。' },
       { id: 'halo-canvas', name: 'Halo Canvas', blurb: '浮动画布布局，书签、面板各就其位。' },
@@ -108,7 +117,7 @@ export const zh: SiteContent = {
     ],
     blueprintTitle: '主题系统',
     blueprintBody:
-      'Theme API v2 以 slot、宿主 API 与 .mltheme 主题包开放整个工作区——深度定制，留给有独特创意、有强烈表达欲望的人。',
+      '主题系统开放整个工作区的深度定制——布局、面板与纸墨质感皆可重新塑造，留给有独特创意、有强烈表达欲望的人。',
     marketplaceNote: '主题随应用内置发布，开箱即用。',
   },
   themePreview: {
@@ -161,7 +170,32 @@ export const zh: SiteContent = {
     lead: 'JotLuck 是我们向外展开的第一页。',
     quote: '有些想法成为工具。另一些长成整个世界。',
     body: '如果你也有一个放不下的想法，写信给我们。',
-    action: 'carrie@leankom.com',
+    action: 'carriechan@leankom.com',
+  },
+  privacy: {
+    eyebrow: '隐私',
+    title: '你的作品，本该属于你。',
+    lead: 'JotLuck 是本地优先的离线工具。写作无需账号，没有遥测，也没有一台装着用户数据、等着被泄露的服务器。',
+    sections: [
+      {
+        title: '我们不碰你的笔记',
+        body: 'JotLuck 桌面应用完全离线运行。没有遥测，不上传笔记内容，也不统计你的使用行为。我们处理你笔记数据的方式，是从一开始就接触不到它。未来主题商店上线时，会需要一个邮箱账户，仅用于交付你购买的数字资产。它只装你的邮箱地址和购买记录，与你的笔记没有任何关系。',
+      },
+      {
+        title: '笔记只存于你的文件夹',
+        body: '每一条笔记都是纯文本 Markdown 文件，保存在你自己选择的本地文件夹中。备份、同步与删除完全由你决定——JotLuck 不持有任何副本。',
+      },
+      {
+        title: '我们不追踪你的访问',
+        body: '本站是静态网站。不使用 Cookie，不加载分析或追踪脚本，字体与素材全部自托管。你的访问只是读走几个文件，仅此而已。',
+      },
+      {
+        title: '下载与 GitHub',
+        body: '安装包通过 GitHub 发布。你在 GitHub 站点内的访问适用 GitHub 的隐私政策；JotLuck 不会从这一渠道获得你的任何信息。',
+      },
+    ],
+    contactTitle: '有问题，写信给我们',
+    contactBody: '对隐私有任何疑问或顾虑，直接来信，我们会认真回复。',
   },
   footer: {
     studio: 'LeankomStudio',

@@ -63,6 +63,13 @@ export interface DownloadContent {
   /** 倒计时邮戳：标签行 + 天数单位（数字由客户端确定性计算） */
   countdownLabel: string;
   countdownUnit: string;
+  /** Preview 下载区文案（裁决 33；版本/SHA-256/链接等事实值在 release.ts RELEASE.preview） */
+  previewTitle: string;
+  downloadBtn: string;
+  releaseBtn: string;
+  signNote: string;
+  /** 代码签名政策链接文案（URL 在 release.ts EXTERNAL.codeSigning） */
+  signPolicyLink: string;
   notesTitle: string;
   notes: string[];
 }
@@ -140,14 +147,24 @@ export interface StudioContent {
   action: string;
 }
 
+/** 隐私页（裁决 26）：分节正文 + 联系段；邮箱地址由页面组件从 release.ts 注入，不进文案 */
+export interface PrivacyContent {
+  eyebrow: string;
+  title: string;
+  lead: string;
+  sections: Array<{ title: string; body: string }>;
+  contactTitle: string;
+  contactBody: string;
+}
+
 export interface SiteContent {
   meta: {
     title: string;
     description: string;
     /** 子页 <title>：栏目词 · JotLuck — 类别短句（≤60 字符，SEO 差异化，2026-08-05 裁决 23） */
-    pageTitles: Record<'download' | 'themes' | 'studio', string>;
+    pageTitles: Record<'download' | 'themes' | 'studio' | 'privacy', string>;
     /** 子页搜索摘要（70–160 字符，不复用视觉 lead——lead 过短/过长失衡，裁决 24） */
-    pageDescriptions: Record<'download' | 'themes' | 'studio', string>;
+    pageDescriptions: Record<'download' | 'themes' | 'studio' | 'privacy', string>;
   };
   localeName: string;
   header: {
@@ -161,6 +178,7 @@ export interface SiteContent {
   themes: ThemesContent;
   themePreview: ThemePreviewContent;
   studio: StudioContent;
+  privacy: PrivacyContent;
   footer: {
     studio: string;
     tagline: string;

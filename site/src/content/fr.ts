@@ -13,14 +13,17 @@ export const fr: SiteContent = {
       download: 'Téléchargement · JotLuck — Notes Markdown locales (Windows)',
       themes: "Thèmes · JotLuck — Notes Markdown, local d'abord",
       studio: "Studio · JotLuck — Notes Markdown, local d'abord",
+      privacy: "Confidentialité · JotLuck — Notes Markdown, local d'abord",
     },
     pageDescriptions: {
       download:
-        "Téléchargez JotLuck pour Windows x64. Un outil de notes Markdown léger, local d'abord, utilisable hors ligne. Première version publique : 15 août 2026.",
+        'Télécharger JotLuck Windows x64 : Preview est disponible ; version signée le 15 août 2026. Un outil de notes Markdown — chaque note est un fichier texte brut.',
       themes:
-        "Les thèmes de JotLuck — Paper, Halo Canvas et Lumen Field. Un thème n'est pas qu'une couche de peinture : il remodèle l'espace de travail lui-même.",
+        "Les thèmes de JotLuck — Paper, Halo Canvas et Lumen Field. Chaque thème remodèle l'espace de travail, du papier et de l'encre à la disposition des fenêtres.",
       studio:
         "LeankomStudio aide les idées à traverser les genres et à trouver la forme qui leur convient. JotLuck, l'outil de notes Markdown local, est notre première page.",
+      privacy:
+        'JotLuck — vie privée : notes en fichiers texte dans votre dossier ; app 100 % hors ligne — pas de compte pour écrire, pas de télémétrie, ni cookies ni analyse.',
     },
   },
   localeName: 'Français',
@@ -34,7 +37,7 @@ export const fr: SiteContent = {
     emphasis: 'Commencez par un fichier.',
     subline:
       "Laissez l'écosystème logiciel au bord de la page. Tout ce que vous écrivez reste libre de voyager.",
-    action: 'Suivre la sortie',
+    action: 'Télécharger maintenant',
     dateLine: 'Version publique Windows x64 attendue le 15 août 2026',
     dateQuip: 'Une estimation prudente — elle pourrait bien arriver plus tôt.',
   },
@@ -77,23 +80,30 @@ export const fr: SiteContent = {
   },
   download: {
     eyebrow: 'Téléchargement',
-    title: 'La date est fixée.',
-    lead: 'La première version Windows x64 arrive le 15 août 2026. macOS et Linux suivront — le texte brut ne choisit jamais sa plateforme, et vos notes restent des fichiers locaux sur tous les systèmes.',
+    title: 'La Preview est en ligne.',
+    lead: 'La Preview Windows x64 est prête à télécharger dès maintenant ; la version signée arrive le 15 août 2026. macOS et Linux suivront — le texte brut ne choisit jamais sa plateforme, et vos notes restent des fichiers locaux sur tous les systèmes.',
     statusLabel: 'Première plateforme',
     statusValue: 'Windows x64',
     statusDate: '2026-08-15',
-    statusQuip: 'Une estimation prudente — elle pourrait bien arriver plus tôt.',
+    statusQuip:
+      "Une estimation prudente — elle pourrait bien arriver plus tôt. La Preview l'a prouvé.",
     platformTitle: 'Plateformes',
     platforms: [
-      { name: 'Windows x64', state: 'Première version publique, 15 août 2026' },
+      { name: 'Windows x64', state: 'Preview en ligne · version signée 2026-08-15' },
       { name: 'macOS', state: 'Suivra' },
       { name: 'Linux', state: 'Suivra' },
     ],
-    honestyTitle: "Le 15 août, c'est en ligne.",
+    honestyTitle: "La Preview d'abord. La version signée le 15 août.",
     honestyBody:
-      "Le jour de la sortie, cette page et GitHub Releases sont mis en ligne en même temps que l'installateur final — chaque copie que vous téléchargez est la version complète et vérifiable.",
-    countdownLabel: 'Première sortie publique dans',
+      "L'installateur Preview est déjà sur GitHub Releases — téléchargeable, vérifiable, réversible. La version signée arrivera sur cette page et sur Releases le 15 août, chaque copie toujours complète et vérifiable.",
+    countdownLabel: 'Version signée dans',
     countdownUnit: 'jours',
+    previewTitle: 'v0.11.0 Preview',
+    downloadBtn: 'Télécharger la Preview (Windows x64)',
+    releaseBtn: 'Notes de version et checksum',
+    signNote:
+      "Cette Preview n'est pas signée : Windows SmartScreen peut afficher un avertissement. Vérifiez que le SHA-256 correspond à la page Release avant d'installer.",
+    signPolicyLink: 'Politique de signature de code',
     notesTitle: 'À savoir',
     notes: [
       'Les notes vivent dans le dossier que vous choisissez — aucun compte requis',
@@ -104,7 +114,7 @@ export const fr: SiteContent = {
   themes: {
     eyebrow: 'Thèmes',
     title: "L'espace où vous créez mérite lui aussi d'être façonné.",
-    lead: "Un thème n'est pas qu'une nouvelle couche de peinture — il remodèle l'espace de travail lui-même.",
+    lead: "Un thème remodèle l'espace de travail lui-même, de la couleur du papier et de l'encre à la disposition des fenêtres.",
     items: [
       {
         id: 'paper',
@@ -125,7 +135,7 @@ export const fr: SiteContent = {
     ],
     blueprintTitle: 'Le système de thèmes',
     blueprintBody:
-      "Theme API v2 ouvre tout l'espace de travail via des slots, des API hôtes et des packs .mltheme — une personnalisation profonde, pour les personnes aux idées singulières et à l'envie irrépressible de s'exprimer.",
+      "Le système de thèmes ouvre tout l'espace de travail à une personnalisation profonde — disposition, panneaux et texture du papier et de l'encre peuvent tous être remodelés, pour les personnes aux idées singulières et à l'envie irrépressible de s'exprimer.",
     marketplaceNote: "Les thèmes sont livrés dans l'application, prêts à l'emploi dès l'ouverture.",
   },
   themePreview: {
@@ -194,7 +204,33 @@ export const fr: SiteContent = {
     lead: "JotLuck est la première page que nous déployons vers l'extérieur.",
     quote: "Certaines idées deviennent des outils. D'autres grandissent en mondes entiers.",
     body: 'Si vous avez une idée que vous ne pouvez pas lâcher, écrivez-nous.',
-    action: 'carrie@leankom.com',
+    action: 'carriechan@leankom.com',
+  },
+  privacy: {
+    eyebrow: 'Confidentialité',
+    title: 'Votre travail était censé vous appartenir.',
+    lead: "JotLuck est un outil local d'abord, hors ligne : pas de compte pour écrire, pas de télémétrie, et aucun serveur qui détienne vos données et puisse les laisser fuir.",
+    sections: [
+      {
+        title: 'Nous ne touchons pas à vos notes',
+        body: "L'application de bureau JotLuck fonctionne entièrement hors ligne : pas de télémétrie, aucun contenu de note envoyé, aucune statistique d'usage. Notre façon de traiter vos notes est de ne jamais y toucher. Quand la boutique de thèmes ouvrira, un compte e-mail sera nécessaire, uniquement pour livrer les contenus numériques que vous achetez. Il ne conserve que votre adresse e-mail et vos achats, et n'a rien à voir avec vos notes.",
+      },
+      {
+        title: 'Vos notes vivent uniquement dans votre dossier',
+        body: 'Chaque note est un fichier Markdown en texte brut, dans un dossier local que vous choisissez. Sauvegarde, synchronisation et suppression vous appartiennent entièrement — JotLuck ne conserve aucune copie.',
+      },
+      {
+        title: 'Nous ne suivons pas votre visite',
+        body: "Ce site est statique : pas de cookies, pas de scripts d'analyse ni de suivi, et toutes les polices et ressources sont hébergées localement. Le visiter, c'est lire quelques fichiers — rien de plus.",
+      },
+      {
+        title: 'Téléchargements et GitHub',
+        body: 'Les installateurs sont publiés via GitHub. Vos visites sur GitHub relèvent de la politique de confidentialité de GitHub ; JotLuck ne reçoit aucune de vos informations par ce canal.',
+      },
+    ],
+    contactTitle: 'Une question ? Écrivez-nous',
+    contactBody:
+      'Toute question ou préoccupation concernant la vie privée — écrivez-nous directement et nous répondrons sérieusement.',
   },
   footer: {
     studio: 'LeankomStudio',

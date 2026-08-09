@@ -13,14 +13,17 @@ export const en: SiteContent = {
       download: 'Download · JotLuck — Local-first Markdown notes for Windows',
       themes: 'Themes · JotLuck — Local-first Markdown notes',
       studio: 'Studio · JotLuck — Local-first Markdown notes',
+      privacy: 'Privacy · JotLuck — Local-first Markdown notes',
     },
     pageDescriptions: {
       download:
-        'Download JotLuck for Windows x64, a lightweight local-first Markdown note tool. Notes stay plain-text files; folders stay notebooks. Public build: Aug 15, 2026.',
+        'Download JotLuck for Windows x64: preview live now, signed release Aug 15, 2026. A lightweight local-first Markdown note tool — every note a plain-text file.',
       themes:
-        'JotLuck workspace themes — Paper, Halo Canvas and Lumen Field. A theme is more than a new coat of paint: it reshapes the workspace itself.',
+        'JotLuck workspace themes — Paper, Halo Canvas and Lumen Field. Each theme reshapes the workspace itself, from paper and ink to window layout.',
       studio:
         'LeankomStudio helps ideas cross genres and find the shape that fits them best. JotLuck, a local-first Markdown note tool, is the first page we unfold outward.',
+      privacy:
+        'JotLuck privacy: notes stay plain-text files in your folder; fully offline — no account for writing, no telemetry, no cookies or analytics.',
     },
   },
   localeName: 'English',
@@ -34,7 +37,7 @@ export const en: SiteContent = {
     emphasis: 'Begin with a file.',
     subline:
       'Leave the software ecosystem at the edge of the page. Everything you write remains free to travel.',
-    action: 'Track the release',
+    action: 'Download now',
     dateLine: 'Public Windows x64 build expected August 15, 2026',
     dateQuip: 'A conservative estimate; it may well land earlier.',
   },
@@ -73,23 +76,29 @@ export const en: SiteContent = {
   },
   download: {
     eyebrow: 'Download',
-    title: 'The date is set.',
-    lead: 'The first Windows x64 build arrives on August 15, 2026. macOS and Linux follow. Plain text never picks platforms, and your notes stay local files on every system.',
+    title: 'Preview is live.',
+    lead: 'The Windows x64 preview is ready to download now; the signed release lands August 15, 2026. macOS and Linux follow. Plain text never picks platforms, and your notes stay local files on every system.',
     statusLabel: 'First platform',
     statusValue: 'Windows x64',
     statusDate: '2026-08-15',
-    statusQuip: 'A conservative estimate; it may well land earlier.',
+    statusQuip: 'A conservative estimate; it may well land earlier. The preview did.',
     platformTitle: 'Platforms',
     platforms: [
-      { name: 'Windows x64', state: 'First public build, 2026-08-15' },
+      { name: 'Windows x64', state: 'Preview live · signed release 2026-08-15' },
       { name: 'macOS', state: 'Follows' },
       { name: 'Linux', state: 'Follows' },
     ],
-    honestyTitle: 'On August 15, it ships.',
+    honestyTitle: 'Preview first. Signed release on August 15.',
     honestyBody:
-      'On release day, this page and GitHub Releases go live together with the finished installer — every copy you download is the verifiable, complete build.',
-    countdownLabel: 'First public release in',
+      'The preview installer is already on GitHub Releases — downloadable, verifiable, reversible. The signed build lands on this page and Releases on August 15, every copy still verifiable and complete.',
+    countdownLabel: 'Signed release in',
     countdownUnit: 'days',
+    previewTitle: 'v0.11.0 Preview',
+    downloadBtn: 'Download Preview (Windows x64)',
+    releaseBtn: 'Release notes & checksum',
+    signNote:
+      'This preview is unsigned: Windows SmartScreen may warn. Verify the SHA-256 against the Release page before installing.',
+    signPolicyLink: 'Code signing policy',
     notesTitle: 'Worth knowing',
     notes: [
       'Notes live in the folder you choose — no account required',
@@ -100,7 +109,7 @@ export const en: SiteContent = {
   themes: {
     eyebrow: 'Themes',
     title: 'The space you create in deserves to be shaped, too.',
-    lead: 'A theme is more than a new coat of paint: it reshapes the workspace itself.',
+    lead: 'A theme reshapes the workspace itself, from paper and ink to window layout.',
     items: [
       {
         id: 'paper',
@@ -120,7 +129,7 @@ export const en: SiteContent = {
     ],
     blueprintTitle: 'The theme system',
     blueprintBody:
-      'Theme API v2 opens the whole workspace through slots, host APIs and .mltheme packs: deep customization, for people with singular ideas and an irrepressible urge to express.',
+      'The theme system opens the whole workspace to deep customization — layout, panels and the paper-and-ink feel can all be reshaped, for people with singular ideas and an irrepressible urge to express.',
     marketplaceNote: 'Themes ship built into the app, ready out of the box.',
   },
   themePreview: {
@@ -180,7 +189,32 @@ export const en: SiteContent = {
     lead: 'JotLuck is the first page we unfold outward.',
     quote: 'Some ideas become tools. Others grow into whole worlds.',
     body: 'If you have an idea you cannot put down, write to us.',
-    action: 'carrie@leankom.com',
+    action: 'carriechan@leankom.com',
+  },
+  privacy: {
+    eyebrow: 'Privacy',
+    title: 'Your work was meant to be yours.',
+    lead: 'JotLuck is local-first and offline: no account needed for writing, no telemetry, and no server holding user data that could ever leak.',
+    sections: [
+      {
+        title: "We don't touch your notes",
+        body: 'The JotLuck desktop app runs fully offline: no telemetry, no note content uploaded, no usage statistics. The way we handle your notes is by never touching them in the first place. When the theme store launches, it will need an email account solely to deliver the digital assets you buy. It holds only your email address and purchase records, and has nothing to do with your notes.',
+      },
+      {
+        title: 'Your notes live only in your folder',
+        body: 'Every note is a plain-text Markdown file in a local folder you choose. Backup, sync and deletion are entirely yours to decide — JotLuck holds no copies.',
+      },
+      {
+        title: "We don't track your visit",
+        body: 'This site is static: no cookies, no analytics or tracking scripts, and all fonts and assets are self-hosted. Visiting it means reading a few files — nothing more.',
+      },
+      {
+        title: 'Downloads and GitHub',
+        body: "Installers are published via GitHub. Your visits on GitHub are covered by GitHub's own privacy policy; JotLuck receives none of your information from that channel.",
+      },
+    ],
+    contactTitle: 'Questions? Write to us',
+    contactBody: 'Any privacy question or concern — email us directly and we will reply in person.',
   },
   footer: {
     studio: 'LeankomStudio',

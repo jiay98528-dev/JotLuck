@@ -13,14 +13,17 @@ export const ja: SiteContent = {
       download: 'ダウンロード · JotLuck — ローカルファーストの Markdown ノート（Windows）',
       themes: 'テーマ · JotLuck — ローカルファーストの Markdown ノート',
       studio: 'スタジオ · JotLuck — ローカルファーストの Markdown ノート',
+      privacy: 'プライバシー · JotLuck — ローカルファーストの Markdown ノート',
     },
     pageDescriptions: {
       download:
-        'JotLuck Windows x64 版をダウンロード。軽量でローカルファースト、オフラインでも使える Markdown ノートツールです。ノートはプレーンテキストファイル、フォルダーがそのままノートブック。最初の公開版は 2026 年 8 月 15 日です。',
+        'JotLuck Windows x64 版をダウンロード：Preview 版は公開中、正式署名版は 2026 年 8 月 15 日リリース。軽量でローカルファースト、オフラインでも使える Markdown ノートツールで、すべてのノートはプレーンテキストファイルです。',
       themes:
-        'JotLuck のワークスペーステーマ——Paper・Halo Canvas・Lumen Field の 3 種類。テーマは単なる塗り替えではなく、ワークスペースそのものを再形成します。',
+        'JotLuck のワークスペーステーマ——Paper・Halo Canvas・Lumen Field の 3 種類。テーマはワークスペースそのものを再形成します——紙と墨の色から、ウィンドウのレイアウトまで。',
       studio:
         'LeankomStudio は鸰湖科技のプロダクトスタジオです。アイデアがカテゴリを越え、いちばん合う形に出会うように——JotLuck は私たちが外に向かって開いた最初のページです。',
+      privacy:
+        'JotLuck のプライバシーについて：ノートはプレーンテキストファイルとしてあなたのフォルダーに保存されます。アプリは完全にオフラインで動作——書くのにアカウントは不要で、テレメトリもありません。このサイトは静的サイトで、Cookie も分析トラッキングも使いません。',
     },
   },
   localeName: '日本語',
@@ -33,7 +36,7 @@ export const ja: SiteContent = {
     lines: ['書くことは、', 'もともと', '軽やかなもの。'],
     emphasis: 'まずは、ひとつのファイルから。',
     subline: 'ソフトウェアの生態系は、紙面の外に置いておく。書いたものはすべて、自由に旅立てる。',
-    action: '公開状況を見る',
+    action: '今すぐダウンロード',
     dateLine: 'Windows x64 公開版は 2026 年 8 月 15 日公開予定',
     dateQuip: '控えめな見積もりです——もしかすると、もっと早く届くかもしれません。',
   },
@@ -72,23 +75,30 @@ export const ja: SiteContent = {
   },
   download: {
     eyebrow: 'ダウンロード',
-    title: '公開日は決まりました。',
-    lead: '最初の Windows x64 版は 2026 年 8 月 15 日に公開します。macOS と Linux も続きます——プレーンテキストはプラットフォームを選びません。どのシステムでも、ノートはローカルファイルのままです。',
+    title: 'Preview は公開中です。',
+    lead: 'Windows x64 プレビュー版は今すぐダウンロードできます。正式署名版は 2026 年 8 月 15 日に公開します。macOS と Linux も続きます——プレーンテキストはプラットフォームを選びません。どのシステムでも、ノートはローカルファイルのままです。',
     statusLabel: '最初のプラットフォーム',
     statusValue: 'Windows x64',
     statusDate: '2026-08-15',
-    statusQuip: '控えめな見積もりです——もしかすると、もっと早く届くかもしれません。',
+    statusQuip:
+      '控えめな見積もりです——もしかすると、もっと早く届くかもしれません。Preview がそうでした。',
     platformTitle: 'プラットフォーム',
     platforms: [
-      { name: 'Windows x64', state: '2026 年 8 月 15 日 最初の公開版' },
+      { name: 'Windows x64', state: 'Preview 公開中 · 正式版 2026-08-15' },
       { name: 'macOS', state: '続いて公開予定' },
       { name: 'Linux', state: '続いて公開予定' },
     ],
-    honestyTitle: '8月15日、公開します。',
+    honestyTitle: 'Preview 先行、正式署名版は 8 月 15 日。',
     honestyBody:
-      'リリース当日、このページと GitHub Releases が完成版インストーラーと同時に公開されます。ダウンロードするどのコピーも、検証済みの完全なビルドです。',
-    countdownLabel: '初回公開まで',
+      'Preview インストーラーはすでに GitHub Releases に公開されています——ダウンロード可能、検証可能、巻き戻し可能。正式署名版は 8 月 15 日にこのページと Releases に同時公開され、どのコピーも引き続き検証可能な完全なビルドです。',
+    countdownLabel: '正式署名版まで',
     countdownUnit: '日',
+    previewTitle: 'v0.11.0 Preview',
+    downloadBtn: 'Preview をダウンロード（Windows x64）',
+    releaseBtn: 'Release ノートとチェックサム',
+    signNote:
+      'この Preview は未署名です：Windows SmartScreen が警告を表示する場合があります。インストール前に SHA-256 が Release ページと一致することを確認してください。',
+    signPolicyLink: 'コード署名ポリシー',
     notesTitle: '知っておきたいこと',
     notes: [
       'ノートは自分で選んだフォルダに保存されます——アカウントは不要です',
@@ -99,7 +109,7 @@ export const ja: SiteContent = {
   themes: {
     eyebrow: 'テーマ',
     title: '創作の空間もまた、形を整える価値がある。',
-    lead: 'テーマは単なる塗り替えではありません——ワークスペースそのものを再形成します。',
+    lead: 'テーマはワークスペースそのものを再形成します——紙と墨の色から、ウィンドウのレイアウトまで。',
     items: [
       {
         id: 'paper',
@@ -119,7 +129,7 @@ export const ja: SiteContent = {
     ],
     blueprintTitle: 'テーマシステム',
     blueprintBody:
-      'Theme API v2 は、slot・ホスト API・.mltheme パックを通じてワークスペース全体を開放します——独自のアイデアと、表現したいという抑えきれない衝動を持つ人のための、深いカスタマイズです。',
+      'テーマシステムはワークスペース全体を深いカスタマイズへ開放します——レイアウトもパネルも、紙と墨の質感まで再形成できます。独自のアイデアと、表現したいという抑えきれない衝動を持つ人のために。',
     marketplaceNote: 'テーマはアプリに同梱され、開いたその瞬間から使えます。',
   },
   themePreview: {
@@ -185,7 +195,33 @@ export const ja: SiteContent = {
     lead: 'JotLuck は、私たちが外に向かって開いた最初のページです。',
     quote: 'あるアイデアは道具になる。別のものは、ひとつの世界へと育つ。',
     body: '手放せないアイデアがあるなら、私たちに手紙を書いてください。',
-    action: 'carrie@leankom.com',
+    action: 'carriechan@leankom.com',
+  },
+  privacy: {
+    eyebrow: 'プライバシー',
+    title: 'あなたの作品は、もともとあなたのもの。',
+    lead: 'JotLuck はローカルファーストのオフラインツールです：書くのにアカウントは不要で、テレメトリもなく、ユーザーデータを抱えて漏えいの恐れのあるサーバーもありません。',
+    sections: [
+      {
+        title: '私たちはあなたのノートに触れません',
+        body: 'JotLuck デスクトップアプリは完全にオフラインで動作します：テレメトリもなく、ノートの内容をアップロードせず、利用行動も記録しません。私たちがあなたのノートデータを扱う方法は、そもそも触れることがないことです。将来テーマストアが開設された際には、購入したデジタルアセットを届けるためだけに、メールアドレスによるアカウントが必要になります。そこに保存されるのはメールアドレスと購入記録だけで、あなたのノートとは一切関係がありません。',
+      },
+      {
+        title: 'ノートはあなたのフォルダーにだけあります',
+        body: 'すべてのノートはプレーンテキストの Markdown ファイルとして、あなたが選んだローカルフォルダーに保存されます。バックアップも同期も削除も、すべてあなたの判断で——JotLuck はコピーを一切保持しません。',
+      },
+      {
+        title: '私たちはあなたの訪問を追跡しません',
+        body: '本サイトは静的サイトです：Cookie を使わず、分析や追跡スクリプトも読み込まず、フォントや素材もすべてセルフホストしています。訪問はファイルをいくつか読むだけ——それ以上のことは何もありません。',
+      },
+      {
+        title: 'ダウンロードと GitHub',
+        body: 'インストーラーは GitHub を通じて公開されます。GitHub サイト内でのあなたの閲覧は GitHub のプライバシーポリシーの対象です。JotLuck はこの経路からあなたの情報を得ることはありません。',
+      },
+    ],
+    contactTitle: '質問があれば、手紙をください',
+    contactBody:
+      'プライバシーについて疑問や懸念があれば、直接メールでお知らせください。真摯にお返事します。',
   },
   footer: {
     studio: 'LeankomStudio',
