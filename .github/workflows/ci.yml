@@ -110,7 +110,8 @@ jobs:
   e2e:
     name: E2E Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # webkit 实测需要 16 分钟以上（chromium 11.1 / firefox 12.1 分钟通过），15 分钟连续两次撞线。
+    timeout-minutes: 25
     needs: [lint-and-typecheck, test]
 
     strategy:
@@ -294,7 +295,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tauri-webview2-smoke
-          path: scripts/corpus/_web-cache/autocomplete-candidates/tauri-webview-smoke.json
+          # NDJSON 轨迹含 tauri-driver 捕获的 stdout/stderr，是 smoke 失败的主要诊断面。
+          path: |
+            scripts/corpus/_web-cache/autocomplete-candidates/tauri-webview-smoke.json
+            scripts/corpus/_web-cache/autocomplete-candidates/tauri-webview-smoke.webdriver.ndjson
           if-no-files-found: error
 
       - name: Upload immutable Windows candidate
