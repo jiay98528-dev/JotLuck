@@ -536,7 +536,9 @@ test.describe('即时模式 (Live Preview)', () => {
   // Test 11: IME 回归 — 标题换行后首字符与中文标点不被吞
   // ==========================================================
   test('11-标题换行后中文 IME 输入保持在新行且标点不被吞', async ({ page }) => {
-    await typeInEditor(page, '# 中文标题');
+    // 标题文本为铺设而非考核对象：insertText 单次注入，规避 Linux WebKit CI
+    // 高负载下逐键投递与 Live Preview 行转换竞态导致的字符乱序（实录 '文标题# 中'）。
+    await typeInEditor(page, '# 中文标题', { insertText: true });
 
     const editor = page.locator('.cm-content');
     await editor.click();

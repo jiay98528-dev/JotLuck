@@ -143,7 +143,9 @@ test.describe('搜索系统', () => {
 
     // Enter selects the first result (selected by default) and closes palette
     await page.keyboard.press('Enter');
-    await expect(page.locator('.palette')).not.toBeVisible({ timeout: 2000 });
+    // 慢速 CI WebKit 实录：Enter 后搜索导航 + 编辑器重建长时间占用主线程，
+    // 面板关闭动画的 DOM 移除会被推迟到 2s 之外（失败快照显示面板最终正常关闭）。
+    await expect(page.locator('.palette')).not.toBeVisible({ timeout: 10000 });
   });
 
   // ============================================================
