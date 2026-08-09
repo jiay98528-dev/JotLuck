@@ -2,9 +2,9 @@
 
 ## Supported Versions
 
-JotLuck is not currently distributed as a public installer. The unsigned
-`v0.11.0` remains an unpublished signing candidate; it is not a stable release or
-an RC support line. Security reports for the source tree are handled on a
+JotLuck is distributed as a public preview installer on GitHub Releases. The
+unsigned `v0.11.0-preview` is not a stable release or an RC support line.
+Security reports for the source tree and the preview installer are handled on a
 best-effort basis.
 
 ## Reporting A Vulnerability

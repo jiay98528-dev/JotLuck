@@ -1,18 +1,19 @@
 # Known Limitations
 
-This document describes limitations for JotLuck `v0.11.0`. These are not
+This document describes limitations for JotLuck `v0.11.0-preview`. These are not
 marketing claims; they are the remaining release constraints and expected
 behavior boundaries.
 
-## Signing Candidate Status
+## Preview Status
 
-- `v0.11.0` is an unpublished, unsigned signing candidate. It is not a formal
-  public or stable release, and no official public installer is currently available.
-- This candidate does not claim complete installed-app release evidence, final
+- `v0.11.0-preview` is a public, unsigned preview. It is not a stable release;
+  the official installer is available only on GitHub Releases and may trigger a
+  Windows SmartScreen warning.
+- This preview does not claim complete installed-app release evidence, final
   Rust audit evidence, signing, notarization, or host-specific validation for
   every supported platform.
-- Any future public preview, RC, or stable release must bind its own exact
-  installer, verification evidence, and release notes.
+- Any future RC or stable release must bind its own exact installer,
+  verification evidence, and release notes.
 
 ## Environment-Dependent Gates
 

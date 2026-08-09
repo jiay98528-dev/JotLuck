@@ -1,12 +1,12 @@
-# JotLuck v0.11.0 — Signing Candidate Notes
+# JotLuck v0.11.0-preview — Preview Release Notes
 
-> Date: 2026-08-05
-> This document describes the current unpublished Windows x64 signing candidate.
+> Date: 2026-08-08
+> This document describes the current public Windows x64 preview.
 > It is unsigned and is not a stable release.
 
-## Important — This Is Not Yet a Public Release
+## Important — Unsigned Preview
 
-JotLuck `v0.11.0` is an **unsigned signing candidate**. It must not be published or redistributed as a release. The exact Windows NSIS installer must first pass installed-app evidence capture, be submitted through the approved signing service, and have its Authenticode signature and post-sign SHA-256 verified. See [`CODE_SIGNING.md`](./CODE_SIGNING.md).
+JotLuck `v0.11.0-preview` is a **public, unsigned preview**. The Windows NSIS installer is available only on GitHub Releases; verify its SHA-256 before installing. The signed release still follows the pipeline in [`CODE_SIGNING.md`](./CODE_SIGNING.md): installed-app evidence capture, submission through the approved signing service, and Authenticode signature and post-sign SHA-256 verification.
 
 ## Highlights
 
@@ -36,7 +36,7 @@ JotLuck `v0.11.0` is an **unsigned signing candidate**. It must not be published
 
 See [KNOWN_LIMITATIONS.md](./KNOWN_LIMITATIONS.md) for the complete list. Highlights:
 
-- **Unsigned installer** — the signing candidate is not a public download and must not be redistributed.
+- **Unsigned installer** — the preview is distributed only via GitHub Releases and may trigger Windows SmartScreen; verify the SHA-256 before installing.
 - **macOS and Linux packages** have not completed host-specific packaging, signing, or release validation.
 - **Local `.mltheme` / `.zip` imports** are a developer experimental feature. `trusted-code` themes may execute theme author code and take over exposed UX slots. Import only themes from trusted sources.
 - **Cargo audit** reports allowed unsoundness warnings for `lru 0.12.5` and `memmap2 0.9.10` (transitive via tantivy 0.22.1).
