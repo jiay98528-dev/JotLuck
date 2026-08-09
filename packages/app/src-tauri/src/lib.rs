@@ -154,10 +154,24 @@ fn cloned_window_config(
 
 fn build_window(app: &tauri::AppHandle, label: &str) -> Result<WebviewWindow, String> {
     let config = cloned_window_config(app, label.to_string())?;
-    WebviewWindowBuilder::from_config(app, &config)
-        .map_err(|error| error.to_string())?
-        .build()
-        .map_err(|error| error.to_string())
+    let builder = WebviewWindowBuilder::from_config(app, &config)
+        .map_err(|error| error.to_string())?;
+    // CDP 环境变量重注入（Windows）：提权进程（CI runner 全程高完整性）中
+    // WebView2Loader 会丢弃 WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS 环境变量——
+    // 实测 runner 上浏览器进程命令行缺失 --remote-debugging-port、UDF 变量却生效，
+    // 而 API 通道（CoreWebView2EnvironmentOptions）不受此限。msedgedriver 驱动
+    // WebView2 时正是通过该环境变量下发调试端口，故在此显式转入 API 通道。
+    // 仅变量存在时启用；默认值与 wry 0.55 内置参数保持一致（tauri 文档警告：
+    // 调用 additional_browser_args 会整体替换 wry 默认参数，需自行补齐）。
+    #[cfg(windows)]
+    let builder = match std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS") {
+        Ok(extra) if !extra.trim().is_empty() => builder.additional_browser_args(&format!(
+            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required {}",
+            extra.trim()
+        )),
+        _ => builder,
+    };
+    builder.build().map_err(|error| error.to_string())
 }
 
 fn focus_window(window: &WebviewWindow) {
