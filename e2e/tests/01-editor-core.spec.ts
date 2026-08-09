@@ -156,7 +156,7 @@ test.describe('编辑器核心', () => {
   });
 
   test('分栏模式显示完整标准预览且左侧保持纯源码', async ({ page }) => {
-    await typeInEditor(page, '# 第一行\n第二行\n第三行');
+    await typeInEditor(page, '# 第一行\n第二行\n第三行', { insertText: true });
     await page.locator('.view-mode-toggle').click();
 
     const sourcePane = page.locator('.split-left');
@@ -195,7 +195,7 @@ test.describe('编辑器核心', () => {
   test('should show format bubble on text selection', async ({ page }) => {
     // V1: 验证格式气泡在选中文本后出现
     // Step 1: 输入测试文本
-    await typeInEditor(page, '这是测试文本用于验证格式气泡功能');
+    await typeInEditor(page, '这是测试文本用于验证格式气泡功能', { insertText: true });
     await waitForAutoSave(page);
 
     // Step 2: 在编辑器中选中文本
@@ -263,14 +263,14 @@ test.describe('编辑器核心', () => {
   test('should handle undo/redo (Ctrl+Z / Ctrl+Shift+Z)', async ({ page }) => {
     // V1: 验证撤销/重做正确性
     // Step 1: 输入第一段文本
-    await typeInEditor(page, '第一行内容');
+    await typeInEditor(page, '第一行内容', { insertText: true });
     await waitForAutoSave(page);
 
     const contentAfterFirstType = await getEditorContent(page);
     expect(contentAfterFirstType).toContain('第一行内容');
 
     // Step 2: 追加第二段文本
-    await appendInEditor(page, '\n第二行内容');
+    await appendInEditor(page, '\n第二行内容', { insertText: true });
     await waitForAutoSave(page);
 
     const contentAfterSecondType = await getEditorContent(page);

@@ -300,8 +300,8 @@ jobs:
 
       - name: Probe WebView2 CDP directly (diagnostic)
         # 诊断步骤：不经 tauri-driver/msedgedriver，直接拉起构建产物并检查 CDP。
-        # 用于区分三类 smoke 失败根因：应用崩溃 / WebView2 无法建 CDP / 驱动链不匹配。
-        # 永不置红（exit 0），结论打在日志里。
+        # 区分根因：应用崩溃 / WebView2 建不了 CDP / 驱动链不匹配 / GPU 进程崩溃。
+        # 日志一律 Write-Host（不污染函数返回值），永不置红（exit 0）。
         shell: pwsh
         run: |
           $exe = "packages/app/src-tauri/target/release/jotluck.exe"
@@ -313,29 +313,40 @@ jobs:
             $alive = $false
             for ($i = 0; $i -lt 30; $i++) {
               Start-Sleep -Seconds 2
-              if ($proc.HasExited) { "PROBE[$label]: app exited early, code=$($proc.ExitCode)"; break }
+              if ($proc.HasExited) { Write-Host "PROBE[$label]: app exited early, code=$($proc.ExitCode)"; break }
               try {
                 $v = Invoke-RestMethod -Uri "http://127.0.0.1:9222/json/version" -TimeoutSec 2
-                "PROBE[$label]: CDP OK -> $($v.Browser) | $($v.'User-Agent' -replace '\s+',' ')"
+                Write-Host "PROBE[$label]: CDP OK -> $($v.Browser)"
                 $alive = $true; break
               } catch {}
             }
             if (-not $alive -and -not $proc.HasExited) {
-              "PROBE[$label]: app alive 60s but no CDP on 9222"
-              $portFile = Join-Path $udf "DevToolsActivePort"
-              if (Test-Path $portFile) { "PROBE[$label]: DevToolsActivePort EXISTS: $(Get-Content $portFile -Raw)" }
-              else { "PROBE[$label]: DevToolsActivePort missing under $udf" }
-              Get-ChildItem $udf -ErrorAction SilentlyContinue | Select-Object -First 12 -ExpandProperty Name | ForEach-Object { "PROBE[$label]: udf entry: $_" }
+              Write-Host "PROBE[$label]: app alive 60s but no CDP on 9222"
+              # WebView2 的 DevToolsActivePort 在 <udf>\EBWebView\ 下，不在 udf 根
+              $portFile = Join-Path $udf "EBWebView\DevToolsActivePort"
+              if (Test-Path $portFile) { Write-Host "PROBE[$label]: DevToolsActivePort EXISTS: $(Get-Content $portFile -Raw)" }
+              else { Write-Host "PROBE[$label]: DevToolsActivePort missing at $portFile" }
+              # 关键判别：WebView2 浏览器进程是否存在、命令行是否带着 --remote-debugging-port
+              $wv = Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" -ErrorAction SilentlyContinue
+              if ($wv) {
+                $wv | Select-Object -First 6 | ForEach-Object {
+                  $hasPort = $_.CommandLine -match 'remote-debugging-port'
+                  Write-Host "PROBE[$label]: webview2 pid=$($_.ProcessId) port-arg=$hasPort cmd=$($_.CommandLine.Substring(0, [Math]::Min(220, $_.CommandLine.Length)))"
+                }
+              } else {
+                Write-Host "PROBE[$label]: no msedgewebview2.exe process at all"
+              }
             }
             if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
-            return $alive
+            Get-Process msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            return [bool]$alive
           }
           $plain = Test-Cdp "" "plain"
           if (-not $plain) {
             $gpu = Test-Cdp "--disable-gpu" "disable-gpu"
-            "PROBE: summary plain=$plain disable-gpu=$gpu"
+            Write-Host "PROBE: summary plain=$plain disable-gpu=$gpu"
           } else {
-            "PROBE: summary plain=$plain (disable-gpu not needed)"
+            Write-Host "PROBE: summary plain=$plain (disable-gpu not needed)"
           }
           exit 0
 
