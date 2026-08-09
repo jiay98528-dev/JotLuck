@@ -206,6 +206,9 @@ mod tests {
     fn test_resolve_notebook_root_marker() {
         let root = env::temp_dir().join("JotLuck-test-root-marker");
         let _ = std::fs::create_dir_all(root.join("notes"));
+        // CI runner 的 temp_dir 可能是 8.3 短名（RUNNER~1），而 resolve_safe_path 内部
+        // canonicalize 出长名；断言前先规范化期望值，两端走同一 normalize 语义
+        let root = without_windows_verbatim_prefix(root.canonicalize().unwrap());
         let resolved = resolve_safe_path(&root, "/notes/test.md").unwrap();
         assert_eq!(resolved, root.join("notes/test.md"));
         let resolved_root = resolve_safe_path(&root, "/").unwrap();
