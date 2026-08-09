@@ -143,6 +143,11 @@ onMounted(async () => {
           class="stack-front"
         />
       </div>
+      <!-- 移动端常驻重播印记（裁决 31）：纸下缘右对齐功能印，↻ 套准橙；
+           仅 ≤720px 且 html.js 显示（非 scoped 门控），pointer-events 穿透，单一交互语义 -->
+      <p class="replay-hint" aria-hidden="true">
+        <span class="replay-glyph" aria-hidden="true">↻</span> {{ preview.ui.replay }}
+      </p>
     </div>
   </section>
 </template>
@@ -170,7 +175,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--ink-50);
+  color: var(--ink-70);
 }
 .eyebrow-tick {
   width: 14px;
@@ -334,6 +339,19 @@ html[lang='ja'] .emphasis {
     transform: translateY(-4px);
   }
 }
+/* ---------- 移动端常驻重播印记（裁决 31）：默认隐藏，显示由底部非 scoped 块 html.js 门控 ---------- */
+.replay-hint {
+  display: none;
+  margin: 16px 4px 0;
+  text-align: right;
+  font-size: 0.6875rem;
+  color: var(--ink-70);
+  pointer-events: none;
+}
+.replay-glyph {
+  color: var(--orange);
+}
+
 @media (max-width: 720px) {
   .display-line {
     font-size: clamp(2.25rem, calc(var(--display-size, 6vw) * 2), 4rem);
@@ -447,6 +465,12 @@ html.fonts-ready .press-stage .stage-copy > .subline {
 }
 html.fonts-ready .press-stage .stage-copy > .action-row {
   animation-delay: 500ms;
+}
+/* 移动端重播印记显示门控：≤720px 且 JS 可用时显示（无 JS 演示为静态，提示不误导） */
+@media (max-width: 720px) {
+  html.js .replay-hint {
+    display: block;
+  }
 }
 /* reduced-motion：全部动画静态化，直接呈终态（截图链路即 reducedMotion 环境） */
 @media (prefers-reduced-motion: reduce) {

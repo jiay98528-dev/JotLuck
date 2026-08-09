@@ -39,6 +39,7 @@ const { locale, content } = useLocale();
   display: flex;
   align-items: center;
   gap: 10px;
+  min-height: 44px;
   text-decoration: none;
   font-weight: 700;
 }
@@ -49,8 +50,10 @@ const { locale, content } = useLocale();
 }
 .site-nav-link {
   min-height: 44px;
+  min-width: 44px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   text-decoration: none;
   font-size: 0.75rem;
   font-weight: 700;
@@ -83,9 +86,6 @@ const { locale, content } = useLocale();
     margin-left: 0;
     gap: 18px;
     overflow-x: auto;
-  }
-  .site-nav-link {
-    min-height: 40px;
   }
 }
 </style>
