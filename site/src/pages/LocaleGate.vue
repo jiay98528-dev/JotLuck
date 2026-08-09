@@ -1,22 +1,54 @@
 <script setup lang="ts">
 import { onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useHead } from '@unhead/vue';
 import { LOCALES, LOCALE_TAGS, getContent, type Locale } from '../content';
 import { SITE_URL, SOCIAL_CARD, SOCIAL_CARD_ALT } from '../release';
 import { JSON_LD } from '../composables/usePageHead';
 
 /**
- * 语言门页（`/`）：客户端按浏览器语言重定向到五语之一；
+ * 语言门页（`/`）：始终按浏览器语言自动分配到五语之一（英文兜底）；
  * 无 JS / SSG 静态态呈现五语入口（真实链接，SEO 可达）。
  * SEO：canonical 指自身；hreflang 指向五语首页，x-default 指自身（语言选择器模式）。
  * 裁决 32：补 WebSite+Organization JSON-LD；description 改为门页专属（与 /en/ 首页差异化）。
+ * 裁决 36：取消「二次访问稳定停留」（反转裁决 23②）——head 内联脚本首绘前分发，
+ *          仅 pathname === '/' 触发（404.html 副本不受影响），query/hash 透传保留 UTM。
+ *          catch-all 未命中路由复用本组件展示五语入口，按 route.name !== 'gate' 跳过分发，
+ *          原 URL 停留（真实 404 语义，避免软 404 改址）。
  */
 const router = useRouter();
+const route = useRoute();
 
 /** 门页专属 description：说明产品类别 + 语言选择器职能 */
 const GATE_DESCRIPTION =
   'JotLuck — a lightweight, local-first Markdown note tool. Choose your language: 中文 / 日本語 / 한국어 / English / Français.';
+
+/**
+ * 首绘前语言分发（内联同步脚本，SSG 直出 <head>，真实浏览器不再看到门页闪烁）。
+ * 仅作用于门页本身：postbuild 的 404.html 副本 URL 是原始不存在路径，
+ * pathname !== '/' 不会触发，404 不会被弹成软跳转；location.replace 不留历史记录。
+ */
+const GATE_DISPATCH_SCRIPT = `(function () {
+  try {
+    if (location.pathname !== '/') return;
+    var ls =
+      navigator.languages && navigator.languages.length
+        ? navigator.languages
+        : [navigator.language || ''];
+    var l = 'en';
+    for (var i = 0; i < ls.length; i += 1) {
+      var t = String(ls[i]).toLowerCase();
+      if (t.indexOf('zh') === 0) { l = 'zh'; break; }
+      if (t.indexOf('ja') === 0) { l = 'ja'; break; }
+      if (t.indexOf('ko') === 0) { l = 'ko'; break; }
+      if (t.indexOf('fr') === 0) { l = 'fr'; break; }
+      if (t.indexOf('en') === 0) { l = 'en'; break; }
+    }
+    location.replace('/' + l + '/' + location.search + location.hash);
+  } catch (e) {
+    /* 分发失败时停留在门页，五语入口仍可用 */
+  }
+})();`;
 
 useHead({
   htmlAttrs: { lang: 'en' },
@@ -37,7 +69,10 @@ useHead({
     { name: 'twitter:description', content: GATE_DESCRIPTION },
     { name: 'twitter:image', content: `${SITE_URL}${SOCIAL_CARD}` },
   ],
-  script: [{ type: 'application/ld+json', innerHTML: JSON_LD }],
+  script: [
+    { innerHTML: GATE_DISPATCH_SCRIPT },
+    { type: 'application/ld+json', innerHTML: JSON_LD },
+  ],
   link: [
     { rel: 'canonical', href: `${SITE_URL}/` },
     ...LOCALES.map((l) => ({
@@ -63,14 +98,11 @@ function detect(): Locale {
 }
 
 onMounted(() => {
-  // 自动跳转只做一次性：sessionStorage 记忆后访客可稳定停留在语言门页
-  //（Google 多语言指南：避免基于推测语言的强制重定向妨碍查看其他语言版本）
-  try {
-    if (sessionStorage.getItem('jl-gate-redirected')) return;
-    sessionStorage.setItem('jl-gate-redirected', '1');
-  } catch {
-    /* 隐私模式下 storage 不可写：照常跳转一次 */
-  }
+  // SPA 回退：内联分发被 CSP/扩展阻断、或客户端路由直达门页时，仍始终分配（裁决 36）。
+  // 换言通道由页眉语言选择器承担，不再提供门页稳定停留。
+  // 仅限真门页：catch-all 未命中路由复用本组件时必须保留原 URL 停留（真实 404 语义），
+  // 否则不存在路径会被弹成软 404 跳转。
+  if (route.name !== 'gate') return;
   router.replace(`/${detect()}/`);
 });
 </script>

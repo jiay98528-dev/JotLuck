@@ -33,5 +33,7 @@ export const routes: RouteRecordRaw[] = [
       meta: { locale, page: p.name as SitePage },
     })),
   ),
-  { path: '/:pathMatch(.*)*', redirect: '/' },
+  // 未知路径：就地复用门页渲染五语入口，保留原 URL（真实 404 语义，避免软 404 改址）。
+  // 是否自动分发由 LocaleGate 按 route.name 判定：仅真门页 'gate' 分发。
+  { path: '/:pathMatch(.*)*', name: 'not-found', component: LocaleGate },
 ];
