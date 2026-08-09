@@ -103,3 +103,6 @@ spec/progress.md
 
 # 本地调研素材（不入库）
 _research_assets/
+
+# WebView2 驱动（msedgedriver-tool 本地下载物，CI 亦生成于工作区根）
+msedgedriver.exe

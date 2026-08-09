@@ -314,16 +314,18 @@ async function waitForNotebookGate() {
 }
 
 async function openUnicodeNoteThroughGui(fixture) {
+  // msedgedriver 的 CDP Input 注入在 WebView2 150/151 上会挂起或断开会话（本地实测：
+  // Runtime.evaluate 正常、Input.dispatchMouseEvent 必挂）。smoke 的目的是验证打包运行时
+  // 行为而非 OS 输入管线（真实输入由 Playwright E2E 覆盖），故点击改走 DOM 合成事件。
   const menu = await browser.$('.topbar-btn--menu');
   await menu.waitForDisplayed({ timeout: 20_000 });
-  await menu.click();
+  await syntheticDomClick('.topbar-btn--menu');
   const drawer = await browser.$('.file-drawer');
   await drawer.waitForDisplayed({ timeout: 20_000 });
-  const item = await browser.$(
-    `//*[contains(concat(' ', normalize-space(@class), ' '), ' tree-item ') and contains(., "${fixture.note.fileName}")]`,
-  );
+  const itemSelector = `//*[contains(concat(' ', normalize-space(@class), ' '), ' tree-item ') and contains(., "${fixture.note.fileName}")]`;
+  const item = await browser.$(itemSelector);
   await item.waitForDisplayed({ timeout: 20_000 });
-  await item.click();
+  await syntheticDomClick(itemSelector, item);
   await (await browser.$('.cm-content')).waitForDisplayed({ timeout: 20_000 });
   await browser.waitUntil(
     () =>
@@ -354,6 +356,15 @@ function serializeError(error) {
     name: error instanceof Error ? error.name : 'Error',
     message: error instanceof Error ? error.message : String(error),
   };
+}
+
+// 通过已解析的 WebdriverIO 元素（可见性检查仍走协议层）派发 DOM 合成点击，
+// 规避 msedgedriver/WebView2 的 Input 域缺陷；见 openUnicodeNoteThroughGui 注释。
+async function syntheticDomClick(selector, resolved = null) {
+  const element = resolved ?? (await browser.$(selector));
+  await browser.execute((target) => {
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+  }, element);
 }
 
 function assertWebDriverEvidenceObserved() {

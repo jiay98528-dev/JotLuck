@@ -282,6 +282,17 @@ jobs:
       - name: Install matching Microsoft Edge Driver
         shell: pwsh
         run: |
+          # runner 镜像冻结的 WebView2（150.0.4078.105）无法创建 CDP 会话
+          # （DevToolsActivePort 不生成），而用户端的 evergreen 运行时会自动更新。
+          # 先对齐到最新 evergreen（=真实用户环境），再让工具按新版本匹配驱动。
+          Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile "webview2-bootstrapper.exe"
+          .\webview2-bootstrapper.exe /silent /install
+          $deadline = (Get-Date).AddMinutes(3)
+          do {
+            Start-Sleep -Seconds 3
+            $pv = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}' -ErrorAction SilentlyContinue).pv
+          } while ($pv -eq '150.0.4078.105' -and (Get-Date) -lt $deadline)
+          "WebView2 runtime after update: $pv"
           cargo install --git https://github.com/chippers/msedgedriver-tool --rev 8c4b34f51b45f5cf08013366d703de464ab871d1 --locked
           & "$env:USERPROFILE\.cargo\bin\msedgedriver-tool.exe"
           $edgeDriver = (Resolve-Path ".\msedgedriver.exe").Path
