@@ -27,8 +27,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 11
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -71,8 +69,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 11
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -123,8 +119,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 11
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -164,8 +158,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 11
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -195,8 +187,10 @@ jobs:
 
   rust:
     name: Rust Check, Test & Audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 产品当前仅 Windows x64（README/CODE_SIGNING 同一口径）；ubuntu 上 cargo check 需 GTK/WebKitGTK
+    # 系统依赖，与本仓实际发布平台无关且长期无 apt 步骤导致红灯，改在实际发布平台检查
+    runs-on: windows-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -211,11 +205,22 @@ jobs:
       - name: Rust tests
         run: cargo test --manifest-path packages/app/src-tauri/Cargo.toml
 
+      - name: Verify ignored rkyv advisory is unreachable
+        shell: pwsh
+        run: |
+          $rkyvTree = @(cargo tree --manifest-path packages/app/src-tauri/Cargo.toml --target all -i rkyv@0.7.46 2>$null)
+          if ($rkyvTree.Count -ne 0) {
+            $rkyvTree | Write-Output
+            throw 'RUSTSEC-2026-0235 is reachable; remove the audit exception and upgrade rkyv.'
+          }
+
       - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
+        uses: taiki-e/install-action@cargo-audit
 
       - name: Audit Rust dependencies
-        run: cargo audit --file packages/app/src-tauri/Cargo.lock
+        # rkyv is present only as rust_decimal's optional metadata dependency; no selected
+        # JotLuck feature enables it (`cargo tree --target all -i rkyv` is empty).
+        run: cargo audit --file packages/app/src-tauri/Cargo.lock --ignore RUSTSEC-2026-0235
 
   tauri-build-windows:
     name: Windows Tauri Build
@@ -232,8 +237,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 11
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
