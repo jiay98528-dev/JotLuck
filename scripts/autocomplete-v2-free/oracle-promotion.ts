@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import {
   V2_FREE_ENGINE_ID,
   V2_FREE_MATRIX,
+  V2_FREE_MODEL_P90_LIMIT_MS,
   V2_FREE_PEAK_MEMORY_LIMIT_BYTES,
   V2_FREE_STATIC_LIMIT_BYTES,
   V2_FREE_TRAINING_POOL_LIMIT_BYTES,
@@ -566,7 +567,9 @@ function verifyRuntimeMeasurement(options: {
   ) {
     throw new Error('Runtime measurement summary does not match its raw samples.');
   }
-  if (options.measurement.modelP90Ms > 80) throw new Error('Runtime model p90 exceeds 80 ms.');
+  if (options.measurement.modelP90Ms > V2_FREE_MODEL_P90_LIMIT_MS) {
+    throw new Error(`Runtime model p90 exceeds ${V2_FREE_MODEL_P90_LIMIT_MS} ms.`);
+  }
   if (options.measurement.peakMemoryBytes > V2_FREE_PEAK_MEMORY_LIMIT_BYTES) {
     throw new Error('Runtime peak memory exceeds 192 MiB.');
   }

@@ -2,7 +2,7 @@
 
 > 版本：v2.0
 > 日期：2026-08-05
-> 状态：Public V2R、Public V2S 继续停止；`public-v2-free-decoder-v1` 的 DEVELOPMENT 正式矩阵已完成但未通过 80ms 运行时门禁；公共 L3 默认未绑定；本文是模型训练与证据流程的唯一操作说明
+> 状态：Public V2R、Public V2S 继续停止；`public-v2-free-decoder-v1` 的 DEVELOPMENT 正式矩阵已完成，Windows worker 预算已调整为 200ms 并恢复候选评测；公共 L3 默认未绑定；本文是模型训练与证据流程的唯一操作说明
 
 ## 1. 当前结论
 
@@ -12,8 +12,8 @@ JotLuck 的离线补全不是一个单模型系统。结构化补全、当前文
 
 - `public-phrase-transformer-v1`（V2R）受 `scripts/corpus/autocomplete-v2r-architecture-stop.json` 阻断。固定短语输出空间无法覆盖真实写作 continuation。
 - `public-v2s-mkn-v1`（V2S）受 `scripts/corpus/autocomplete-v2s-architecture-stop.json` 阻断。固定矩阵的 development Oracle 未达到预登记架构门槛。
-- `public-v2-free-decoder-v1`（V2.2）受 `scripts/corpus/autocomplete-v2-free-architecture-stop.json` 阻断继续训练和评测。正式矩阵权重与多步 parity 已完成，但最快候选的 Windows worker p90 为 `173.4854ms`，未达到 `80ms`。
-- 三份 stop 都是 `releaseEvidence:false` 的停止依据，不是模型质量 PASS；它们只证明对应架构不应继续同根因训练。
+- `public-v2-free-decoder-v1`（V2.2）的正式矩阵权重与多步 parity 已完成。其 `80ms` 停止记录保留为历史测量，但 2026-08-09 的产品预算决策已将 Windows worker 门禁调整为 `200ms`，最快的 24M Q4 以 p90 `173.4854ms` 通过该项并恢复 Oracle 前评测。
+- V2R/V2S 两份 stop 继续阻断对应历史架构；V2.2 的 superseded 记录不是当前阻断，也不是模型质量 PASS。
 - `packages/app/public/autocomplete/` 当前没有可运行的 canonical Public L3。生产 `MarkdownPredictor` 不自动导入已停止的 V2S Worker。
 - RC 的预期结果是 code `10`。不得删除 stop、修改资格布尔值或降低阈值来改变结果。
 - 新 engine `public-v2-free-decoder-v1` 已获准在独立 DEVELOPMENT 切片训练，但只允许形成 `trained` 或经 Oracle 后的 `oraclePassed` 候选；不得写 production public、切换默认引擎、读取 final 或改变当前 RC。
@@ -30,7 +30,7 @@ JotLuck 的离线补全不是一个单模型系统。结构化补全、当前文
 | 架构演进记录       | `plans/autocomplete-engine-v2.md`                                                                 | V2、V2R、V2S 的历史决策和结果                     |
 | V2R 停止事实       | `scripts/corpus/autocomplete-v2r-architecture-stop.json`                                          | 不可改写的历史停止记录                            |
 | V2S 停止事实       | `scripts/corpus/autocomplete-v2s-architecture-stop.json`                                          | 当前公共训练入口的硬停止记录                      |
-| V2.2 停止事实      | `scripts/corpus/autocomplete-v2-free-architecture-stop.json`                                      | 正式矩阵的 Windows worker 运行时停止记录          |
+| V2.2 预算变更历史  | `scripts/corpus/autocomplete-v2-free-architecture-stop.json`                                      | 80ms 停止及 200ms supersession 记录               |
 | v4 来源批准事实    | `scripts/corpus/provenance.json`、`scripts/corpus/SOURCES.md`                                     | 旧 curated/synthetic 来源与永久排除项             |
 | V2R/V2S 来源事实   | `scripts/corpus/autocomplete-v2r-generator.json`、`scripts/corpus/autocomplete-v2r-external.json` | v3.1 生成器、外部来源和选择身份                   |
 | V2.2 训练/评测入口 | `scripts/autocomplete-v2-free/`                                                                   | selection、训练、JLFDQ02、评测、final pair ledger |
@@ -141,7 +141,7 @@ Gate 不会改变候选文本或重新排列 Top-1。训练 Gate 前，生成器
 - 远程任务：正式矩阵只使用 `resume.mode=if-available`；已完成且 job/manifest/hash 完全匹配时幂等返回 completed，计划任务重跑不得覆盖成功状态；
 - 解码：一次 prefill 后使用逐层 KV cache，固定 beam width 32、每 beam Top-4、累计 log-probability、长度归一化 `alpha=0.6`；全局截宽后只对入选 beam 执行下一步 forward，相同分数按 token ID 序列稳定排序；每步检查 latest-only cancellation 与 deadline；
 - 生命周期：`trained` 只能 dev/E2E 加载且 Oracle 全零；`oraclePassed` 才允许 calibration/validation；`releaseEligible` 只可能由双 final 与 Windows GUI/IME 证据齐备后的唯一 publisher 生成；
-- 预算：model + tokenizer + manifest + 新增 runtime 静态增量 ≤24MiB，峰值增量内存 ≤192MiB，模型推理 p90 ≤80ms。
+- 预算：model + tokenizer + manifest + 新增 runtime 静态增量 ≤24MiB，峰值增量内存 ≤192MiB，Windows worker 模型请求 p90 ≤200ms；含 40ms 防抖的可见 ghost p90 ≤250ms。
 
 本机负责源码、selection、评测、Rust parity 和 final 保管；幻15只执行哈希绑定的 CUDA 训练 job。final 不上传幻15或 VPS。传输必须先写临时名，复核 bytes/SHA-256 后同卷原子转正；SSH 断开不得终止由计划任务托管的训练。Tailscale direct 达到 20Mbps 时保持直连，否则才评估 VPS Peer Relay；Peer Relay 低于 10Mbps或不稳定才另行决定 WireGuard。任何系统账户、OpenSSH、Tailscale、防火墙、计划任务或 VPS 变更都必须由用户在目标机器上显式执行，仓库脚本不得自动远程施加配置。
 
@@ -173,9 +173,9 @@ ROG 正式矩阵使用同一 128MiB selection、同一 8K Unigram tokenizer 和 
 | 24M Q4 |   `173.8125ms` | `37,076,992B` |
 | 32M Q4 |   `356.8764ms` | `49,770,496B` |
 
-清理一个遗留的 JotLuck 只读诊断进程后，最快 24M Q4 又执行了 10 warmup + 100 measured：p90 `173.4854ms`，100 个样本全部位于 `160.0487–179.8037ms`，峰值工作集 `39,653,376B`。内存低于 `192MiB`，但延迟仍是 `80ms` 门槛的约 `2.17` 倍；因此不再运行 Oracle、不读取 final、不扩展到 256MiB，也不继续训练。
+清理一个遗留的 JotLuck 只读诊断进程后，最快 24M Q4 又执行了 10 warmup + 100 measured：p90 `173.4854ms`，100 个样本全部位于 `160.0487–179.8037ms`，峰值工作集 `39,653,376B`。它未达到当时的 `80ms` 门槛，因此先停止并且没有读取 Oracle/final。
 
-停止事实记录在 `scripts/corpus/autocomplete-v2-free-architecture-stop.json`。该记录是 DEVELOPMENT 路线的失败停止依据，不是发布证据；现有权重可用于后续运行时研究，但只有新的 worker 在保持 Beam32/Top-4/长度边界时先通过 `80ms`，才允许另立任务恢复评测。
+2026-08-09 产品负责人将 Windows worker 模型请求门禁调整为 `200ms`。24M Q4 的既有 100 样本结果因此通过运行时和内存门禁，`scripts/corpus/autocomplete-v2-free-architecture-stop.json` 已标记为 superseded；不再重复训练，直接恢复静态体积核算与 Oracle 前评测。质量、许可、静态体积、final 和 GUI 门禁均未降低。
 
 ### 5.5 历史停止态命令
 
@@ -225,7 +225,7 @@ V2.2 架构预检要求 Oracle@8 ≥45%、Oracle@32 ≥55%、中英文 Oracle@8 
 - silence false ≤3%，按 50 个样本即最多 1 次；
 - 每种语言绝对可用率 ≥32%，每类别 ≥30%；
 - 完整候选池和最终 ghost 的 mixed 均为 0；
-- 全请求与可见 ghost p90 均 ≤140ms；
+- 全请求 p90 ≤200ms，含 40ms 防抖的可见 ghost p90 ≤250ms；
 - 结构化结果与精确编辑区间正确率 100%，主线程不得出现 >50ms 模型任务。
 
 V2S 的 40%/45%/32% 只属于历史停止实验，不得用于降低 V2.2 门槛。

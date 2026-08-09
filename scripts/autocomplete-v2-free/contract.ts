@@ -12,6 +12,9 @@ export const V2_FREE_MATRIX = Object.freeze([
 export const V2_FREE_STATIC_LIMIT_BYTES = 24 * 1024 * 1024;
 export const V2_FREE_PEAK_MEMORY_LIMIT_BYTES = 192 * 1024 * 1024;
 export const V2_FREE_TRAINING_POOL_LIMIT_BYTES = 512 * 1024 * 1024;
+export const V2_FREE_MODEL_P90_LIMIT_MS = 200;
+export const V2_FREE_REQUEST_P90_LIMIT_MS = 200;
+export const V2_FREE_VISIBLE_GHOST_P90_LIMIT_MS = 250;
 
 export interface V2FreeOracleReport {
   schema: 'jotluck.autocomplete.v2-free-oracle.v1';
@@ -222,8 +225,12 @@ export function assessFinalReport(report: V2FreeFinalReport): string[] {
   ) {
     failures.push(`${report.suite}-structured-edit-correctness`);
   }
-  if (report.requestP90Ms > 140) failures.push(`${report.suite}-request-p90`);
-  if (report.visibleGhostP90Ms > 140) failures.push(`${report.suite}-visible-p90`);
+  if (report.requestP90Ms > V2_FREE_REQUEST_P90_LIMIT_MS) {
+    failures.push(`${report.suite}-request-p90`);
+  }
+  if (report.visibleGhostP90Ms > V2_FREE_VISIBLE_GHOST_P90_LIMIT_MS) {
+    failures.push(`${report.suite}-visible-p90`);
+  }
   if (report.mainThreadModelTasksOver50Ms !== 0) failures.push(`${report.suite}-main-thread`);
   return failures;
 }
@@ -276,7 +283,7 @@ export function assessV2FreeCandidate(
   }
   if (evidence.staticBytes > V2_FREE_STATIC_LIMIT_BYTES) failures.push('static-budget');
   if (evidence.peakMemoryBytes > V2_FREE_PEAK_MEMORY_LIMIT_BYTES) failures.push('memory-budget');
-  if (evidence.modelInferenceP90Ms > 80) failures.push('model-p90');
+  if (evidence.modelInferenceP90Ms > V2_FREE_MODEL_P90_LIMIT_MS) failures.push('model-p90');
   if (!evidence.coldFinal || !evidence.workspaceFinal) failures.push('dual-final-missing');
   if (evidence.coldFinal) failures.push(...assessFinalReport(evidence.coldFinal));
   if (evidence.workspaceFinal) failures.push(...assessFinalReport(evidence.workspaceFinal));

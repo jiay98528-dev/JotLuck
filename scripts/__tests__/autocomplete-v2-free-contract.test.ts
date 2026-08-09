@@ -65,8 +65,8 @@ function final(suite: 'cold' | 'workspace', candidateId: string): V2FreeFinalRep
     structuredCorrect: 20,
     editChecks: 20,
     editCorrect: 20,
-    requestP90Ms: 90,
-    visibleGhostP90Ms: 100,
+    requestP90Ms: 200,
+    visibleGhostP90Ms: 250,
     mainThreadModelTasksOver50Ms: 0,
     consumedOnce: true,
   };
@@ -88,7 +88,7 @@ function evidence(
     windowsGuiEvidenceSha256: 'e'.repeat(64),
     staticBytes: parameterCount === 16_000_000 ? 10_000_000 : 14_000_000,
     peakMemoryBytes: 128 * 1024 * 1024,
-    modelInferenceP90Ms: 70,
+    modelInferenceP90Ms: 200,
     licenseAuditPassed: true,
     licenseAuditSha256: '9'.repeat(64),
     selectionSha256: 'a'.repeat(64),
@@ -135,6 +135,26 @@ describe('V2 free decoder evidence gates', () => {
       passed: false,
       failures: expect.arrayContaining(['windows-gui-ime']),
     });
+  });
+
+  it('accepts the revised 200ms worker budget and rejects values above its boundaries', () => {
+    const atBoundary = evidence();
+    expect(assessV2FreeCandidate(atBoundary)).toMatchObject({
+      stage: 'release-eligible',
+      passed: true,
+    });
+
+    const slowModel = evidence();
+    slowModel.modelInferenceP90Ms = 200.001;
+    expect(assessV2FreeCandidate(slowModel).failures).toContain('model-p90');
+
+    const slowRequest = evidence();
+    slowRequest.coldFinal!.requestP90Ms = 200.001;
+    expect(assessV2FreeCandidate(slowRequest).failures).toContain('cold-request-p90');
+
+    const slowVisibleGhost = evidence();
+    slowVisibleGhost.workspaceFinal!.visibleGhostP90Ms = 250.001;
+    expect(assessV2FreeCandidate(slowVisibleGhost).failures).toContain('workspace-visible-p90');
   });
 
   it('rejects reports that name the candidate but bind different asset bytes', () => {

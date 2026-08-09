@@ -178,14 +178,14 @@ N-gram Provider 必须用 `provideMany` 暴露 L1、Personal L2、N2、L3 各层
 | 结构化匹配            | < 1ms               |
 | 本地同步 Provider     | 20ms 软预算         |
 | Hybrid                | 35ms 软预算         |
-| 桌面全请求硬截止      | 80ms                |
-| 用户可见 p90 (含防抖) | ≤ 140ms             |
+| 桌面预测请求硬截止    | 200ms               |
+| 公共可见 p90 (含防抖) | ≤ 250ms             |
 | L1 内存占用           | < 500KB             |
 | L2 localStorage       | < 5MB               |
 | 免费 V2 Bundle 增量   | 以实际构建报告核算  |
 | 新公共模型总静态增量  | ≤24MiB              |
 | 新公共模型峰值内存    | ≤192MiB             |
-| 新公共模型推理 p90    | ≤80ms               |
+| 新公共模型推理 p90    | ≤200ms              |
 | L3 主线程单次任务     | < 50ms              |
 | 切换 20 篇笔记        | L3 只加载/解析 1 次 |
 
@@ -348,7 +348,7 @@ Resolver 在排序前按规范化 suggestion 文本去重，拒绝信号对跨 P
 - Web/PWA 用专用 Web Worker 持有工作区短语索引；Tauri 用 Rust 应用状态持有等价内存索引。两端支持按路径替换、删除、重命名、清空和查询，不把正文派生索引长期落盘。
 - 两端共享候选协议，并统一在 TypeScript 侧执行轻量排名、Resolver 和质量门控。后端异常必须降级为同步免费候选。
 - 两端默认最多索引 2,000 篇文档；单文档输入 ≤512KiB、工作区输入合计 ≤16MiB、单文档贡献 ≤20,000 entries、工作区贡献合计 ≤300,000 entries。只保留 fingerprint 与可逆贡献；替换按净值核算，任何超限都必须保留旧贡献并 fail closed。
-- 默认 soft deadline 为桌面 80ms、Web 110ms；包含输入防抖的最终可见预测仍须满足 p90 ≤140ms。防抖不得配置为大于最终 p90 预算的固定值。
+- 默认 soft deadline 为桌面 200ms、Web 110ms；包含 40ms 输入防抖的桌面公共可见预测须满足 p90 ≤250ms。结构化和强本地候选不等待公共生成器；防抖不得配置为大于最终 p90 预算的固定值。
 
 ### 12.4 P1/P2 评测与后端可靠性合同
 
@@ -511,7 +511,7 @@ interface CompletionRequestSnapshot {
 }
 ```
 
-每次输入、selection、scope、document、composition 或 focus 边界变化都取消旧请求。响应只有在 session/scope/revision/cursor/epoch/focus/composition 全部仍匹配且尚未超过 deadline 时可显示。同步本地 Provider 20ms 为软预算，Hybrid 35ms 为软预算，桌面请求 80ms 为硬截止；某个 Provider 超预算只记录诊断并停止消费其更多结果，不能阻塞编辑器。
+每次输入、selection、scope、document、composition 或 focus 边界变化都取消旧请求。响应只有在 session/scope/revision/cursor/epoch/focus/composition 全部仍匹配且尚未超过 deadline 时可显示。同步本地 Provider 20ms 为软预算，Hybrid 35ms 为软预算，桌面预测请求 200ms 为硬截止；某个 Provider 超预算只记录诊断并停止消费其更多结果，不能阻塞编辑器。结构化和强本地候选立即显示后，迟到公共结果仍不得替换。
 
 ### 15.4 反馈、准入与迁移
 
@@ -541,7 +541,7 @@ v5 migration 将 v4 personal 模型与 accepted lexicon 放入 `legacyAccepted`�
 - 输出：中文默认 ≤8 code points；英文 ≤12 code points且完整成词；单行、非 mixed、非循环、不得越过 Markdown 边界。
 - Windows/Tauri：同一签名 exe 的隐藏常驻 completion worker；长度帧、request ID、latest-only、取消、deadline、崩溃重启上限与 Job Object 资源约束必须测试。
 - 序列解码：一次 prefill、逐层 KV cache、固定 beam width 32、每 beam Top-4、累计 log-probability与 `alpha=0.6` 长度归一化；全局截宽后才对入选 beam 执行 forward，相同分数按 token ID 序列排序。Python quantized 与 Rust 必须在 Q4/Q8、中英文真实权重上逐序列一致。
-- 资源：模型+tokenizer+manifest+新增宿主静态增量 ≤24MiB；峰值增量内存 ≤192MiB；模型 p90 ≤80ms。
+- 资源：模型+tokenizer+manifest+新增宿主静态增量 ≤24MiB；峰值增量内存 ≤192MiB；Windows worker 模型请求 p90 ≤200ms。
 - 预检：Oracle@8 ≥45%、Oracle@32 ≥55%、中英文 Oracle@8 各 ≥40%；任一失败即写新路线 stop，不训练 gate、不读取 final、不发布资产。
 - 候选身份：manifest、Oracle、cold/workspace final 和发布证据必须绑定同一 `candidateArtifactSha256`；该哈希由 candidate ID、参数档、量化档以及模型/tokenizer 的长度与 SHA-256 规范化计算。
 - 运行时身份：worker warmup 必须独立重算 `candidateArtifactSha256`，并校验 `JLFDQ02` magic、`jotluck.autocomplete.quantized-decoder.v2`、payload SHA-256、matrix 架构、group-size 64 的 Q4/Q8 F16 scales、F16 vectors 以及张量名/形状/offset/alias/完整覆盖；文件 SHA 正确但模型布局不可消费时不得返回 ready。
@@ -555,4 +555,4 @@ v5 migration 将 v4 personal 模型与 accepted lexicon 放入 `legacyAccepted`�
 
 E2E 覆盖精确区间替换、立即撤销、保存 retained、修改后 modified、切文档/工作区/失焦陈旧结果、1MiB 文档热路径以及现有补全旅程。Playwright composition 模拟只作自动回归，不能替代真实 Windows/Tauri 中文 IME 人工闭环。
 
-cold 与 workspace final 各 200 checkpoint：150 complete、50 silence，中英文均衡。每套必须同时满足触发率 35%–42%、绝对可用率 ≥35%、中英文各 ≥32%、各类别 ≥30%、silence false trigger ≤3%、mixed/跨行/超长为 0、结构化结果与 edit 正确率 100%、全请求和可见 ghost p90 ≤140ms（目标 ≤100ms）、主线程无 >50ms 模型任务。两套 final 都通过且 Windows GUI 闭环完成前，公共生成器只允许 dev/E2E flag；切换默认只能由唯一 publisher 原子执行。
+cold 与 workspace final 各 200 checkpoint：150 complete、50 silence，中英文均衡。每套必须同时满足触发率 35%–42%、绝对可用率 ≥35%、中英文各 ≥32%、各类别 ≥30%、silence false trigger ≤3%、mixed/跨行/超长为 0、结构化结果与 edit 正确率 100%、全请求 p90 ≤200ms、含 40ms 防抖的可见 ghost p90 ≤250ms（目标 ≤220ms）、主线程无 >50ms 模型任务。两套 final 都通过且 Windows GUI 闭环完成前，公共生成器只允许 dev/E2E flag；切换默认只能由唯一 publisher 原子执行。

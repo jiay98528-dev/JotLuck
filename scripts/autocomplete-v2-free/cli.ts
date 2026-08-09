@@ -45,7 +45,7 @@ export async function runV2FreeCli(argv: readonly string[]): Promise<number> {
         '  validate-holdout --workspace-root <path> --descriptor <path> [--content <path>]',
         '  evaluate --workspace-root <path> --worker <exe> --manifest <path> --descriptor <path> --content <path> --output-dir <path>',
         '  promote-oracle --workspace-root <path> --candidate-root <path> --trained-manifest <path> --oracle-output-dir <path> --runtime-measurement <path> --worker <path>',
-        '  measure-runtime --workspace-root <path> --worker <relative> --runtime-baseline <relative> --manifest <relative> --output <relative>',
+        '  measure-runtime --workspace-root <path> --worker <relative> [--runtime-baseline <relative>] --manifest <relative> --output <relative>',
         '  remote <prepare|upload|submit|status|pull> [options]',
         '  claim-final-pair --workspace-root <path> --cold-descriptor <path> --workspace-descriptor <path> --candidate-artifact-sha256 <sha> --baseline-sha256 <sha> --evaluator-tree-sha256 <sha>',
       ].join('\n') + '\n',
@@ -93,7 +93,7 @@ async function measureRuntimeCommand(argv: readonly string[]): Promise<number> {
   const result = await measureV2FreeRuntime({
     workspaceRoot: requiredArgument(argv, '--workspace-root'),
     workerExecutablePath: requiredArgument(argv, '--worker'),
-    runtimeBaselineExecutablePath: requiredArgument(argv, '--runtime-baseline'),
+    runtimeBaselineExecutablePath: readArgument(argv, '--runtime-baseline'),
     candidateManifestPath: requiredArgument(argv, '--manifest'),
     outputPath: requiredArgument(argv, '--output'),
   });

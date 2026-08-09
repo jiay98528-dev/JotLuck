@@ -66,12 +66,12 @@ JotLuck 是本地优先、离线可用的 Markdown 笔记工具。数据以普�
 - 接受 `Tab` 只产生 `accepted`，不立即持久学习。只有插入内容在后续越过区间或保存/关闭时仍完整，转为 `retained` 后才写 Personal L2、accepted lexicon 和正向排序信号；立即撤销/修改分别记为 `reverted`/`modified`，继续输入、失焦或切文档记为 `abandoned` 且不作负反馈，`Escape` 才是 `explicitRejected`。结构化候选永不写入语料。
 - 学习准入固定为 `persist | memoryOnly | skip`：普通工作区正文可持久化，临时/外部会话仅内存；密钥、密码、token、代码和 frontmatter 跳过。用户笔记、反馈和本地指标不得上传或进入公共模型训练。
 - V2R 固定短语 Transformer 与 V2S Subword MKN 的 architecture-stop 继续有效。下一版本免费公共引擎必须使用新 ID `public-v2-free-decoder-v1`、新 manifest 和新缓存，不得修改旧停止记录或并行加载第二公共引擎。
-- 免费公共引擎固定比较 16M/24M/32M Q4 与 16M Q8 decoder-only，使用单一 8K Unigram + byte fallback 双语 tokenizer、最多 256 tokens 上下文；训练池清洗后上限 512MiB。模型、tokenizer、manifest 与新增推理宿主静态增量合计不超过 24MiB，增量峰值内存不超过 192MiB，模型推理 p90 不超过 80ms。
+- 免费公共引擎固定比较 16M/24M/32M Q4 与 16M Q8 decoder-only，使用单一 8K Unigram + byte fallback 双语 tokenizer、最多 256 tokens 上下文；训练池清洗后上限 512MiB。模型、tokenizer、manifest 与新增推理宿主静态增量合计不超过 24MiB，增量峰值内存不超过 192MiB，Windows worker 模型请求 p90 不超过 200ms。
 - V2.2 正式矩阵使用独立的 128MiB DEVELOPMENT selection 和一次冻结、全候选复用的 tokenizer；公开自然文本必须固定来源/许可/快照/页面 revision/清洗器/逐段哈希并通过近重复与 holdout 泄漏检查。训练准入不等于模型分发许可，Share-Alike 来源的发布处理必须另立评估。
 - Windows/Tauri 通过同一签名可执行文件的隐藏常驻 completion worker 推理。长度帧、request ID、latest-only 取消、deadline、崩溃隔离和 Job Object 资源限制必须 fail closed；模型只能返回不可信文本，插入区间、来源、优先级与学习策略由宿主决定。
 - 公共模型必须来自许可证明确、来源可追溯且通过隐私、样板、原始/残余重复、类别/来源占比和正式 holdout 重叠闸门的语料。上下文胶囊仅含标题链、当前段落、前段尾部和至多一个无路径检索片段，不提供整篇正文、文件名或工作区清单。
 - Oracle 预检必须先达到 Oracle@8 ≥45%、Oracle@32 ≥55%、中英文 Oracle@8 各 ≥40%；失败即停止，不训练 visibility gate、不读取 final、不发布资产。旧已观察 holdout 只作回归。
-- Cold 与 workspace-conditioned 两套冻结 final 必须分别达到触发率 35%–42%、绝对可用率至少 35%、silence false trigger 不超过 3%、mixed 候选为 0、全请求与可见预测 p90 均不超过 140ms，才允许标记为可发布。每套 200 个 checkpoint 必须触发 70–84 次且至少 70 次可用；`usable/triggered` 只作条件精度诊断，不得冒充绝对可用率。
+- Cold 与 workspace-conditioned 两套冻结 final 必须分别达到触发率 35%–42%、绝对可用率至少 35%、silence false trigger 不超过 3%、mixed 候选为 0、全请求 p90 不超过 200ms、含 40ms 防抖的可见预测 p90 不超过 250ms，才允许标记为可发布。每套 200 个 checkpoint 必须触发 70–84 次且至少 70 次可用；`usable/triggered` 只作条件精度诊断，不得冒充绝对可用率。
 - 正式证据分为 cold 与 workspace-conditioned 两套 validation/final。validation 可用于选择候选但不得进入训练；final 只能在模型、短语库和阈值冻结后消费一次。final 失败后该版本不可重跑，公共资产继续 fail-closed，Personal Learning 结果不得并入公共模型分数。
 - 未发布候选只能由 dev/E2E flag 在隔离候选目录运行，必须保留 `qualityGatePassed/releaseEligible=false`；普通生产构建不得接受候选 URL、候选 manifest 或把候选写入 public。双 final 与真实 Windows 中文 IME GUI 闭环通过后，publisher 才能一次性切换默认并删除生产双引擎比较入口。
 - V1 只允许作为仓库内隔离评测快照存在。V1/V2 必须在同一冻结数据上报告 Top-1、Oracle@8、usable、安全与运行时指标；V1 源码、模型和观测补丁不得进入生产依赖图或构建产物。

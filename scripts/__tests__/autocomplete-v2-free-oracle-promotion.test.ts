@@ -85,6 +85,15 @@ describe('V2 free Oracle lifecycle promotion', () => {
     await expect(promote(fixture)).rejects.toThrow('lacks raw samples');
   });
 
+  it('rejects a recomputed model p90 above the revised 200ms budget', async () => {
+    const fixture = await createFixture();
+    await mutateJson(path.join(REPOSITORY_ROOT, fixture.measurementRelative), (value) => {
+      value.modelP90Ms = 200.001;
+      value.modelInferenceSamplesMs = Array.from({ length: 20 }, () => 200.001);
+    });
+    await expect(promote(fixture)).rejects.toThrow('exceeds 200 ms');
+  });
+
   it('stops when recomputed Oracle rates miss a required threshold', async () => {
     const fixture = await createFixture({ oracleAt8Hits: 89, oracleAt32Hits: 110 });
     await expect(promote(fixture)).rejects.toThrow('oracle-at8-minimum');

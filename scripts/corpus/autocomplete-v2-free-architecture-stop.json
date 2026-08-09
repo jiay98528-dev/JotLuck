@@ -3,10 +3,10 @@
   "schemaVersion": 1,
   "engine": "public-v2-free-decoder-v1",
   "architectureId": "decoder-only-cpu-beam32-top4-v1",
-  "status": "architecture-blocked",
+  "status": "superseded",
   "formalResult": false,
   "releaseEvidence": false,
-  "stopFurtherTraining": true,
+  "stopFurtherTraining": false,
   "reasonCode": "windows-worker-runtime-p90",
   "recordedAt": "2026-08-09T09:16:00.322Z",
   "runtimeGate": {
@@ -107,5 +107,18 @@
     "publisherRun": false,
     "productionDefaultChanged": false,
     "requiredNextStep": "Do not add training data or train another matrix. A continuation must first demonstrate the same Beam32/Top-4 decoding contract at or below 80ms p90 on the Windows worker host."
+  },
+  "supersession": {
+    "supersededAt": "2026-08-09T10:02:00.000Z",
+    "decision": "owner-runtime-budget-200ms",
+    "windowsWorkerModelP90MaximumMs": 200,
+    "desktopPredictionDeadlineMs": 200,
+    "visibleGhostP90MaximumMs": 250,
+    "fastestCandidateNowPassesRuntimeGate": true,
+    "candidateId": "v22-formal-bffc72982c9e-24m-q4.q4",
+    "measuredP90Ms": 173.48540000000003,
+    "oraclePrecheckRun": false,
+    "finalHoldoutsRead": false,
+    "publisherRun": false
   }
 }

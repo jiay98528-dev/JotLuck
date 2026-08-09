@@ -362,7 +362,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
             typeof predictor.requestGhostText === 'function'
               ? await predictor.requestGhostText(cursor, doc, {
                   signal: controller.signal,
-                  deadlineMs: isDesktopRuntime() ? 80 : 110,
+                  deadlineMs: isDesktopRuntime() ? 200 : 110,
                   documentRevision,
                   documentVersion: `revision:${documentRevision}`,
                   editorSessionId: this.editorSessionId,

@@ -68,6 +68,7 @@ describe('Windows runtime measurement producer', () => {
       'isolated-worker-absolute-working-set',
     );
     expect(result.artifact.measurement.memoryBaselineBytes).toBe(0);
+    expect(result.artifact.measurement.runtimeStaticAccounting).toBe('worker-minus-baseline');
     expect(new Set(deadlines)).toHaveLength(110);
     expect(deadlines[0]).toBe(1_005_000);
     expect(deadlines.at(-1)).toBe(1_005_109);
@@ -81,6 +82,21 @@ describe('Windows runtime measurement producer', () => {
     expect(JSON.parse(await readFile(path.join(root, 'out/runtime.json'), 'utf8'))).toEqual(
       result.artifact,
     );
+  });
+
+  it('can conservatively charge the full worker when no comparable baseline exists', async () => {
+    const root = await fixtureWorkspace();
+    const { runtimeBaselineExecutablePath: _baseline, ...options } = measurementOptions(root);
+    const dependencies = fixtureDependencies();
+
+    const result = await measureV2FreeRuntime(options, dependencies);
+
+    expect(result.artifact.runtimeStaticDeltaBytes).toBe(12);
+    expect(result.artifact.measurement.runtimeBaselineExecutableBytes).toBe(0);
+    expect(result.artifact.measurement.runtimeBaselineExecutableSha256).toBe(
+      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    );
+    expect(result.artifact.measurement.runtimeStaticAccounting).toBe('full-worker-conservative');
   });
 
   it('rejects empty memory sampling instead of manufacturing a peak claim', async () => {
@@ -159,5 +175,38 @@ function measurementOptions(root: string) {
     candidateManifestPath: 'candidate/manifest.json',
     outputPath: 'out/runtime.json',
     createdAt: '2026-08-08T00:00:00.000Z',
+  };
+}
+
+function fixtureDependencies(): RuntimeMeasurementDependencies {
+  let clock = 0;
+  return {
+    platform: 'win32',
+    now: () => clock++,
+    wallNow: () => Date.now(),
+    async openSession() {
+      return {
+        ready: {
+          protocolVersion: 1,
+          engineId: 'public-v2-free-decoder-v1',
+          candidateId: 'candidate-16m-q4',
+          workerPid: 42,
+          manifestBytes: 10,
+          modelBytes: 20,
+          tokenizerBytes: 30,
+          runtimeStaticDeltaBytes: 0,
+          peakMemoryLimitBytes: 192 * 1024 * 1024,
+        },
+        async generate() {},
+        async close() {},
+      };
+    },
+    async startMemorySampler() {
+      return {
+        async stop() {
+          return [70_000_000];
+        },
+      };
+    },
   };
 }

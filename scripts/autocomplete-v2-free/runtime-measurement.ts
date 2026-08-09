@@ -52,7 +52,7 @@ export interface RuntimeMeasurementDependencies {
 export interface MeasureV2FreeRuntimeOptions {
   workspaceRoot: string;
   workerExecutablePath: string;
-  runtimeBaselineExecutablePath: string;
+  runtimeBaselineExecutablePath?: string;
   candidateManifestPath: string;
   outputPath: string;
   createdAt?: string;
@@ -78,6 +78,7 @@ export interface V2FreeRuntimeMeasurementArtifact {
     workerExecutableBytes: number;
     runtimeBaselineExecutableBytes: number;
     runtimeBaselineExecutableSha256: V2FreeSha256;
+    runtimeStaticAccounting: 'worker-minus-baseline' | 'full-worker-conservative';
     memorySampleIntervalMs: 5;
     memoryAccounting: 'isolated-worker-absolute-working-set';
     memoryBaselineBytes: 0;
@@ -94,11 +95,12 @@ export async function measureV2FreeRuntime(
   const root = await realpath(path.resolve(options.workspaceRoot));
   const manifestPath = await resolveWorkspaceFile(root, options.candidateManifestPath);
   const workerPath = await resolveWorkspaceFile(root, options.workerExecutablePath);
-  const baselinePath = await resolveWorkspaceFile(root, options.runtimeBaselineExecutablePath);
   const outputPath = resolveWorkspaceOutput(root, options.outputPath);
   const candidate = parseCandidateIdentity(await readFile(manifestPath));
   const workerBytes = await readFile(workerPath);
-  const baselineBytes = await readFile(baselinePath);
+  const baselineBytes = options.runtimeBaselineExecutablePath
+    ? await readFile(await resolveWorkspaceFile(root, options.runtimeBaselineExecutablePath))
+    : Buffer.alloc(0);
   const runtimeStaticDeltaBytes = workerBytes.byteLength - baselineBytes.byteLength;
   if (runtimeStaticDeltaBytes <= 0) {
     throw new Error('Worker executable must be larger than the bound runtime baseline.');
@@ -156,6 +158,9 @@ export async function measureV2FreeRuntime(
       workerExecutableBytes: workerBytes.byteLength,
       runtimeBaselineExecutableBytes: baselineBytes.byteLength,
       runtimeBaselineExecutableSha256: sha256(baselineBytes),
+      runtimeStaticAccounting: options.runtimeBaselineExecutablePath
+        ? 'worker-minus-baseline'
+        : 'full-worker-conservative',
       memorySampleIntervalMs: 5,
       memoryAccounting: 'isolated-worker-absolute-working-set',
       memoryBaselineBytes: 0,

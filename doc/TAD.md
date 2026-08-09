@@ -71,14 +71,14 @@ Vue 3 + Pinia + Vite
 - 数据层固定为当前文档增量段落 L1、每工作区/进程最多 100 条的 Session History、notebook 按文件可撤销贡献 N2、只接收 `retained` 的 Personal L2，以及应用级唯一只读公共插槽。L1 由变更覆盖的段落贡献撤销/重建，N2 先汇总跨文档支持再剪枝；各层原始分数不得直接跨 Provider 比较。
 - `CompletionProviderRegistry` 在 Predictor 生命周期内注册一次类型安全描述符，固定声明 mode、上下文能力、priority tier、最大候选数、20ms 本地软预算/35ms Hybrid 软预算、反馈能力和数据权限；不提供任意 JS/WASM/原生代码 Provider 插件。调度顺序为结构化 → 当前文档/Session → Personal/Notebook/Hybrid → 唯一公共生成器 → generic fallback。
 - 候选以 `CompletionTextEdit { from, to, insertText }` 作为唯一正文写入；`displayText` 只用于 ghost。去重保留全部 `contributors`，候选同时携带 mode、kind、providerId、sourceLayer、priorityTier、raw/calibrated score 和 feedback policy。
-- 请求快照由 `editorSessionId + workspaceScope + documentRevision + UTF-16 cursor + contextSnapshot + deadlineAt` 构成，异步入口一律携带 `AbortSignal`。桌面总请求 80ms 硬截止；超过截止、revision/scope/cursor/epoch 不一致或已经显示 fallback 时，迟到结果直接丢弃。
+- 请求快照由 `editorSessionId + workspaceScope + documentRevision + UTF-16 cursor + contextSnapshot + deadlineAt` 构成，异步入口一律携带 `AbortSignal`。桌面预测请求 200ms 硬截止；超过截止、revision/scope/cursor/epoch 不一致或已经显示 fallback 时，迟到结果直接丢弃。结构化和强本地候选仍立即显示，不等待公共生成器。
 - 学习仓库 v5 统一保存 Personal L2、legacyAccepted、accepted lexicon、signals、metrics 和元数据；写入按 scope 串行合并，可用时使用 Web Locks，并通过 BroadcastChannel/storage event 同步多标签页。v4 已接受数据只进入 `legacyAccepted` 且以 0.5 权重参与排序，不能伪造 retained 统计。
 - 反馈状态机为 `shown → accepted → retained | modified | reverted`，另含 `explicitRejected` 和 `abandoned`。只有 retained 才持久学习；结构化补全永不写语料。准入 `persist | memoryOnly | skip` 由宿主根据会话、block 和敏感内容决定。
 - `CompletionEngineRouter` 管理唯一、模型无关的 `CompletionPublicEngine` 生成插槽。公共插槽默认未绑定；只有通过独立证据的模型才能显式安装。V2R/V2S 停止态继续保留且不能作为 fallback。
 - 下一版本公共引擎 ID 为 `public-v2-free-decoder-v1`，使用新协议和新缓存。Windows/Tauri 由同一签名可执行文件的隐藏常驻 completion worker 执行长度帧请求、latest-only 取消和 Job Object 资源限制；warmup 重算跨模型/tokenizer 的 candidate hash，并校验 `JLFDQ02`、group-size 64 Q4/Q8 F16 scales、header、payload hash、matrix 与完整张量布局。worker 只返回不可信原始文本，宿主重新执行语言、长度、Markdown、循环、mixed 与精确编辑门控。
 - 模型生命周期是单向 `trained → oraclePassed → releaseEligible`。trainer 只能生成 dev/E2E 可加载的 `trained` manifest；Oracle evaluator 才能晋升第二态；唯一 publisher 只有在双 final 与 Windows GUI/IME 证据齐备时才生成第三态。任何 manifest 布尔值都不能绕过对应原始观察和哈希绑定。
 - 训练控制面与 CUDA 数据面分离：当前工作站持有 selection、evaluator 和 final；幻15仅执行内容寻址、可恢复的训练 job。Tailscale direct 优先，VPS 只可作为端到端加密 Peer Relay；传输使用临时名 + SHA-256 + 同卷原子转正，final、用户数据和凭据不得上传训练节点或 VPS。
-- 公共上下文胶囊只包含标题链、当前段落、前一段尾部和至多一个无路径检索片段，最多 256 tokens；不得提供整篇正文、文件名或工作区清单。模型、8K Unigram+byte fallback tokenizer、manifest 与新增宿主总静态增量 ≤24MiB，增量峰值内存 ≤192MiB，模型推理 p90 ≤80ms。
+- 公共上下文胶囊只包含标题链、当前段落、前一段尾部和至多一个无路径检索片段，最多 256 tokens；不得提供整篇正文、文件名或工作区清单。模型、8K Unigram+byte fallback tokenizer、manifest 与新增宿主总静态增量 ≤24MiB，增量峰值内存 ≤192MiB，Windows worker 模型请求 p90 ≤200ms；含 40ms 防抖的可见 ghost p90 ≤250ms。
 - 新公共路线固定 16M/24M/32M Q4 与 16M Q8；Oracle@8/32 预检必须分别 ≥45%/55%，且中英文 Oracle@8 各 ≥40%。不通过则停止，不训练 gate、不读取 final、不发布资产。双 final 与真实 Windows IME GUI 闭环前只允许 dev/E2E flag。
 - 正式矩阵的 128MiB selection 与单一共享 tokenizer 由当前工作站冻结；RemoteTrainingJob v2 同时绑定 corpus/selection/tokenizer model/tokenizer runtime/recipe/source tree，统一 `resume.mode=if-available`，匹配完成态幂等。ROG 只串行执行 16M→24M→32M CUDA 训练，不持有 final。
 - worker 序列生成采用一次 prefill、逐层 KV cache、beam width 32、每 beam Top-4、累计 log-probability 和 `alpha=0.6` 长度归一化；全局选出 Top-32 后才推进 cache。每步执行 latest-only/deadline 检查，超时只允许返回已完成序列。

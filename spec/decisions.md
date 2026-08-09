@@ -1,6 +1,6 @@
 # Decisions
 
-版本：v1.2（2026-08-05）
+版本：v1.3（2026-08-09）
 
 ## 已确认决策
 
@@ -20,8 +20,8 @@
 - **训练节点**：当前工作站保管 selection、evaluator 和 final，幻15只承担内容寻址的 CUDA job。Tailscale direct 优先，VPS Peer Relay 仅作加密转发；final、用户数据和凭据不得上传训练节点或 VPS。该分工不改变离线产品的数据边界。
 - **正式矩阵合同**：128MiB selection 固定四个 dated Wikimedia DEVELOPMENT 来源与近重复/泄漏门禁；8K tokenizer 只冻结一次并由全部 job 复用。RemoteTrainingJob v2 绑定 source tree、recipe、selection、corpus 与两份 tokenizer 资产，使用幂等 `if-available` resume。
 - **序列推理**：Rust/Python 共同采用一次 prefill、逐层 KV cache、beam width 32、Top-4 扩展、`alpha=0.6` 长度归一化和 token 序列稳定 tie-break；全局截宽后才执行下一步 forward，并在每步检查取消/deadline。
-- **预算**：模型、tokenizer、manifest 与新增推理宿主静态增量合计不超过 24MiB，增量峰值内存不超过 192MiB，模型推理 p90 不超过 80ms。Web/PWA 不继承桌面模型承诺，只保留结构化、个人和工作区安全降级。
-- **停止与放行**：训练 visibility gate 前，Oracle@8 必须 ≥45%、Oracle@32 ≥55%、中英文 Oracle@8 各 ≥40%；不通过即停止该路线且不读取 final。通过预检后，cold/workspace 两套各 200 checkpoint 的独立 final 仍必须同时达到 35%–42% 触发率、绝对可用率 ≥35%、silence false trigger ≤3%、mixed/跨行/超长为 0 和双 p90 ≤140ms，才允许 publisher 原子安装唯一 canonical 公共引擎。
+- **预算**：模型、tokenizer、manifest 与新增推理宿主静态增量合计不超过 24MiB，增量峰值内存不超过 192MiB，Windows worker 模型请求 p90 不超过 200ms。Web/PWA 不继承桌面模型承诺，只保留结构化、个人和工作区安全降级。
+- **停止与放行**：训练 visibility gate 前，Oracle@8 必须 ≥45%、Oracle@32 ≥55%、中英文 Oracle@8 各 ≥40%；不通过即停止该路线且不读取 final。通过预检后，cold/workspace 两套各 200 checkpoint 的独立 final 仍必须同时达到 35%–42% 触发率、绝对可用率 ≥35%、silence false trigger ≤3%、mixed/跨行/超长为 0、全请求 p90 ≤200ms 和含 40ms 防抖的可见 ghost p90 ≤250ms，才允许 publisher 原子安装唯一 canonical 公共引擎。
 - **后果**：ADR-014/016 的 architecture-stop 原样有效；旧观察 holdout 只用于回归，新的 validation/final 必须重新冻结且 final 每套只消费一次。新引擎在双 final 与真实 Windows GUI/IME 闭环前只能由 dev/E2E flag 显式启用。
 
 ## ADR-021：补全内核采用双平面、精确编辑与保留后反馈
@@ -33,7 +33,7 @@
 - **Provider 合同**：内部类型安全 Registry 在 Predictor 生命周期内注册一次，描述 mode、上下文能力、优先层、候选上限、软预算、反馈能力和数据权限；不开放任意 JS/WASM/原生 Provider 插件。顺序固定为结构化 → 当前文档/Session → Personal/Notebook/Hybrid → 免费公共生成器 → 唯一 generic fallback。
 - **反馈合同**：事件状态为 `shown → accepted → retained | modified | reverted`，另有 `explicitRejected` 与无负反馈的 `abandoned`。只有 `retained` 才写入 Personal L2、accepted lexicon 和正向排序信号；结构化候选永不进入语料。学习准入只有 `persist | memoryOnly | skip`，密钥、密码、token、代码和 frontmatter 必须 skip。
 - **迁移**：持久化 schema 升级为 v5；v4 已接受数据进入 `legacyAccepted` 分区并以 0.5 权重参与排序，不伪造 retained。每工作区 Session History 最多 100 条且进程退出清空。
-- **预算**：同步本地 Provider 20ms 软预算，Hybrid 35ms 软预算，桌面请求 80ms 硬截止；包含防抖的可见 ghost 仍以 ≤140ms 为硬门禁、≤100ms 为目标。
+- **预算**：同步本地 Provider 20ms 软预算、Hybrid 35ms 软预算保持不变；桌面预测请求硬截止调整为 200ms。结构化与强本地候选仍立即显示且不等待公共模型；包含 40ms 防抖的公共可见 ghost 以 ≤250ms 为硬门禁、≤220ms 为目标。
 
 ## ADR-020：二进制文档采用隔离语义转换与双路径编辑
 
@@ -133,6 +133,8 @@
 - **后果**：测试机并行负载不会单独阻断 preview，但也不能用“环境抖动”豁免缺安装旅程、缺样本、缺 provenance、缺证据提交或产品功能失败。
 
 ## 变更记录
+
+- 2026-08-09（v1.3）：根据正式矩阵真实 Windows worker 数据，将 V2.2 模型请求 p90 与桌面预测硬截止从 80ms 调整为 200ms；含 40ms 防抖的可见 ghost 门禁同步调整为 250ms。质量、内存、静态体积和 final 门禁不降低。
 
 - 2026-08-05（v1.2）：新增 ADR-021/022，确立 PowerShell 式双平面补全、精确编辑、retained 学习合同，以及下一版本免费开放词表公共生成器和 24MiB 总预算。
 
