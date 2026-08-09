@@ -36,9 +36,9 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 适合所有与文字打交道的人，也适合与 AI 协作的你。
 
-当前状态：`v0.10.0-rc.1`，Windows 候选发布版。经过完整测试，尚未签名。
+当前状态：`v0.11.0-preview`，Windows 公开预览版。经过完整测试，尚未签名。
 
-> **下载提示：** 官方安装包只会出现在 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases)。当前还没有上架，`v0.10.0-rc.1` 未签名。请勿从其他任何渠道下载 JotLuck。
+> **下载提示：** 官方安装包只会出现在 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases)。`v0.11.0-preview` 安装包已上架，尚未签名——安装前请核对 SHA-256。请勿从其他任何渠道下载 JotLuck。
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck 工作区，左侧是最近笔记，中间是 Markdown 编辑器，右侧是大纲与反向链接">
@@ -60,7 +60,7 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 ## 三步开始使用
 
-1. **获取应用。** 第一个公开安装包将在 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases) 上架，那是唯一官方来源。开发者可按下方说明从源码构建。
+1. **获取应用。** 公开预览版安装包已在 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases) 上架，那是唯一官方来源。开发者可按下方说明从源码构建。
 2. **打开一个文件夹。** 任何文件夹都行，它就是你的笔记本。`Ctrl/Cmd+O` 随时切换。
 3. **开始写作。** 笔记随输入直接保存进这个文件夹。
 
@@ -94,8 +94,8 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 | 项目       | 当前范围                                              |
 | ---------- | ----------------------------------------------------- |
-| 当前版本   | `v0.10.0-rc.1`                                        |
-| 发行阶段   | 公开候选版本；不是稳定版                              |
+| 当前版本   | `v0.11.0-preview`                                     |
+| 发行阶段   | 公开预览版；不是稳定版                                |
 | 已验证平台 | Windows x64                                           |
 | 桌面运行时 | Tauri 2 与 Microsoft Edge WebView2                    |
 | 数据格式   | `.md`、`.markdown`、`.mdx`、`.txt`                    |

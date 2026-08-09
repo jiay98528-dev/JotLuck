@@ -36,9 +36,9 @@ It opens and renders Markdown in seconds, beautifully. Read-only preview or full
 
 For everyone who works with text, and everyone who works with AI.
 
-Current status: `v0.10.0-rc.1`, a Windows release candidate. Tested, usable, unsigned.
+Current status: `v0.11.0-preview`, a public Windows preview. Tested, usable, unsigned.
 
-> **Download notice:** Official installers appear only on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases). Nothing is there yet, and `v0.10.0-rc.1` is unsigned. Please don't download JotLuck from anywhere else.
+> **Download notice:** Official installers appear only on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases). The `v0.11.0-preview` installer is available there now — unsigned, so verify its SHA-256 before installing. Please don't download JotLuck from anywhere else.
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck workspace with recent notes, a Markdown editor, outline, and backlinks">
@@ -60,7 +60,7 @@ Every note is an ordinary file: `.md`, `.markdown`, `.mdx`, or `.txt`. Any edito
 
 ## Get started in three steps
 
-1. **Get the app.** The first public installer lands on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases) — the only official source. Developers can build from source below.
+1. **Get the app.** The public preview installer lives on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases) — the only official source. Developers can build from source below.
 2. **Open a folder.** Any folder. It becomes your notebook. `Ctrl/Cmd+O` switches anytime.
 3. **Start writing.** Notes save as you type, straight into that folder.
 
@@ -94,8 +94,8 @@ See the full [Privacy Policy](./PRIVACY.md) and the identity and integrity proce
 
 | Item              | Current scope                                                                      |
 | ----------------- | ---------------------------------------------------------------------------------- |
-| Current version   | `v0.10.0-rc.1`                                                                     |
-| Release stage     | Release candidate; not a stable release                                            |
+| Current version   | `v0.11.0-preview`                                                                  |
+| Release stage     | Public preview; not a stable release                                               |
 | Verified platform | Windows x64                                                                        |
 | Desktop runtime   | Tauri 2 and Microsoft Edge WebView2                                                |
 | Note formats      | `.md`, `.markdown`, `.mdx`, `.txt`                                                 |

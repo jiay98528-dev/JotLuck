@@ -53,7 +53,7 @@ JotLuck 不收集、不存储、不上传任何用户数据。所有笔记数据
 
 ```bash
 # 验证实际 NSIS 安装包
-signtool verify /pa /v JotLuck_0.10.0-rc.1_x64-setup.exe
+signtool verify /pa /v JotLuck_0.11.0-preview_x64-setup.exe
 
 # 产物由 GitHub Actions 工作流自动构建
 # 工作流定义：.github/workflows/ci.yml
