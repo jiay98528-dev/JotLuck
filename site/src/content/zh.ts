@@ -37,8 +37,8 @@ export const zh: SiteContent = {
     emphasis: '把生态留在纸页之外。',
     emphasisHighlight: '生态',
     subline: '从一个文件开始，沿着思绪写下去。写下的一切，依然可以随你远行。',
-    action: '立刻下载',
-    dateLine: 'Windows x64 公开版本预计 2026 年 8 月 15 日发布',
+    action: '下载 Preview',
+    dateLine: 'Preview 已上架 · 正式签名版 2026 年 8 月 15 日发布',
     dateQuip: '保守估计——说不定更早。',
   },
   narrative: [

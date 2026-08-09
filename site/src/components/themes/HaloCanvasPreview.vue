@@ -234,19 +234,13 @@ onBeforeUnmount(clearTimers);
       <text x="290" :y="sectionY" class="hc-h2">{{ note.section }}</text>
       <g v-for="(b, i) in note.bullets" :key="b">
         <text x="290" :y="bulletY(i)" class="hc-body">·</text>
-        <SvgInlineText :x="305" :y="bulletY(i)" :src="b" class="hc-body" />
+        <SvgInlineText :x="305" :y="bulletY(i)" :src="b" />
       </g>
 
       <!-- 模拟键入行：打字中呈纯文本，完成后换行内标记渲染（[[wikilink]] 高亮） -->
       <template v-if="typed">
         <text x="290" :y="typedY" class="hc-body">·</text>
-        <SvgInlineText
-          v-if="typedDone"
-          :x="305"
-          :y="typedY"
-          :src="frame.typedBullet"
-          class="hc-body"
-        />
+        <SvgInlineText v-if="typedDone" :x="305" :y="typedY" :src="frame.typedBullet" />
         <text v-else x="305" :y="typedY" class="hc-body">{{ typed }}</text>
       </template>
       <rect v-if="cursorOn" :x="cursorX" :y="typedY - 12" width="2" height="15" class="hc-cursor" />
@@ -310,7 +304,8 @@ onBeforeUnmount(clearTimers);
   width: 100%;
   height: auto;
   font-family: var(--font-body);
-  /* 行内标记着色变量：活链蓝、标签钢蓝 */
+  /* 行内标记着色变量：正文墨、活链蓝、标签钢蓝 */
+  --mk-body-fill: #3f3933;
   --mk-wiki-fill: #5b7fb8;
   --mk-wiki-deco-color: #a8c0dd;
   --mk-tag-fill: #5b7fb8;

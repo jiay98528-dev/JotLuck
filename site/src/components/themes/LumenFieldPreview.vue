@@ -66,7 +66,7 @@ const quoteBarY = computed(() => bulletY(props.note.bullets.length - 1) + 22);
     <text x="305" :y="sectionY" class="lf-h2">{{ note.section }}</text>
     <g v-for="(b, i) in note.bullets" :key="b">
       <text x="305" :y="bulletY(i)" class="lf-body">·</text>
-      <SvgInlineText :x="320" :y="bulletY(i)" :src="b" class="lf-body" />
+      <SvgInlineText :x="320" :y="bulletY(i)" :src="b" />
     </g>
 
     <!-- 引文条 -->
@@ -128,6 +128,7 @@ const quoteBarY = computed(() => bulletY(props.note.bullets.length - 1) + 22);
   height: auto;
   font-family: var(--font-body);
   /* 行内标记着色变量：暗场哑红链、赭橙标签 */
+  --mk-body-fill: #c8bfb6;
   --mk-wiki-fill: #b65156;
   --mk-wiki-deco-color: #7c3a3e;
   --mk-tag-fill: #c07a3a;

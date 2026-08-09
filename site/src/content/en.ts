@@ -37,8 +37,8 @@ export const en: SiteContent = {
     emphasis: 'Begin with a file.',
     subline:
       'Leave the software ecosystem at the edge of the page. Everything you write remains free to travel.',
-    action: 'Download now',
-    dateLine: 'Public Windows x64 build expected August 15, 2026',
+    action: 'Download Preview',
+    dateLine: 'Preview live now · signed release August 15, 2026',
     dateQuip: 'A conservative estimate; it may well land earlier.',
   },
   narrative: [

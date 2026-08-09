@@ -37,8 +37,8 @@ export const ko: SiteContent = {
     emphasis: '파일 하나에서 시작합니다.',
     subline:
       '소프트웨어 생태계는 페이지 바깥에 두세요. 당신이 쓴 모든 것은 어디든 자유롭게 떠날 수 있습니다.',
-    action: '지금 다운로드',
-    dateLine: 'Windows x64 공개 버전은 2026년 8월 15일 출시 예정입니다.',
+    action: 'Preview 다운로드',
+    dateLine: 'Preview 공개 중 · 정식 서명 버전은 2026년 8월 15일 출시 예정입니다.',
     dateQuip: '보수적인 추정입니다——어쩌면 더 일찍 나올지도 몰라요.',
   },
   narrative: [

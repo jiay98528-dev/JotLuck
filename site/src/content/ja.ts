@@ -36,8 +36,8 @@ export const ja: SiteContent = {
     lines: ['書くことは、', 'もともと', '軽やかなもの。'],
     emphasis: 'まずは、ひとつのファイルから。',
     subline: 'ソフトウェアの生態系は、紙面の外に置いておく。書いたものはすべて、自由に旅立てる。',
-    action: '今すぐダウンロード',
-    dateLine: 'Windows x64 公開版は 2026 年 8 月 15 日公開予定',
+    action: 'Preview をダウンロード',
+    dateLine: 'Preview 公開中 · 正式署名版は 2026 年 8 月 15 日公開予定',
     dateQuip: '控えめな見積もりです——もしかすると、もっと早く届くかもしれません。',
   },
   narrative: [

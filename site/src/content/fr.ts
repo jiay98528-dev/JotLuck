@@ -37,8 +37,8 @@ export const fr: SiteContent = {
     emphasis: 'Commencez par un fichier.',
     subline:
       "Laissez l'écosystème logiciel au bord de la page. Tout ce que vous écrivez reste libre de voyager.",
-    action: 'Télécharger maintenant',
-    dateLine: 'Version publique Windows x64 attendue le 15 août 2026',
+    action: 'Télécharger la Preview',
+    dateLine: 'Preview disponible · version signée prévue le 15 août 2026',
     dateQuip: 'Une estimation prudente — elle pourrait bien arriver plus tôt.',
   },
   narrative: [

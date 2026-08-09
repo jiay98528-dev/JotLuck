@@ -5,8 +5,9 @@ import { parseInlineMarks } from '../../lib/inline-marks';
 /**
  * SVG 行内混排文本：[[wikilink]] 与 #tag 渲染为着色 tspan（语法符号 [[]]/# 隐藏）。
  * 着色由本组件 scoped 样式 + CSS 变量驱动：宿主主题组件在自己的根类上定义
- * --mk-wiki-fill / --mk-wiki-deco-color / --mk-tag-fill（自定义属性可跨组件边界
- * 继承，scoped CSS 无法穿透子组件）。
+ * --mk-body-fill / --mk-body-size / --mk-wiki-fill / --mk-wiki-deco-color /
+ * --mk-tag-fill（自定义属性可跨组件边界继承，scoped CSS 无法穿透子组件；
+ * 本组件为多根节点，外部传入的 class 不会落到内部 <text>，正文 fill/字号必须走变量）。
  * wikilink 下划线为实测手画 <line>：Chrome 对 SVG tspan 的 text-decoration
  * 会泄漏渲染到无关文本行且位置错位（2026-08-05 探针实证），不可用。
  */
@@ -46,7 +47,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <text ref="textEl" :x="x" :y="y">
+  <text ref="textEl" :x="x" :y="y" class="mk-body">
     <template v-for="(seg, i) in segments" :key="i">
       <tspan v-if="seg.kind === 'text'">{{ seg.text }}</tspan>
       <tspan v-else :class="seg.kind === 'wiki' ? 'mk-wiki' : 'mk-tag'">{{ seg.text }}</tspan>
@@ -64,7 +65,11 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* 颜色来自宿主根类上的 --mk-* 变量（见头注）；!important 覆盖宿主 text 通配 fill */
+/* 颜色/字号来自宿主根类上的 --mk-* 变量（见头注）；!important 覆盖宿主 text 通配 fill */
+.mk-body {
+  fill: var(--mk-body-fill, #333);
+  font-size: var(--mk-body-size, 14px);
+}
 .mk-wiki {
   fill: var(--mk-wiki-fill, #6379a0) !important;
 }

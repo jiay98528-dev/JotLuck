@@ -239,19 +239,13 @@ const clearX = computed(() => fmtDiv2X.value + 18);
     <text x="213" :y="sectionY" class="pp-h2">{{ note.section }}</text>
     <g v-for="(b, i) in note.bullets" :key="b">
       <text x="213" :y="bulletY(i)" class="pp-body">·</text>
-      <SvgInlineText :x="228" :y="bulletY(i)" :src="b" class="pp-body" />
+      <SvgInlineText :x="228" :y="bulletY(i)" :src="b" />
     </g>
 
     <!-- demo 模拟键入行：打字中呈纯文本，完成后换行内标记渲染（[[wikilink]] 高亮） -->
     <template v-if="demo && frame && typed">
       <text x="213" :y="typedY" class="pp-body">·</text>
-      <SvgInlineText
-        v-if="typedDone"
-        :x="228"
-        :y="typedY"
-        :src="frame.typedBullet"
-        class="pp-body"
-      />
+      <SvgInlineText v-if="typedDone" :x="228" :y="typedY" :src="frame.typedBullet" />
       <text v-else x="228" :y="typedY" class="pp-body">{{ typed }}</text>
     </template>
     <rect
@@ -321,6 +315,7 @@ const clearX = computed(() => fmtDiv2X.value + 18);
   height: auto;
   font-family: var(--font-body);
   /* 行内标记着色变量：活链蓝（与「▷ 即时」同色）、标签钢蓝 */
+  --mk-body-fill: #3a342b;
   --mk-wiki-fill: #4a63a8;
   --mk-wiki-deco-color: #b8c6e8;
   --mk-tag-fill: #6379a0;
