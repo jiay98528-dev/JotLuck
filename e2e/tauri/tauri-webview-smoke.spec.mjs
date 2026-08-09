@@ -363,7 +363,9 @@ function serializeError(error) {
 async function syntheticDomClick(selector, resolved = null) {
   const element = resolved ?? (await browser.$(selector));
   await browser.execute((target) => {
-    target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    target.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true, view: window }),
+    );
   }, element);
 }
 
