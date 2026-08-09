@@ -298,6 +298,47 @@ jobs:
           $edgeDriver = (Resolve-Path ".\msedgedriver.exe").Path
           "JOTLUCK_EDGE_DRIVER=$edgeDriver" >> $env:GITHUB_ENV
 
+      - name: Probe WebView2 CDP directly (diagnostic)
+        # 诊断步骤：不经 tauri-driver/msedgedriver，直接拉起构建产物并检查 CDP。
+        # 用于区分三类 smoke 失败根因：应用崩溃 / WebView2 无法建 CDP / 驱动链不匹配。
+        # 永不置红（exit 0），结论打在日志里。
+        shell: pwsh
+        run: |
+          $exe = "packages/app/src-tauri/target/release/jotluck.exe"
+          function Test-Cdp([string]$extraArgs, [string]$label) {
+            $udf = Join-Path $env:TEMP ("wv2-probe-" + $label)
+            $env:WEBVIEW2_USER_DATA_FOLDER = $udf
+            $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222 $extraArgs"
+            $proc = Start-Process $exe -PassThru
+            $alive = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              Start-Sleep -Seconds 2
+              if ($proc.HasExited) { "PROBE[$label]: app exited early, code=$($proc.ExitCode)"; break }
+              try {
+                $v = Invoke-RestMethod -Uri "http://127.0.0.1:9222/json/version" -TimeoutSec 2
+                "PROBE[$label]: CDP OK -> $($v.Browser) | $($v.'User-Agent' -replace '\s+',' ')"
+                $alive = $true; break
+              } catch {}
+            }
+            if (-not $alive -and -not $proc.HasExited) {
+              "PROBE[$label]: app alive 60s but no CDP on 9222"
+              $portFile = Join-Path $udf "DevToolsActivePort"
+              if (Test-Path $portFile) { "PROBE[$label]: DevToolsActivePort EXISTS: $(Get-Content $portFile -Raw)" }
+              else { "PROBE[$label]: DevToolsActivePort missing under $udf" }
+              Get-ChildItem $udf -ErrorAction SilentlyContinue | Select-Object -First 12 -ExpandProperty Name | ForEach-Object { "PROBE[$label]: udf entry: $_" }
+            }
+            if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+            return $alive
+          }
+          $plain = Test-Cdp "" "plain"
+          if (-not $plain) {
+            $gpu = Test-Cdp "--disable-gpu" "disable-gpu"
+            "PROBE: summary plain=$plain disable-gpu=$gpu"
+          } else {
+            "PROBE: summary plain=$plain (disable-gpu not needed)"
+          }
+          exit 0
+
       - name: Run standalone Tauri WebView2 smoke
         run: pnpm test:tauri:webview-smoke
 

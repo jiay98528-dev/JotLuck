@@ -89,9 +89,14 @@ test.describe('five-language localization', () => {
       await expect(page.locator('#app')).toHaveAttribute('lang', locale.code);
       await expect(page.locator('#app')).toHaveAttribute('dir', 'ltr');
       await page.waitForTimeout(250);
+      // WebKit 原生 <select>（menulist）按当前选中项字体度量决定固有高度，
+      // min-height: 44px 不能把它钳到整数边界：实测 en=43.9991、fr=43.9958，
+      // 而 zh/ja/ko 的 CJK 字体恰好 ≥44。这是引擎亚像素渲染偏差而非契约失守
+      // （--touch-target-min 恒为 44px），故容差 0.5px；真正的塌陷（padding/
+      // border 丢失）会差出数像素，仍会被拦截。
       expect(
         await selector.evaluate((element) => element.getBoundingClientRect().height),
-      ).toBeGreaterThanOrEqual(44);
+      ).toBeGreaterThanOrEqual(43.5);
       expect(await page.evaluate(() => localStorage.getItem('jotluck:locale:v1'))).toBe(
         locale.code,
       );
