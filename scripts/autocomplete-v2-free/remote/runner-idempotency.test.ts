@@ -22,7 +22,11 @@ afterEach(async () => {
   );
 });
 
-describe('remote runner terminal-state idempotency', () => {
+// 训练管线（pwsh.exe / .venv\Scripts\python.exe / git.exe）仅支持 Windows 宿主，
+// 与 rust job 同理由：CI ubuntu 上没有这些可执行文件，整套用例在 posix 下跳过。
+const describeRunnerIdempotency = describe.skipIf(process.platform !== 'win32');
+
+describeRunnerIdempotency('remote runner terminal-state idempotency', () => {
   it('re-verifies a completed bundle and does not rewrite successful state', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'jotluck-runner-idempotency-'));
     temporaryRoots.push(root);

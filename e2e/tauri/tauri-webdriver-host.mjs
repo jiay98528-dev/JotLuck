@@ -124,7 +124,11 @@ export class TauriWebDriverHost {
       throw new Error('an installed application path is required');
     }
     const attemptId = randomUUID();
-    const requestedApplication = resolve(application);
+    // tauri-driver 会话只面向 Windows 安装路径：已满足 win32 绝对形态（盘符或
+    // UNC）时保持原样，避免在 posix 环境（CI 单测）被 cwd 拼接成非法路径。
+    const requestedApplication = path.win32.isAbsolute(application)
+      ? application
+      : resolve(application);
     const requestedArgs = args.map(String);
     const pendingCommands = [];
     const registration = { attemptId, onEvent };

@@ -1,3 +1,4 @@
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { sha256 } from '../autocomplete-v2r/common';
@@ -72,9 +73,12 @@ describe('V2R corpus selection and project-owned generator v3', () => {
         'scripts/corpus/_web-cache/autocomplete-v2r/generated-project-owned-v3.1',
       ),
     );
-    expect(resolveProjectOwnedV3Root('D:/isolated-workspace')).toBe(
-      path.resolve(
-        'D:/isolated-workspace/scripts/corpus/_web-cache/autocomplete-v2r/generated-project-owned-v3.1',
+    // 注入根必须在 win32/posix 下同为绝对路径（CI 单测跑在 ubuntu，'D:/...' 非绝对）。
+    const injectedRoot = path.resolve(os.tmpdir(), 'isolated-workspace');
+    expect(resolveProjectOwnedV3Root(injectedRoot)).toBe(
+      path.join(
+        injectedRoot,
+        'scripts/corpus/_web-cache/autocomplete-v2r/generated-project-owned-v3.1',
       ),
     );
   });
