@@ -217,4 +217,55 @@
     <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/studio"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
   </url>
+  <!-- 隐私页（五语，2026-08-05 裁决 26；按页归组追加，不影响既有语言分组） -->
+  <url>
+    <loc>https://jotluck.com/zh/privacy</loc>
+    <lastmod>2026-08-05</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/privacy"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/privacy"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/privacy"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/privacy"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/privacy"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/en/privacy</loc>
+    <lastmod>2026-08-05</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/privacy"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/privacy"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/privacy"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/privacy"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/privacy"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/ja/privacy</loc>
+    <lastmod>2026-08-05</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/privacy"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/privacy"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/privacy"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/privacy"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/privacy"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/ko/privacy</loc>
+    <lastmod>2026-08-05</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/privacy"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/privacy"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/privacy"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/privacy"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/privacy"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/fr/privacy</loc>
+    <lastmod>2026-08-05</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/privacy"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/privacy"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/privacy"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/privacy"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/privacy"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
+  </url>
 </urlset>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import SvgInlineText from './SvgInlineText.vue';
 import { wrapText, widthUnits } from '../../lib/inline-marks';
 import type { ThemeHaloNote, ThemePreviewUi, ThemeSampleNote } from '../../content/types';
@@ -78,6 +78,30 @@ function run() {
   );
 }
 
+/**
+ * 跨语言切换（裁决 26，黑盒审计实测 zh→en 残留中文键入句）：
+ * 五语路由共用组件实例，切语言时 onMounted 不重跑，演示内部状态必须跟随
+ * 新语言重置；已入场的演示按新语言重播（reduced-motion 直接呈新终态）。
+ */
+watch(
+  () => props.frame?.typedBullet,
+  () => {
+    if (!props.demo) return;
+    clearTimers();
+    typed.value = '';
+    saved.value = true;
+    cursorOn.value = false;
+    running.value = false;
+    const el = rootEl.value;
+    if (!el?.classList.contains('is-in')) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      finish();
+    } else {
+      timers.push(window.setTimeout(run, 700));
+    }
+  },
+);
+
 onMounted(() => {
   const el = rootEl.value;
   if (!el) return;
@@ -145,7 +169,7 @@ const clearX = computed(() => fmtDiv2X.value + 18);
     viewBox="0 0 1280 800"
     :role="demo ? 'button' : 'img'"
     :tabindex="demo ? 0 : undefined"
-    :aria-label="note.title"
+    :aria-label="demo ? `${note.title} — ${ui.replay}` : note.title"
     :title="demo ? ui.replay : undefined"
     preserveAspectRatio="xMidYMid meet"
     @click="run"

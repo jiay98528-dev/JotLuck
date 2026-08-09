@@ -95,7 +95,7 @@
 .tech-rail {
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  color: var(--ink-50);
+  color: var(--ink-70);
   letter-spacing: 0.03em;
 }
 
@@ -132,5 +132,5 @@
 .quip {
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  color: var(--ink-50);
+  color: var(--ink-70);
 }
