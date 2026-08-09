@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { useLocale } from '../composables/useLocale';
+import { pagePath } from '../router';
 import { EXTERNAL } from '../release';
 
-const { content } = useLocale();
+const { locale, content } = useLocale();
 </script>
 
 <template>
@@ -13,7 +14,7 @@ const { content } = useLocale();
     </div>
     <nav class="footer-links" aria-label="footer">
       <a :href="EXTERNAL.githubIssues" rel="noopener">{{ content.footer.links.support }}</a>
-      <a :href="`mailto:${EXTERNAL.supportMail}`">{{ content.footer.links.privacy }}</a>
+      <RouterLink :to="pagePath(locale, 'privacy')">{{ content.footer.links.privacy }}</RouterLink>
       <a :href="EXTERNAL.githubRepo" rel="noopener">{{ content.footer.links.github }}</a>
     </nav>
     <p class="footer-copyright">{{ content.footer.copyright }}</p>
@@ -40,8 +41,16 @@ const { content } = useLocale();
   gap: 20px;
   margin-left: auto;
 }
+/* 触控契约 44×44（裁决 32）：页脚链接扩命中区 */
+.footer-links a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+}
 .footer-copyright {
   width: 100%;
-  color: var(--ink-50);
+  color: var(--ink-70);
 }
 </style>

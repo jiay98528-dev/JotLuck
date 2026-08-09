@@ -4,22 +4,27 @@ import { useRouter } from 'vue-router';
 import { useHead } from '@unhead/vue';
 import { LOCALES, LOCALE_TAGS, getContent, type Locale } from '../content';
 import { SITE_URL, SOCIAL_CARD, SOCIAL_CARD_ALT } from '../release';
+import { JSON_LD } from '../composables/usePageHead';
 
 /**
  * 语言门页（`/`）：客户端按浏览器语言重定向到五语之一；
  * 无 JS / SSG 静态态呈现五语入口（真实链接，SEO 可达）。
  * SEO：canonical 指自身；hreflang 指向五语首页，x-default 指自身（语言选择器模式）。
+ * 裁决 32：补 WebSite+Organization JSON-LD；description 改为门页专属（与 /en/ 首页差异化）。
  */
 const router = useRouter();
 
-const en = getContent('en');
+/** 门页专属 description：说明产品类别 + 语言选择器职能 */
+const GATE_DESCRIPTION =
+  'JotLuck — a lightweight, local-first Markdown note tool. Choose your language: 中文 / 日本語 / 한국어 / English / Français.';
+
 useHead({
   htmlAttrs: { lang: 'en' },
   title: 'JotLuck',
   meta: [
-    { name: 'description', content: en.meta.description },
+    { name: 'description', content: GATE_DESCRIPTION },
     { property: 'og:title', content: 'JotLuck' },
-    { property: 'og:description', content: en.meta.description },
+    { property: 'og:description', content: GATE_DESCRIPTION },
     { property: 'og:type', content: 'website' },
     { property: 'og:site_name', content: 'JotLuck' },
     { property: 'og:url', content: `${SITE_URL}/` },
@@ -29,9 +34,10 @@ useHead({
     { property: 'og:image:alt', content: SOCIAL_CARD_ALT },
     { name: 'twitter:card', content: 'summary_large_image' },
     { name: 'twitter:title', content: 'JotLuck' },
-    { name: 'twitter:description', content: en.meta.description },
+    { name: 'twitter:description', content: GATE_DESCRIPTION },
     { name: 'twitter:image', content: `${SITE_URL}${SOCIAL_CARD}` },
   ],
+  script: [{ type: 'application/ld+json', innerHTML: JSON_LD }],
   link: [
     { rel: 'canonical', href: `${SITE_URL}/` },
     ...LOCALES.map((l) => ({
@@ -157,6 +163,6 @@ onMounted(() => {
 .gate-tag {
   font-family: var(--font-mono);
   font-size: 0.72rem;
-  color: var(--ink-50);
+  color: var(--ink-70);
 }
 </style>

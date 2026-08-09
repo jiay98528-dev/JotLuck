@@ -209,6 +209,10 @@ onMounted(() => {
   font-size: 0.9rem;
   color: var(--teal);
   align-self: flex-start;
+  /* 触控契约 44px 高（裁决 32）；宽 155px 已达标 */
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
 }
 
 .studio-cta {

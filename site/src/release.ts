@@ -2,19 +2,30 @@
 export const SITE_URL = 'https://jotluck.com';
 
 export const RELEASE = {
-  /** 首个公开 Windows x64 版本的预计日期（用户裁决：沿用 2026-08-15 + 保守估计俏皮注） */
+  /** 首个正式签名 Windows x64 版本的预计日期（用户裁决：沿用 2026-08-15 + 保守估计俏皮注） */
   dateISO: '2026-08-15',
   platform: 'Windows x64',
-  /** prelaunch = GitHub Releases 尚无任何公开资产，下载按钮不点亮 */
-  state: 'prelaunch' as const,
+  /** preview = 预览版已上架 GitHub Releases（2026-08-08 v0.11.0-preview，公开 Pre-release）；下载按钮点亮，倒计时保留指正式版 */
+  state: 'preview' as const,
+  /** Preview 事实（裁决 33）：版本/链接/校验的唯一事实源，下载页模板引用；事实值不进五语 content */
+  preview: {
+    version: '0.11.0-preview',
+    dateISO: '2026-08-08',
+    downloadUrl:
+      'https://github.com/jiay98528-dev/JotLuck/releases/download/v0.11.0-preview/JotLuck_0.11.0-preview_x64-setup.exe',
+    tagUrl: 'https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.11.0-preview',
+    sha256: 'f3655ed116839c8230b5191419cc40cdcd5a69a1a6cebe03425bd2b16efccdd5',
+  },
 };
 
 export const EXTERNAL = {
   githubRepo: 'https://github.com/jiay98528-dev/JotLuck',
   githubReleases: 'https://github.com/jiay98528-dev/JotLuck/releases',
   githubIssues: 'https://github.com/jiay98528-dev/JotLuck/issues/new/choose',
+  /** 代码签名政策（仓库内公开政策文件；官网下载页 Preview 区链接，SignPath 审查披露项） */
+  codeSigning: 'https://github.com/jiay98528-dev/JotLuck/blob/main/CODE_SIGNING.md',
   supportMail: 'official@leankom.com',
-  studioMail: 'carrie@leankom.com',
+  studioMail: 'carriechan@leankom.com',
 };
 
 /** 全局默认社卡片（宣传片/02-视觉素材/社交预览/social-preview.png 转正，1280×640 中英双语） */

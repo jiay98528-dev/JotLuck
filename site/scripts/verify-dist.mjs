@@ -9,23 +9,23 @@
  *   dist/index.html            门页（lang=en）
  *   dist/404.html              404（门页副本，canonical 指 /）
  *   dist/{l}/index.html        五语首页
- *   dist/{l}/{page}.html       五语 × 3 子页
+ *   dist/{l}/{page}.html       五语 × 4 子页
  *   dist/sitemap.xml           sitemap（loc → dist 文件映射）
  *
  * 断言矩阵：
- *   (a) 21 个 HTML 文件全部存在（index + 5 语首页 + 5 语 × 3 子页）
+ *   (a) 26 个 HTML 文件全部存在（index + 5 语首页 + 5 语 × 4 子页）
  *   (b) html lang：门页 en；zh 页 zh-CN；其余 en/ja/ko/fr
  *   (c) canonical = https://jotluck.com 绝对 URL（门页 /、首页 /{l}/、子页 /{l}/{page}）
  *   (d) 5 条 alternate hreflang（zh-CN/en/ja/ko/fr 指向对应语言同页）+ 1 条 x-default → https://jotluck.com/
  *   (e) og:image 与 twitter:image = https://jotluck.com/assets/brand/social-preview.png；
  *       twitter:card = summary_large_image
  *   (f) 404.html 存在且 canonical = https://jotluck.com/
- *   (g) sitemap.xml：loc 恰好 21 条、无重复、与预期 URL 集合完全相等，且每条
+ *   (g) sitemap.xml：loc 恰好 26 条、无重复、与预期 URL 集合完全相等，且每条
  *       映射为 dist 文件（'/'→index.html、'/{l}/'→{l}/index.html、'/{l}/{page}'→{l}/{page}.html）
  *   (h) 五语首页：<h1 class="statement"> 在 SSG 态为连续纯文本（零 .ch 字符 span、
  *       display-line 行无嵌套标签、去标签文本非空）且与 EXPECTED_H1 预期句逐字一致；
  *       字符动画仅在水合后挂载
- *   (i) 20 个语言页（门页与 404 除外）：恰好 1 个 type="application/ld+json" <script>，
+ *   (i) 25 个语言页（门页与 404 除外）：恰好 1 个 type="application/ld+json" <script>，
  *       可解析且实体语义正确（WebSite url/name/publisher 关联 + Organization 法律主体/alternateName）
  *   (j) title 非空含品牌名且全站唯一；meta description 子页 70–160 / 首页与门页 20–200；
  *       og:image:alt / twitter:title / twitter:description 均存在
@@ -44,7 +44,7 @@ const SITE_URL = 'https://jotluck.com';
 const CARD_URL = `${SITE_URL}/assets/brand/social-preview.png`;
 const LOCALES = ['zh', 'en', 'ja', 'ko', 'fr'];
 const TAGS = { zh: 'zh-CN', en: 'en', ja: 'ja', ko: 'ko', fr: 'fr' };
-const PAGES = ['download', 'themes', 'studio'];
+const PAGES = ['download', 'themes', 'studio', 'privacy'];
 
 /** (h) 五语首页 H1 预期完整句（品牌主句，稳定文案；content 改动时需同步——这正是护栏意义） */
 const EXPECTED_H1 = {
@@ -58,6 +58,14 @@ const EXPECTED_H1 = {
 /** (i) JSON-LD 实体语义期望（与 src/release.ts 的 LEGAL_ENTITY / STUDIO_NAME 同源） */
 const EXPECTED_ORG_NAME = '鸰湖科技（深圳）有限公司';
 const EXPECTED_ORG_ALT = 'LeankomStudio';
+
+/** (k) 下载页 Preview 事实期望（裁决 33，与 src/release.ts RELEASE.preview 同源；改版本须同步——护栏意义即在此） */
+const EXPECTED_PREVIEW = {
+  exe: 'https://github.com/jiay98528-dev/JotLuck/releases/download/v0.11.0-preview/JotLuck_0.11.0-preview_x64-setup.exe',
+  tag: 'https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.11.0-preview',
+  sha: 'f3655ed116839c8230b5191419cc40cdcd5a69a1a6cebe03425bd2b16efccdd5',
+  policy: 'https://github.com/jiay98528-dev/JotLuck/blob/main/CODE_SIGNING.md',
+};
 
 let passCount = 0;
 let failCount = 0;
@@ -98,13 +106,13 @@ function parseHtml(html) {
 
 /**
  * 文件 → 期望值。
- * path 相对 dist/；pageKind ∈ 'gate' | 'home' | 'download' | 'themes' | 'studio'
+ * path 相对 dist/；pageKind ∈ 'gate' | 'home' | 'download' | 'themes' | 'studio' | 'privacy'
  */
 function expectationFor(path) {
   if (path === 'index.html') {
     return { pageKind: 'gate', lang: 'en', canonical: `${SITE_URL}/` };
   }
-  const m = /^([a-z]{2})\/(index\.html|(download|themes|studio)\.html)$/.exec(path);
+  const m = /^([a-z]{2})\/(index\.html|(download|themes|studio|privacy)\.html)$/.exec(path);
   if (!m) return null;
   const locale = m[1];
   const pageKind = m[2] === 'index.html' ? 'home' : m[3];
@@ -129,7 +137,7 @@ function locToRel(loc) {
   if (pathname === '/') return 'index.html';
   const home = /^\/([a-z]{2})\/$/.exec(pathname);
   if (home) return `${home[1]}/index.html`;
-  const page = /^\/([a-z]{2})\/(download|themes|studio)$/.exec(pathname);
+  const page = /^\/([a-z]{2})\/(download|themes|studio|privacy)$/.exec(pathname);
   if (page) return `${page[1]}/${page[2]}.html`;
   throw new Error('无法映射到 dist 文件');
 }
@@ -204,12 +212,12 @@ function checkJsonLd(html, rel) {
   );
 }
 
-// ---------- (a) 21 文件清单（五语根页 = {locale}/index.html） ----------
+// ---------- (a) 26 文件清单（五语根页 = {locale}/index.html） ----------
 const expectedFiles = ['index.html'];
 for (const l of LOCALES) expectedFiles.push(`${l}/index.html`);
 for (const l of LOCALES) for (const p of PAGES) expectedFiles.push(`${l}/${p}.html`);
-if (expectedFiles.length !== 21) {
-  console.error(`[FATAL] 期望文件数 != 21（实际 ${expectedFiles.length}）`);
+if (expectedFiles.length !== 26) {
+  console.error(`[FATAL] 期望文件数 != 26（实际 ${expectedFiles.length}）`);
   process.exit(2);
 }
 
@@ -296,7 +304,7 @@ for (const rel of expectedFiles) {
   titleSeen.push([rel, titleText]);
   const descMeta = metas.find((m) => m.name === 'description');
   const descLen = descMeta?.content?.length ?? 0;
-  // 子页（download/themes/studio）按契约 70–160；首页/门页单独定义 20–200（裁决 24/25）
+  // 子页（download/themes/studio/privacy）按契约 70–160；首页/门页单独定义 20–200（裁决 24/25）
   const isSubpage = PAGES.includes(exp.pageKind);
   const [lo, hi] = isSubpage ? [70, 160] : [20, 200];
   check(
@@ -311,8 +319,17 @@ for (const rel of expectedFiles) {
   check(Boolean(twTitle?.content?.trim()), `twitter:title 存在`, twTitle?.content ? '有' : '缺失');
   check(Boolean(twDesc?.content?.trim()), `twitter:description 存在`, twDesc?.content ? '有' : '缺失');
 
-  // (i) 语言页（门页除外）：JSON-LD 恰好 1 个且可解析
-  if (rel !== 'index.html') checkJsonLd(html, rel);
+  // (i) 全站 26 页（含门页，裁决 32 门页补 JSON-LD）：恰好 1 个且可解析
+  checkJsonLd(html, rel);
+
+  // (k) 五语下载页 Preview 事实（裁决 33）：exe 直链 / Release tag 页 / 完整 SHA-256 三者齐全
+  if (exp.pageKind === 'download') {
+    check(html.includes(EXPECTED_PREVIEW.exe), `Preview exe 直链`, EXPECTED_PREVIEW.exe);
+    check(html.includes(EXPECTED_PREVIEW.tag), `Preview tag 页`, EXPECTED_PREVIEW.tag);
+    check(html.includes(EXPECTED_PREVIEW.sha), `Preview SHA-256`, EXPECTED_PREVIEW.sha);
+    // (k2) 代码签名政策链接（裁决 35，SignPath 审查披露项）
+    check(html.includes(EXPECTED_PREVIEW.policy), `签名政策链接`, EXPECTED_PREVIEW.policy);
+  }
 
   // (h) 五语首页：h1.statement 结构
   if (/^[a-z]{2}\/index\.html$/.test(rel)) checkStatementH1(html, rel);
@@ -354,11 +371,11 @@ if (!existsSync(sitemapPath)) {
   check(true, `sitemap.xml 存在`, `dist/sitemap.xml 存在`);
   const sm = readFileSync(sitemapPath, 'utf8');
   const locs = [...sm.matchAll(/<loc[^>]*>([\s\S]*?)<\/loc>/gi)].map((m) => m[1].trim());
-  // 精确集合：恰好 21 条、无重复、与预期 URL 集合完全相等
+  // 精确集合：恰好 26 条、无重复、与预期 URL 集合完全相等
   const expectedLocs = [`${SITE_URL}/`];
   for (const l of LOCALES) expectedLocs.push(`${SITE_URL}/${l}/`);
   for (const l of LOCALES) for (const p of PAGES) expectedLocs.push(`${SITE_URL}/${l}/${p}`);
-  check(locs.length === 21, `loc 数量 = 21`, `实际 ${locs.length} 条`);
+  check(locs.length === 26, `loc 数量 = 26`, `实际 ${locs.length} 条`);
   const dupLocs = locs.filter((loc, i) => locs.indexOf(loc) !== i);
   check(dupLocs.length === 0, `loc 无重复`, dupLocs.length ? `重复: ${[...new Set(dupLocs)].join(', ')}` : '通过');
   const missing = expectedLocs.filter((u) => !locs.includes(u));
@@ -366,7 +383,7 @@ if (!existsSync(sitemapPath)) {
   check(
     missing.length === 0 && extra.length === 0,
     `loc 与预期集合相等`,
-    missing.length || extra.length ? `缺: ${missing.join(', ') || '无'}｜多: ${extra.join(', ') || '无'}` : '21 条完全匹配',
+    missing.length || extra.length ? `缺: ${missing.join(', ') || '无'}｜多: ${extra.join(', ') || '无'}` : '26 条完全匹配',
   );
   for (const loc of locs) {
     let rel;
@@ -383,7 +400,7 @@ if (!existsSync(sitemapPath)) {
 // ---------- 汇总 ----------
 console.log(`\n================ 汇总 ================`);
 console.log(`断言总数：${passCount + failCount}｜PASS：${passCount}｜FAIL：${failCount}`);
-console.log(`检查文件数：${expectedFiles.length}/21（另有 404.html 与 sitemap.xml 专项）`);
+console.log(`检查文件数：${expectedFiles.length}/26（另有 404.html 与 sitemap.xml 专项）`);
 if (failCount > 0) {
   console.log(`结果：FAIL — 存在 ${failCount} 项未通过`);
   process.exitCode = 1;

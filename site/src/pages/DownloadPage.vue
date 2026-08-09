@@ -2,17 +2,17 @@
 import { onMounted, ref } from 'vue';
 import { useLocale } from '../composables/useLocale';
 import { usePageHead } from '../composables/usePageHead';
-import { EXTERNAL } from '../release';
+import { EXTERNAL, RELEASE } from '../release';
 
 const { content } = useLocale();
 usePageHead('download');
 const d = () => content.value.download;
 
 /**
- * 发布倒计时邮戳：确定性日期差（无运行时随机）。
+ * 发布倒计时邮戳：确定性日期差（无运行时随机），日期由 release.ts RELEASE.dateISO 单点派生。
  * SSR 先渲染占位符，挂载后填入真实天数，避免水合不一致。
  */
-const RELEASE_UTC = Date.UTC(2026, 7, 15);
+const RELEASE_UTC = Date.parse(`${RELEASE.dateISO}T00:00:00Z`);
 const daysLeft = ref('––');
 onMounted(() => {
   const diff = Math.ceil((RELEASE_UTC - Date.now()) / 86_400_000);
@@ -40,6 +40,33 @@ onMounted(() => {
       </div>
     </section>
 
+    <!-- Preview 下载区（裁决 33）：事实值引自 release.ts RELEASE.preview 单点事实源；
+         SHA-256 完整显示（可换行），校验场景必须看得到全部 64 位 -->
+    <section class="preview-dl" aria-labelledby="pv-title">
+      <h2 id="pv-title">{{ d().previewTitle }}</h2>
+      <p class="pv-facts tech-rail">
+        v{{ RELEASE.preview.version }} · {{ RELEASE.preview.dateISO }} · {{ RELEASE.platform }}
+      </p>
+      <p class="pv-sha">
+        <span class="pv-sha-label">SHA-256</span>
+        <code>{{ RELEASE.preview.sha256 }}</code>
+      </p>
+      <div class="pv-actions">
+        <a class="btn btn-primary" :href="RELEASE.preview.downloadUrl" rel="noopener">{{
+          d().downloadBtn
+        }}</a>
+        <a class="btn btn-secondary" :href="RELEASE.preview.tagUrl" rel="noopener">{{
+          d().releaseBtn
+        }}</a>
+      </div>
+      <p class="pv-sign quip">
+        {{ d().signNote }}
+        <a class="pv-policy" :href="EXTERNAL.codeSigning" rel="noopener"
+          >{{ d().signPolicyLink }} ↗</a
+        >
+      </p>
+    </section>
+
     <section class="platforms" aria-labelledby="pf-title">
       <h2 id="pf-title">{{ d().platformTitle }}</h2>
       <ul>
@@ -55,8 +82,8 @@ onMounted(() => {
       <div class="honesty-text">
         <h2 id="hn-title">{{ d().honestyTitle }}</h2>
         <p>{{ d().honestyBody }}</p>
-        <a class="btn btn-secondary releases-link" :href="EXTERNAL.githubReleases" rel="noopener"
-          >GitHub Releases</a
+        <a class="btn btn-secondary releases-link" :href="EXTERNAL.githubRepo" rel="noopener"
+          >GitHub</a
         >
       </div>
       <div class="countdown">
@@ -123,13 +150,58 @@ onMounted(() => {
   margin-top: 18px;
 }
 
+/* ---------- Preview 下载区（裁决 33）：事实行 + 双按钮 + 签名提示 ---------- */
+.preview-dl {
+  margin-top: clamp(56px, 7vw, 88px);
+  padding: clamp(28px, 4vw, 44px) 0;
+  border-top: 1px solid var(--ink-14);
+  border-bottom: 1px solid var(--ink-14);
+}
+.pv-facts {
+  margin-top: 14px;
+  color: var(--ink-70);
+}
+.pv-sha {
+  margin-top: 10px;
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  font-size: 0.8125rem;
+  color: var(--ink-70);
+}
+.pv-sha code {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  word-break: break-all;
+}
+.pv-actions {
+  margin-top: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.pv-sign {
+  margin-top: 20px;
+}
+/* 代码签名政策链接（裁决 35）：与未签名提示同行，低注意力功能链 */
+.pv-policy {
+  color: var(--ink-70);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+.pv-policy:hover {
+  color: var(--orange);
+}
+
 /* ---------- 平台表：发丝分隔，状态用等宽栏 ---------- */
 .platforms {
   margin-top: clamp(56px, 7vw, 88px);
 }
 .platforms h2,
 .notes h2,
-.honesty h2 {
+.honesty h2,
+.preview-dl h2 {
   font-size: clamp(1.375rem, 2.2vw, 1.75rem);
   font-weight: 600;
   letter-spacing: -0.015em;
@@ -193,7 +265,7 @@ onMounted(() => {
   gap: 14px;
 }
 .countdown-label {
-  color: var(--ink-50);
+  color: var(--ink-70);
 }
 .countdown-stamp {
   display: flex;

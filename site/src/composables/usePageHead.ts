@@ -13,7 +13,7 @@ const CARD_URL = `${SITE_URL}${SOCIAL_CARD}`;
  * Organization.name = 法律主体、alternateName = 工作室品牌、JotLuck 为产品品牌，
  * WebSite 经 publisher 关联 Organization；SoftwareApplication 待正式发布。
  */
-const JSON_LD = JSON.stringify({
+export const JSON_LD = JSON.stringify({
   '@context': 'https://schema.org',
   '@graph': [
     {

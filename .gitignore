@@ -100,3 +100,6 @@ scripts/corpus/_web-cache/
 # Vite
 *.local
 spec/progress.md
+
+# 本地调研素材（不入库）
+_research_assets/
