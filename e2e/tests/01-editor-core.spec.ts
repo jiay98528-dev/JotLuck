@@ -263,14 +263,16 @@ test.describe('编辑器核心', () => {
   test('should handle undo/redo (Ctrl+Z / Ctrl+Shift+Z)', async ({ page }) => {
     // V1: 验证撤销/重做正确性
     // Step 1: 输入第一段文本
-    await typeInEditor(page, '第一行内容', { insertText: true });
+    // 逐键输入（勿改 insertText）：本测试考核撤销分组——两段文本需落在不同 undo 组，
+    // insertText 的单笔事务会让两段在 CI 引擎上被 CM6 并入同组，Ctrl+Z 全撤。
+    await typeInEditor(page, '第一行内容');
     await waitForAutoSave(page);
 
     const contentAfterFirstType = await getEditorContent(page);
     expect(contentAfterFirstType).toContain('第一行内容');
 
     // Step 2: 追加第二段文本
-    await appendInEditor(page, '\n第二行内容', { insertText: true });
+    await appendInEditor(page, '\n第二行内容');
     await waitForAutoSave(page);
 
     const contentAfterSecondType = await getEditorContent(page);

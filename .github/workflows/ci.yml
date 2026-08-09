@@ -305,6 +305,10 @@ jobs:
         shell: pwsh
         run: |
           $exe = "packages/app/src-tauri/target/release/jotluck.exe"
+          Write-Host "PROBE[ctx]: integrity:"; whoami /groups | Select-String -Pattern "S-1-16-" | ForEach-Object { Write-Host "PROBE[ctx]: $($_.Line.Trim())" }
+          foreach ($pk in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge','HKLM:\SOFTWARE\Policies\Microsoft\EdgeWebView2','HKCU:\SOFTWARE\Policies\Microsoft\Edge')) {
+            if (Test-Path $pk) { Write-Host "PROBE[ctx]: policy $pk -> $((Get-ItemProperty $pk).PSObject.Properties.Name -join ',')" }
+          }
           function Test-Cdp([string]$extraArgs, [string]$label) {
             $udf = Join-Path $env:TEMP ("wv2-probe-" + $label)
             $env:WEBVIEW2_USER_DATA_FOLDER = $udf
@@ -329,9 +333,12 @@ jobs:
               # 关键判别：WebView2 浏览器进程是否存在、命令行是否带着 --remote-debugging-port
               $wv = Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" -ErrorAction SilentlyContinue
               if ($wv) {
-                $wv | Select-Object -First 6 | ForEach-Object {
-                  $hasPort = $_.CommandLine -match 'remote-debugging-port'
-                  Write-Host "PROBE[$label]: webview2 pid=$($_.ProcessId) port-arg=$hasPort cmd=$($_.CommandLine.Substring(0, [Math]::Min(220, $_.CommandLine.Length)))"
+                $main = $wv | Where-Object { $_.CommandLine -match 'embedded-browser-webview' } | Select-Object -First 1
+                if ($main) {
+                  Write-Host "PROBE[$label]: main pid=$($main.ProcessId) port-arg=$($main.CommandLine -match 'remote-debugging-port')"
+                  Write-Host "PROBE[$label]: main full cmd=$($main.CommandLine)"
+                } else {
+                  Write-Host "PROBE[$label]: no main webview2 process; total=$($wv.Count)"
                 }
               } else {
                 Write-Host "PROBE[$label]: no msedgewebview2.exe process at all"
