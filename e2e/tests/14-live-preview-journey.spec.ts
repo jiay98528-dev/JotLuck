@@ -386,14 +386,17 @@ test.describe('即时模式 (Live Preview)', () => {
     await clearEditor(page);
     await switchToLiveMode(page);
 
+    // 复杂内容以单次 insertText 注入：本测试考核持续编辑后的内容完整性，
+    // 不考核逐键输入路径；Linux WebKit 逐键合成存在首字符延迟乱序（CI 实测）。
     await typeInEditor(
       page,
       '# 稳定性测试\n\n## 章节一\n\n这是第一段正文内容。\n\n## 章节二\n\n- 列表项 1\n- 列表项 2\n\n```\ncode block\n```\n\n> 引用文字',
+      { insertText: true },
     );
     await page.waitForTimeout(500);
 
     // Step 2: 在即时模式下继续追加内容
-    await appendInEditor(page, '\n\n## 章节三\n\n追加内容测试。');
+    await appendInEditor(page, '\n\n## 章节三\n\n追加内容测试。', { insertText: true });
 
     // Step 3: 验证所有内容完整无损坏
     const content = await getEditorContentFromBridge(page);

@@ -216,11 +216,12 @@ test.describe('文件操作', () => {
     await createdItem.click({ button: 'right' });
     await expect(page.locator('.context-menu')).toBeVisible({ timeout: 2000 });
     await page.locator('.context-menu-item--danger').click();
-    await page.waitForTimeout(600);
 
-    // V1: 指标2 — 文件树条目数应减少
-    const countAfter = await page.locator('.tree-item').count();
-    expect(countAfter).toBeLessThan(countBefore);
+    // V1: 指标2 — 文件树条目数应减少（轮询等待删除生效；WebKit 下文件树刷新慢于定值等待。
+    // 注意不能断言精确条数：部分引擎下删除后抽屉关闭，条目数直接归零）
+    await expect
+      .poll(() => page.locator('.tree-item').count(), { timeout: 5000 })
+      .toBeLessThan(countBefore);
 
     // V1: 指标3 — 已删除的条目不再出现
     await expect(page.locator('.tree-item:has-text("笔记-")').first()).not.toBeVisible({

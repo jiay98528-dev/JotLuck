@@ -239,17 +239,19 @@ test.describe('编辑器核心', () => {
     await expect(bold).toBeEnabled();
     await bold.click();
     await expect(bold).toHaveAttribute('aria-pressed', 'true');
-    await page.keyboard.type('中文');
+    // CJK 填充文本以 insertText 单次注入：本测试考核格式工具栏状态机与 Enter 行为，
+    // 不考核逐键路径；Linux WebKit 逐键合成存在首字符延迟乱序（CI 实测）。
+    await page.keyboard.insertText('中文');
     await page.keyboard.press('Enter');
     await expect(bold).toHaveAttribute('aria-pressed', 'false');
-    await page.keyboard.type('普通正文');
+    await page.keyboard.insertText('普通正文');
     expect(await getEditorContentFromBridge(page)).toBe('**中文**\n普通正文');
 
     await page.keyboard.press('Enter');
     await preset.selectOption('heading2');
-    await page.keyboard.type('预选标题');
+    await page.keyboard.insertText('预选标题');
     await page.keyboard.press('Enter');
-    await page.keyboard.type('恢复正文');
+    await page.keyboard.insertText('恢复正文');
     expect(await getEditorContentFromBridge(page)).toBe(
       '**中文**\n普通正文\n## 预选标题\n恢复正文',
     );

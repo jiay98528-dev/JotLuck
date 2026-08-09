@@ -1,4 +1,4 @@
-﻿/**
+/**
  * JotLuck E2E Test Utilities
  *
  * 共享辅助函数，用于 Playwright E2E 测试。
@@ -35,23 +35,35 @@ export async function getEditorContentFromBridge(page: Page): Promise<string> {
 }
 
 /** 在编辑器中输入文本 (聚焦 .cm-content 后逐字键入) */
-export async function typeInEditor(page: Page, text: string): Promise<void> {
+export async function typeInEditor(
+  page: Page,
+  text: string,
+  options?: { insertText?: boolean },
+): Promise<void> {
   await ensureEditorReady(page);
   await focusEditor(page);
   // 使用 Ctrl+A+Backspace 清除内容（经 CM6 key handler，避免 fill() 的 MutationObserver 竞态）
   await page.keyboard.press('Control+a');
   await page.keyboard.press('Backspace');
   await page.waitForTimeout(200); // 等待 CM6 调和状态
-  await page.keyboard.type(text, { delay: 10 });
+  // insertText：单次注入（等价 IME 提交），规避 Linux WebKit 逐键时序错乱；
+  // 仅用于不考核逐键路径的文本填充场景。
+  if (options?.insertText) await page.keyboard.insertText(text);
+  else await page.keyboard.type(text, { delay: 10 });
 }
 
 /** 在编辑器中追加文本 */
-export async function appendInEditor(page: Page, text: string): Promise<void> {
+export async function appendInEditor(
+  page: Page,
+  text: string,
+  options?: { insertText?: boolean },
+): Promise<void> {
   await ensureEditorReady(page);
   await focusEditor(page);
   // Move to end
   await page.keyboard.press('Control+End');
-  await page.keyboard.type(text, { delay: 5 });
+  if (options?.insertText) await page.keyboard.insertText(text);
+  else await page.keyboard.type(text, { delay: 5 });
 }
 
 /** 清空编辑器内容 */
