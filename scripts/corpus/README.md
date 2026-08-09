@@ -1,12 +1,12 @@
 # JotLuck 离线补全语料目录
 
-> 语料目录规范 v6.0 | 日期：2026-07-14 | 当前公共模型训练已停止
+> 语料目录规范 v6.1 | 日期：2026-08-09 | 当前公共模型训练已停止
 
 完整的训练、评测、停止和发布说明见 `doc/autocomplete-model-training.md`。本文件只说明目录职责，避免与权威训练手册重复。
 
 ## 当前状态
 
-- V2R 与 V2S 均有受版本管理的 architecture stop；不得继续长训练、Gate、final 或 publisher。
+- V2R、V2S 与 V2.2 均有受版本管理的 architecture stop；V2.2 正式矩阵已完成，但最快候选未达到 Windows worker 80ms 门禁。不得继续训练、Oracle、final 或 publisher。
 - Public L3 默认未绑定，RC `--autocomplete-only` 预期返回 code 10。
 - `_web-cache/` 是可再生、Git ignored 的本地缓存，不能单独作为发布或放行证据。
 - `novel-zh/` 永久硬隔离，即使文件仍在仓库也不得进入 selection。
@@ -21,6 +21,7 @@ corpus/
 ├── licenses/                             # 外部来源许可证证据
 ├── autocomplete-v2r-architecture-stop.json
 ├── autocomplete-v2s-architecture-stop.json
+├── autocomplete-v2-free-architecture-stop.json
 ├── autocomplete-v2r-holdouts/           # V2R holdout 占位与隔离说明
 ├── autocomplete-v2s-holdouts/           # V2S holdout 占位与隔离说明
 ├── note-patterns-zh/                     # 项目自有精选短笔记

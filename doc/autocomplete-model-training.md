@@ -2,7 +2,7 @@
 
 > 版本：v2.0
 > 日期：2026-08-05
-> 状态：Public V2R、Public V2S 继续停止；`public-v2-free-decoder-v1` 只进入下一版本 DEVELOPMENT 训练；公共 L3 默认未绑定；本文是模型训练与证据流程的唯一操作说明
+> 状态：Public V2R、Public V2S 继续停止；`public-v2-free-decoder-v1` 的 DEVELOPMENT 正式矩阵已完成但未通过 80ms 运行时门禁；公共 L3 默认未绑定；本文是模型训练与证据流程的唯一操作说明
 
 ## 1. 当前结论
 
@@ -12,7 +12,8 @@ JotLuck 的离线补全不是一个单模型系统。结构化补全、当前文
 
 - `public-phrase-transformer-v1`（V2R）受 `scripts/corpus/autocomplete-v2r-architecture-stop.json` 阻断。固定短语输出空间无法覆盖真实写作 continuation。
 - `public-v2s-mkn-v1`（V2S）受 `scripts/corpus/autocomplete-v2s-architecture-stop.json` 阻断。固定矩阵的 development Oracle 未达到预登记架构门槛。
-- 两份 stop 都是 `releaseEvidence:false` 的停止依据，不是模型质量 PASS；它们只证明对应架构不应继续同根因训练。
+- `public-v2-free-decoder-v1`（V2.2）受 `scripts/corpus/autocomplete-v2-free-architecture-stop.json` 阻断继续训练和评测。正式矩阵权重与多步 parity 已完成，但最快候选的 Windows worker p90 为 `173.4854ms`，未达到 `80ms`。
+- 三份 stop 都是 `releaseEvidence:false` 的停止依据，不是模型质量 PASS；它们只证明对应架构不应继续同根因训练。
 - `packages/app/public/autocomplete/` 当前没有可运行的 canonical Public L3。生产 `MarkdownPredictor` 不自动导入已停止的 V2S Worker。
 - RC 的预期结果是 code `10`。不得删除 stop、修改资格布尔值或降低阈值来改变结果。
 - 新 engine `public-v2-free-decoder-v1` 已获准在独立 DEVELOPMENT 切片训练，但只允许形成 `trained` 或经 Oracle 后的 `oraclePassed` 候选；不得写 production public、切换默认引擎、读取 final 或改变当前 RC。
@@ -29,6 +30,7 @@ JotLuck 的离线补全不是一个单模型系统。结构化补全、当前文
 | 架构演进记录       | `plans/autocomplete-engine-v2.md`                                                                 | V2、V2R、V2S 的历史决策和结果                     |
 | V2R 停止事实       | `scripts/corpus/autocomplete-v2r-architecture-stop.json`                                          | 不可改写的历史停止记录                            |
 | V2S 停止事实       | `scripts/corpus/autocomplete-v2s-architecture-stop.json`                                          | 当前公共训练入口的硬停止记录                      |
+| V2.2 停止事实      | `scripts/corpus/autocomplete-v2-free-architecture-stop.json`                                      | 正式矩阵的 Windows worker 运行时停止记录          |
 | v4 来源批准事实    | `scripts/corpus/provenance.json`、`scripts/corpus/SOURCES.md`                                     | 旧 curated/synthetic 来源与永久排除项             |
 | V2R/V2S 来源事实   | `scripts/corpus/autocomplete-v2r-generator.json`、`scripts/corpus/autocomplete-v2r-external.json` | v3.1 生成器、外部来源和选择身份                   |
 | V2.2 训练/评测入口 | `scripts/autocomplete-v2-free/`                                                                   | selection、训练、JLFDQ02、评测、final pair ledger |
@@ -143,7 +145,7 @@ Gate 不会改变候选文本或重新排列 Top-1。训练 Gate 前，生成器
 
 本机负责源码、selection、评测、Rust parity 和 final 保管；幻15只执行哈希绑定的 CUDA 训练 job。final 不上传幻15或 VPS。传输必须先写临时名，复核 bytes/SHA-256 后同卷原子转正；SSH 断开不得终止由计划任务托管的训练。Tailscale direct 达到 20Mbps 时保持直连，否则才评估 VPS Peer Relay；Peer Relay 低于 10Mbps或不稳定才另行决定 WireGuard。任何系统账户、OpenSSH、Tailscale、防火墙、计划任务或 VPS 变更都必须由用户在目标机器上显式执行，仓库脚本不得自动远程施加配置。
 
-### 5.3 2026-08-08 V2.2 实施停止点
+### 5.3 2026-08-08 V2.2 训练前停止点（历史）
 
 32MiB/16M smoke 已证明 float 训练、JLFDQ02 Q4/Q8 导出和 Python quantized→Rust 单步 parity 可以运行，但旧 checkpoint 使用了约 `std=1.0` 的 embedding 初始化，Q4 误差会逐层放大，不能直接成为正式候选。trainer 已改为 `std=0.02` 初始化、共享 embedding/output、padding row 归零，并为 Q4 增加在实际 F16 scale 上的分组 MSE 优化和量化诊断；正式候选仍必须重新训练。
 
@@ -152,13 +154,30 @@ Rust worker 已实现一次 prefill、逐层 KV cache、固定 beam width 32 / T
 - 默认 `opt-level=s`：prefill `42.286ms`，单次 batch32 advance `60.411ms`；仅这两段已为 `102.697ms`，尚未包含后续多步解码；
 - 完整固定中文请求：`518.6–544.7ms`，peak Working Set `82,907,136B`；
 - `opt-level=3` 更慢；隔离 SGEMM 探针最好为 prefill `26.654ms`、batch32 `40.852ms`，仍不是足以让多步完整请求达到 `80ms` 的数量级提升，因此实验依赖已回退；
-- 未运行 10 warmup + 100 measurement，未把单样本伪装成 p90，也未启动 ROG 正式矩阵。
+- 截至 2026-08-08 当日尚未运行 10 warmup + 100 measurement，也尚未启动 ROG 正式矩阵。
 
 四份固定 Wikimedia DEVELOPMENT 来源已清洗出 `100,662,801` bytes / `63,487` docs，中英文只差 `243` bytes。正式 selection 首次验证在内嵌 `U+FEFF` 的跨语言空白归一化差异上 fail closed；修复已锁定显式空白码点集合和跨语言 golden，但 supplement 尚未按新 cleaner identity 重新物化。新的 validation/final fingerprint inventory 也尚未冻结。
 
-因此本轮在运行时 80ms 前置门禁处停止：不得连接 ROG、不得生成正式训练 job、不得读取 final、不得运行 publisher。后续只有在新的运行时方案能以相同 Beam32/Top-4/长度边界通过完整请求 80ms 门禁后，才允许重新物化 selection、冻结 holdout/tokenizer并启动矩阵。
+因此 2026-08-08 当日先停在运行时前置门禁，没有启动 ROG 矩阵。语料、holdout、共享 tokenizer 和远程任务合同随后完成，正式矩阵于 2026-08-09 获准执行；其最终结果与新的运行时停止点见下一节。整个过程中均未读取 final、未运行 publisher。
 
-### 5.4 历史停止态命令
+### 5.4 2026-08-09 V2.2 正式矩阵结果
+
+ROG 正式矩阵使用同一 128MiB selection、同一 8K Unigram tokenizer 和 seed `20260805`，已完成 16M float→Q4/Q8、24M float→Q4、32M float→Q4。四个量化候选的真实权重中英文多步 Python/Rust parity 共 8 项全部通过；它们仍保持 `lifecycle=trained`、`evaluationOnly=true`、`releaseEligible=false`。
+
+当前 Windows worker 对四候选执行 3 warmup + 5 measured 筛查：
+
+| 候选   |            p90 |    峰值工作集 |
+| ------ | -------------: | ------------: |
+| 16M Q4 |   `212.6065ms` | `32,702,464B` |
+| 16M Q8 | `1,033.2824ms` | `81,813,504B` |
+| 24M Q4 |   `173.8125ms` | `37,076,992B` |
+| 32M Q4 |   `356.8764ms` | `49,770,496B` |
+
+清理一个遗留的 JotLuck 只读诊断进程后，最快 24M Q4 又执行了 10 warmup + 100 measured：p90 `173.4854ms`，100 个样本全部位于 `160.0487–179.8037ms`，峰值工作集 `39,653,376B`。内存低于 `192MiB`，但延迟仍是 `80ms` 门槛的约 `2.17` 倍；因此不再运行 Oracle、不读取 final、不扩展到 256MiB，也不继续训练。
+
+停止事实记录在 `scripts/corpus/autocomplete-v2-free-architecture-stop.json`。该记录是 DEVELOPMENT 路线的失败停止依据，不是发布证据；现有权重可用于后续运行时研究，但只有新的 worker 在保持 Beam32/Top-4/长度边界时先通过 `80ms`，才允许另立任务恢复评测。
+
+### 5.5 历史停止态命令
 
 当前只允许只读检查：
 

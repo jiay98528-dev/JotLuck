@@ -1,0 +1,111 @@
+{
+  "schema": "jotluck.autocomplete.v2-free-architecture-stop.v1",
+  "schemaVersion": 1,
+  "engine": "public-v2-free-decoder-v1",
+  "architectureId": "decoder-only-cpu-beam32-top4-v1",
+  "status": "architecture-blocked",
+  "formalResult": false,
+  "releaseEvidence": false,
+  "stopFurtherTraining": true,
+  "reasonCode": "windows-worker-runtime-p90",
+  "recordedAt": "2026-08-09T09:16:00.322Z",
+  "runtimeGate": {
+    "modelP90MaximumMs": 80,
+    "peakMemoryMaximumBytes": 201326592,
+    "warmupRequests": 10,
+    "measuredRequests": 100
+  },
+  "training": {
+    "matrixRunId": "v22-formal-bffc72982c9e",
+    "completed": true,
+    "candidateCount": 4,
+    "trainingSourceCommit": "0d01933463e163b9cba1c9328dba131888e3dd26",
+    "trainingSourceTree": "e6d02433b055b56df177d383ce0d76c132dc9b8d",
+    "selectionSha256": "bffc72982c9e4a5f6a216e344b3522eb402affcc645d13a2fe0ad08e5f8fd225",
+    "tokenizerBindingSha256": "c5c12e0eba3beec9ca0e084282a086a1bd68e33c0d2469e7cbab90c0844ac224"
+  },
+  "evaluationRuntime": {
+    "sourceCommit": "47c401e9c3364593e40f9459b750299db4cc5339",
+    "sourceTree": "021e9b5419d74dec7fc5224c7207fe4c7a915ba3",
+    "workerExecutableSha256": "4d54cc593765897e93ab41d769cce34e1f305abce2ffe41829ae8461b2e5ed42",
+    "workerExecutableBytes": 11684864,
+    "host": "LAPTOP-R5ENP7VL",
+    "gpu": "NVIDIA GeForce RTX 2070 with Max-Q Design",
+    "powerPlan": "high-performance"
+  },
+  "parity": {
+    "passed": true,
+    "completedCases": 8,
+    "totalCases": 8,
+    "statusSha256": "c298ac87fe6514e2c92c0e4f003deee9311676ec8533dc3e93ba63506e85a4c4"
+  },
+  "screening": [
+    {
+      "candidateId": "v22-formal-bffc72982c9e-16m-q4.q4",
+      "candidateArtifactSha256": "46ec9103ab532289451f037e60d8878e3933c143cb5a058555cc7622ba554a4d",
+      "warmupRequests": 3,
+      "measuredRequests": 5,
+      "modelP90Ms": 212.60649999999987,
+      "minimumMs": 179.6193999999998,
+      "maximumMs": 212.60649999999987,
+      "peakWorkingSetBytes": 32702464,
+      "reportSha256": "02449dea181445f5076f3d110130b1394d462b58a2c1125e3d6e0b3f7ce06921"
+    },
+    {
+      "candidateId": "v22-formal-bffc72982c9e-16m-q4.q8",
+      "candidateArtifactSha256": "b8bd19a718ed1d20a3cb1775dfa434f95d6ace099d90dcc8a1c5b747334b6bdd",
+      "warmupRequests": 3,
+      "measuredRequests": 5,
+      "modelP90Ms": 1033.2824,
+      "minimumMs": 1011.8445000000002,
+      "maximumMs": 1033.2824,
+      "peakWorkingSetBytes": 81813504,
+      "reportSha256": "936ba9be7e41a1b8a87f8c1ec9c27f504e251492171004951e6342433567126e"
+    },
+    {
+      "candidateId": "v22-formal-bffc72982c9e-24m-q4.q4",
+      "candidateArtifactSha256": "34552b9f024da44a5c24721c11fb312df4acd7a2f9282df77dabdce495352030",
+      "warmupRequests": 3,
+      "measuredRequests": 5,
+      "modelP90Ms": 173.8125,
+      "minimumMs": 166.82950000000005,
+      "maximumMs": 173.8125,
+      "peakWorkingSetBytes": 37076992,
+      "reportSha256": "bf91086cfb018707133c2ed1e55fd6d57cb58e01a7e4e9ca8f52bc37e77d7d9c"
+    },
+    {
+      "candidateId": "v22-formal-bffc72982c9e-32m-q4.q4",
+      "candidateArtifactSha256": "6bb7a49b7fab0147634b441adcaa007cafcb5225472b3c2ccd487b3bdec96edd",
+      "warmupRequests": 3,
+      "measuredRequests": 5,
+      "modelP90Ms": 356.8764000000001,
+      "minimumMs": 269.78179999999975,
+      "maximumMs": 356.8764000000001,
+      "peakWorkingSetBytes": 49770496,
+      "reportSha256": "64d9de26741d3924e44462690b27eca6f309fceb416434baa1da4b5eef0bdb35"
+    }
+  ],
+  "stopConfirmation": {
+    "candidateId": "v22-formal-bffc72982c9e-24m-q4.q4",
+    "candidateArtifactSha256": "34552b9f024da44a5c24721c11fb312df4acd7a2f9282df77dabdce495352030",
+    "warmupRequests": 10,
+    "measuredRequests": 100,
+    "modelP90Ms": 173.48540000000003,
+    "minimumMs": 160.04869999999937,
+    "maximumMs": 179.80369999999994,
+    "peakWorkingSetBytes": 39653376,
+    "emptyCandidateResponses": 50,
+    "reportSha256": "2e17a5f111e5f8c41935e6cc77a5a995769d58a8ca6b15c7c6fe53706be56ad0",
+    "reportPath": "scripts/corpus/_web-cache/autocomplete-v2-free/remote-execution-47c401e/runtime-results/runtime-stop-47c401e9c336-r1/24m-q4-10x100.json"
+  },
+  "decision": {
+    "fastestObservedCandidate": "v22-formal-bffc72982c9e-24m-q4.q4",
+    "runtimeGatePassed": false,
+    "memoryGatePassed": true,
+    "oraclePrecheckRun": false,
+    "finalHoldoutsRead": false,
+    "publisherRun": false,
+    "productionDefaultChanged": false,
+    "requiredNextStep": "Do not add training data or train another matrix. A continuation must first demonstrate the same Beam32/Top-4 decoding contract at or below 80ms p90 on the Windows worker host."
+  }
+}
