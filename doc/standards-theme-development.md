@@ -609,6 +609,8 @@ interface ThemeCommerceProvider {
 - 如使用默认 slot wrapper，必须验证宿主 action、格式工具栏、无障碍语义和编辑器状态仍由默认组件提供。
 - 主题涉及 spacing、玻璃或悬浮层级时，必须验证关键控件的 computed padding/gap/inset、正文画布阴影和无 `backdrop-filter` 降级，而不是仅保存一张截图。
 - 官方主题的预览图必须来自通过视觉基线与 GUI 验收的真实运行时截图，不得使用方向探针或静态 mock。
+- 主题包裹 `editor-surface` 时必须把 wrapper 建立为受约束的纵向 flex 容器，编辑器、分栏和 `reader-workbench` 作为 `min-height: 0` 的弹性子项；只读正文必须由 `reader-workbench` 自身滚动，外层 `editor-scroll` 或 slot wrapper 不得接管滚动并带走吸顶恢复入口。
+- 官方主题的目录文案、特性标签和预览图必须与当前真实运行时基线一致；布局、主色或控件位置改变后不得继续发布旧资产或旧描述。
 
 涉及 Theme API、slot、Host API 或包协议变更时，最低自动化检查：
 
@@ -624,6 +626,8 @@ pnpm.cmd --filter @jotluck/app build
 仅修改本文档或元指令时，可只执行文档一致性与格式检查。
 
 ## 变更记录
+
+- 2026-08-11：补充主题编辑表面的滚动所有权合同，并要求官方主题目录文案与预览资产同步当前运行时基线。
 
 - 2026-08-03：为 ThemeHostContext 增加只读 i18n API，定义宿主翻译、格式化与语言变化订阅；不扩展 `.mltheme` 包协议。
 - 2026-08-03：扩展既有 `scratch-exit-dialog` 的冲突/文件缺失恢复状态，加入采用外部版本、明确覆盖/重建、另存副本与复制全文回调；不新增 slot，文件 IO 仍由宿主独占。

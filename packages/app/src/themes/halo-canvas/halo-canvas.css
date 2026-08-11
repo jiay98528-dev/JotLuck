@@ -42,6 +42,7 @@
 }
 
 [data-theme-id='jotluck.halo-canvas'] .app-shell .editor-scroll {
+  overflow: hidden;
   overscroll-behavior: contain;
 }
 
@@ -492,6 +493,7 @@
 /* A compact macOS-like glass toolbar keeps all native host actions in one layer. */
 [data-theme-id='jotluck.halo-canvas'] .halo-command-deck {
   display: block;
+  flex: 0 0 auto;
   margin: var(--space-8) var(--space-12) 0;
   padding: var(--space-4) var(--space-6);
   border-radius: var(--radius-md);

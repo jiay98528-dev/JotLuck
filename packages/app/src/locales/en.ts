@@ -574,12 +574,12 @@ export const messages = {
       },
       haloCanvas: {
         name: 'Halo Canvas',
-        headline: 'A quiet canvas inside a bright glass cockpit.',
+        headline: 'Recent notes, the writing canvas and knowledge tools stay in three columns.',
         story:
-          'A silver mica environment turns navigation, commands and knowledge tools into restrained glass bays while the writing canvas remains solid and readable.',
+          'A warm-paper workbench keeps recent notes on the left, an opaque writing canvas in the centre, and outline, backlinks and tags on the right, with commands above and status below.',
         bestFor: "Daytime writing{'|'}Research{'|'}Long-form editing{'|'}Dense knowledge work",
         features:
-          "Silver mica environment{'|'}Floating glass tool bays{'|'}Blue-violet focus refraction{'|'}Native command group{'|'}Quiet writing canvas",
+          "Persistent three-column workbench{'|'}Recent notes on the left{'|'}Opaque centred writing canvas{'|'}Knowledge inspector on the right{'|'}Command and status rails",
       },
       lumenField: {
         name: 'Lumen Field',

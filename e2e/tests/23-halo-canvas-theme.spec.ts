@@ -49,7 +49,9 @@ async function activateHaloCanvas(page: Page, testInfo: TestInfo): Promise<void>
     .poll(() => haloPreview.evaluate((image) => (image as HTMLImageElement).naturalWidth), {
       timeout: 10_000,
     })
-    .toBeGreaterThan(0);
+    .toBe(1440);
+  await expect(haloCard).toContainText('暖纸工作台将最近笔记置于左栏');
+  await expect(haloCard).not.toContainText('银白云母环境');
 
   const activate = haloCard.getByRole('button', { name: '使用', exact: true });
   await expect(activate).toHaveCount(1);
@@ -304,6 +306,39 @@ test.describe('Halo Canvas official theme', () => {
       .locator('#jotluck-active-theme')
       .evaluate((element) => element.textContent ?? '');
     expect(activeThemeCss).not.toContain('halo-canvas');
+  });
+
+  test('keeps the default command deck outside the editor scroll plane', async ({
+    page,
+  }, testInfo: TestInfo) => {
+    await page.setViewportSize({ width: 1536, height: 912 });
+    await activateHaloCanvas(page, testInfo);
+
+    const geometry = await page.evaluate(() => {
+      const outerScroll = document.querySelector<HTMLElement>('.editor-scroll');
+      const dock = document.querySelector<HTMLElement>('.halo-command-deck');
+      const editorSurface = document.querySelector<HTMLElement>('.halo-frame--editor-surface');
+      if (!outerScroll || !dock || !editorSurface) {
+        throw new Error('Missing Halo command deck geometry.');
+      }
+      const outerRect = outerScroll.getBoundingClientRect();
+      const dockRect = dock.getBoundingClientRect();
+      const editorRect = editorSurface.getBoundingClientRect();
+      return {
+        outerOverflowY: window.getComputedStyle(outerScroll).overflowY,
+        outerScrollRange: outerScroll.scrollHeight - outerScroll.clientHeight,
+        dockTop: dockRect.top,
+        dockBottom: dockRect.bottom,
+        editorTop: editorRect.top,
+        outerTop: outerRect.top,
+      };
+    });
+
+    expect(geometry.outerOverflowY).toBe('hidden');
+    expect(geometry.outerScrollRange).toBe(0);
+    expect(geometry.dockTop).toBeGreaterThanOrEqual(geometry.outerTop);
+    expect(geometry.editorTop).toBeGreaterThanOrEqual(geometry.dockBottom - 1);
+    await expect(page.locator('.halo-command-deck .format-toolbar')).toBeVisible();
   });
 
   test('keeps a historical file usable across atomic save events and native copy', async ({

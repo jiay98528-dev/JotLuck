@@ -315,6 +315,27 @@ export function createLumenFieldModule(): OfficialThemeModule {
   height: 100%;
 }
 
+[data-theme-id='jotluck.lumen-field'] .editor-area--single-page .editor-scroll {
+  overflow: hidden;
+}
+
+[data-theme-id='jotluck.lumen-field'] .lumen-slot-frame--editor-surface {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+[data-theme-id='jotluck.lumen-field'] .lumen-slot-frame--editor-surface > .markdown-editor,
+[data-theme-id='jotluck.lumen-field'] .lumen-slot-frame--editor-surface > .reader-workbench,
+[data-theme-id='jotluck.lumen-field'] .lumen-slot-frame--editor-surface > .split-pane {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+[data-theme-id='jotluck.lumen-field'] .lumen-slot-frame--editor-surface > .reader-workbench {
+  overflow: hidden auto;
+}
+
 [data-theme-id='jotluck.lumen-field'] .workflow-canvas {
   background: transparent;
 }

@@ -579,13 +579,14 @@ export const messages = {
       },
       haloCanvas: {
         name: 'Halo Canvas',
-        headline: 'Une toile calme dans un cockpit de verre lumineux.',
+        headline:
+          'Notes récentes, toile d’écriture et outils de connaissance restent en trois colonnes.',
         story:
-          'Un environnement mica argenté transforme la navigation et les outils en baies de verre sobres tandis que le texte reste stable et lisible.',
+          'Un établi de papier chaud garde les notes récentes à gauche, une toile d’écriture opaque au centre et le plan, les liens retour et les tags à droite, avec les commandes en haut et l’état en bas.',
         bestFor:
           "Écriture de jour{'|'}Recherche{'|'}Textes longs{'|'}Travail dense de connaissances",
         features:
-          "Mica argenté{'|'}Baies de verre flottantes{'|'}Focalisation bleu-violet{'|'}Commandes natives{'|'}Toile calme",
+          "Établi permanent à trois colonnes{'|'}Notes récentes à gauche{'|'}Toile opaque au centre{'|'}Inspecteur de connaissances à droite{'|'}Rails de commande et d’état",
       },
       lumenField: {
         name: 'Lumen Field',

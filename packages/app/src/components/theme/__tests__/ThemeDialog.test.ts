@@ -42,6 +42,8 @@ describe('ThemeDialog', () => {
     expect(text).toContain('来自可信来源');
     expect(text).toContain('羽翼布局');
     expect(text).toContain('光环画布（Halo Canvas）');
+    expect(text).toContain('暖纸工作台将最近笔记置于左栏');
+    expect(text).not.toContain('银白云母环境');
     expect(text).toContain('光场知识舱');
     expect(text).not.toContain('能力验证台');
     expect(text).not.toContain('超级工作台');

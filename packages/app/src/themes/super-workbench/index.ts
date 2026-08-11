@@ -39,6 +39,10 @@ export function createSuperWorkbenchModule(): OfficialThemeModule {
     var(--paper-bg);
 }
 
+[data-theme-id='jotluck.super-workbench'] .editor-scroll {
+  overflow: hidden;
+}
+
 [data-theme-id='jotluck.super-workbench'] .super-topbar {
   min-height: var(--topbar-height);
   display: grid;
