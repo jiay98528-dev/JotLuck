@@ -15,6 +15,7 @@ const { locale, content } = useLocale();
     <nav class="footer-links" aria-label="footer">
       <a :href="EXTERNAL.githubIssues" rel="noopener">{{ content.footer.links.support }}</a>
       <RouterLink :to="pagePath(locale, 'privacy')">{{ content.footer.links.privacy }}</RouterLink>
+      <a :href="EXTERNAL.codeSigning" rel="noopener">{{ content.footer.links.signing }}</a>
       <a :href="EXTERNAL.githubRepo" rel="noopener">{{ content.footer.links.github }}</a>
     </nav>
     <p class="footer-copyright">{{ content.footer.copyright }}</p>
@@ -38,6 +39,7 @@ const { locale, content } = useLocale();
 }
 .footer-links {
   display: flex;
+  flex-wrap: wrap;
   gap: 20px;
   margin-left: auto;
 }

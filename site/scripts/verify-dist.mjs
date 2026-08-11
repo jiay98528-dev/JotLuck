@@ -332,7 +332,11 @@ for (const rel of expectedFiles) {
   }
 
   // (h) 五语首页：h1.statement 结构
-  if (/^[a-z]{2}\/index\.html$/.test(rel)) checkStatementH1(html, rel);
+  if (/^[a-z]{2}\/index\.html$/.test(rel)) {
+    checkStatementH1(html, rel);
+    // (k3) 首页页脚签名政策链接（裁决 37，SignPath 首页披露项）
+    check(html.includes(EXPECTED_PREVIEW.policy), `页脚签名政策链接`, EXPECTED_PREVIEW.policy);
+  }
 }
 
 // ---------- (j 续) title 全站唯一 ----------

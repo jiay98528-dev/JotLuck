@@ -236,6 +236,11 @@ export const fr: SiteContent = {
     studio: 'LeankomStudio',
     tagline: "Local d'abord · Open source · Sans enfermement cloud",
     copyright: '© 2026 Linghu Technology (Shenzhen) Co., Ltd.',
-    links: { support: 'Assistance', privacy: 'Confidentialité', github: 'GitHub' },
+    links: {
+      support: 'Assistance',
+      privacy: 'Confidentialité',
+      signing: 'Politique de signature de code',
+      github: 'GitHub',
+    },
   },
 };

@@ -227,6 +227,11 @@ export const ja: SiteContent = {
     studio: 'LeankomStudio',
     tagline: 'ローカルファースト · オープンソース · クラウド非依存',
     copyright: '© 2026 Linghu Technology (Shenzhen) Co., Ltd.',
-    links: { support: 'サポート', privacy: 'プライバシー', github: 'GitHub' },
+    links: {
+      support: 'サポート',
+      privacy: 'プライバシー',
+      signing: 'コード署名ポリシー',
+      github: 'GitHub',
+    },
   },
 };

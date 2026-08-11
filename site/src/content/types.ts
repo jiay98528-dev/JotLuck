@@ -183,6 +183,6 @@ export interface SiteContent {
     studio: string;
     tagline: string;
     copyright: string;
-    links: { support: string; privacy: string; github: string };
+    links: { support: string; privacy: string; signing: string; github: string };
   };
 }

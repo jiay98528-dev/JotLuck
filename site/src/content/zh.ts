@@ -201,6 +201,6 @@ export const zh: SiteContent = {
     studio: 'LeankomStudio',
     tagline: '本地优先 · 开源 · 不被云端锁定',
     copyright: '© 2026 鸰湖科技（深圳）有限公司',
-    links: { support: '支持', privacy: '隐私', github: 'GitHub' },
+    links: { support: '支持', privacy: '隐私', signing: '代码签名政策', github: 'GitHub' },
   },
 };

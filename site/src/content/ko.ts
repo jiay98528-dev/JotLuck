@@ -221,6 +221,6 @@ export const ko: SiteContent = {
     studio: 'LeankomStudio',
     tagline: '로컬 우선 · 오픈소스 · 클라우드 종속 없음',
     copyright: '© 2026 Linghu Technology (Shenzhen) Co., Ltd.',
-    links: { support: '지원', privacy: '개인정보', github: 'GitHub' },
+    links: { support: '지원', privacy: '개인정보', signing: '코드 서명 정책', github: 'GitHub' },
   },
 };

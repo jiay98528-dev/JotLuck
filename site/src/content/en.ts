@@ -220,6 +220,11 @@ export const en: SiteContent = {
     studio: 'LeankomStudio',
     tagline: 'Local-first · Open source · No cloud lock-in',
     copyright: '© 2026 Linghu Technology (Shenzhen) Co., Ltd.',
-    links: { support: 'Support', privacy: 'Privacy', github: 'GitHub' },
+    links: {
+      support: 'Support',
+      privacy: 'Privacy',
+      signing: 'Code signing policy',
+      github: 'GitHub',
+    },
   },
 };
