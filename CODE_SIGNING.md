@@ -1,13 +1,26 @@
 # Code Signing Policy
 
 > 适用于 JotLuck 项目的代码签名策略
-> 更新日期：2026-07-27
+> 更新日期：2026-08-11
 
 ## 当前状态
 
 JotLuck 当前尚未取得或配置可用于正式发行的 Windows 代码签名证书。项目优先申请
 [SignPath Foundation](https://signpath.org/) 的开源项目签名服务；在申请获批并完成真实
 产物验证前，不得把安装包描述为“已签名”。
+
+当前公开的 `v0.11.0-preview` 安装包发布于签名申请之前，无对应的公开 CI 构建记录；首个
+签名版本将按下文流程从精确 commit 经 GitHub Actions 可验证构建产生。
+
+## SignPath 申请状态
+
+Application status: pending（申请待审批）。
+
+获批后，经签名的 JotLuck 发布产物将附带以下归属声明：
+
+> Free code signing provided by SignPath.io, certificate by SignPath Foundation.
+
+当前 `v0.11.0-preview` 安装包仍未签名。
 
 ## 签名范围
 

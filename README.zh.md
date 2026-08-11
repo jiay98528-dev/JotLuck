@@ -25,7 +25,7 @@
   · <a href="#三步开始使用">开始使用</a>
   · <a href="./SUPPORT.md">获得帮助</a>
   · <a href="./PRIVACY.md">隐私政策</a>
-  · <a href="./CODE_SIGNING.md">代码签名</a>
+  · <a href="./CODE_SIGNING.md">代码签名政策</a>
   · <a href="https://github.com/jiay98528-dev/JotLuck/issues/new/choose">反馈问题</a>
 </p>
 

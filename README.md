@@ -25,7 +25,7 @@
   · <a href="#get-started-in-three-steps">Get started</a>
   · <a href="./SUPPORT.md">Support</a>
   · <a href="./PRIVACY.md">Privacy</a>
-  · <a href="./CODE_SIGNING.md">Code signing</a>
+  · <a href="./CODE_SIGNING.md">Code signing policy</a>
   · <a href="https://github.com/jiay98528-dev/JotLuck/issues/new/choose">Send feedback</a>
 </p>
 
