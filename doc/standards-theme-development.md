@@ -610,6 +610,7 @@ interface ThemeCommerceProvider {
 - 主题涉及 spacing、玻璃或悬浮层级时，必须验证关键控件的 computed padding/gap/inset、正文画布阴影和无 `backdrop-filter` 降级，而不是仅保存一张截图。
 - 官方主题的预览图必须来自通过视觉基线与 GUI 验收的真实运行时截图，不得使用方向探针或静态 mock。
 - 主题包裹 `editor-surface` 时必须把 wrapper 建立为受约束的纵向 flex 容器，编辑器、分栏和 `reader-workbench` 作为 `min-height: 0` 的弹性子项；只读正文必须由 `reader-workbench` 自身滚动，外层 `editor-scroll` 或 slot wrapper 不得接管滚动并带走吸顶恢复入口。
+- 单页面主题 Shell 必须继承宿主分配的可用高度，不得用 `100vh` 越过外部单文件编辑状态栏；左、右、底部抽屉入口在正常、外部编辑、长文滚动和窗口缩放后都必须保持在视口内可见、可聚焦、可操作。
 - 官方主题的目录文案、特性标签和预览图必须与当前真实运行时基线一致；布局、主色或控件位置改变后不得继续发布旧资产或旧描述。
 
 涉及 Theme API、slot、Host API 或包协议变更时，最低自动化检查：

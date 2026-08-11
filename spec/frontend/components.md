@@ -13,6 +13,8 @@
 - `ThemeSlotBoundary`
 - `NotebookOpenGate`
 
+- `AppShell` 与 `SinglePageDrawerShell` 必须占满父级分配的布局轨道，不得自行使用 `100vh` 重新声明窗口高度。外部单文件编辑上方存在状态栏时，左右和底部抽屉入口仍必须完整位于当前视口内，并可通过键盘或指针展开对应工具。
+
 ## 主题插槽约束
 
 - Shell、主页、编辑器表面、文件抽屉、命令面板、导出/模板/设置/分享/新建/删除/外部编辑/草稿退出弹窗、toast、更新提示和 Markdown 速查表都必须通过 `ThemeSlotBoundary` 暴露。

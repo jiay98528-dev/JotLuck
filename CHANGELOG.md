@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.11.2-preview] - 2026-08-12
+
+### Fixed
+
+- Keep the Lumen Field bottom command-deck handle inside the visible window when editing an
+  external single file below its session banner.
+- Size application shells from their assigned layout track so external edit chrome cannot hide
+  drawer controls or status tools below the viewport.
+
+### Distribution
+
+- This is an unsigned Windows preview candidate. Its NSIS installer is versioned separately
+  from `v0.11.1-preview` and does not replace that release asset.
+
 ## [0.11.1-preview] - 2026-08-11
 
 ### Fixed

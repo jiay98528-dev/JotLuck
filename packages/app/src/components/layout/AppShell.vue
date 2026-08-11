@@ -406,8 +406,9 @@ watch(
 <style scoped>
 .app-shell {
   display: flex;
-  height: 100vh;
-  width: 100vw;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
   background: var(--paper-bg);
 }

@@ -258,8 +258,9 @@ onUnmounted(() => {
   position: relative;
   isolation: isolate;
   display: grid;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
   grid-template-columns:
     var(--single-drawer-left-track) minmax(0, 1fr)

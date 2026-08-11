@@ -77,6 +77,58 @@ test.describe('Official theme scroll ownership', () => {
     await expect(page.locator('.cm-content')).toBeFocused();
   });
 
+  test('keeps the Lumen command-deck handle inside an external edit session viewport', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1536, height: 912 });
+    const externalPath = 'C:/Users/alice/Desktop/lumen-external.md';
+    await page.addInitScript(
+      ({ path, themeId }) => {
+        localStorage.setItem('jotluck:welcome:completed', '1');
+        localStorage.setItem('jotluck:locale:v1', 'zh-CN');
+        localStorage.setItem('jotluck:theme-state:v2', JSON.stringify({ activeThemeId: themeId }));
+        (
+          window as typeof window & {
+            __jotluck_e2e?: {
+              mockOpenedFile: { absolutePath: string };
+              externalFiles: Record<string, string>;
+            };
+          }
+        ).__jotluck_e2e = {
+          mockOpenedFile: { absolutePath: path },
+          externalFiles: {
+            [path]: '# 外部暗场文档\n\n用于验证顶部状态栏不会把底部命令入口挤出视口。',
+          },
+        };
+      },
+      { path: externalPath, themeId: LUMEN_THEME_ID },
+    );
+
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('[data-testid="external-file-session"]')).toBeVisible({
+      timeout: 10000,
+    });
+    await page.getByRole('button', { name: '启用编辑' }).click();
+    await expect(page.locator('.external-edit-banner')).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('data-theme-id', LUMEN_THEME_ID);
+
+    const bottomHandle = page.locator('.single-page-drawer-handle--bottom');
+    await expect(bottomHandle).toBeVisible();
+    const handleBounds = await bottomHandle.boundingBox();
+    expect(handleBounds).not.toBeNull();
+    expect((handleBounds?.y ?? 0) + (handleBounds?.height ?? 0)).toBeLessThanOrEqual(912);
+
+    await bottomHandle.click();
+    await expect(page.locator('.single-page-drawer--bottom')).toHaveClass(/is-open/u);
+    await expect(page.locator('.lumen-command-deck')).toBeVisible();
+    await expect(
+      page
+        .locator('.lumen-command-deck__actions')
+        .getByRole('button', { name: '切换到分栏视图', exact: true }),
+    ).toBeVisible();
+  });
+
   test('keeps developer theme reader wrappers on the same sticky contract', async ({ page }) => {
     await page.setViewportSize({ width: 1536, height: 912 });
     const sections = Array.from(
