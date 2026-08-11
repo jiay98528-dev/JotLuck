@@ -147,11 +147,30 @@ test.describe('编辑器核心', () => {
     await viewToggle.click();
     await expect(page.locator('.reader-workbench[data-view-mode="read"]')).toBeVisible();
     await expect(page.locator('[data-theme-part="format-toolbar"]')).toHaveCount(0);
+    const readerWorkbench = page.locator('.reader-workbench[data-view-mode="read"]');
     const readerBar = page.locator('.reader-workbench__bar');
     const returnToEdit = readerBar.getByRole('button', { name: '返回即时编辑', exact: true });
+    await expect(readerWorkbench).toHaveCSS('overflow-y', 'auto');
     await expect(readerBar).toHaveCSS('position', 'sticky');
     await expect(returnToEdit).toBeVisible();
     await expect(returnToEdit).toBeFocused();
+
+    const readerBarTop = await readerBar.evaluate((element) => element.getBoundingClientRect().top);
+    const scrollRange = await readerWorkbench.evaluate(
+      (element) => element.scrollHeight - element.clientHeight,
+    );
+    expect(scrollRange).toBeGreaterThan(0);
+    await readerWorkbench.evaluate((element) => {
+      element.scrollTop = Math.min(400, element.scrollHeight - element.clientHeight);
+    });
+    await expect
+      .poll(() => readerWorkbench.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(0);
+    const readerBarTopAfterScroll = await readerBar.evaluate(
+      (element) => element.getBoundingClientRect().top,
+    );
+    expect(Math.abs(readerBarTopAfterScroll - readerBarTop)).toBeLessThanOrEqual(1);
+    await expect(returnToEdit).toBeVisible();
 
     // Step 3: 只读渲染 → 即时编辑
     await returnToEdit.click();

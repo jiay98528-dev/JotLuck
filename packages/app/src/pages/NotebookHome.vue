@@ -5349,6 +5349,7 @@ function onDismissVersion(version: string) {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  overflow: hidden auto;
   background: color-mix(in oklch, var(--paper-bg) 72%, var(--paper-surface));
 }
 
