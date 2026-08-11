@@ -633,6 +633,10 @@
   min-height: 0;
 }
 
+[data-theme-id='jotluck.halo-canvas'] .halo-frame--editor-surface > .reader-workbench {
+  overflow: hidden auto;
+}
+
 [data-theme-id='jotluck.halo-canvas'] .workflow-canvas__main,
 [data-theme-id='jotluck.halo-canvas'] .reader-workbench,
 [data-theme-id='jotluck.halo-canvas'] .split-pane,

@@ -42,6 +42,7 @@
 
 ## Markdown 编辑与预览
 
+- 工作区切换到只读渲染时，`view-toggle` 不再服从主题的普通工具栏位置，必须进入正文阅读栏右侧并随阅读滚动吸顶；入口显示“返回编辑”短标签。模式切换后焦点交给该入口，从只读返回后焦点交还编辑器，主题不得把唯一恢复入口放回可滚走或已退出交互层的区域。
 - `MarkdownEditor` 的 Live Preview 通过可选同步 `resolveImageSrc` 解析图片地址，并以 `imageRevision` 重建异步加载完成后的渲染块；未提供时保持原始 renderer 行为。
 - `MarkdownEditor` 必须安装工作区级稳定 Predictor 和编辑器会话级 `CompletionDocumentContextField`；输入热路径只传单调 document revision 与有界上下文快照，不把 `doc.toString()` 或全文 fingerprint 交给补全服务。
 - 补全调度分为 composition 稳定后立即运行的结构化平面，以及 40ms 防抖、仅 paragraph/list/quote 行尾运行的预测平面；两者共享单 ghost、无菜单、Tab/Escape 交互。

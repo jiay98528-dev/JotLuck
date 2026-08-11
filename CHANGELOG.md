@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.11.1-preview] - 2026-08-11
+
+### Fixed
+
+- Keep the read-only mode recovery action in a sticky reader bar across the bundled theme
+  configurations.
+- Transfer focus to “Return to edit” when entering read-only mode and restore focus to the
+  editor when leaving it.
+- Preserve the sticky recovery action inside Halo Canvas by making its reader workbench the
+  vertical scroll owner.
+
+### Distribution
+
+- This is an unsigned Windows preview candidate. Its NSIS installer is versioned separately
+  from `v0.11.0-preview` and does not replace that release asset.
+
 ## [0.10.0-rc.1] - 2026-07-31
 
 ### Release Candidate

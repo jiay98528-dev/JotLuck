@@ -147,11 +147,16 @@ test.describe('编辑器核心', () => {
     await viewToggle.click();
     await expect(page.locator('.reader-workbench[data-view-mode="read"]')).toBeVisible();
     await expect(page.locator('[data-theme-part="format-toolbar"]')).toHaveCount(0);
-    await expect(viewToggle).toHaveAttribute('aria-label', '返回即时编辑');
+    const readerBar = page.locator('.reader-workbench__bar');
+    const returnToEdit = readerBar.getByRole('button', { name: '返回即时编辑', exact: true });
+    await expect(readerBar).toHaveCSS('position', 'sticky');
+    await expect(returnToEdit).toBeVisible();
+    await expect(returnToEdit).toBeFocused();
 
     // Step 3: 只读渲染 → 即时编辑
-    await viewToggle.click();
+    await returnToEdit.click();
     await expect(page.locator('.cm-editor')).toBeVisible();
+    await expect(page.locator('.cm-editor')).toHaveClass(/cm-focused/);
     await expect(viewToggle).toHaveAttribute('aria-label', '切换到分栏视图');
   });
 

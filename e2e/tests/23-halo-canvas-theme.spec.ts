@@ -800,12 +800,34 @@ test.describe('Halo Canvas official theme', () => {
 
     await expect(page.locator('.halo-command-deck')).toBeHidden();
     await expect(page.locator('[data-theme-part="format-toolbar"]')).toHaveCount(0);
+    const readerWorkbench = page.locator(
+      '.halo-frame--editor-surface > .reader-workbench[data-view-mode="read"]',
+    );
     const readerBar = page.locator('.reader-workbench__bar');
+    await expect(readerWorkbench).toHaveCSS('overflow-y', 'auto');
+    await expect(readerBar).toHaveCSS('position', 'sticky');
     await expect(readerBar).toContainText('只读渲染');
     const editButton = readerBar.getByRole('button', { name: '返回即时编辑', exact: true });
     await expect(editButton).toBeVisible();
+    await expect(editButton).toBeFocused();
     await expect(editButton).not.toHaveAttribute('aria-pressed');
     await expect(editButton).toHaveAttribute('title', /当前为只读渲染/);
+    const readerBarTop = await readerBar.evaluate((element) => element.getBoundingClientRect().top);
+    const scrollRange = await readerWorkbench.evaluate(
+      (element) => element.scrollHeight - element.clientHeight,
+    );
+    expect(scrollRange).toBeGreaterThan(0);
+    await readerWorkbench.evaluate((element) => {
+      element.scrollTop = Math.min(400, element.scrollHeight - element.clientHeight);
+    });
+    await expect
+      .poll(() => readerWorkbench.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(0);
+    const readerBarTopAfterScroll = await readerBar.evaluate(
+      (element) => element.getBoundingClientRect().top,
+    );
+    expect(Math.abs(readerBarTopAfterScroll - readerBarTop)).toBeLessThanOrEqual(1);
+    await expect(editButton).toBeVisible();
     await expect(readerBar).toHaveScreenshot('halo-canvas-read-mode-bar.png', {
       animations: 'disabled',
       caret: 'hide',

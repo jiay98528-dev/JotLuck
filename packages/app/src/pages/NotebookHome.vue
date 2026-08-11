@@ -1,5 +1,5 @@
 <template>
-  <div class="notebook-home-root">
+  <div ref="notebookHomeRootRef" class="notebook-home-root">
     <div
       v-if="!startupRouteResolved"
       class="startup-state"
@@ -986,6 +986,7 @@ const loading = ref(true);
 const startupRouteResolved = ref(false);
 const errorMessage = ref('');
 const currentDir = ref('/');
+const notebookHomeRootRef = ref<HTMLElement | null>(null);
 
 // --- Theme ---
 const theme = useThemeStore();
@@ -1140,8 +1141,9 @@ const externalReadStats = computed(() => {
 
 function actionRegion(id: ShellAction['id']): ThemeActionRegion {
   const preferred = chrome.value.actionPlacements[id] ?? 'hidden';
-  if (id === 'view-toggle' && preferred === 'reader-bar' && viewMode.value !== 'read') {
-    return 'topbar-right';
+  if (id === 'view-toggle') {
+    if (viewMode.value === 'read') return 'reader-bar';
+    if (preferred === 'reader-bar') return 'topbar-right';
   }
   return preferred;
 }
@@ -1608,12 +1610,22 @@ const viewModeActionCopy = computed(() => {
   return { label: t('notebook.view.returnLive'), shortLabel: t('notebook.view.returnEdit') };
 });
 
-function cycleViewMode(): void {
+async function cycleViewMode(): Promise<void> {
+  const previousViewMode = viewMode.value;
   pendingFormatAction.value = null;
   viewMode.value = nextViewMode.value;
   scheduleSplitEditorMountForCurrentMode();
   if (viewMode.value === 'split' || viewMode.value === 'read') {
     updateSplitPreview();
+  }
+
+  await nextTick();
+  if (viewMode.value === 'read') {
+    notebookHomeRootRef.value
+      ?.querySelector<HTMLButtonElement>('.reader-workbench__bar .shell-action--view-toggle')
+      ?.focus({ preventScroll: true });
+  } else if (previousViewMode === 'read') {
+    editorRef.value?.focus();
   }
 }
 
@@ -5341,13 +5353,16 @@ function onDismissVersion(version: string) {
 }
 
 .reader-workbench__bar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-wing);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-12);
   padding: var(--space-8) var(--space-24);
   border-bottom: var(--border-thin) solid color-mix(in oklch, var(--rule) 66%, transparent);
-  background: color-mix(in oklch, var(--paper-bg) 88%, transparent);
+  background: color-mix(in oklch, var(--paper-bg) 88%, var(--paper-surface));
 }
 
 .reader-workbench__label {
