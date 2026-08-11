@@ -93,7 +93,7 @@ export const en: SiteContent = {
       'The preview installer is already on GitHub Releases — downloadable, verifiable, reversible. The signed build lands on this page and Releases on August 15, every copy still verifiable and complete.',
     countdownLabel: 'Signed release in',
     countdownUnit: 'days',
-    previewTitle: 'v0.11.0 Preview',
+    previewTitle: 'v0.11.2 Preview',
     downloadBtn: 'Download Preview (Windows x64)',
     releaseBtn: 'Release notes & checksum',
     signNote:

@@ -93,7 +93,7 @@ export const ko: SiteContent = {
       'Preview 설치 파일은 이미 GitHub Releases에 공개되었습니다——다운로드 가능하고, 검증 가능하며, 되돌릴 수 있습니다. 정식 서명 버전은 8월 15일에 이 페이지와 Releases에 함께 공개되며, 모든 복사본은 여전히 검증 가능한 완전한 빌드입니다.',
     countdownLabel: '정식 서명 버전까지',
     countdownUnit: '일',
-    previewTitle: 'v0.11.0 Preview',
+    previewTitle: 'v0.11.2 Preview',
     downloadBtn: 'Preview 다운로드（Windows x64）',
     releaseBtn: 'Release 노트와 체크섬',
     signNote:

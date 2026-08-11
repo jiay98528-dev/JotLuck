@@ -11,8 +11,9 @@
 
 ### Distribution
 
-- This is an unsigned Windows preview candidate. Its NSIS installer is versioned separately
-  from `v0.11.1-preview` and does not replace that release asset.
+- Published as an unsigned Windows preview hotfix. It includes the read-mode recovery fixes
+  recorded under `v0.11.1-preview`; no separate public installer was released for that
+  intermediate candidate, and the existing `v0.11.0-preview` asset remains available.
 
 ## [0.11.1-preview] - 2026-08-11
 
@@ -27,8 +28,8 @@
 
 ### Distribution
 
-- This is an unsigned Windows preview candidate. Its NSIS installer is versioned separately
-  from `v0.11.0-preview` and does not replace that release asset.
+- Intermediate unsigned Windows preview candidate. These fixes are included in
+  `v0.11.2-preview`; no public installer was released under this version.
 
 ## [0.10.0-rc.1] - 2026-07-31
 

@@ -1,15 +1,17 @@
-# JotLuck v0.11.0-preview — Preview Release Notes
+# JotLuck v0.11.2-preview — Preview Release Notes
 
-> Date: 2026-08-08
+> Date: 2026-08-12
 > This document describes the current public Windows x64 preview.
 > It is unsigned and is not a stable release.
 
 ## Important — Unsigned Preview
 
-JotLuck `v0.11.0-preview` is a **public, unsigned preview**. The Windows NSIS installer is available only on GitHub Releases; verify its SHA-256 before installing. The signed release still follows the pipeline in [`CODE_SIGNING.md`](./CODE_SIGNING.md): installed-app evidence capture, submission through the approved signing service, and Authenticode signature and post-sign SHA-256 verification.
+JotLuck `v0.11.2-preview` is a **public, unsigned preview**. The Windows NSIS installer is available only on GitHub Releases; verify SHA-256 `1df93e6426aa0b14d1dec3ddacc2c236880d26598d0d7a1c8968c378a75702c5` before installing. This release is built from commit `8f8c1150ac6db6c38230544acd7dfbaa054a44cb`. The signed release still follows the pipeline in [`CODE_SIGNING.md`](./CODE_SIGNING.md): installed-app evidence capture, submission through the approved signing service, and Authenticode signature and post-sign SHA-256 verification.
 
 ## Highlights
 
+- **Read-mode recovery stays visible.** The bundled themes keep “Return to edit” in a sticky reader bar, transfer focus to it when entering read-only mode, and restore editor focus on return.
+- **External-file controls stay inside the window.** The single-file session banner no longer pushes Lumen Field's bottom command-deck handle below the viewport.
 - **Local-first plain-text notebooks.** Folders are notebooks. Notes are regular `.md`, `.markdown`, `.mdx`, or `.txt` files that any text editor can open. Use OneDrive, Git, Syncthing, or your own backup tools.
 - **CodeMirror 6 editor with Live Preview.** Block-level rendering, real-time markdown, full keyboard navigation.
 - **Wiki-link and backlinks.** `[[note]]` syntax, aliases, dead/live link styling, and an automatic backlinks panel.
@@ -17,7 +19,7 @@ JotLuck `v0.11.0-preview` is a **public, unsigned preview**. The Windows NSIS in
 - **Templates and assets.** Built-in and custom templates with `{{date}}` and other placeholders. Image paste and drop into a notebook `assets/` folder with relative Markdown paths.
 - **Flexible export.** PDF, DOCX, XLSX, CSV, TXT, HTML.
 - **Offline completion.** Single ghost text suggestion, Tab to accept, fully on-device. Per-notebook and per-workspace learning.
-- **Hot-pluggable theme system.** Default `paper` (warm paper OKLCH layout), capability demo `super-workbench`, plus 8 more built-in themes. Theme API v2 supports local market, `.mltheme` import, preview, install, enable, uninstall, fallback, and persistence.
+- **Hot-pluggable theme system.** Six bundled configurations cover the safe fallback, Paper, Ability Lab, Halo Canvas, Lumen Field, and Super Workbench. Theme API v2 supports local market, `.mltheme` import, preview, install, enable, uninstall, fallback, and persistence.
 - **Windows native desktop.** Tauri 2, Microsoft Edge WebView2, system file dialogs, native file watcher (Rust `notify`).
 - **Read-only document import.** `.docx`, `.pdf`, `.xlsx`, and `.xls` open in an isolated semantic Markdown preview. The source remains untouched; users can continue in a detected professional editor or save a new Markdown copy for JotLuck editing.
 - **Eight optional Windows associations.** `.md`, `.markdown`, `.mdx`, `.txt`, `.docx`, `.pdf`, `.xlsx`, and `.xls` are registered as optional Open With choices. Installation and upgrade never replace the user's Windows default application.
@@ -45,11 +47,11 @@ See [KNOWN_LIMITATIONS.md](./KNOWN_LIMITATIONS.md) for the complete list. Highli
 
 ## Verification
 
-Release verification is bound to the exact candidate commit and installer artifact, not copied into this document as mutable counters. The signing request requires green source checks, Windows installed-app evidence, an installer hash, an Authenticode verification result, and a post-sign hash.
+This preview is bound to commit `8f8c1150ac6db6c38230544acd7dfbaa054a44cb` and installer SHA-256 `1df93e6426aa0b14d1dec3ddacc2c236880d26598d0d7a1c8968c378a75702c5`; Authenticode status is `NotSigned`. The signing request requires green source checks, Windows installed-app evidence, an installer hash, an Authenticode verification result, and a post-sign hash.
 
 ## What to Expect Next
 
-- **Code signing application** for the exact `v0.11.0` candidate, followed by Authenticode and post-sign hash verification.
+- **Code signing application review**, followed by GitHub Actions integration, Authenticode verification, and post-sign hash verification for a future signed candidate.
 - **macOS / Linux packaging** (TBD).
 - **Public V2S offline completion** (currently fail-closed; will unlock only after passing the cold/workspace-conditioned final gate).
 - **Optional V3** offline semantic short completion (48M–80M dedicated SLM, model + host delta ≤ 96 MiB). This is a research charter only.

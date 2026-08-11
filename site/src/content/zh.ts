@@ -93,7 +93,7 @@ export const zh: SiteContent = {
       '预览版安装包已上架 GitHub Releases——可下载、可校验、可回退。正式签名版将于 8 月 15 日同步上架本页与 Releases，每一份仍是可核验的完整版本。',
     countdownLabel: '距离正式签名版',
     countdownUnit: '天',
-    previewTitle: 'v0.11.0 Preview',
+    previewTitle: 'v0.11.2 Preview',
     downloadBtn: '下载 Preview（Windows x64）',
     releaseBtn: 'Release 说明与校验',
     signNote:

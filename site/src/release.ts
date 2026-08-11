@@ -5,16 +5,16 @@ export const RELEASE = {
   /** 首个正式签名 Windows x64 版本的预计日期（用户裁决：沿用 2026-08-15 + 保守估计俏皮注） */
   dateISO: '2026-08-15',
   platform: 'Windows x64',
-  /** preview = 预览版已上架 GitHub Releases（2026-08-08 v0.11.0-preview，公开 Pre-release）；下载按钮点亮，倒计时保留指正式版 */
+  /** preview = 预览版已上架 GitHub Releases（当前 2026-08-12 v0.11.2-preview，公开 Pre-release）；下载按钮点亮，倒计时保留指正式版 */
   state: 'preview' as const,
   /** Preview 事实（裁决 33）：版本/链接/校验的唯一事实源，下载页模板引用；事实值不进五语 content */
   preview: {
-    version: '0.11.0-preview',
-    dateISO: '2026-08-08',
+    version: '0.11.2-preview',
+    dateISO: '2026-08-12',
     downloadUrl:
-      'https://github.com/jiay98528-dev/JotLuck/releases/download/v0.11.0-preview/JotLuck_0.11.0-preview_x64-setup.exe',
-    tagUrl: 'https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.11.0-preview',
-    sha256: 'f3655ed116839c8230b5191419cc40cdcd5a69a1a6cebe03425bd2b16efccdd5',
+      'https://github.com/jiay98528-dev/JotLuck/releases/download/v0.11.2-preview/JotLuck_0.11.2-preview_x64-setup.exe',
+    tagUrl: 'https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.11.2-preview',
+    sha256: '1df93e6426aa0b14d1dec3ddacc2c236880d26598d0d7a1c8968c378a75702c5',
   },
 };
 

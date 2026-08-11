@@ -98,7 +98,7 @@ export const fr: SiteContent = {
       "L'installateur Preview est déjà sur GitHub Releases — téléchargeable, vérifiable, réversible. La version signée arrivera sur cette page et sur Releases le 15 août, chaque copie toujours complète et vérifiable.",
     countdownLabel: 'Version signée dans',
     countdownUnit: 'jours',
-    previewTitle: 'v0.11.0 Preview',
+    previewTitle: 'v0.11.2 Preview',
     downloadBtn: 'Télécharger la Preview (Windows x64)',
     releaseBtn: 'Notes de version et checksum',
     signNote:

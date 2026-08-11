@@ -93,7 +93,7 @@ export const ja: SiteContent = {
       'Preview インストーラーはすでに GitHub Releases に公開されています——ダウンロード可能、検証可能、巻き戻し可能。正式署名版は 8 月 15 日にこのページと Releases に同時公開され、どのコピーも引き続き検証可能な完全なビルドです。',
     countdownLabel: '正式署名版まで',
     countdownUnit: '日',
-    previewTitle: 'v0.11.0 Preview',
+    previewTitle: 'v0.11.2 Preview',
     downloadBtn: 'Preview をダウンロード（Windows x64）',
     releaseBtn: 'Release ノートとチェックサム',
     signNote:

@@ -36,9 +36,9 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 适合所有与文字打交道的人，也适合与 AI 协作的你。
 
-当前状态：`v0.11.0-preview`，Windows 公开预览版。经过完整测试，尚未签名。
+当前状态：`v0.11.2-preview`，Windows 公开预览版。经过完整测试，尚未签名。
 
-> **下载提示：** 官方安装包只会出现在 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases)。`v0.11.0-preview` 安装包已上架，尚未签名——安装前请核对 SHA-256。请勿从其他任何渠道下载 JotLuck。
+> **下载提示：** 官方安装包只会出现在 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases)。`v0.11.2-preview` 安装包已上架，尚未签名——安装前请核对 SHA-256。请勿从其他任何渠道下载 JotLuck。
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck 工作区，左侧是最近笔记，中间是 Markdown 编辑器，右侧是大纲与反向链接">
@@ -76,7 +76,7 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 - **更快动笔。** 模板支持 `{{date}}` 占位符。粘贴的图片落进 `assets/`，相对路径引用。
 - **六种出口。** 导出 PDF、DOCX、XLSX、CSV、TXT、HTML，无缝衔接你现有的工作流。
 - **安静的助手。** 离线幽灵文本补全，Tab 采纳。
-- **有深度的主题。** 三款内置主题，持续更新。在这里，主题改的不只是颜色，而是整个工作区的气质。
+- **有深度的主题。** 六套随包主题配置，持续更新。在这里，主题改的不只是颜色，而是整个工作区的气质。
 - **在 Windows 上很自在。** 原生文件监听、系统对话框、多窗口。基于 Tauri 2。
 
 ## 隐私与数据安全
@@ -95,7 +95,7 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 | 项目         | 当前范围                                                                                   |
 | ------------ | ------------------------------------------------------------------------------------------ |
-| 当前版本     | `v0.11.0-preview`                                                                          |
+| 当前版本     | `v0.11.2-preview`                                                                          |
 | 发行阶段     | 公开预览版，未签名；不是稳定版                                                             |
 | 候选平台     | Windows x64                                                                                |
 | 桌面运行时   | Tauri 2 与 Microsoft Edge WebView2                                                         |

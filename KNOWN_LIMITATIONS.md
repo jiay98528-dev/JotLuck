@@ -1,12 +1,12 @@
 # Known Limitations
 
-This document describes limitations for JotLuck `v0.11.0-preview`. These are not
+This document describes limitations for JotLuck `v0.11.2-preview`. These are not
 marketing claims; they are the remaining release constraints and expected
 behavior boundaries.
 
 ## Preview Status
 
-- `v0.11.0-preview` is a public, unsigned preview. It is not a stable release;
+- `v0.11.2-preview` is a public, unsigned preview. It is not a stable release;
   the official installer is available only on GitHub Releases and may trigger a
   Windows SmartScreen warning.
 - This preview does not claim complete installed-app release evidence, final
@@ -34,9 +34,9 @@ behavior boundaries.
 
 ## Desktop App Limits
 
-- The current locally built Windows candidate is unsigned and is not a public
-  download. A future public asset must be identified by its accompanying
-  official release information; this document does not publish a placeholder checksum.
+- The current Windows preview is unsigned. Its only official public download is
+  the `v0.11.2-preview` GitHub Release; verify the SHA-256 published on that page
+  before installation.
 - Tauri shell access is limited to the scoped `shell:default` capability.
   Unscoped `shell:allow-open`, `process:*`, and `fs:*` capabilities are not
   granted in the default desktop capability file.
