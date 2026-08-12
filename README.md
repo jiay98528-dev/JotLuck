@@ -21,7 +21,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/jiay98528-dev/JotLuck/releases"><strong>View release status</strong></a>
+  <a href="https://jotluck.com/en/"><strong>Official website</strong></a>
+  · <a href="https://jotluck.com/en/download"><strong>Download</strong></a>
+  · <a href="https://github.com/jiay98528-dev/JotLuck/releases">GitHub Releases</a>
   · <a href="#get-started-in-three-steps">Get started</a>
   · <a href="./SUPPORT.md">Support</a>
   · <a href="./PRIVACY.md">Privacy</a>
