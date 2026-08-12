@@ -3,7 +3,14 @@ import { useRoute } from 'vue-router';
 import { useHead } from '@unhead/vue';
 import { LOCALES, LOCALE_TAGS, getContent, type Locale } from '../content';
 import { pagePath, type SitePage } from '../router';
-import { SITE_URL, SOCIAL_CARD, SOCIAL_CARD_ALT, LEGAL_ENTITY, STUDIO_NAME } from '../release';
+import {
+  SITE_URL,
+  SOCIAL_CARD,
+  SOCIAL_CARD_ALT,
+  LEGAL_ENTITY,
+  STUDIO_NAME,
+  EXTERNAL,
+} from '../release';
 
 /** 社卡片绝对 URL（单张中英双语默认卡，五语页面共用） */
 const CARD_URL = `${SITE_URL}${SOCIAL_CARD}`;
@@ -31,6 +38,7 @@ export const JSON_LD = JSON.stringify({
       alternateName: STUDIO_NAME,
       url: SITE_URL,
       logo: `${SITE_URL}/assets/brand/jotluck-icon.png`,
+      sameAs: [EXTERNAL.githubRepo],
     },
   ],
 });

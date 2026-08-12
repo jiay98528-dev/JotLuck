@@ -21,7 +21,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/jiay98528-dev/JotLuck/releases"><strong>查看发行状态</strong></a>
+  <a href="https://jotluck.com/zh/"><strong>官方网站</strong></a>
+  · <a href="https://jotluck.com/zh/download"><strong>下载</strong></a>
+  · <a href="https://github.com/jiay98528-dev/JotLuck/releases">GitHub Releases</a>
   · <a href="#三步开始使用">开始使用</a>
   · <a href="./SUPPORT.md">获得帮助</a>
   · <a href="./PRIVACY.md">隐私政策</a>
