@@ -79,7 +79,7 @@ async function main() {
       onEvent: recordWebDriverEvent,
     });
 
-    await waitForNotebookGate();
+    await waitForGuidedSampleWorkspace();
     await browser.execute((root) => {
       localStorage.setItem('jotluck-recent-notebooks', JSON.stringify([root]));
     }, fixture.notebookRoot);
@@ -307,10 +307,20 @@ async function cleanupTemporaryRoot(temporaryRoot) {
   recordWebDriverEvent({ event: 'temporary-root-cleaned', temporaryRoot });
 }
 
-async function waitForNotebookGate() {
-  const gate = await browser.$('[data-testid="notebook-open-gate"]');
-  await gate.waitForExist({ timeout: 20_000 });
-  await gate.waitForDisplayed({ timeout: 20_000 });
+async function waitForGuidedSampleWorkspace() {
+  const editor = await browser.$('.cm-content');
+  await editor.waitForExist({ timeout: 20_000 });
+  await editor.waitForDisplayed({ timeout: 20_000 });
+  const guidedText = await browser.execute(
+    () => document.querySelector('.cm-content')?.textContent?.trim() ?? '',
+  );
+  assert.notEqual(guidedText, '', 'Guided sample workspace opened without visible note content');
+  const gateCount = await browser.$$('[data-testid="notebook-open-gate"]');
+  assert.equal(
+    gateCount.length,
+    0,
+    'Fresh launch unexpectedly fell back to the notebook open gate',
+  );
 }
 
 async function openUnicodeNoteThroughGui(fixture) {
