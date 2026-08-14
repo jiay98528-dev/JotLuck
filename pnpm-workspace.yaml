@@ -9,9 +9,12 @@ allowBuilds:
   protobufjs: false
   vue-demi: true
 minimumReleaseAgeExclude:
+  - '@puppeteer/browsers@3.2.0'
   - nanoid@3.3.18
   - postcss@8.5.23
 overrides:
+  # GHSA-jmr9-qjv8-65gv：新版浏览器管理模块已移除受影响的 extract-zip 依赖
+  '@puppeteer/browsers': 3.2.0
   brace-expansion: 5.0.9
   fast-uri@^3.0.0: 3.1.5
   fast-xml-parser@^5.0.0: 5.10.1
