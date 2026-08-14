@@ -1,6 +1,6 @@
 # Frontend Pages
 
-版本：v1.1（2026-08-04）
+版本：v1.2（2026-08-14）
 
 ## 全局语言启动与切换
 
@@ -26,8 +26,9 @@
 - `external-edit`：同窗口进入完整编辑壳，但只开放初始只读 grant 升级后的当前文件读取、保存和自动保存；不得扫描父目录、打开其他文件、调用 workspace IPC 或持久化最近笔记本。
 - `document-import-readonly`：进入复用 ExternalReader 的渐进转换页；首屏先显示源快照阶段，随后按序追加转换块。该页面只加载渲染器和文档导入 IPC，不加载编辑器、目录服务或普通外部笔记 IPC。完成后才启用双路径编辑；源 revision 变化后进入 stale 并只允许重新转换。
 - `workspace`：显示完整笔记本工作流。由“添加到笔记”进入时，先显示原目标文件，再异步加载文件树、索引、watcher 和 completion；父目录才成为持久最近笔记本。
-- `workspace-unbound`：仅用于桌面 `workspace` 窗口。最近笔记本为空或全部不可用时进入门页；Web/PWA 继续使用 MockFS，不进入该状态。门页只有“选择笔记本文件夹”主操作，主题/设置可用，所有写文件、搜索、模板、导出和编辑动作禁用。
-- `workspace-unbound → opening`：调用原生目录选择器。取消返回 `workspace-unbound` 且不显示错误；路径、权限或 IPC 失败返回带内联错误的 `workspace-unbound`，焦点回到主操作；成功才提交 notebook root。
+- `workspace-unbound`：仅用于桌面 `workspace` 窗口。最近笔记本全部不可用、或内存引导会话初始化失败时进入门页；Web/PWA 继续使用 MockFS，不进入该状态。门页只有“选择笔记本文件夹”主操作，主题/设置可用，所有写文件、搜索、模板、导出和编辑动作禁用。
+- 桌面 `workspace` 在最近列表为空时进入内存引导会话，不打开 AppData 示例目录、不写磁盘。左翼展示 `createSampleNotebookSeed()` 的引导笔记，编辑器打开第一条；自动保存关闭。Ctrl/Cmd+S 与另存只引导用户选择笔记本文件夹。选出文件夹后立即卸下全部引导笔记；若当前这篇有未确认编辑，可丢弃或只把这一篇写入新文件夹。
+- `workspace-unbound → opening`：调用原生目录选择器。取消返回 `workspace-unbound` 且不显示错误；路径、权限或 IPC 失败返回带内联错误的 `workspace-unbound`，焦点回到主操作；成功才提交 notebook root。引导会话里的选文件夹动作复用同一选择器，取消后仍留在引导会话。
 - `opening → workspace`：先绑定可读 root，再清除旧 root 的文件、活动笔记、索引、watcher、模板和补全派生状态；加载根目录后恢复 workspace 动作，并在后台重建索引。后台扫描失败显示非阻断 warning，不回退到旧 root。
 - 已有 `workspace` 的“切换笔记本”与 `Ctrl/Cmd+O` 复用相同 opening 流程。切换前必须完成当前保存；原生选择器等待期间旧 watcher 保持工作，新 root 返回后才停止旧 watcher 并进入提交阶段；保存失败、选择取消或 root 打开失败时保留原 root、正文和派生状态。选择相同 root 不重置当前笔记。
 - `external-readonly` / `external-edit` 不响应 workspace 切换动作，继续只通过“添加到笔记”显式提升既有 file grant。
@@ -59,6 +60,7 @@
 
 ## 变更记录
 
+- 2026-08-14：桌面空启动改为内存引导会话；闸门留给最近项全失败、引导初始化失败和显式选文件夹。
 - 2026-08-04（v1.1）：新增 document-import-readonly 渐进页面状态、源过期状态、双路径编辑，以及欢迎/设置的 Windows 实际关联状态流程。
 
 - 2026-08-03：新增全局语言启动/切换状态与 SettingsDialog 通用语言页签。

@@ -71,7 +71,7 @@ const SuperLeftWing = defineComponent({
         h(
           'div',
           { class: 'super-left-wing__notes' },
-          props.notes.slice(0, 8).map((note, index) =>
+          props.notes.map((note, index) =>
             h(
               'button',
               {

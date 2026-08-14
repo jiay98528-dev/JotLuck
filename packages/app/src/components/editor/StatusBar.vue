@@ -41,6 +41,7 @@
         <span v-else-if="isSaving" class="status-saving"
           >&#9203; {{ t('editor.status.saving') }}</span
         >
+        <span v-else-if="statusNote" class="status-dirty">{{ statusNote }}</span>
         <span v-else-if="isDirty" class="status-dirty">&#9679; {{ t('editor.status.dirty') }}</span>
         <span v-else class="status-saved" :class="{ ripple: showRipple }"
           >&#10003; {{ t('editor.status.saved') }}</span
@@ -93,6 +94,7 @@
           <span v-else-if="isSaving" class="status-saving"
             >&#9203; {{ t('editor.status.saving') }}</span
           >
+          <span v-else-if="statusNote" class="status-dirty">{{ statusNote }}</span>
           <span v-else-if="isDirty" class="status-dirty"
             >&#9679; {{ t('editor.status.dirty') }}</span
           >
@@ -142,6 +144,7 @@
         <span v-else-if="isSaving" class="status-saving"
           >&#9203; {{ t('editor.status.saving') }}</span
         >
+        <span v-else-if="statusNote" class="status-dirty">{{ statusNote }}</span>
         <span v-else-if="isDirty" class="status-dirty">&#9679; {{ t('editor.status.dirty') }}</span>
         <span v-else class="status-saved" :class="{ ripple: showRipple }"
           >&#10003; {{ t('editor.status.saved') }}</span
@@ -169,6 +172,7 @@ const props = withDefaults(
     isDirty?: boolean;
     isSaving?: boolean;
     saveError?: string | null;
+    statusNote?: string | null;
     lastSavedAt?: number | null;
     region?: StatusBarRegion;
     actions?: ShellAction[];
@@ -182,6 +186,7 @@ const props = withDefaults(
     isDirty: false,
     isSaving: false,
     saveError: null,
+    statusNote: null,
     lastSavedAt: null,
     region: () => ({ layout: 'full' as const, density: 'calm' as const }),
     actions: () => [],

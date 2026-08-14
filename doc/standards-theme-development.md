@@ -347,6 +347,7 @@ export default plugin;
 规则：
 
 - 这些属性只能补充现有 DOM，不能替代组件的 role、ARIA、事件、slot 或 action 路由。
+- 左翼书签列表是宿主纵向滚动合同：`navigator-list`（或主题自建等价列表）必须成为可滚动面并露出细滚动条。主题外壳可以 `overflow: hidden` 裁材质，但必须 `min-height: 0` 并把高度传进列表，不得把 `scrollbar-width: none` 加回去，也不得用 `slice` 静默截断 `recentNotes`。
 - 主题需要“玻璃外壳”时，应优先用 slot wrapper 包裹默认内容，再对 `data-theme-part` 施加 scoped CSS；不得为了视觉而重建裸 `<button>`、伪图标、文件列表或编辑器状态。
 - `inspector-rail-toggle` 是宿主 `RightWing` 的加性、本地状态控件：它必须是可聚焦的原生 button，通过 `aria-expanded` 表达窄轨展开状态；它不是 Theme API、slot 或宿主 action。
 - 变更现有部件的名称、语义或层级前，必须同时更新本文档、宿主组件测试和至少一个主题保留性测试。

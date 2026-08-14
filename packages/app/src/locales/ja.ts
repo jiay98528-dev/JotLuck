@@ -780,6 +780,9 @@ export const messages = {
       openingNote: 'ノートを開いています…',
       stats: '{chars} 文字 · {lines} 行',
       scratch: '一時下書き',
+      guided: 'ガイド用サンプル',
+      guidedHint:
+        'サンプルはディスクに書き込まれません。保存するにはノートブックフォルダーを選んでください。',
       openNotebook: 'ノートブックを開く',
       externalSession: '外部ファイル · {name}',
     },
@@ -837,6 +840,11 @@ export const messages = {
     },
     unsaved: {
       scratchTitle: '一時下書きを保存しますか？',
+      guidedTitle: 'ノートブックフォルダーに保存しますか？',
+      guidedMessage:
+        'サンプルノートはディスクに書き込まれません。変更を破棄してフォルダーを開くか、このノートだけを新しいフォルダーへ保存できます。',
+      guidedDiscard: '保存せずに開く',
+      guidedSave: 'このノートを持ち込んで保存',
       conflictTitle: '元のファイルとローカル下書きが異なります',
       missingTitle: '元のファイルは移動または削除されました',
       defaultTitle: 'この変更はまだ保存されていません',
@@ -912,6 +920,8 @@ export const messages = {
       alreadyNotebook: 'このノートブックはすでに開いています。',
       switchedNotebook: 'ノートブックを切り替えました。',
       openedNotebook: 'ノートブックを開きました。',
+      guidedCarried: 'このノートを新しいノートブックに保存しました。',
+      guidedCarryFailed: 'ノートブックは開きましたが、このノートを書き込めませんでした：{error}',
       scanIncomplete: 'ノートブックのバックグラウンドスキャンが完了しませんでした：{error}',
       deleted: 'ノートを削除しました',
       deleteFailed: '削除できませんでした：{error}',

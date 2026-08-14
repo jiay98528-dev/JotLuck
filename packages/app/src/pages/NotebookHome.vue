@@ -121,6 +121,7 @@
           :is-dirty="isDirty"
           :is-saving="isSaving"
           :save-error="saveError"
+          :status-note="guidedStatusNote"
           :last-saved-at="lastSavedAt"
           :theme-chrome="chrome"
           :actions="shellActions"
@@ -267,17 +268,17 @@
                             :predictor="completionPredictor"
                             :enable-autocomplete="!isExternalEditing && !isLargeDocument"
                             :on-editor-drop="
-                              isExternalEditing || isInteractionLocked
+                              isExternalEditing || isInteractionLocked || isGuidedSampleSession
                                 ? undefined
                                 : imageUpload.handleDrop
                             "
                             :on-editor-drag-over="
-                              isExternalEditing || isInteractionLocked
+                              isExternalEditing || isInteractionLocked || isGuidedSampleSession
                                 ? undefined
                                 : imageUpload.handleDragOver
                             "
                             :on-editor-paste="
-                              isExternalEditing || isInteractionLocked
+                              isExternalEditing || isInteractionLocked || isGuidedSampleSession
                                 ? undefined
                                 : imageUpload.handlePaste
                             "
@@ -323,17 +324,17 @@
                         :predictor="completionPredictor"
                         :enable-autocomplete="!isExternalEditing && !isLargeDocument"
                         :on-editor-drop="
-                          isExternalEditing || isInteractionLocked
+                          isExternalEditing || isInteractionLocked || isGuidedSampleSession
                             ? undefined
                             : imageUpload.handleDrop
                         "
                         :on-editor-drag-over="
-                          isExternalEditing || isInteractionLocked
+                          isExternalEditing || isInteractionLocked || isGuidedSampleSession
                             ? undefined
                             : imageUpload.handleDragOver
                         "
                         :on-editor-paste="
-                          isExternalEditing || isInteractionLocked
+                          isExternalEditing || isInteractionLocked || isGuidedSampleSession
                             ? undefined
                             : imageUpload.handlePaste
                         "
@@ -714,7 +715,7 @@
               {{ t('common.cancel') }}
             </button>
             <button
-              v-if="unsavedDialogMode !== 'scratch'"
+              v-if="unsavedDialogMode !== 'scratch' && unsavedDialogMode !== 'guided'"
               class="btn btn--secondary"
               @click="copyCurrentContent"
             >
@@ -747,24 +748,19 @@
               }}
             </button>
             <button
-              v-if="isScratchSession || unsavedDialogIntent === 'close'"
+              v-if="
+                isScratchSession ||
+                isGuidedSampleSession ||
+                unsavedDialogIntent === 'close' ||
+                unsavedDialogIntent === 'bind-workspace'
+              "
               class="btn btn--secondary"
               @click="discardUnsavedAndClose"
             >
-              {{
-                isScratchSession
-                  ? t('notebook.unsaved.discard')
-                  : t('notebook.unsaved.discardAndExit')
-              }}
+              {{ guidedUnsavedDiscardLabel }}
             </button>
             <button class="btn btn--primary" @click="saveUnsavedAsCopy">
-              {{
-                isScratchSession
-                  ? t('common.save')
-                  : unsavedDialogIntent === 'close'
-                    ? t('notebook.unsaved.saveCopyAndExit')
-                    : t('notebook.unsaved.saveCopy')
-              }}
+              {{ guidedUnsavedSaveLabel }}
             </button>
           </div>
         </div>
@@ -807,6 +803,18 @@ import ThemeSlotBoundary from '@/components/theme/ThemeSlotBoundary.vue';
 import ToastContainer, { useToast } from '@/components/common/Toast.vue';
 import { MockFSService } from '@/services/MockFSService';
 import { TauriIPCService } from '@/services/TauriIPCService';
+import {
+  applyGuidedSampleEdit,
+  createGuidedSampleSession,
+  decideEmptyWorkspaceFallback,
+  findGuidedSampleNote,
+  findGuidedSampleNoteByTitle,
+  guidedNotesAsDirEntries,
+  guidedSampleWikiLinkExists,
+  isGuidedSampleDirty,
+  nextAvailableNotePath,
+  type GuidedSampleSession,
+} from '@/services/GuidedSampleSession';
 import { useIndexStore } from '@/stores/index';
 import { useSearchStore } from '@/stores/search';
 import { useThemeStore } from '@/stores/theme';
@@ -1021,6 +1029,8 @@ const showSettings = ref(false);
 const showThemeDialog = ref(false);
 const showShare = ref(false);
 const isScratchSession = ref(false);
+const guidedSampleSession = ref<GuidedSampleSession | null>(null);
+const isGuidedSampleSession = computed(() => guidedSampleSession.value !== null);
 const workspaceGateStatus = ref<NotebookOpenGateStatus | null>(null);
 const workspaceGateError = ref('');
 const isNotebookOpening = ref(false);
@@ -1108,14 +1118,17 @@ if (e2eBridge) {
     isExternalEditing: isExternalEditing.value,
     activeNotebookRoot: activeNotebookRoot.value,
     isWorkspaceUnbound: isWorkspaceUnbound.value,
+    isGuidedSampleSession: isGuidedSampleSession.value,
     isNotebookOpening: isNotebookOpening.value,
     isNoteSwitching: isNoteSwitching.value,
     saveIssueKind: saveIssue.value?.kind ?? null,
   });
   e2eBridge.listNotePaths = () =>
-    files.value
-      .filter((entry) => entry.isFile && isSupportedNoteFile(entry.name))
-      .map((entry) => entry.path);
+    isGuidedSampleSession.value
+      ? (guidedSampleSession.value?.notes.map((note) => note.path) ?? [])
+      : files.value
+          .filter((entry) => entry.isFile && isSupportedNoteFile(entry.name))
+          .map((entry) => entry.path);
   e2eBridge.selectNote = (path) => onSelectNote(path);
   e2eBridge.readNoteFile = (path) => fs.readFile(path);
   e2eBridge.writeNoteFileExternally = (path, content) => fs.writeFile(path, content);
@@ -1157,23 +1170,31 @@ const shellActions = computed<ShellAction[]>(() => [
     title: t('notebook.actions.newNote'),
     icon: 'new-note',
     run: onShellCreateNote,
-    disabled: isWorkspaceUnbound.value || isNotebookOpening.value,
+    disabled: isWorkspaceUnbound.value || isGuidedSampleSession.value || isNotebookOpening.value,
   },
   {
     id: 'file-drawer',
     region: actionRegion('file-drawer'),
-    label: isWorkspaceUnbound.value
-      ? t('notebook.actions.openNotebookFolder')
-      : t('notebook.actions.toggleBookmarks'),
-    shortLabel: isWorkspaceUnbound.value
-      ? t('notebook.actions.openShort')
-      : t('notebook.actions.filesShort'),
-    title: isWorkspaceUnbound.value
-      ? t('notebook.actions.chooseNotebook')
-      : t('notebook.actions.openDrawer'),
+    label:
+      isWorkspaceUnbound.value || isGuidedSampleSession.value
+        ? t('notebook.actions.openNotebookFolder')
+        : t('notebook.actions.toggleBookmarks'),
+    shortLabel:
+      isWorkspaceUnbound.value || isGuidedSampleSession.value
+        ? t('notebook.actions.openShort')
+        : t('notebook.actions.filesShort'),
+    title:
+      isWorkspaceUnbound.value || isGuidedSampleSession.value
+        ? t('notebook.actions.chooseNotebook')
+        : t('notebook.actions.openDrawer'),
     icon: 'file-drawer',
-    run: isWorkspaceUnbound.value ? requestOpenNotebook : onToggleLeftDrawer,
-    active: !isWorkspaceUnbound.value && showLeftDrawer.value,
+    run:
+      isWorkspaceUnbound.value || isGuidedSampleSession.value
+        ? () => {
+            void requestOpenNotebook();
+          }
+        : onToggleLeftDrawer,
+    active: !isWorkspaceUnbound.value && !isGuidedSampleSession.value && showLeftDrawer.value,
     disabled: isNotebookOpening.value,
   },
   {
@@ -1185,7 +1206,7 @@ const shellActions = computed<ShellAction[]>(() => [
     icon: 'search',
     run: onOpenPalette,
     active: searchVisible.value,
-    disabled: isWorkspaceUnbound.value || isNotebookOpening.value,
+    disabled: isWorkspaceUnbound.value || isGuidedSampleSession.value || isNotebookOpening.value,
   },
   {
     id: 'template',
@@ -1196,7 +1217,7 @@ const shellActions = computed<ShellAction[]>(() => [
     icon: 'template',
     run: onShellCreateNote,
     active: showTemplate.value,
-    disabled: isWorkspaceUnbound.value || isNotebookOpening.value,
+    disabled: isWorkspaceUnbound.value || isGuidedSampleSession.value || isNotebookOpening.value,
   },
   {
     id: 'export',
@@ -1210,7 +1231,7 @@ const shellActions = computed<ShellAction[]>(() => [
       showExport.value = true;
     },
     active: showExport.value,
-    disabled: isWorkspaceUnbound.value || isNotebookOpening.value,
+    disabled: isWorkspaceUnbound.value || isGuidedSampleSession.value || isNotebookOpening.value,
   },
   {
     id: 'share',
@@ -1224,7 +1245,7 @@ const shellActions = computed<ShellAction[]>(() => [
       showShare.value = true;
     },
     active: showShare.value,
-    disabled: isWorkspaceUnbound.value || isNotebookOpening.value,
+    disabled: isWorkspaceUnbound.value || isGuidedSampleSession.value || isNotebookOpening.value,
   },
   {
     id: 'theme',
@@ -1273,7 +1294,7 @@ const workflowSlotProps = computed(() => ({
   activePath: shellActivePath.value,
   noteTitle: shellNoteTitle.value,
   notebookName: shellNotebookName.value,
-  isDraftSession: isScratchSession.value,
+  isDraftSession: isScratchSession.value || isGuidedSampleSession.value,
   viewMode: viewMode.value,
   workspaceIntent: chrome.value.workspaceIntent,
   switchViewMode: cycleViewMode,
@@ -1290,7 +1311,7 @@ const editorControlSlotProps = computed(() => ({
 
 const editorSurfaceSlotProps = computed(() => ({
   activePath: shellActivePath.value,
-  isDraftSession: isScratchSession.value,
+  isDraftSession: isScratchSession.value || isGuidedSampleSession.value,
   viewMode: viewMode.value,
   splitRatio: splitRatio.value,
   charCount: editorStats.charCount,
@@ -1419,23 +1440,41 @@ const externalEditDialogSlotProps = computed(() => ({
   confirmEditOnly: () => confirmExternalEdit(),
 }));
 
-const unsavedDialogMode = computed<'scratch' | 'save-failed' | 'conflict' | 'missing'>(() => {
-  if (isScratchSession.value) return 'scratch';
-  if (saveIssue.value?.kind === 'conflict') return 'conflict';
-  if (saveIssue.value?.kind === 'missing') return 'missing';
-  return 'save-failed';
-});
+const unsavedDialogMode = computed<'scratch' | 'guided' | 'save-failed' | 'conflict' | 'missing'>(
+  () => {
+    if (isGuidedSampleSession.value) return 'guided';
+    if (isScratchSession.value) return 'scratch';
+    if (saveIssue.value?.kind === 'conflict') return 'conflict';
+    if (saveIssue.value?.kind === 'missing') return 'missing';
+    return 'save-failed';
+  },
+);
 const unsavedDialogTitle = computed(() => {
+  if (unsavedDialogMode.value === 'guided') return t('notebook.unsaved.guidedTitle');
   if (unsavedDialogMode.value === 'scratch') return t('notebook.unsaved.scratchTitle');
   if (unsavedDialogMode.value === 'conflict') return t('notebook.unsaved.conflictTitle');
   if (unsavedDialogMode.value === 'missing') return t('notebook.unsaved.missingTitle');
   return t('notebook.unsaved.defaultTitle');
 });
 const unsavedDialogMessage = computed(() => {
+  if (unsavedDialogMode.value === 'guided') return t('notebook.unsaved.guidedMessage');
   if (unsavedDialogMode.value === 'scratch') {
     return t('notebook.unsaved.scratchMessage');
   }
   return saveIssue.value?.message ?? t('notebook.unsaved.defaultMessage');
+});
+const guidedUnsavedDiscardLabel = computed(() => {
+  if (unsavedDialogIntent.value === 'bind-workspace') return t('notebook.unsaved.guidedDiscard');
+  if (unsavedDialogMode.value === 'guided') return t('notebook.unsaved.discardAndExit');
+  if (isScratchSession.value) return t('notebook.unsaved.discard');
+  return t('notebook.unsaved.discardAndExit');
+});
+const guidedUnsavedSaveLabel = computed(() => {
+  if (unsavedDialogMode.value === 'guided') return t('notebook.unsaved.guidedSave');
+  if (isScratchSession.value) return t('common.save');
+  return unsavedDialogIntent.value === 'close'
+    ? t('notebook.unsaved.saveCopyAndExit')
+    : t('notebook.unsaved.saveCopy');
 });
 
 const scratchExitDialogSlotProps = computed(() => ({
@@ -1662,6 +1701,7 @@ function scheduleSplitEditorMountForCurrentMode(): void {
 function onSplitContentUpdate(content: string): void {
   if (
     !isScratchSession.value &&
+    !isGuidedSampleSession.value &&
     (!activeNotebookRoot.value || isWorkspaceUnbound.value || isInteractionLocked.value)
   ) {
     requireBoundWorkspace(t('notebook.actions.editNote'));
@@ -1671,7 +1711,10 @@ function onSplitContentUpdate(content: string): void {
   currentContent.value = content;
   updateHeadings(content);
   updateEditorStats(content);
-  if (isScratchSession.value) {
+  if (isGuidedSampleSession.value) {
+    persistGuidedSampleCurrent();
+    clearSaveIssue();
+  } else if (isScratchSession.value) {
     isDirty.value = content.trim().length > 0;
     clearSaveIssue();
   } else if (activePath.value) {
@@ -1741,7 +1784,7 @@ let currentSavePromise: Promise<boolean> | null = null;
 let noteSelectionQueue: Promise<void> = Promise.resolve();
 let noteSelectionVersion = 0;
 let externalSelectionVersion = 0;
-const unsavedDialogIntent = ref<'recover' | 'close'>('recover');
+const unsavedDialogIntent = ref<'recover' | 'close' | 'bind-workspace'>('recover');
 
 function clearSaveIssue(): void {
   saveIssue.value = null;
@@ -1800,11 +1843,20 @@ const shellActivePath = computed(() =>
   isExternalEditing.value ? externalRelativePath.value : activePath.value,
 );
 const shellNoteTitle = computed(() => {
+  if (guidedSampleSession.value) {
+    return (
+      findGuidedSampleNote(guidedSampleSession.value, activePath.value)?.title ||
+      t('notebook.status.guided')
+    );
+  }
   if (isScratchSession.value) return t('notebook.status.scratch');
   if (isExternalSession.value) return stripSupportedNoteExtension(externalFileName.value);
   return noteTitle.value;
 });
 const shellNotebookName = computed(() => {
+  if (isGuidedSampleSession.value) {
+    return guidedSampleSession.value?.notebookName || t('notebook.status.guided');
+  }
   if (isScratchSession.value) return t('notebook.status.scratch');
   if (!isExternalSession.value) return notebookName.value || t('notebook.status.openNotebook');
   const root = externalFile.value?.notebookRoot;
@@ -1833,9 +1885,23 @@ const externalRecentNotesWithColors = computed(() =>
     _i: i,
   })),
 );
-const shellRecentNotesWithColors = computed(() =>
-  isExternalEditing.value ? externalRecentNotesWithColors.value : recentNotesWithColors.value,
+const guidedRecentNotesWithColors = computed(() =>
+  (guidedSampleSession.value?.notes ?? []).map((note, index) => ({
+    path: note.path,
+    title: note.title,
+    colorIndex: Math.abs(hashString(note.path)) % 8,
+    _i: index,
+  })),
 );
+const guidedStatusNote = computed(() =>
+  isGuidedSampleSession.value ? t('notebook.status.guidedHint') : null,
+);
+const shellRecentNotesWithColors = computed(() => {
+  if (isGuidedSampleSession.value) return guidedRecentNotesWithColors.value;
+  return isExternalEditing.value
+    ? externalRecentNotesWithColors.value
+    : recentNotesWithColors.value;
+});
 function hashString(s: string): number {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
@@ -1962,6 +2028,7 @@ async function commitWorkspaceHandle(
   if (!transitionAlreadyStarted) await suspendWorkspaceForTransition();
 
   isScratchSession.value = false;
+  clearGuidedSampleSession();
   workspaceGateStatus.value = null;
   workspaceGateError.value = '';
   activeNotebookRoot.value = normalizeOsPath(handle.rootPath);
@@ -2006,6 +2073,7 @@ async function enterWorkspaceGate(error = ''): Promise<void> {
   }
 
   isScratchSession.value = false;
+  clearGuidedSampleSession();
   externalSessionMode.value = 'none';
   void revokeExternalGrant(externalFile.value);
   externalFile.value = null;
@@ -2270,10 +2338,115 @@ async function restartNotebookWatcher(rootPath: string): Promise<void> {
 }
 
 let initialNotebookGateError = '';
+let guidedBindResolver: ((choice: 'cancel' | 'discard' | 'save') => void) | null = null;
+let guidedCarryOnBind: 'ask' | 'discard' | 'save' = 'ask';
+
+function clearGuidedSampleSession(): void {
+  if (guidedBindResolver) {
+    const resolve = guidedBindResolver;
+    guidedBindResolver = null;
+    resolve('cancel');
+  }
+  guidedCarryOnBind = 'ask';
+  guidedSampleSession.value = null;
+}
+
+function persistGuidedSampleCurrent(): void {
+  const session = guidedSampleSession.value;
+  if (!session || !activePath.value) return;
+  syncCurrentContentFromEditor();
+  const next = applyGuidedSampleEdit(session, activePath.value, currentContent.value);
+  if (next !== session) guidedSampleSession.value = next;
+  const note = findGuidedSampleNote(next, activePath.value);
+  isDirty.value = Boolean(note && isGuidedSampleDirty(note));
+}
+
+function isGuidedCurrentDirty(): boolean {
+  persistGuidedSampleCurrent();
+  const session = guidedSampleSession.value;
+  if (!session || !activePath.value) return false;
+  const note = findGuidedSampleNote(session, activePath.value);
+  return Boolean(note && isGuidedSampleDirty(note));
+}
+
+function enterGuidedSampleSession(): boolean {
+  const session = createGuidedSampleSession();
+  const first = session.notes[0];
+  if (!first) return false;
+
+  guidedSampleSession.value = session;
+  isScratchSession.value = false;
+  workspaceGateStatus.value = null;
+  workspaceGateError.value = '';
+  activeNotebookRoot.value = '';
+  notebookName.value = session.notebookName;
+  files.value = guidedNotesAsDirEntries(session);
+  currentDir.value = '/';
+  activePath.value = first.path;
+  contentRevision++;
+  currentContent.value = first.content;
+  currentDiskRevision.value = null;
+  isDirty.value = false;
+  isSaving.value = false;
+  clearSaveIssue();
+  lastSavedAt.value = null;
+  updateHeadings(first.content);
+  updateEditorStats(first.content);
+  scheduleSplitEditorMountForCurrentMode();
+  refreshSplitPreviewIfVisible();
+  wikiLinkRevision.value++;
+  return true;
+}
+
+function confirmGuidedBind(): Promise<'cancel' | 'discard' | 'save'> {
+  if (showScratchExitDialog.value && guidedBindResolver) {
+    return new Promise((resolve) => {
+      const previous = guidedBindResolver;
+      guidedBindResolver = (choice) => {
+        previous?.(choice);
+        resolve(choice);
+      };
+    });
+  }
+  return new Promise((resolve) => {
+    guidedBindResolver = resolve;
+    unsavedDialogIntent.value = 'bind-workspace';
+    showScratchExitDialog.value = true;
+  });
+}
+
+function resolveGuidedBind(choice: 'cancel' | 'discard' | 'save'): void {
+  showScratchExitDialog.value = false;
+  const resolve = guidedBindResolver;
+  guidedBindResolver = null;
+  resolve?.(choice);
+}
+
+function requestWorkspaceForGuidedSave(): boolean {
+  toast.show(
+    t('notebook.error.chooseNotebookFirst', { action: t('notebook.actions.saveNote') }),
+    'warning',
+    3500,
+  );
+  void requestOpenNotebook();
+  return false;
+}
+
+async function writeCarriedGuidedNote(path: string, content: string): Promise<string> {
+  const existing = (await listDirectoryRecursive('/'))
+    .filter((entry) => entry.isFile)
+    .map((entry) => entry.path);
+  const target = nextAvailableNotePath(existing, path);
+  const result = await fs.writeFileIfUnchanged(target, content, null);
+  if (result.status === 'conflict') {
+    throw createUserMessageError('notebook.error.fileExists', { path: target });
+  }
+  return target;
+}
 
 async function openInitialNotebook(): Promise<boolean> {
   initialNotebookGateError = '';
-  const forceGate = !isDesktopRuntime() && peekJotLuckE2EBridge()?.mockNotebook?.forceGate;
+  const forceGate = Boolean(!isDesktopRuntime() && peekJotLuckE2EBridge()?.mockNotebook?.forceGate);
 
   let recent: string[] = [];
   try {
@@ -2297,7 +2470,15 @@ async function openInitialNotebook(): Promise<boolean> {
     initialNotebookGateError = t('notebook.error.recentUnavailable');
   }
 
-  if (!isDesktopRuntime() && !forceGate) {
+  const fallback = decideEmptyWorkspaceFallback({
+    isDesktop: isDesktopRuntime(),
+    forceGate,
+    recentCount: recent.length,
+  });
+  if (fallback === 'guided-sample') {
+    return enterGuidedSampleSession();
+  }
+  if (fallback === 'web-default') {
     try {
       await openNotebookRoot('/');
       return true;
@@ -2488,6 +2669,7 @@ async function saveScratchAs(): Promise<boolean> {
 }
 
 async function saveCurrentAsCopy(): Promise<boolean> {
+  if (isGuidedSampleSession.value) return requestWorkspaceForGuidedSave();
   await imageUpload.waitForIdle();
   syncCurrentContentFromEditor();
   const wasExternalEditing = isExternalEditing.value;
@@ -2608,7 +2790,9 @@ function syncCurrentContentFromEditor(): void {
   updateEditorStats(content);
   scheduleSplitEditorMountForCurrentMode();
   refreshSplitPreviewIfVisible();
-  if (isScratchSession.value) {
+  if (isGuidedSampleSession.value) {
+    persistGuidedSampleCurrent();
+  } else if (isScratchSession.value) {
     isDirty.value = content.trim().length > 0;
   } else if (activePath.value || isExternalEditing.value) {
     isDirty.value = true;
@@ -2642,6 +2826,10 @@ async function flushPendingCurrentSave(): Promise<boolean> {
   if (saveTimer) {
     clearTimeout(saveTimer);
     saveTimer = null;
+  }
+  if (isGuidedSampleSession.value) {
+    persistGuidedSampleCurrent();
+    return true;
   }
   if (!isDirty.value) {
     if (currentSavePromise) await currentSavePromise;
@@ -2686,6 +2874,7 @@ async function retryCurrentSave(): Promise<boolean> {
     return false;
   }
 
+  if (isGuidedSampleSession.value) return requestWorkspaceForGuidedSave();
   if (isScratchSession.value) return saveScratchAs();
   if (isWorkspaceUnbound.value || isNotebookOpening.value) {
     requireBoundWorkspace(t('notebook.actions.saveNote'));
@@ -2752,6 +2941,7 @@ function requireBoundWorkspace(action: string): boolean {
   if (
     activeNotebookRoot.value &&
     !isWorkspaceUnbound.value &&
+    !isGuidedSampleSession.value &&
     !isNotebookOpening.value &&
     !isExternalSession.value
   ) {
@@ -2771,9 +2961,9 @@ function requireFileBrowseSession(): boolean {
   return requireBoundWorkspace(t('notebook.actions.browseFiles'));
 }
 
-let notebookOpenTask: Promise<void> | null = null;
+let notebookOpenTask: Promise<boolean> | null = null;
 
-function requestOpenNotebook(): Promise<void> {
+function requestOpenNotebook(): Promise<boolean> {
   if (notebookOpenTask) return notebookOpenTask;
   const task = performOpenNotebook();
   void task.then(
@@ -2788,14 +2978,18 @@ function requestOpenNotebook(): Promise<void> {
   return task;
 }
 
-async function performOpenNotebook(): Promise<void> {
+async function performOpenNotebook(): Promise<boolean> {
   if (isExternalSession.value) {
     toast.show(t('notebook.external.addHint'), 'info', 4000);
-    return;
+    return false;
   }
+
+  if (isGuidedSampleSession.value) persistGuidedSampleCurrent();
 
   const previousRoot = activeNotebookRoot.value;
   const startedFromGate = isWorkspaceUnbound.value;
+  const startedFromGuided = isGuidedSampleSession.value;
+  let pendingGuidedCarry: { path: string; content: string } | null = null;
   let shouldResumePreviousWatcher = false;
   if (startedFromGate) {
     workspaceGateStatus.value = 'opening';
@@ -2808,20 +3002,29 @@ async function performOpenNotebook(): Promise<void> {
     const selection = await fs.selectNotebook();
     if (!selection) {
       if (startedFromGate) workspaceGateStatus.value = 'idle';
-      return;
+      return false;
     }
 
     const nextRoot = normalizeOsPath(selection.rootPath);
     if (previousRoot && notebookRootsEqual(previousRoot, nextRoot)) {
       toast.show(t('notebook.toast.alreadyNotebook'), 'info', 2500);
-      return;
+      return true;
+    }
+
+    if (startedFromGuided && isGuidedCurrentDirty()) {
+      const choice = guidedCarryOnBind === 'ask' ? await confirmGuidedBind() : guidedCarryOnBind;
+      guidedCarryOnBind = 'ask';
+      if (choice === 'cancel') return false;
+      if (choice === 'save' && activePath.value) {
+        pendingGuidedCarry = { path: activePath.value, content: currentContent.value };
+      }
     }
 
     if (previousRoot) isNoteSwitching.value = true;
     await imageUpload.waitForIdle();
     if (previousRoot && !(await flushCurrentSaveOrBlock(t('notebook.actions.switchNotebook')))) {
       isNoteSwitching.value = false;
-      return;
+      return false;
     }
 
     await suspendWorkspaceForTransition();
@@ -2850,7 +3053,7 @@ async function performOpenNotebook(): Promise<void> {
       } else {
         await enterWorkspaceGate(t('notebook.error.selectedOpenFailed', { error: message }));
       }
-      return;
+      return false;
     }
 
     await commitWorkspaceHandle(handle, stagedFiles, true);
@@ -2860,10 +3063,27 @@ async function performOpenNotebook(): Promise<void> {
       'success',
       2500,
     );
+    if (pendingGuidedCarry) {
+      try {
+        const savedPath = await writeCarriedGuidedNote(
+          pendingGuidedCarry.path,
+          pendingGuidedCarry.content,
+        );
+        await onSelectNote(savedPath);
+        toast.show(t('notebook.toast.guidedCarried'), 'success', 2500);
+      } catch (carryError) {
+        toast.show(
+          t('notebook.toast.guidedCarryFailed', { error: userErrorMessage(carryError) }),
+          'warning',
+          5000,
+        );
+      }
+    }
     void completeNotebookInitializationInBackground(
       activeNotebookRoot.value,
       notebookDataGeneration,
     );
+    return true;
   } catch (error) {
     const message = userErrorMessage(error);
     if (previousRoot && shouldResumePreviousWatcher) {
@@ -2883,8 +3103,15 @@ async function performOpenNotebook(): Promise<void> {
       workspaceGateStatus.value = 'error';
       workspaceGateError.value = t('notebook.error.notebookOpenFailed', { error: message });
     } else {
-      toast.show(t('notebook.error.switchFailed', { error: message }), 'error', 5000);
+      toast.show(
+        startedFromGuided
+          ? t('notebook.error.selectedOpenFailed', { error: message })
+          : t('notebook.error.switchFailed', { error: message }),
+        'error',
+        5000,
+      );
     }
+    return false;
   } finally {
     isNotebookOpening.value = false;
     isNoteSwitching.value = false;
@@ -3060,7 +3287,9 @@ async function initNotebook(): Promise<void> {
       await enterWorkspaceGate(initialNotebookGateError);
       return;
     }
-    if (initialRelativePath) {
+    if (isGuidedSampleSession.value) {
+      // In-memory samples are already in the editor; skip directory and index IO.
+    } else if (initialRelativePath) {
       await loadDirectoryShallow('/');
       await onSelectNote(initialRelativePath);
       void completeNotebookInitializationInBackground(
@@ -3078,7 +3307,7 @@ async function initNotebook(): Promise<void> {
     loading.value = false;
     markStartupReady(notebookReady ? 'workspace' : 'gate');
   }
-  if (!notebookReady) return;
+  if (!notebookReady || isGuidedSampleSession.value) return;
   try {
     await indexStore.initialize(fs, true);
     await refreshCustomTemplates(true);
@@ -3304,6 +3533,31 @@ async function selectNoteNow(path: string, selectionVersion: number): Promise<vo
     saveTimer = null;
   }
   syncCurrentContentFromEditor();
+  if (guidedSampleSession.value) {
+    persistGuidedSampleCurrent();
+    const session = guidedSampleSession.value;
+    if (!session) return;
+    const note = findGuidedSampleNote(session, normalizePath(path));
+    if (!note) {
+      toast.show(t('notebook.error.noteNotFound', { title: path }), 'warning', 3000);
+      return;
+    }
+    if (selectionVersion !== noteSelectionVersion) return;
+    showLeftDrawer.value = false;
+    activePath.value = note.path;
+    contentRevision++;
+    currentContent.value = note.content;
+    currentDiskRevision.value = null;
+    isDirty.value = isGuidedSampleDirty(note);
+    isSaving.value = false;
+    clearSaveIssue();
+    const dir = note.path.substring(0, note.path.lastIndexOf('/') + 1) || '/';
+    currentDir.value = normalizeDir(dir);
+    updateHeadings(note.content);
+    updateEditorStats(note.content);
+    refreshSplitPreviewIfVisible();
+    return;
+  }
   // 防御性刷新：即使 saveTimer 已触发但 debouncedSave 尚未完成，
   // 只要 isDirty 为 true 就执行保存，确保内容不丢失
   if (!(await flushPendingCurrentSave())) return;
@@ -3662,6 +3916,9 @@ let previewRenderTimer: ReturnType<typeof setTimeout> | null = null;
 function wikiLinkExists(noteTitle: string): boolean {
   const target = noteTitle.trim();
   if (!target) return false;
+  if (guidedSampleSession.value && guidedSampleWikiLinkExists(guidedSampleSession.value, target)) {
+    return true;
+  }
   const tree = isExternalEditing.value ? externalFiles.value : files.value;
   const existsInTree = tree.some((entry) => {
     if (!entry.isFile) return false;
@@ -3861,6 +4118,7 @@ async function hydrateMockNotebookFromExternalFiles(rootPath: string): Promise<v
 function onContentUpdate(content: string): void {
   if (
     !isScratchSession.value &&
+    !isGuidedSampleSession.value &&
     (!activeNotebookRoot.value || isWorkspaceUnbound.value || isInteractionLocked.value)
   ) {
     requireBoundWorkspace(t('notebook.actions.editNote'));
@@ -3870,6 +4128,12 @@ function onContentUpdate(content: string): void {
   currentContent.value = content;
   updateHeadings(content);
   updateEditorStats(content);
+  if (isGuidedSampleSession.value) {
+    persistGuidedSampleCurrent();
+    clearSaveIssue();
+    refreshSplitPreviewIfVisible();
+    return;
+  }
   if (isScratchSession.value) {
     isDirty.value = content.trim().length > 0;
     clearSaveIssue();
@@ -4352,6 +4616,18 @@ async function onLivePreviewWikiLinkClick(noteTitle: string, anchor: null | stri
     toast.show(t('notebook.external.wikiRestricted'), 'info', 3500);
     return;
   }
+  if (guidedSampleSession.value) {
+    const guided = findGuidedSampleNoteByTitle(guidedSampleSession.value, noteTitle);
+    if (!guided) {
+      toast.show(t('notebook.error.noteNotFound', { title: noteTitle }), 'warning', 3000);
+      return;
+    }
+    await onShellSelectNote(guided.path);
+    if (!anchor) return;
+    const targetHeading = headings.value.find((heading) => heading.text.trim() === anchor.trim());
+    if (targetHeading) onNavTreeNavigate(targetHeading.id, targetHeading.lineNumber);
+    return;
+  }
   const docs = Object.values(indexStore.getIndexService()?.getAllDocuments() ?? {});
   const exact =
     docs.find((doc) => doc.title === noteTitle) ??
@@ -4494,7 +4770,9 @@ function onGlobalKeydown(e: KeyboardEvent): void {
   if ((e.ctrlKey || e.metaKey) && key === 's') {
     e.preventDefault();
     e.stopPropagation();
-    if (isScratchSession.value) {
+    if (isGuidedSampleSession.value) {
+      requestWorkspaceForGuidedSave();
+    } else if (isScratchSession.value) {
       void saveScratchAs();
     } else if (isWorkspaceUnbound.value) {
       requireBoundWorkspace(t('notebook.actions.saveNote'));
@@ -4527,9 +4805,30 @@ function onGlobalKeydown(e: KeyboardEvent): void {
 function connectPredictor(): void {
   const pred = completionPredictor;
   pred.setSessionKind(
-    isExternalSession.value ? 'external' : isScratchSession.value ? 'temporary' : 'workspace',
+    isExternalSession.value
+      ? 'external'
+      : isScratchSession.value || isGuidedSampleSession.value
+        ? 'temporary'
+        : 'workspace',
   );
   if (isExternalSession.value) return;
+  if (isGuidedSampleSession.value) {
+    const titles = guidedSampleSession.value?.notes.map((note) => note.title) ?? [];
+    pred.setStorageScope('guided-sample');
+    pred.setIndexData({
+      getAllNoteTitles: () => titles,
+      getAllTags: () => [],
+      getRecentNoteTitles: () => titles,
+      matchFilePaths: (prefix: string) => {
+        const q = prefix.toLowerCase();
+        return (guidedSampleSession.value?.notes ?? [])
+          .map((note) => note.path)
+          .filter((path) => path.toLowerCase().startsWith(q));
+      },
+    });
+    pred.ingestExcerpts(titles);
+    return;
+  }
   pred.setStorageScope(completionStorageScope.value);
   completionTrainingMeta.value = loadTrainingMeta(completionStorageScope.value);
   const svc = indexStore.getIndexService();
@@ -4620,6 +4919,7 @@ function onClearCompletionData(): void {
 }
 
 function hasUnsavedScratch(): boolean {
+  if (isGuidedSampleSession.value) return isGuidedCurrentDirty();
   return isScratchSession.value && currentContent.value.trim().length > 0 && isDirty.value;
 }
 
@@ -4667,6 +4967,10 @@ async function requestDesktopWindowClose(): Promise<void> {
 }
 
 function cancelUnsavedExit(): void {
+  if (unsavedDialogIntent.value === 'bind-workspace') {
+    resolveGuidedBind('cancel');
+    return;
+  }
   showScratchExitDialog.value = false;
   if (!isNotebookOpening.value) isNoteSwitching.value = false;
 }
@@ -4786,11 +5090,28 @@ async function overwriteCurrentDiskVersion(): Promise<void> {
 }
 
 async function discardUnsavedAndClose(): Promise<void> {
+  if (unsavedDialogIntent.value === 'bind-workspace') {
+    resolveGuidedBind('discard');
+    return;
+  }
   await closeCurrentWindow();
 }
 
 async function saveUnsavedAsCopy(): Promise<void> {
   const intent = unsavedDialogIntent.value;
+  if (intent === 'bind-workspace') {
+    resolveGuidedBind('save');
+    return;
+  }
+  if (isGuidedSampleSession.value) {
+    showScratchExitDialog.value = false;
+    guidedCarryOnBind = 'save';
+    const opened = await requestOpenNotebook();
+    if (intent === 'close' && opened && !isGuidedSampleSession.value) {
+      await closeCurrentWindow();
+    }
+    return;
+  }
   const saved = isScratchSession.value ? await saveScratchAs() : await saveCurrentAsCopy();
   if (!saved) return;
   showScratchExitDialog.value = false;
@@ -4798,10 +5119,13 @@ async function saveUnsavedAsCopy(): Promise<void> {
 }
 
 // Reconnect predictor when editor remounts due to :key changes (view-mode / note switch).
-watch([activePath, viewMode, isScratchSession, isExternalSession], async () => {
-  await nextTick();
-  connectPredictor();
-});
+watch(
+  [activePath, viewMode, isScratchSession, isGuidedSampleSession, isExternalSession],
+  async () => {
+    await nextTick();
+    connectPredictor();
+  },
+);
 
 // ── Version Check ──────────────────────────────────────────
 const VERSION_AUTO_CHECK_KEY = 'jotluck:version:autoCheck';

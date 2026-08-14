@@ -62,7 +62,7 @@ const LumenLeftWing = defineComponent({
           'div',
           { class: 'lumen-note-list' },
           props.notes.length > 0
-            ? props.notes.slice(0, 12).map((note, index) =>
+            ? props.notes.map((note, index) =>
                 h(
                   'button',
                   {

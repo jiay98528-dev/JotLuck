@@ -79,6 +79,63 @@ describe('layout theme part contracts', () => {
     expect(wrapper.emitted('select-note')).toEqual([['/second.md']]);
   });
 
+  it('keeps the bookmark list as the scroll owner and shows a hover name on dots', async () => {
+    document.body.innerHTML = '';
+    const notes = Array.from({ length: 24 }, (_, index) => ({
+      path: `/note-${index}.md`,
+      title: `Note ${index}`,
+      colorIndex: index % 8,
+    }));
+    const wrapper = mount(LeftWing, {
+      attachTo: document.body,
+      props: {
+        activePath: '/note-0.md',
+        notes,
+        region: { mode: 'default', layout: 'bookmarks' },
+      },
+    });
+
+    const list = wrapper.get('[data-theme-part="navigator-list"]');
+    expect(wrapper.find('.wing-spacer').exists()).toBe(false);
+    expect(list.classes()).toContain('wing-bookmarks');
+    expect(getComputedStyle(list.element).scrollbarWidth).not.toBe('none');
+
+    await wrapper.get('button[aria-label="Note 3"]').trigger('mouseenter');
+
+    const label = document.getElementById('wing-bookmark-label');
+    expect(label?.textContent?.trim()).toBe('Note 3');
+    expect(label?.getAttribute('role')).toBe('tooltip');
+    expect(wrapper.get('button[aria-label="Note 3"]').attributes('aria-describedby')).toBe(
+      'wing-bookmark-label',
+    );
+
+    await wrapper.get('button[aria-label="Note 3"]').trigger('click');
+    expect(wrapper.emitted('select-note')).toEqual([['/note-3.md']]);
+
+    wrapper.unmount();
+  });
+
+  it('does not stack a hover label on navigator rows that already show titles', async () => {
+    document.body.innerHTML = '';
+    const wrapper = mount(LeftWing, {
+      attachTo: document.body,
+      props: {
+        activePath: '/first.md',
+        notes: [
+          { path: '/first.md', title: 'First note', colorIndex: 0 },
+          { path: '/second.md', title: 'Second note', colorIndex: 1 },
+        ],
+        region: { mode: 'navigator', layout: 'navigator' },
+      },
+    });
+
+    await wrapper.get('button[aria-label="Second note"]').trigger('mouseenter');
+
+    expect(document.getElementById('wing-bookmark-label')).toBeNull();
+    expect(wrapper.get('.wing-bookmark-name').text()).toBe('First note');
+    wrapper.unmount();
+  });
+
   it('labels inspector sections while preserving the resize separator and accordion', async () => {
     const wrapper = mount(RightWing, {
       props: {

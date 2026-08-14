@@ -79,6 +79,7 @@
             :is-dirty="isDirty"
             :is-saving="isSaving"
             :save-error="saveError"
+            :status-note="statusNote"
             :last-saved-at="lastSavedAt"
             :region="statusBarRegion"
             :actions="actionsFor('status-right')"
@@ -159,6 +160,7 @@
             :is-dirty="isDirty"
             :is-saving="isSaving"
             :save-error="saveError"
+            :status-note="statusNote"
             :last-saved-at="lastSavedAt"
             :region="statusBarRegion"
             :actions="actionsFor('status-right')"
@@ -245,6 +247,7 @@ const props = defineProps<{
   isDirty: boolean;
   isSaving: boolean;
   saveError: string | null;
+  statusNote?: string | null;
   lastSavedAt: number | null;
   themeChrome: ThemeChromeState;
   actions: ShellAction[];
@@ -287,6 +290,7 @@ const rightWingRegion = computed<RightWingRegion>(() => ({
 const statusText = computed(() => {
   if (props.isSaving) return t('shell.saving');
   if (props.saveError) return t('shell.saveFailed');
+  if (props.statusNote) return props.statusNote;
   if (props.isDirty) return t('shell.unsaved');
   return t('shell.wordCharCount', { words: props.wordCount, chars: props.charCount });
 });
@@ -342,6 +346,7 @@ const statusBarSlotProps = computed(() => ({
   isDirty: props.isDirty,
   isSaving: props.isSaving,
   saveError: props.saveError,
+  statusNote: props.statusNote ?? null,
   lastSavedAt: props.lastSavedAt,
   region: statusBarRegion.value,
   actions: actionsFor('status-right'),

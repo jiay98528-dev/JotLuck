@@ -290,16 +290,23 @@
 
 /* Navigator remains a single glass pod; only current and focused rows gain material. */
 [data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing {
+  display: flex;
   flex: 0 0 var(--wing-left-width);
+  flex-direction: column;
+  align-self: stretch;
   width: var(--wing-left-width);
   min-width: 0;
+  min-height: 0;
   margin: var(--space-8) 0 var(--space-8) var(--space-8);
   border-radius: var(--radius-lg);
 }
 
 [data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing .left-wing {
+  flex: 1 1 0;
   width: 100%;
   min-width: 0;
+  height: auto;
+  min-height: 0;
   padding: var(--space-14) var(--space-10) var(--space-12);
   border: 0;
   background: transparent;
@@ -832,7 +839,9 @@
 
   [data-theme-id='jotluck.halo-canvas'] .halo-frame--left-wing {
     flex-basis: var(--wing-left-width);
+    align-self: stretch;
     width: var(--wing-left-width);
+    min-height: 0;
     margin: var(--space-8) 0 var(--space-8) var(--space-8);
   }
 
@@ -930,7 +939,9 @@
     --wing-left-width: 56px;
 
     flex-basis: var(--wing-left-width);
+    align-self: stretch;
     width: var(--wing-left-width);
+    min-height: 0;
     margin: var(--space-4) 0 var(--space-4) var(--space-4);
   }
 

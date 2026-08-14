@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.12.0-preview] - 2026-08-14
+
+### Added
+
+- Desktop empty launch now shows in-memory guided sample notes. They can be edited, but are not
+  written to disk until the user chooses a notebook folder. Selecting a workspace removes the
+  samples; the current edited note can be carried into the new folder.
+
+### Fixed
+
+- Left-wing bookmark lists scroll again across Paper, Halo Canvas, and Lumen Field. Winged
+  bookmark dots show the note name on hover and keyboard focus.
+
+### Distribution
+
+- Published as the unsigned Windows preview release `v0.12.0-preview`.
+
 ## [0.11.2-preview] - 2026-08-12
 
 ### Fixed

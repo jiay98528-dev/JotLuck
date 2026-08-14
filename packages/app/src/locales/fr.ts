@@ -807,6 +807,9 @@ export const messages = {
       openingNote: 'Ouverture de la note…',
       stats: '{chars} caractères · {lines} lignes',
       scratch: 'Brouillon temporaire',
+      guided: 'Notes d’exemple',
+      guidedHint:
+        'Les exemples ne sont pas écrits sur le disque. Choisissez un dossier de carnet pour enregistrer.',
       openNotebook: 'Ouvrir un carnet',
       externalSession: 'Fichier externe · {name}',
     },
@@ -865,6 +868,11 @@ export const messages = {
     },
     unsaved: {
       scratchTitle: 'Enregistrer le brouillon temporaire ?',
+      guidedTitle: 'Enregistrer dans un dossier de carnet ?',
+      guidedMessage:
+        'Les notes d’exemple ne sont pas écrites sur le disque. Abandonnez ces modifications et ouvrez le dossier, ou n’emportez que cette note dans le nouveau dossier.',
+      guidedDiscard: 'Ouvrir sans enregistrer',
+      guidedSave: 'Emporter cette note et enregistrer',
       conflictTitle: 'Le fichier original et le brouillon local diffèrent',
       missingTitle: 'Le fichier original a été déplacé ou supprimé',
       defaultTitle: 'Ces modifications ne sont pas enregistrées',
@@ -948,6 +956,8 @@ export const messages = {
       alreadyNotebook: 'Ce carnet est déjà ouvert.',
       switchedNotebook: 'Carnet changé.',
       openedNotebook: 'Carnet ouvert.',
+      guidedCarried: 'Cette note a été enregistrée dans le nouveau carnet.',
+      guidedCarryFailed: 'Le carnet s’est ouvert, mais cette note n’a pas pu être écrite : {error}',
       scanIncomplete: 'L’analyse en arrière-plan du carnet ne s’est pas terminée : {error}',
       deleted: 'Note supprimée',
       deleteFailed: 'Impossible de supprimer : {error}',

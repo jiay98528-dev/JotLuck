@@ -49,10 +49,10 @@
     <div v-else-if="region.layout === 'studio-rail'" class="wing-rail-groove" aria-hidden="true" />
 
     <nav
-      ref="bookmarkList"
       class="wing-bookmarks"
       data-theme-part="navigator-list"
       :aria-label="t('shell.recentNotes')"
+      @scroll.passive="clearBookmarkLabel"
     >
       <button
         v-for="note in notes"
@@ -60,18 +60,18 @@
         class="wing-bookmark-dot"
         :class="{ active: note.path === activePath }"
         :style="{ '--dot-color': dotPalette[note.colorIndex % 8] }"
-        :title="note.title"
-        :data-tooltip="note.title"
         data-theme-part="navigator-item"
         :aria-label="note.title"
+        :aria-describedby="describedByFor(note.path)"
         @click="$emit('select-note', note.path)"
+        @focus="showBookmarkLabel($event, note)"
+        @mouseenter="showBookmarkLabel($event, note)"
+        @mouseleave="clearBookmarkLabel"
+        @blur="clearBookmarkLabel"
       >
         <span class="dot-core" />
         <span v-if="note.path === activePath" class="dot-ring" />
-        <span
-          v-if="region.layout === 'research-stack' || region.layout === 'navigator'"
-          class="wing-bookmark-title"
-        >
+        <span v-if="showsInlineTitle" class="wing-bookmark-title">
           <span class="wing-bookmark-name">{{ note.title }}</span>
           <span v-if="region.layout === 'navigator'" class="wing-bookmark-path">
             {{ normalizeBookmarkPath(note.path) }}
@@ -86,7 +86,17 @@
       </div>
     </nav>
 
-    <div class="wing-spacer" />
+    <Teleport to="body">
+      <div
+        v-if="bookmarkLabel"
+        id="wing-bookmark-label"
+        class="wing-bookmark-label"
+        role="tooltip"
+        :style="bookmarkLabelStyle"
+      >
+        {{ bookmarkLabel.title }}
+      </div>
+    </Teleport>
 
     <div v-if="bottomActions.length > 0" class="wing-action-stack wing-action-stack--bottom">
       <ShellActionButton
@@ -101,7 +111,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import ShellActionButton from './ShellActionButton.vue';
 import type { ShellAction, LeftWingRegion } from '@/types/theme-pack';
@@ -125,6 +135,8 @@ defineEmits<{
   'select-note': [path: string];
 }>();
 
+const LABEL_GAP_PX = 8;
+
 const dotPalette = Array.from({ length: 8 }, (_, i) => `var(--dot-${i})`);
 const bottomActionIds = new Set(['settings']);
 const topActions = computed(() =>
@@ -133,19 +145,68 @@ const topActions = computed(() =>
 const bottomActions = computed(() =>
   props.actions.filter((action) => bottomActionIds.has(action.id)),
 );
+const showsInlineTitle = computed(
+  () => props.region.layout === 'research-stack' || props.region.layout === 'navigator',
+);
+const usesHoverLabel = computed(() => !showsInlineTitle.value);
+
+const bookmarkLabel = ref<{ path: string; title: string; top: number; left: number } | null>(null);
+const bookmarkLabelStyle = computed(() => {
+  const label = bookmarkLabel.value;
+  if (!label) return undefined;
+  return {
+    top: `${label.top}px`,
+    left: `${label.left}px`,
+  };
+});
+
+function describedByFor(path: string): string | undefined {
+  return usesHoverLabel.value && bookmarkLabel.value?.path === path
+    ? 'wing-bookmark-label'
+    : undefined;
+}
+
+function showBookmarkLabel(event: Event, note: { path: string; title: string }): void {
+  if (!usesHoverLabel.value) return;
+  const target = event.currentTarget;
+  if (!(target instanceof HTMLElement)) return;
+  const rect = target.getBoundingClientRect();
+  bookmarkLabel.value = {
+    path: note.path,
+    title: note.title,
+    top: rect.top + rect.height / 2,
+    left: rect.right + LABEL_GAP_PX,
+  };
+}
+
+function clearBookmarkLabel(): void {
+  bookmarkLabel.value = null;
+}
 
 function normalizeBookmarkPath(path: string): string {
   return path.replace(/^\/+/, '') || 'home';
 }
+
+onMounted(() => {
+  window.addEventListener('resize', clearBookmarkLabel);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', clearBookmarkLabel);
+  clearBookmarkLabel();
+});
 </script>
 
 <style scoped>
 .left-wing {
+  display: flex;
   width: var(--wing-left-width);
   min-width: var(--wing-left-width);
-  display: flex;
+  height: 100%;
+  min-height: 0;
   flex-direction: column;
   align-items: center;
+  overflow: hidden;
   padding: var(--space-12) 0 var(--space-8);
   background: var(--paper-left);
   user-select: none;
@@ -190,6 +251,7 @@ function normalizeBookmarkPath(path: string): string {
 }
 
 .wing-logo {
+  flex-shrink: 0;
   border: none;
   background: none;
   cursor: pointer;
@@ -209,6 +271,7 @@ function normalizeBookmarkPath(path: string): string {
 
 .wing-action-stack {
   display: grid;
+  flex-shrink: 0;
   gap: var(--space-4);
   place-items: center;
 }
@@ -222,6 +285,7 @@ function normalizeBookmarkPath(path: string): string {
 }
 
 .wing-rule {
+  flex-shrink: 0;
   width: 24px;
   height: var(--border-thin);
   background: var(--rule-wing);
@@ -230,6 +294,7 @@ function normalizeBookmarkPath(path: string): string {
 
 .wing-index-count {
   display: grid;
+  flex-shrink: 0;
   width: 26px;
   height: 20px;
   margin-bottom: var(--space-10);
@@ -243,6 +308,7 @@ function normalizeBookmarkPath(path: string): string {
 }
 
 .wing-panel-kicker {
+  flex-shrink: 0;
   margin-bottom: var(--space-10);
   color: var(--ink-muted);
   font-size: 10px;
@@ -252,6 +318,7 @@ function normalizeBookmarkPath(path: string): string {
 }
 
 .wing-rail-groove {
+  flex-shrink: 0;
   width: 4px;
   min-height: 36px;
   margin-bottom: var(--space-10);
@@ -262,18 +329,22 @@ function normalizeBookmarkPath(path: string): string {
 
 .wing-bookmarks {
   display: flex;
+  flex: 1 1 0;
   flex-direction: column;
   align-items: center;
   gap: var(--space-10);
   width: 100%;
   min-height: 0;
   overflow: hidden auto;
+  overscroll-behavior: contain;
   padding: var(--space-2) 0;
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .wing-bookmark-dot {
   position: relative;
+  flex-shrink: 0;
   width: 26px;
   height: 26px;
   border: 0;
@@ -414,7 +485,19 @@ function normalizeBookmarkPath(path: string): string {
   opacity: 0.62;
 }
 
-.wing-spacer {
-  flex: 1;
+.wing-bookmark-label {
+  position: fixed;
+  z-index: var(--z-overlay);
+  max-width: 220px;
+  padding: var(--space-4) var(--space-8);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  box-shadow: var(--shadow-sheet);
+  color: var(--ink-primary);
+  font-size: var(--text-xs);
+  line-height: var(--lh-ui);
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 </style>

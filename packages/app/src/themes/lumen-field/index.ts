@@ -85,21 +85,24 @@ export function createLumenFieldModule(): OfficialThemeModule {
 
 [data-theme-id='jotluck.lumen-field'] .lumen-left,
 [data-theme-id='jotluck.lumen-field'] .lumen-radar {
-  min-height: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--space-16);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   padding: var(--space-16);
 }
 
 [data-theme-id='jotluck.lumen-field'] .lumen-left__header,
 [data-theme-id='jotluck.lumen-field'] .lumen-radar__header,
 [data-theme-id='jotluck.lumen-field'] .lumen-command-deck__actions {
-  min-width: 0;
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-12);
+  min-width: 0;
 }
 
 [data-theme-id='jotluck.lumen-field'] .lumen-left__header strong,
@@ -126,6 +129,7 @@ export function createLumenFieldModule(): OfficialThemeModule {
 
 [data-theme-id='jotluck.lumen-field'] .lumen-left > .lumen-action-strip {
   display: grid;
+  flex-shrink: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: stretch;
 }
@@ -179,9 +183,16 @@ export function createLumenFieldModule(): OfficialThemeModule {
 
 [data-theme-id='jotluck.lumen-field'] .lumen-note-list,
 [data-theme-id='jotluck.lumen-field'] .lumen-radar__body {
-  min-width: 0;
   display: grid;
+  flex: 1 1 0;
+  align-content: start;
   gap: var(--space-8);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 [data-theme-id='jotluck.lumen-field'] .lumen-note {

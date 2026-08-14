@@ -61,6 +61,7 @@ export interface JotLuckE2EBridge {
     isExternalEditing: boolean;
     activeNotebookRoot: string;
     isWorkspaceUnbound: boolean;
+    isGuidedSampleSession?: boolean;
     isNotebookOpening: boolean;
     isNoteSwitching: boolean;
     saveIssueKind: 'io' | 'conflict' | 'missing' | null;

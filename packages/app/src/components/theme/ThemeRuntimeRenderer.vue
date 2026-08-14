@@ -134,6 +134,12 @@ export default defineComponent({
   min-width: 0;
 }
 
+.theme-runtime--left-wing {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
 .theme-runtime-node--stack,
 .theme-runtime-node--actionlist {
   display: flex;

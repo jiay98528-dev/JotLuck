@@ -1,6 +1,6 @@
 # Frontend Components
 
-版本：v1.1（2026-08-04）
+版本：v1.2（2026-08-14）
 
 ## 布局主链
 
@@ -14,6 +14,7 @@
 - `NotebookOpenGate`
 
 - `AppShell` 与 `SinglePageDrawerShell` 必须占满父级分配的布局轨道，不得自行使用 `100vh` 重新声明窗口高度。外部单文件编辑上方存在状态栏时，左右和底部抽屉入口仍必须完整位于当前视口内，并可通过键盘或指针展开对应工具。
+- `LeftWing` 的书签列表（`navigator-list`）是左翼唯一纵向滚动所有者：外壳 `min-height: 0`，列表 `flex: 1 1 0` + `overflow-y: auto`，必须露出细滚动条，禁止 `scrollbar-width: none`。主题包裹可以裁材质，不得裁列表。书签点布局（无内联标题）在 hover/focus 时必须用脱离左翼裁切的提示显示笔记名；`navigator` / `research-stack` 继续用内联标题。
 
 ## 主题插槽约束
 
@@ -35,7 +36,8 @@
 - Props 固定为 `status: 'idle' | 'opening' | 'error'`、`errorMessage: string | null`、`formatsLabel: string`；只发出 `open-notebook` 事件。
 - idle 显示单一主操作“选择笔记本文件夹”；opening 禁用重复触发并设置 `aria-busy`；error 使用 `role="alert"` 展示可理解原因，并保留同一按钮重试。
 - 主操作首次显示、取消或失败后都获得焦点；Enter/Space 可触发。360px、200% 缩放和减弱动效下不得溢出或丢失焦点环。
-- 门页只说明“文件夹即笔记本”和四种支持格式，不展示教程步骤、插画、示例数据或可写临时草稿。
+- 门页只说明“文件夹即笔记本”和四种支持格式，不展示教程步骤、插画、示例数据或可写临时草稿。桌面空启动的引导笔记走既有 LeftWing / EditorSurface，不塞进门页。
+- `StatusBar` 可选 `statusNote`：无保存错误时覆盖“已保存/未保存”文案。内存引导会话用它说明示例不会写入磁盘。
 
 ## 文件抽屉
 
@@ -113,6 +115,8 @@
 - 外部只读窗口不得挂载文件树、编辑器、导出、索引、监听、补全或更新检查；进入 workspace 后这些目录级组件才可异步初始化。
 
 ## 变更记录
+
+- 2026-08-14：桌面空启动引导笔记走 LeftWing / EditorSurface；`StatusBar` 增加可选 `statusNote`。门页仍不展示示例数据。
 
 - 2026-08-11：明确主题 `editor-surface` 的只读滚动所有权，以及官方主题文案和预览图必须与当前真实运行时一致。
 

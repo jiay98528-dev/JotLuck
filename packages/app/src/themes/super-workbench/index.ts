@@ -98,10 +98,13 @@ export function createSuperWorkbenchModule(): OfficialThemeModule {
 }
 
 [data-theme-id='jotluck.super-workbench'] .super-left-wing {
-  width: 72px;
   display: grid;
+  width: 72px;
+  height: 100%;
+  min-height: 0;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: var(--space-12);
+  overflow: hidden;
   padding: var(--space-12) var(--space-8);
   border-right: var(--border-thin) solid color-mix(in oklch, var(--accent) 24%, var(--rule));
   background: color-mix(in oklch, var(--paper-left) 92%, transparent);
@@ -128,6 +131,15 @@ export function createSuperWorkbenchModule(): OfficialThemeModule {
   display: grid;
   justify-items: center;
   gap: var(--space-8);
+}
+
+[data-theme-id='jotluck.super-workbench'] .super-left-wing__notes {
+  align-content: start;
+  min-height: 0;
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 [data-theme-id='jotluck.super-workbench'] .super-note-dot {
