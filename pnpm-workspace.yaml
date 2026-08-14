@@ -9,6 +9,7 @@ allowBuilds:
   protobufjs: false
   vue-demi: true
 minimumReleaseAgeExclude:
+  - nanoid@3.3.18
   - postcss@8.5.23
 overrides:
   brace-expansion: 5.0.9
@@ -16,8 +17,8 @@ overrides:
   fast-xml-parser@^5.0.0: 5.10.1
   ip-address: ^10.3.1
   js-yaml@^4.0.0: 4.3.1
-  # GHSA-28wg-ghj8-5hjv：nanoid 非安全生成器可死循环；v3（postcss 链）≥3.3.17、v5（docx 链）≥5.1.16
-  nanoid@^3.0.0: 3.3.17
+  # GHSA-2v37-7h3g-55p8：nanoid 自定义生成器在 size=0 时可死循环；v3（postcss 链）≥3.3.18
+  nanoid@^3.0.0: 3.3.18
   nanoid@^5.0.0: 5.1.16
   postcss@^8.0.0: 8.5.23
   serialize-javascript: ^7.0.3
