@@ -27,7 +27,16 @@ const candidateApplicationIdentity = {
 const shard = process.env.JOTLUCK_INSTALLED_EVIDENCE_TEST_SHARD;
 const shardIt = (expected) => (shard === expected ? it : () => undefined);
 
-afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })));
+afterEach(() =>
+  roots.splice(0).forEach((root) =>
+    rmSync(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 100,
+    }),
+  ),
+);
 
 describe('installed-app evidence v2', () => {
   shardIt('1')(
