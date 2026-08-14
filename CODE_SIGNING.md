@@ -1,31 +1,26 @@
 # Code Signing Policy
 
 > JotLuck 项目 Windows 发布产物的代码签名政策
-> 更新日期：2026-08-12
+> 更新日期：2026-08-14
 
 ## 当前状态
 
 JotLuck 目前尚未配置 Windows 代码签名证书。公开发布的安装包（包括
-`v0.11.0-preview` 与 `v0.11.2-preview`）均为未签名产物，Windows SmartScreen 可能显示未知发布者警告；
+`v0.11.0-preview`、`v0.11.2-preview` 与 `v0.12.0-preview`）均为未签名产物，Windows SmartScreen 可能显示未知发布者警告；
 安装前请核对发布页公布的 SHA-256 校验值。
 
-项目已向 [SignPath Foundation](https://signpath.org/) 提交开源项目签名申请。
-在签名流程启用之前，所有下载入口都会明确标注未签名状态。
+JotLuck 的 Windows 代码签名正在处理中。在签名流程启用之前，所有下载入口都会明确标注未签名状态。
 
 `v0.11.0-preview` 发布于签名申请之前，没有对应的公开 CI 构建记录。首个签名
 版本将按下文流程，从精确 commit 经 GitHub Actions 以可验证方式构建。
 
-## SignPath 申请状态
+## 签名服务状态
 
-Application status: pending（申请待审批）。
+代码签名正在处理中。
 
-获批后，经签名的 JotLuck 发布产物将附带以下归属声明：
-
-> Free code signing provided by SignPath.io, certificate by SignPath Foundation.
-
-当前 `v0.11.2-preview` 安装包未签名；它绑定 commit
-`8f8c1150ac6db6c38230544acd7dfbaa054a44cb`，公开安装包 SHA-256 为
-`1df93e6426aa0b14d1dec3ddacc2c236880d26598d0d7a1c8968c378a75702c5`。
+当前 `v0.12.0-preview` 安装包未签名；它绑定 commit
+`094d99071d8a2daa74e75045644ef438ab18729a`，公开安装包 SHA-256 为
+`a13ee468e77c17f238d57fd17f9951cd51b95f0a1060ec020f4d3cb513a873be`。
 
 ## 签名范围
 
@@ -76,7 +71,7 @@ commit 与对应的 CI run，可在发布页直接核对。
 
 ```bash
 # 当前 preview 安装包（未签名）：核对 SHA-256
-certutil -hashfile JotLuck_0.11.2-preview_x64-setup.exe SHA256
+certutil -hashfile V12-preview_x64-setup.exe SHA256
 
 # 签名版本发布后：验证 Authenticode 签名
 signtool verify /pa /v JotLuck_<version>_x64-setup.exe

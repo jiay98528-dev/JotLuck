@@ -3,7 +3,7 @@
 ## Supported Versions
 
 JotLuck is distributed as a public preview installer on GitHub Releases. The
-unsigned `v0.11.2-preview` is not a stable release or an RC support line.
+unsigned `v0.12.0-preview` is not a stable release or an RC support line.
 Security reports for the source tree and the preview installer are handled on a
 best-effort basis.
 

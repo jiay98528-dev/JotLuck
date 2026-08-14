@@ -1,17 +1,19 @@
-# JotLuck v0.11.2-preview — Preview Release Notes
+# JotLuck v0.12.0-preview — Preview Release Notes
 
-> Date: 2026-08-12
+> Date: 2026-08-14
 > This document describes the current public Windows x64 preview.
 > It is unsigned and is not a stable release.
 
 ## Important — Unsigned Preview
 
-JotLuck `v0.11.2-preview` is a **public, unsigned preview**. The Windows NSIS installer is available only on GitHub Releases; verify SHA-256 `1df93e6426aa0b14d1dec3ddacc2c236880d26598d0d7a1c8968c378a75702c5` before installing. This release is built from commit `8f8c1150ac6db6c38230544acd7dfbaa054a44cb`. The signed release still follows the pipeline in [`CODE_SIGNING.md`](./CODE_SIGNING.md): installed-app evidence capture, submission through the approved signing service, and Authenticode signature and post-sign SHA-256 verification.
+JotLuck `v0.12.0-preview` is a **public, unsigned preview**. The Windows NSIS installer is available only on GitHub Releases; verify SHA-256 `a13ee468e77c17f238d57fd17f9951cd51b95f0a1060ec020f4d3cb513a873be` before installing. This release is built from commit `094d99071d8a2daa74e75045644ef438ab18729a`. The signed release still follows the pipeline in [`CODE_SIGNING.md`](./CODE_SIGNING.md): installed-app evidence capture, submission through an approved signing service, Authenticode verification, and a post-sign SHA-256 check.
 
 ## Highlights
 
-- **Read-mode recovery stays visible.** The bundled themes keep “Return to edit” in a sticky reader bar, transfer focus to it when entering read-only mode, and restore editor focus on return.
-- **External-file controls stay inside the window.** The single-file session banner no longer pushes Lumen Field's bottom command-deck handle below the viewport.
+- **Start writing before choosing a folder.** An empty desktop launch now opens a set of in-memory guided notes. They can be read and edited immediately without writing anything to disk. Saving prompts for a notebook folder; the edited current note can then be carried into that folder or discarded.
+- **Guidance yields cleanly to real notebooks.** After a workspace is selected, the sample notes disappear from both the sidebar and editor, leaving only the user's own files. A future empty launch starts with a clean guide again.
+- **Long bookmark lists remain reachable.** Bookmark lists now scroll independently in Paper, Halo Canvas, and Lumen Field instead of being clipped below the window.
+- **Winged bookmarks identify themselves.** In the default wing layout, hovering a colored dot or reaching it by keyboard immediately reveals the note name beside it.
 - **Local-first plain-text notebooks.** Folders are notebooks. Notes are regular `.md`, `.markdown`, `.mdx`, or `.txt` files that any text editor can open. Use OneDrive, Git, Syncthing, or your own backup tools.
 - **CodeMirror 6 editor with Live Preview.** Block-level rendering, real-time markdown, full keyboard navigation.
 - **Wiki-link and backlinks.** `[[note]]` syntax, aliases, dead/live link styling, and an automatic backlinks panel.
@@ -28,6 +30,8 @@ JotLuck `v0.11.2-preview` is a **public, unsigned preview**. The Windows NSIS in
 ## Upgrade and Data Notes
 
 - **Notes remain plain text files.** No migration is required. Existing notebooks open as-is.
+- **Existing workspaces still restore first.** If JotLuck has a recently opened real notebook, startup restores that notebook instead of showing the guided samples.
+- **Guided samples are memory-only.** They are recreated from a clean state on each empty launch and never touch disk until the user explicitly chooses a notebook folder and saves the current note.
 - **Windows installer registration covers `.md`, `.markdown`, `.mdx`, `.txt`, `.docx`, `.pdf`, `.xlsx`, and `.xls` as optional Open With choices.** JotLuck does **not** replace the user's current default application for any extension.
 - **External file opening** uses a single-file read-only session by default. Editing must be explicitly enabled and saves only the current file; the parent directory is not added as a notebook unless the user explicitly opens it.
 - **Imported Office/PDF documents** use a separate read-only session. Their preview is semantic rather than pixel-perfect, PDF OCR is not included, and “Edit Markdown copy” always uses Save As without overwriting the source.
@@ -47,11 +51,11 @@ See [KNOWN_LIMITATIONS.md](./KNOWN_LIMITATIONS.md) for the complete list. Highli
 
 ## Verification
 
-This preview is bound to commit `8f8c1150ac6db6c38230544acd7dfbaa054a44cb` and installer SHA-256 `1df93e6426aa0b14d1dec3ddacc2c236880d26598d0d7a1c8968c378a75702c5`; Authenticode status is `NotSigned`. The signing request requires green source checks, Windows installed-app evidence, an installer hash, an Authenticode verification result, and a post-sign hash.
+This preview is bound to commit `094d99071d8a2daa74e75045644ef438ab18729a` and installer SHA-256 `a13ee468e77c17f238d57fd17f9951cd51b95f0a1060ec020f4d3cb513a873be`; Authenticode status is `NotSigned`. The package reports FileVersion and ProductVersion `0.12.0` and has a size of 6,166,624 bytes.
 
 ## What to Expect Next
 
-- **Code signing application review**, followed by GitHub Actions integration, Authenticode verification, and post-sign hash verification for a future signed candidate.
+- **Code signing.** Windows code signing is in progress.
 - **macOS / Linux packaging** (TBD).
 - **Public V2S offline completion** (currently fail-closed; will unlock only after passing the cold/workspace-conditioned final gate).
 - **Optional V3** offline semantic short completion (48M–80M dedicated SLM, model + host delta ≤ 96 MiB). This is a research charter only.
