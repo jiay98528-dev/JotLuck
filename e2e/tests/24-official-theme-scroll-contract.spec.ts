@@ -152,7 +152,14 @@ test.describe('Official theme scroll ownership', () => {
       const editButton = readerBar.locator('.shell-action--view-toggle');
       await expect(reader).toHaveCSS('overflow-y', 'auto');
       await expect(editButton).toBeVisible();
+      if (themeId === 'jotluck.super-workbench') {
+        await expect(reader.locator('.reader-preview')).toHaveCSS('flex-shrink', '0');
+      }
       const barTop = await readerBar.evaluate((element) => element.getBoundingClientRect().top);
+      const scrollRange = await reader.evaluate(
+        (element) => element.scrollHeight - element.clientHeight,
+      );
+      expect(scrollRange, `${themeId} reader must own a positive scroll range`).toBeGreaterThan(0);
       await reader.evaluate((element) => {
         element.scrollTop = Math.min(700, element.scrollHeight - element.clientHeight);
       });

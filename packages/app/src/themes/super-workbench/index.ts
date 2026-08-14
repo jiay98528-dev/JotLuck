@@ -265,6 +265,13 @@ export function createSuperWorkbenchModule(): OfficialThemeModule {
   min-height: 0;
 }
 
+[data-theme-id='jotluck.super-workbench']
+  .super-slot-shell--editor-surface
+  > .reader-workbench
+  > .reader-preview {
+  flex: 0 0 auto;
+}
+
 [data-theme-id='jotluck.super-workbench'] .super-editor-control {
   border-bottom: var(--border-thin) solid color-mix(in oklch, var(--accent) 24%, var(--rule));
   background: color-mix(in oklch, var(--accent-soft) 40%, var(--paper-raised));
