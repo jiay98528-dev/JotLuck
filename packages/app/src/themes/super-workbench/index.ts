@@ -267,6 +267,14 @@ export function createSuperWorkbenchModule(): OfficialThemeModule {
 
 [data-theme-id='jotluck.super-workbench']
   .super-slot-shell--editor-surface
+  > .reader-workbench {
+  flex: 1 1 0;
+  height: 0;
+  overflow: hidden auto;
+}
+
+[data-theme-id='jotluck.super-workbench']
+  .super-slot-shell--editor-surface
   > .reader-workbench
   > .reader-preview {
   flex: 0 0 auto;
