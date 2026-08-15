@@ -17,7 +17,7 @@ export const ja: SiteContent = {
     },
     pageDescriptions: {
       download:
-        'JotLuck Windows x64 版をダウンロード：Preview 版は公開中、正式署名版は 2026 年 8 月 15 日リリース。軽量でローカルファースト、オフラインでも使える Markdown ノートツールで、すべてのノートはプレーンテキストファイルです。',
+        'JotLuck Windows x64 版をダウンロード：Preview 版公開中（未署名。SHA-256 を確認してからインストール）。軽量でローカルファースト、オフラインでも使える Markdown ノートツールで、すべてのノートはプレーンテキストファイルです。',
       themes:
         'JotLuck のワークスペーステーマ——Paper・Halo Canvas・Lumen Field の 3 種類。テーマはワークスペースそのものを再形成します——紙と墨の色から、ウィンドウのレイアウトまで。',
       studio:
@@ -37,8 +37,7 @@ export const ja: SiteContent = {
     emphasis: 'まずは、ひとつのファイルから。',
     subline: 'ソフトウェアの生態系は、紙面の外に置いておく。書いたものはすべて、自由に旅立てる。',
     action: 'Preview をダウンロード',
-    dateLine: 'Preview 公開中 · 正式署名版は 2026 年 8 月 15 日公開予定',
-    dateQuip: '控えめな見積もりです——もしかすると、もっと早く届くかもしれません。',
+    dateLine: 'Preview 公開中',
   },
   narrative: [
     {
@@ -76,23 +75,18 @@ export const ja: SiteContent = {
   download: {
     eyebrow: 'ダウンロード',
     title: 'Preview は公開中です。',
-    lead: 'Windows x64 プレビュー版は今すぐダウンロードできます。正式署名版は 2026 年 8 月 15 日に公開します。macOS と Linux も続きます——プレーンテキストはプラットフォームを選びません。どのシステムでも、ノートはローカルファイルのままです。',
+    lead: 'Windows x64 プレビュー版は今すぐダウンロードできます。macOS と Linux も続きます——プレーンテキストはプラットフォームを選びません。どのシステムでも、ノートはローカルファイルのままです。',
     statusLabel: '最初のプラットフォーム',
     statusValue: 'Windows x64',
-    statusDate: '2026-08-15',
-    statusQuip:
-      '控えめな見積もりです——もしかすると、もっと早く届くかもしれません。Preview がそうでした。',
     platformTitle: 'プラットフォーム',
     platforms: [
-      { name: 'Windows x64', state: 'Preview 公開中 · 正式版 2026-08-15' },
+      { name: 'Windows x64', state: 'Preview 公開中' },
       { name: 'macOS', state: '続いて公開予定' },
       { name: 'Linux', state: '続いて公開予定' },
     ],
-    honestyTitle: 'Preview 先行、正式署名版は 8 月 15 日。',
+    honestyTitle: 'Preview 先行。',
     honestyBody:
-      'Preview インストーラーはすでに GitHub Releases に公開されています——ダウンロード可能、検証可能、巻き戻し可能。正式署名版は 8 月 15 日にこのページと Releases に同時公開され、どのコピーも引き続き検証可能な完全なビルドです。',
-    countdownLabel: '正式署名版まで',
-    countdownUnit: '日',
+      'Preview インストーラーはすでに GitHub Releases に公開されています——ダウンロード可能、検証可能、巻き戻し可能。',
     previewTitle: 'v0.11.2 Preview',
     downloadBtn: 'Preview をダウンロード（Windows x64）',
     releaseBtn: 'Release ノートとチェックサム',

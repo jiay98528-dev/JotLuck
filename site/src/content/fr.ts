@@ -17,7 +17,7 @@ export const fr: SiteContent = {
     },
     pageDescriptions: {
       download:
-        'Télécharger JotLuck Windows x64 : Preview est disponible ; version signée le 15 août 2026. Un outil de notes Markdown — chaque note est un fichier texte brut.',
+        'Télécharger JotLuck Windows x64 : Preview disponible — non signée, vérifiez le SHA-256. Un outil de notes Markdown — chaque note est un fichier texte brut.',
       themes:
         "Les thèmes de JotLuck — Paper, Halo Canvas et Lumen Field. Chaque thème remodèle l'espace de travail, du papier et de l'encre à la disposition des fenêtres.",
       studio:
@@ -38,8 +38,7 @@ export const fr: SiteContent = {
     subline:
       "Laissez l'écosystème logiciel au bord de la page. Tout ce que vous écrivez reste libre de voyager.",
     action: 'Télécharger la Preview',
-    dateLine: 'Preview disponible · version signée prévue le 15 août 2026',
-    dateQuip: 'Une estimation prudente — elle pourrait bien arriver plus tôt.',
+    dateLine: 'Preview disponible',
   },
   narrative: [
     {
@@ -81,23 +80,18 @@ export const fr: SiteContent = {
   download: {
     eyebrow: 'Téléchargement',
     title: 'La Preview est en ligne.',
-    lead: 'La Preview Windows x64 est prête à télécharger dès maintenant ; la version signée arrive le 15 août 2026. macOS et Linux suivront — le texte brut ne choisit jamais sa plateforme, et vos notes restent des fichiers locaux sur tous les systèmes.',
+    lead: 'La Preview Windows x64 est prête à télécharger dès maintenant. macOS et Linux suivront — le texte brut ne choisit jamais sa plateforme, et vos notes restent des fichiers locaux sur tous les systèmes.',
     statusLabel: 'Première plateforme',
     statusValue: 'Windows x64',
-    statusDate: '2026-08-15',
-    statusQuip:
-      "Une estimation prudente — elle pourrait bien arriver plus tôt. La Preview l'a prouvé.",
     platformTitle: 'Plateformes',
     platforms: [
-      { name: 'Windows x64', state: 'Preview en ligne · version signée 2026-08-15' },
+      { name: 'Windows x64', state: 'Preview en ligne' },
       { name: 'macOS', state: 'Suivra' },
       { name: 'Linux', state: 'Suivra' },
     ],
-    honestyTitle: "La Preview d'abord. La version signée le 15 août.",
+    honestyTitle: "La Preview d'abord.",
     honestyBody:
-      "L'installateur Preview est déjà sur GitHub Releases — téléchargeable, vérifiable, réversible. La version signée arrivera sur cette page et sur Releases le 15 août, chaque copie toujours complète et vérifiable.",
-    countdownLabel: 'Version signée dans',
-    countdownUnit: 'jours',
+      "L'installateur Preview est déjà sur GitHub Releases — téléchargeable, vérifiable, réversible.",
     previewTitle: 'v0.11.2 Preview',
     downloadBtn: 'Télécharger la Preview (Windows x64)',
     releaseBtn: 'Notes de version et checksum',

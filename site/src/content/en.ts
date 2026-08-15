@@ -17,7 +17,7 @@ export const en: SiteContent = {
     },
     pageDescriptions: {
       download:
-        'Download JotLuck for Windows x64: preview live now, signed release Aug 15, 2026. A lightweight local-first Markdown note tool — every note a plain-text file.',
+        'Download JotLuck for Windows x64: preview live now — unsigned, verify the SHA-256. A lightweight local-first Markdown note tool; every note a plain-text file.',
       themes:
         'JotLuck workspace themes — Paper, Halo Canvas and Lumen Field. Each theme reshapes the workspace itself, from paper and ink to window layout.',
       studio:
@@ -38,8 +38,7 @@ export const en: SiteContent = {
     subline:
       'Leave the software ecosystem at the edge of the page. Everything you write remains free to travel.',
     action: 'Download Preview',
-    dateLine: 'Preview live now · signed release August 15, 2026',
-    dateQuip: 'A conservative estimate; it may well land earlier.',
+    dateLine: 'Preview live now',
   },
   narrative: [
     {
@@ -77,22 +76,18 @@ export const en: SiteContent = {
   download: {
     eyebrow: 'Download',
     title: 'Preview is live.',
-    lead: 'The Windows x64 preview is ready to download now; the signed release lands August 15, 2026. macOS and Linux follow. Plain text never picks platforms, and your notes stay local files on every system.',
+    lead: 'The Windows x64 preview is ready to download now. macOS and Linux follow. Plain text never picks platforms, and your notes stay local files on every system.',
     statusLabel: 'First platform',
     statusValue: 'Windows x64',
-    statusDate: '2026-08-15',
-    statusQuip: 'A conservative estimate; it may well land earlier. The preview did.',
     platformTitle: 'Platforms',
     platforms: [
-      { name: 'Windows x64', state: 'Preview live · signed release 2026-08-15' },
+      { name: 'Windows x64', state: 'Preview live' },
       { name: 'macOS', state: 'Follows' },
       { name: 'Linux', state: 'Follows' },
     ],
-    honestyTitle: 'Preview first. Signed release on August 15.',
+    honestyTitle: 'Preview first.',
     honestyBody:
-      'The preview installer is already on GitHub Releases — downloadable, verifiable, reversible. The signed build lands on this page and Releases on August 15, every copy still verifiable and complete.',
-    countdownLabel: 'Signed release in',
-    countdownUnit: 'days',
+      'The preview installer is already on GitHub Releases — downloadable, verifiable, reversible.',
     previewTitle: 'v0.11.2 Preview',
     downloadBtn: 'Download Preview (Windows x64)',
     releaseBtn: 'Release notes & checksum',
