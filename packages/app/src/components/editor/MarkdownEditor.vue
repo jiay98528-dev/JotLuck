@@ -52,6 +52,11 @@ const props = withDefaults(
     wikiLinkRevision?: number;
     resolveImageSrc?: RendererOptions['resolveImageSrc'];
     imageRevision?: number;
+    remoteImages?: RendererOptions['remoteImages'];
+    remoteImageRevision?: number;
+    onLivePreviewRemoteImageClick?: (event: MouseEvent) => boolean;
+    onLivePreviewRemoteImageLoad?: (event: Event) => boolean;
+    onLivePreviewRemoteImageError?: (event: Event) => boolean;
     onEditorDrop?: (event: DragEvent) => void;
     onEditorDragOver?: (event: DragEvent) => void;
     onEditorPaste?: (event: ClipboardEvent) => boolean | void | Promise<boolean>;
@@ -74,6 +79,11 @@ const props = withDefaults(
     wikiLinkRevision: 0,
     resolveImageSrc: undefined,
     imageRevision: 0,
+    remoteImages: undefined,
+    remoteImageRevision: 0,
+    onLivePreviewRemoteImageClick: undefined,
+    onLivePreviewRemoteImageLoad: undefined,
+    onLivePreviewRemoteImageError: undefined,
     onEditorDrop: undefined,
     onEditorDragOver: undefined,
     onEditorPaste: undefined,
@@ -236,6 +246,10 @@ function createState(doc: string) {
               onWikiLinkClick: props.onLivePreviewWikiLinkClick,
               wikiLinkExists: props.wikiLinkExists,
               resolveImageSrc: props.resolveImageSrc,
+              remoteImages: props.remoteImages,
+              onRemoteImageClick: props.onLivePreviewRemoteImageClick,
+              onRemoteImageLoad: props.onLivePreviewRemoteImageLoad,
+              onRemoteImageError: props.onLivePreviewRemoteImageError,
             })
           : [],
       ),
@@ -399,7 +413,13 @@ function onEditorHostPaste(event: ClipboardEvent): void {
 // Dynamic live preview toggle
 watch(
   () =>
-    [props.livePreview, props.wikiLinkRevision, props.imageRevision, currentLocale.value] as const,
+    [
+      props.livePreview,
+      props.wikiLinkRevision,
+      props.imageRevision,
+      props.remoteImageRevision,
+      currentLocale.value,
+    ] as const,
   ([active]) => {
     if (!view) return;
     view.dispatch({
@@ -411,6 +431,10 @@ watch(
               onWikiLinkClick: props.onLivePreviewWikiLinkClick,
               wikiLinkExists: props.wikiLinkExists,
               resolveImageSrc: props.resolveImageSrc,
+              remoteImages: props.remoteImages,
+              onRemoteImageClick: props.onLivePreviewRemoteImageClick,
+              onRemoteImageLoad: props.onLivePreviewRemoteImageLoad,
+              onRemoteImageError: props.onLivePreviewRemoteImageError,
             })
           : [],
       ),

@@ -183,6 +183,8 @@
               ref="markdownElement"
               class="markdown-body external-reader__markdown"
               @click="onMarkdownClick"
+              @load.capture="remoteImages.handleLoad"
+              @error.capture="remoteImages.handleError"
               v-html="html"
             />
             <!-- eslint-enable vue/no-v-html -->
@@ -297,7 +299,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { useRouter } from 'vue-router';
 import Button from '@/components/common/Button.vue';
@@ -324,6 +326,7 @@ import { normalizeUrl } from '@/utils/urlUtils';
 import { useI18n } from 'vue-i18n';
 import { normalizeCommandError } from '@/services/command-errors';
 import { useDialogFocus } from '@/composables/useDialogFocus';
+import { useRemoteImageSession } from '@/composables/useRemoteImageSession';
 
 const router = useRouter();
 const { t, te } = useI18n();
@@ -380,6 +383,20 @@ const documentScroller = ref<HTMLElement | null>(null);
 const activeHeadingId = ref<string | null>(null);
 const backlinks = ref<BacklinkEntry[]>([]);
 const { headings, update: updateHeadings } = useHeadings();
+const remoteImages = useRemoteImageSession();
+const remoteImagePolicy = computed(() => {
+  void remoteImages.revision.value;
+  return remoteImages.createPolicy({
+    blocked: t('notebook.remoteImages.blocked'),
+    source: t('notebook.remoteImages.source'),
+    loadAll: t('notebook.remoteImages.loadAll'),
+    loading: t('notebook.remoteImages.loading'),
+    failed: t('notebook.remoteImages.failed'),
+    retry: t('notebook.remoteImages.retry'),
+    insecure: t('notebook.remoteImages.insecure'),
+    unnamed: t('notebook.remoteImages.unnamed'),
+  });
+});
 
 useDialogFocus({
   visible: () => editDialogOpen.value,
@@ -508,6 +525,10 @@ async function load(): Promise<void> {
     }
     if (bootstrap.mode === 'document-import-readonly') {
       importedDocument.value = bootstrap.source;
+      remoteImages.setScope(
+        'document-import',
+        `${bootstrap.source.fileName}:${bootstrap.source.revision.sha256}`,
+      );
       document.title = `${fileName.value} · JotLuck`;
       loading.value = false;
       await startDocumentConversion();
@@ -515,6 +536,7 @@ async function load(): Promise<void> {
       return;
     }
     openedFile.value = bootstrap.openedFile;
+    remoteImages.setScope('external-file', bootstrap.openedFile.absolutePath);
     isEditing.value = bootstrap.mode === 'external-edit';
     content.value = await invoke<string>('read_external_note_file', {
       accessToken: bootstrap.openedFile.accessToken,
@@ -666,7 +688,9 @@ async function renderCurrentMarkdown(): Promise<void> {
   for (const [assetId, url] of assetUrls) {
     previewMarkdown = previewMarkdown.replaceAll(`jotluck-asset://${assetId}`, url);
   }
-  const rendered = rendererModule.renderMarkdown(previewMarkdown);
+  const rendered = rendererModule.renderMarkdown(previewMarkdown, {
+    remoteImages: remoteImagePolicy.value,
+  });
   if (revision !== renderRevision) return;
   html.value = rendered;
   updateHeadings(content.value);
@@ -833,6 +857,9 @@ function showNotebookCapabilityNotice(key: ReaderNoticeKey, args?: Record<string
 }
 
 function onMarkdownClick(event: MouseEvent): void {
+  if (remoteImages.handleClick(event)) {
+    return;
+  }
   const target = event.target;
   if (!(target instanceof Element)) return;
   const anchor = target.closest('a');
@@ -900,6 +927,10 @@ async function promote(): Promise<void> {
 onMounted(() => {
   window.addEventListener('focus', refreshSourceOnFocus);
   void load();
+});
+
+watch(remoteImages.revision, () => {
+  if (!isPlainText.value && content.value) void renderCurrentMarkdown();
 });
 
 onBeforeUnmount(() => {

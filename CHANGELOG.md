@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.12.1-preview] - 2026-08-15
+
+### Added
+
+- Added privacy-preserving remote image controls to Live Preview, split view, read view, and
+  external document reading. HTTPS images begin as in-place placeholders and load for the active
+  note only after an explicit user action.
+
+### Security
+
+- Keep remote images at zero requests by default, use `no-referrer` after authorization, and keep
+  authorization in window memory with per-note isolation and refresh reset.
+- Permanently block HTTP, credential-bearing, and unsupported image URLs. Raw HTML `<img>` follows
+  the same policy and passes through a second DOMPurify boundary.
+- Strip renderer-reserved remote-image attributes from note HTML and validate generated controls,
+  the active scope, and normalized HTTPS sources before granting access.
+- Limit the Tauri CSP change to `img-src https:` without expanding script or connection access.
+
+### Fixed
+
+- Preserve automatic rendering for notebook-local images across Live Preview, split view, read
+  view, and installed-app image evidence.
+- Replace failed remote images and retry them in place so successfully loaded sibling images are
+  not rebuilt or requested again.
+
+### Distribution
+
+- Advanced application and Windows package metadata to `0.12.1`. Windows code signing is in
+  progress.
+
 ## [0.12.0-preview] - 2026-08-14
 
 ### Added

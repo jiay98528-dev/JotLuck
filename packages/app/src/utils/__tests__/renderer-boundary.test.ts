@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { renderMarkdown } from '@jotluck/renderer';
+import { renderMarkdown, type RemoteImageLabels } from '@jotluck/renderer';
+
+const remoteLabels: RemoteImageLabels = {
+  blocked: 'blocked',
+  source: 'source',
+  loadAll: 'load all',
+  loading: 'loading',
+  failed: 'failed',
+  retry: 'retry',
+  insecure: 'insecure',
+  unnamed: 'image',
+};
+
+const remoteScope = 'test-scope';
 
 function countPreBlocks(html: string): number {
   return html.match(/<pre>/g)?.length ?? 0;
@@ -83,5 +96,65 @@ describe('@jotluck/renderer markdown boundaries', () => {
     expect(html).toContain('alt="blocked"');
     expect(html).not.toContain('outside.png');
     expect(html).not.toContain('src=');
+  });
+
+  it('blocks Markdown and raw HTML HTTPS images without leaving a requestable src', () => {
+    const html = renderMarkdown(
+      '![markdown](https://cdn.example.com/a.png)\n\n<img src="https://raw.example.com/b.png" alt="raw">',
+      { remoteImages: { labels: remoteLabels, scopeId: remoteScope, decide: () => 'blocked' } },
+    );
+
+    expect(html).toContain('data-remote-image-action="load-all"');
+    expect(html).toContain('cdn.example.com');
+    expect(html).toContain('raw.example.com');
+    expect(html).not.toContain('<img');
+    expect(html).not.toContain('src="https:');
+  });
+
+  it('allows only authorized HTTPS images with a no-referrer policy', () => {
+    const html = renderMarkdown('![remote](https://cdn.example.com/a.png)', {
+      remoteImages: { labels: remoteLabels, scopeId: remoteScope, decide: () => 'allowed' },
+    });
+
+    expect(html).toContain('<img');
+    expect(html).toContain('src="https://cdn.example.com/a.png"');
+    expect(html).toContain('referrerpolicy="no-referrer"');
+    expect(html).toContain('data-remote-image-source="https://cdn.example.com/a.png"');
+  });
+
+  it('never offers an action for HTTP images and renders failures as retry controls', () => {
+    const insecure = renderMarkdown('![insecure](http://cdn.example.com/a.png)', {
+      remoteImages: { labels: remoteLabels, scopeId: remoteScope, decide: () => 'allowed' },
+    });
+    const failed = renderMarkdown('![failed](https://cdn.example.com/a.png)', {
+      remoteImages: { labels: remoteLabels, scopeId: remoteScope, decide: () => 'failed' },
+    });
+
+    expect(insecure).toContain('remote-image-placeholder--insecure');
+    expect(insecure).not.toContain('data-remote-image-action');
+    expect(insecure).not.toContain('<img');
+    expect(failed).toContain('data-remote-image-action="retry"');
+    expect(failed).not.toContain('<img');
+  });
+
+  it('blocks credentialed and unsupported absolute image protocols', () => {
+    const html = renderMarkdown(
+      '<img src="https://user:secret@cdn.example.com/a.png" alt="credentials"><img src="ftp://cdn.example.com/a.png" alt="ftp">',
+      { remoteImages: { labels: remoteLabels, scopeId: remoteScope, decide: () => 'allowed' } },
+    );
+
+    expect(html).not.toContain('<img');
+    expect(html).not.toContain('data-remote-image-action');
+    expect(html).not.toContain('secret');
+  });
+
+  it('does not let raw Markdown HTML opt into renderer-owned controls', () => {
+    const html = renderMarkdown(
+      '<button data-remote-image-action="load-all">spoof</button><a href="#" class="remote-image-placeholder__action" data-remote-image-control="v1" data-remote-image-action="load-all" data-remote-image-source="https://cdn.example.com/a.png" data-remote-image-scope="remote-image-scope-1">forged link</a><span data-remote-image-action="retry">forged span</span>',
+    );
+
+    expect(html).not.toContain('<button');
+    expect(html).not.toMatch(/data-remote-image-(?:action|control|source|scope)/);
+    expect(html).toContain('forged link');
   });
 });

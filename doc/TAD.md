@@ -33,12 +33,12 @@ Vue 3 + Pinia + Vite
   └─ MockFS / Tauri FS adapters
 ```
 
-## Markdown 本地图片渲染边界
+## Markdown 图片渲染边界
 
-- Markdown 仍按 `marked → 宿主图片地址解析 → DOMPurify → DOM` 顺序渲染；地址解析只能改写图片 `src`，不能绕过最终清洗。
-- renderer 只暴露同步 `resolveImageSrc` 回调，不直接读取文件系统。Notebook 宿主以当前笔记路径为基准规范化相对地址，拒绝越过 notebook root，再通过 `IFileSystemService.readBinary()` 读取受支持图片并生成 `data:image/*;base64` 地址。
-- 二进制读取是异步的，宿主按当前笔记缓存结果并用 generation 丢弃迟到回写；图片 revision 触发分栏预览和 Live Preview 重建。
-- `external-readonly` 与未提升的 `external-edit` 不解析同级本地图片，不因预览扩大初始单文件 grant；网络、data/blob 和锚点地址保持浏览器原有语义。
+- Markdown 按 `marked → DOMPurify → 完整图片策略 → DOMPurify → DOM` 渲染。图片策略遍历首次清洗后的全部 `<img>`，因此 Markdown 图片和用户原始 HTML 图片不能绕过同一安全边界；宿主解析结果与生成的占位控件仍须经过最终清洗。
+- renderer 通过同步 `resolveImageSrc` 解析本地图片，不直接读取文件系统。Notebook 宿主以当前笔记路径为基准规范化相对地址，拒绝越过 notebook root，再通过 `IFileSystemService.readBinary()` 读取受支持图片并生成 `data:image/*;base64` 地址。二进制读取按当前笔记缓存，以 generation 丢弃迟到回写，并通过图片 revision 重建分栏与 Live Preview。
+- HTTPS 图片默认不保留可请求的 `src`，而是显示来源域名与“加载本篇远程图片”原位控件。首次清洗禁止用户 HTML 保留 `data-remote-image-*` 协议属性；事件端还须校验 renderer 生成标记、当前 scope 与无凭据 HTTPS URL。窗口内授权按 notebook root 与 note path 隔离，切换返回时保留，刷新或重启后清空；授权图片必须使用 `referrerpolicy="no-referrer"`。加载失败与重试只原位替换该 URL 的节点，不得递增整篇 revision 或重建已加载兄弟图片。Tauri CSP 只在 `img-src` 允许 `https:`，不允许 HTTP 或通配符。
+- HTTP、含凭据或非法协议图片保持 fail-closed。`external-readonly` 与未提升的 `external-edit` 不解析同级本地图片，不因预览扩大初始单文件 grant；`data:` / `blob:` 仍只承担既有受控本地或转换资产语义。
 
 ## 关联文件窗口会话
 
@@ -128,6 +128,8 @@ Vue 3 + Pinia + Vite
 - 安装版性能使用 catalog 中的 `coldStartP90ReferenceMs` / `hotWindowP90ReferenceMs`。20/30 原始样本、正数约束、P90 复算和 advisory 守恒是硬门控；20 次冷启动每轮前后必须为零进程，30 次热开窗每轮关闭后必须恢复原窗口数，热会话结束后必须再次为零进程。超过参考线只返回 `pass-with-warnings`，不改变退出码；生命周期边界不完整仍硬失败。
 
 ## 变更记录
+
+- 2026-08-15：图片管线增加二次清洗与按笔记隔离的 HTTPS 按需加载策略；桌面 CSP 仅放行 `img-src https:`，外部单文件本地授权边界不变。
 
 - 2026-08-05：Windows 专业编辑器启动增加不可跨 apartment 的关联处理器兼容路径；仍只使用系统枚举返回的完整可执行文件，不解析注册表命令，并保留 Open With 末级回退。
 

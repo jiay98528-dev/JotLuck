@@ -234,6 +234,83 @@ body {
   border-radius: var(--radius);
 }
 
+.remote-image-placeholder {
+  box-sizing: border-box;
+  display: grid;
+  width: min(100%, var(--editor-max-width));
+  gap: var(--space-4);
+  margin-block: var(--space-12);
+  padding: var(--space-12) var(--space-16);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  color: var(--ink-secondary);
+  font-family: var(--ff-body);
+  font-size: var(--text-sm);
+  line-height: var(--lh-ui);
+}
+
+.remote-image-placeholder--failed,
+.remote-image-placeholder--insecure {
+  border-color: color-mix(in oklch, var(--signal-warning) 48%, var(--rule));
+  background: var(--signal-warning-soft);
+}
+
+.remote-image-placeholder__title {
+  color: var(--ink-primary);
+  font-weight: var(--fw-semibold);
+}
+
+.remote-image-placeholder__detail {
+  overflow-wrap: anywhere;
+  color: var(--ink-muted);
+}
+
+.remote-image-placeholder__action {
+  width: fit-content;
+  min-height: var(--touch-target-min);
+  margin-top: var(--space-4);
+  padding-inline: var(--space-16);
+  border: var(--border-thin) solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--paper-surface);
+  color: var(--ink-primary);
+  font: inherit;
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-micro) var(--ease-fade),
+    background var(--dur-micro) var(--ease-fade);
+}
+
+.remote-image-placeholder__action:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.remote-image-placeholder__action:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.remote-image {
+  display: grid;
+  gap: var(--space-8);
+  margin-block: var(--space-12);
+}
+
+.remote-image__status {
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+  line-height: var(--lh-ui);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .remote-image-placeholder__action {
+    transition: none;
+  }
+}
+
 /* NOTE: 类名 "wikilink" 与 marked-extensions.ts 渲染输出对齐 */
 .markdown-body .wikilink {
   color: var(--link);

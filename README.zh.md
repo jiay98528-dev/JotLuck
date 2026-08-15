@@ -38,7 +38,7 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 适合所有与文字打交道的人，也适合与 AI 协作的你。
 
-当前状态：`v0.12.0-preview`，Windows 公开预览版。经过完整测试，尚未签名。
+当前源码版本：`v0.12.1-preview`，Windows 公开预览版。经过完整测试，代码签名正在处理中。
 
 > **下载提示：** 官方安装包只会出现在 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases)。`v0.12.0-preview` 安装包已上架，尚未签名——安装前请核对 SHA-256。请勿从其他任何渠道下载 JotLuck。
 
@@ -97,7 +97,7 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 | 项目         | 当前范围                                                                                   |
 | ------------ | ------------------------------------------------------------------------------------------ |
-| 当前版本     | `v0.12.0-preview`                                                                          |
+| 当前源码版本 | `v0.12.1-preview`                                                                          |
 | 发行阶段     | 公开预览版，未签名；不是稳定版                                                             |
 | 候选平台     | Windows x64                                                                                |
 | 桌面运行时   | Tauri 2 与 Microsoft Edge WebView2                                                         |

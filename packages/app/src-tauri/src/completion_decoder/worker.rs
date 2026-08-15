@@ -628,10 +628,7 @@ mod beam_tests {
 
     #[test]
     fn fixed_beam_ranking_uses_alpha_and_stable_token_ties() {
-        let mut beams = Vec::new();
-        beams.push(beam(&[2, 4], -1.0));
-        beams.push(beam(&[2], -0.8));
-        beams.push(beam(&[1], -0.8));
+        let mut beams = [beam(&[2, 4], -1.0), beam(&[2], -0.8), beam(&[1], -0.8)];
         beams.sort_by(compare_beams);
         assert_eq!(beams[0].token_ids, vec![2, 4]);
         assert_eq!(beams[1].token_ids, vec![1]);

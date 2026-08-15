@@ -66,6 +66,7 @@ function renderBlock(
   const renderOptions = {
     wikiLinkExists: options.wikiLinkExists,
     resolveImageSrc: options.resolveImageSrc,
+    remoteImages: options.remoteImages,
   };
   if (refDefs.size === 0) return renderMarkdown(raw, renderOptions);
   const prefix = [...refDefs.values()].join('\n');
@@ -123,6 +124,10 @@ interface LivePreviewOptions {
   onWikiLinkClick?: (note: string, anchor: null | string) => void;
   wikiLinkExists?: (note: string) => boolean;
   resolveImageSrc?: RendererOptions['resolveImageSrc'];
+  remoteImages?: RendererOptions['remoteImages'];
+  onRemoteImageClick?: (event: MouseEvent) => boolean;
+  onRemoteImageLoad?: (event: Event) => boolean;
+  onRemoteImageError?: (event: Event) => boolean;
 }
 
 const SOURCE_PRESERVING_BLOCK_TYPES = new Set<BlockType>([
@@ -870,7 +875,12 @@ class RenderedBlockWidget extends WidgetType {
   /** 允许点击穿透 → CM6 将光标移到此处 → 源码切换 */
   override ignoreEvent(event: Event): boolean {
     const target = event.target as HTMLElement | null;
-    if (target?.closest('input[type="checkbox"], .cm-task-toggle, a')) return true;
+    if (
+      target?.closest(
+        'input[type="checkbox"], .cm-task-toggle, a, [data-remote-image-action], .remote-image',
+      )
+    )
+      return true;
     return false;
   }
 }
@@ -1010,6 +1020,8 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
       editorView: EditorView | null = null;
       // Stored listener refs for cleanup
       onClick: ((e: MouseEvent) => void) | null = null;
+      onRemoteImageLoad: ((e: Event) => void) | null = null;
+      onRemoteImageError: ((e: Event) => void) | null = null;
       onPointerDownCapture: ((e: PointerEvent) => void) | null = null;
       onChangeCapture: ((e: Event) => void) | null = null;
       onKeydown: ((e: KeyboardEvent) => void) | null = null;
@@ -1065,6 +1077,9 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         // cursor to a wrong line, which is especially disruptive for IME input.
         const onClick = (e: MouseEvent) => {
           const target = e.target as HTMLElement;
+          if (target.closest('[data-remote-image-action]') && options.onRemoteImageClick?.(e)) {
+            return;
+          }
           const checkbox = target.closest('input[type="checkbox"], .cm-task-toggle');
           if (checkbox) {
             const widget = checkbox.closest('.cm-live-block[data-block-type="taskListItem"]');
@@ -1110,12 +1125,27 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         };
         this.onClick = onClick;
         view.dom.addEventListener('click', onClick);
+        const onRemoteImageLoad = (event: Event) => {
+          options.onRemoteImageLoad?.(event);
+        };
+        const onRemoteImageError = (event: Event) => {
+          options.onRemoteImageError?.(event);
+        };
+        this.onRemoteImageLoad = onRemoteImageLoad;
+        this.onRemoteImageError = onRemoteImageError;
+        view.dom.addEventListener('load', onRemoteImageLoad, true);
+        view.dom.addEventListener('error', onRemoteImageError, true);
 
         // A block restored by Escape owns focus without exposing the hidden
         // source selection. Enter explicitly maps it back to its source range.
         const onKeydown = (e: KeyboardEvent) => {
           if (e.key !== 'Enter') return;
           const target = e.target as HTMLElement;
+
+          if (target.closest('[data-remote-image-action]')) {
+            e.stopPropagation();
+            return;
+          }
           if (target.closest('a, button, input, select, textarea')) return;
           const widget = target.closest('.cm-live-block') as HTMLElement | null;
           if (!widget) return;
@@ -1142,6 +1172,11 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         const onPointerDownCapture = (e: PointerEvent) => {
           if (this.destroyed) return;
           const target = e.target as HTMLElement;
+
+          if (target.closest('[data-remote-image-action]')) {
+            e.stopPropagation();
+            return;
+          }
 
           // Block CM6 from moving the cursor before the checkbox can mutate source.
           const checkbox = target.closest('input[type="checkbox"], .cm-task-toggle');
@@ -1442,6 +1477,9 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           // Remove click/pointerdown listeners from dom
           const dom = this.editorView.dom;
           if (this.onClick) dom.removeEventListener('click', this.onClick);
+          if (this.onRemoteImageLoad) dom.removeEventListener('load', this.onRemoteImageLoad, true);
+          if (this.onRemoteImageError)
+            dom.removeEventListener('error', this.onRemoteImageError, true);
           if (this.onKeydown) dom.removeEventListener('keydown', this.onKeydown, true);
           if (this.onPointerDownCapture)
             dom.removeEventListener('pointerdown', this.onPointerDownCapture, true);
@@ -1451,6 +1489,8 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         this.onCompStart = null;
         this.onCompEnd = null;
         this.onClick = null;
+        this.onRemoteImageLoad = null;
+        this.onRemoteImageError = null;
         this.onKeydown = null;
         this.onPointerDownCapture = null;
         this.onChangeCapture = null;

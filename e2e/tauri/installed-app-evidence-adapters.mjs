@@ -1155,11 +1155,26 @@ async function guiImageAsset({ workRoot, trace }) {
     });
     const editorText = await readVisibleEditor(browser);
     if (!editorText.includes('assets/')) throw new Error('image drop did not insert an asset path');
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (await (await browser.$('[data-view-mode="read"]')).isExisting()) break;
+      await clickSelector(browser, '.view-mode-toggle', trace);
+    }
+    await waitForSelector(browser, '[data-view-mode="read"]', trace);
+    const renderedImage = await browser.$('[data-view-mode="read"] img');
+    await browser.waitUntil(async () => (await renderedImage.getProperty('naturalWidth')) > 0, {
+      timeout: 15_000,
+      interval: 250,
+      timeoutMsg: 'uploaded image did not render with a positive natural width',
+    });
+    const imageObservation = {
+      naturalWidth: await renderedImage.getProperty('naturalWidth'),
+      naturalHeight: await renderedImage.getProperty('naturalHeight'),
+    };
     await openFileDrawer(browser, trace);
     const drawerText = await (await browser.$('.file-drawer')).getText();
     if (/evidence-pixel|assets/iu.test(drawerText))
       throw new Error('asset internals leaked into file drawer');
-    return { editorText, tree: snapshotTree(fixture.root) };
+    return { editorText, imageObservation, tree: snapshotTree(fixture.root) };
   });
   return [
     webdriverArtifact(workRoot),

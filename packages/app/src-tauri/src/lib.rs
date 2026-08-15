@@ -157,8 +157,8 @@ fn desktop_window_config(label: String) -> tauri::utils::config::WindowConfig {
 
 fn build_window(app: &tauri::AppHandle, label: &str) -> Result<WebviewWindow, String> {
     let config = desktop_window_config(label.to_string());
-    let builder = WebviewWindowBuilder::from_config(app, &config)
-        .map_err(|error| error.to_string())?;
+    let builder =
+        WebviewWindowBuilder::from_config(app, &config).map_err(|error| error.to_string())?;
     // CDP 环境变量重注入（Windows）：提权进程（CI runner 全程高完整性）中
     // WebView2Loader 会丢弃 WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS 环境变量——
     // 实测 runner 上浏览器进程命令行缺失 --remote-debugging-port、UDF 变量却生效，

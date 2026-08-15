@@ -80,6 +80,50 @@ describe('cm6 live preview table rendering', () => {
 });
 
 describe('cm6 live preview markdown block boundaries', () => {
+  it('keeps remote image controls interactive without revealing source', async () => {
+    const doc = '![remote](https://cdn.example.com/image.png)\n\nTail';
+    const onRemoteImageClick = vi.fn(() => true);
+    const host = document.createElement('div');
+    document.body.append(host);
+    const view = new EditorView({
+      state: EditorState.create({
+        doc,
+        selection: { anchor: doc.length },
+        extensions: [
+          livePreviewExtension({
+            remoteImages: {
+              scopeId: 'test-scope',
+              labels: {
+                blocked: 'blocked',
+                source: 'source',
+                loadAll: 'load all',
+                loading: 'loading',
+                failed: 'failed',
+                retry: 'retry',
+                insecure: 'insecure',
+                unnamed: 'image',
+              },
+              decide: () => 'blocked',
+            },
+            onRemoteImageClick,
+          }),
+        ],
+      }),
+      parent: host,
+    });
+    mountedViews.push(view);
+
+    await vi.waitFor(() => {
+      expect(view.dom.querySelector('[data-remote-image-action="load-all"]')).not.toBeNull();
+    });
+    const selectionBefore = view.state.selection.main.head;
+    view.dom.querySelector<HTMLButtonElement>('[data-remote-image-action="load-all"]')?.click();
+
+    expect(onRemoteImageClick).toHaveBeenCalledOnce();
+    expect(view.state.selection.main.head).toBe(selectionBefore);
+    expect(view.dom.querySelector('[data-remote-image-action="load-all"]')).not.toBeNull();
+  });
+
   it('keeps setext heading text and rule as paired heading blocks', () => {
     const blocks = __parseLiveBlocksForTest('Release Notes\n---\n\nBody text');
 

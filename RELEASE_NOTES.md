@@ -1,15 +1,19 @@
-# JotLuck v0.12.0-preview — Preview Release Notes
+# JotLuck v0.12.1-preview — Preview Release Notes
 
-> Date: 2026-08-14
-> This document describes the current public Windows x64 preview.
-> It is unsigned and is not a stable release.
+> Date: 2026-08-15
+> This document describes the current public Windows x64 preview source track.
+> The latest published installer remains unsigned and is not a stable release.
 
 ## Important — Unsigned Preview
 
-JotLuck `v0.12.0-preview` is a **public, unsigned preview**. The Windows NSIS installer is available only on GitHub Releases; verify SHA-256 `a13ee468e77c17f238d57fd17f9951cd51b95f0a1060ec020f4d3cb513a873be` before installing. This release is built from commit `094d99071d8a2daa74e75045644ef438ab18729a`. The signed release still follows the pipeline in [`CODE_SIGNING.md`](./CODE_SIGNING.md): installed-app evidence capture, submission through an approved signing service, Authenticode verification, and a post-sign SHA-256 check.
+JotLuck `v0.12.1-preview` is the current public source version. The latest published Windows NSIS installer remains the **public, unsigned `v0.12.0-preview`** package available only on GitHub Releases; verify SHA-256 `a13ee468e77c17f238d57fd17f9951cd51b95f0a1060ec020f4d3cb513a873be` before installing. Windows code signing is in progress and follows the pipeline in [`CODE_SIGNING.md`](./CODE_SIGNING.md): installed-app evidence capture, submission through an approved signing service, Authenticode verification, and a post-sign SHA-256 check.
 
 ## Highlights
 
+- **Remote images now require an explicit choice.** HTTPS images start as in-place controls and make zero requests until the reader chooses to load them for the current note. Permission stays in window memory, is isolated by note, and clears on refresh.
+- **Unsafe image sources stay blocked.** HTTP URLs, credential-bearing URLs, unsupported protocols, and forged remote-image controls cannot trigger a request. Raw HTML images follow the same policy and are sanitized again before display.
+- **Local images continue to work automatically.** Notebook assets keep their existing local-first rendering path across Live Preview, split view, reading view, and external reading.
+- **Image failures stay local.** A failed image or retry replaces only that image in place, without rebuilding or re-requesting already loaded sibling images.
 - **Start writing before choosing a folder.** An empty desktop launch now opens a set of in-memory guided notes. They can be read and edited immediately without writing anything to disk. Saving prompts for a notebook folder; the edited current note can then be carried into that folder or discarded.
 - **Guidance yields cleanly to real notebooks.** After a workspace is selected, the sample notes disappear from both the sidebar and editor, leaving only the user's own files. A future empty launch starts with a clean guide again.
 - **Long bookmark lists remain reachable.** Bookmark lists now scroll independently in Paper, Halo Canvas, and Lumen Field instead of being clipped below the window.

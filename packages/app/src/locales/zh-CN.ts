@@ -583,6 +583,16 @@ export const messages = {
   },
   notebook: {
     startup: { aria: 'JotLuck 正在启动', opening: '正在打开 JotLuck…' },
+    remoteImages: {
+      blocked: '远程图片已阻止',
+      source: '来源',
+      loadAll: '加载本篇远程图片',
+      loading: '正在加载图片…',
+      failed: '图片加载失败',
+      retry: '重试',
+      insecure: '不安全的 HTTP 图片已阻止',
+      unnamed: '图片',
+    },
     actions: {
       newNote: '新建笔记',
       newShort: '新建',

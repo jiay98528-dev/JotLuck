@@ -17,6 +17,15 @@ describe('release security configuration', () => {
     expect(tauriConfig.app?.withGlobalTauri).toBe(false);
     expect(tauriConfig.app?.security?.csp).toEqual(expect.any(String));
     expect(tauriConfig.app?.security?.csp).not.toBe('');
+    const csp = tauriConfig.app?.security?.csp ?? '';
+    const imageDirective = csp
+      .split(';')
+      .map((directive) => directive.trim())
+      .find((directive) => directive.startsWith('img-src '));
+    expect(imageDirective).toContain('https:');
+    expect(imageDirective).not.toMatch(/(?:^|\s)http:(?:\s|$)/);
+    expect(imageDirective).not.toContain('*');
+    expect(csp).toContain("connect-src 'self' ipc: http://ipc.localhost");
   });
 
   it('does not grant unscoped shell, process, or fs capabilities', () => {

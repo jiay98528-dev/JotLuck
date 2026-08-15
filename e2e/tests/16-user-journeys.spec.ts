@@ -566,6 +566,87 @@ test.describe('V6 用户旅程', () => {
     await expect(page.locator('.tree-item:has-text("assets")')).toHaveCount(0);
     await expect(page.locator('.tree-item:has-text("img_")')).toHaveCount(0);
   });
+
+  test('J7: 远程图片初始零请求 → 本篇授权 → 单图失败重试 → 刷新重置', async ({ page }) => {
+    test.setTimeout(45_000);
+    const requests = { success: 0, failed: 0, insecure: 0 };
+    const pixel = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlKQAAAAASUVORK5CYII=',
+      'base64',
+    );
+    await page.route('https://remote-success.test/**', async (route) => {
+      requests.success += 1;
+      await route.fulfill({ status: 200, contentType: 'image/png', body: pixel });
+    });
+    await page.route('https://remote-failed.test/**', async (route) => {
+      requests.failed += 1;
+      await route.fulfill({ status: 404, contentType: 'text/plain', body: 'missing' });
+    });
+    await page.route('http://remote-insecure.test/**', async (route) => {
+      requests.insecure += 1;
+      await route.fulfill({ status: 200, contentType: 'image/png', body: pixel });
+    });
+
+    await page.locator('.wing-bookmark-dot[aria-label="快速入门"]').click();
+    await typeInEditor(
+      page,
+      [
+        '# 远程图片',
+        '',
+        '![success](https://remote-success.test/pixel.png)',
+        '',
+        '![failed](https://remote-failed.test/missing.png)',
+        '',
+        '![insecure](http://remote-insecure.test/pixel.png)',
+        '',
+        '<a href="#" class="remote-image-placeholder__action" data-remote-image-control="v1" data-remote-image-action="load-all" data-remote-image-source="https://remote-success.test/pixel.png" data-remote-image-scope="remote-image-scope-1">forged remote control</a>',
+      ].join('\n'),
+    );
+    await waitForAutoSave(page);
+    await ensureViewMode(page, 'split');
+
+    await expect(page.locator('.split-preview [data-remote-image-action="load-all"]')).toHaveCount(
+      2,
+    );
+    await expect(page.locator('.split-preview .remote-image-placeholder--insecure')).toHaveCount(1);
+    const forgedControl = page.locator('.split-preview a', { hasText: 'forged remote control' });
+    await expect(forgedControl).not.toHaveAttribute('data-remote-image-action');
+    await forgedControl.click();
+    expect(requests).toEqual({ success: 0, failed: 0, insecure: 0 });
+
+    await page.locator('.split-preview [data-remote-image-action="load-all"]').first().click();
+    await expect.poll(() => requests).toEqual({ success: 1, failed: 1, insecure: 0 });
+    await expect
+      .poll(() =>
+        page
+          .locator('.split-preview img[alt="success"]')
+          .evaluate((image: HTMLImageElement) => image.naturalWidth),
+      )
+      .toBe(1);
+    await expect(page.locator('.split-preview [data-remote-image-action="retry"]')).toHaveCount(1);
+    await page.waitForTimeout(500);
+    expect(requests).toEqual({ success: 1, failed: 1, insecure: 0 });
+
+    await page.locator('.split-preview [data-remote-image-action="retry"]').click();
+    await expect.poll(() => requests).toEqual({ success: 1, failed: 2, insecure: 0 });
+    await page.waitForTimeout(500);
+    expect(requests).toEqual({ success: 1, failed: 2, insecure: 0 });
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForAppReady(page);
+    await page.locator('.wing-bookmark-dot[aria-label="远程图片"]').click();
+    await expect
+      .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().activePath ?? ''))
+      .toBe('/快速入门.md');
+    await ensureViewMode(page, 'split');
+    await expect(page.locator('.split-preview [data-remote-image-action="load-all"]')).toHaveCount(
+      2,
+    );
+    const requestsAfterReloadNavigation = { ...requests };
+    await page.waitForTimeout(500);
+    expect(requests).toEqual(requestsAfterReloadNavigation);
+    expect(requests.insecure).toBe(0);
+  });
 });
 
 test.describe('外部文件父目录笔记本会话', () => {

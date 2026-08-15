@@ -5,6 +5,13 @@ import createDOMPurify from 'dompurify';
 
 let purifierInstance: ReturnType<typeof createDOMPurify> | null = null;
 
+const REMOTE_IMAGE_RESERVED_ATTRS = [
+  'data-remote-image-action',
+  'data-remote-image-control',
+  'data-remote-image-scope',
+  'data-remote-image-source',
+] as const;
+
 const purifyConfig = {
   ALLOWED_TAGS: [
     'h1',
@@ -56,11 +63,23 @@ const purifyConfig = {
     'disabled',
     'target',
     'rel',
+    'role',
+    'aria-label',
+    'aria-live',
+    'referrerpolicy',
     'align',
   ],
   ALLOW_DATA_ATTR: true,
   FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form'],
-  FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur'],
+  FORBID_ATTR: [
+    'onerror',
+    'onload',
+    'onclick',
+    'onmouseover',
+    'onfocus',
+    'onblur',
+    ...REMOTE_IMAGE_RESERVED_ATTRS,
+  ],
 };
 
 function getPurifier(): ReturnType<typeof createDOMPurify> {
@@ -84,6 +103,20 @@ function getPurifier(): ReturnType<typeof createDOMPurify> {
   return purifierInstance;
 }
 
-export function sanitize(html: string): string {
-  return getPurifier().sanitize(html, purifyConfig);
+export function sanitize(html: string, allowRemoteImageControls = false): string {
+  return getPurifier().sanitize(
+    html,
+    allowRemoteImageControls
+      ? {
+          ...purifyConfig,
+          ALLOWED_TAGS: [...purifyConfig.ALLOWED_TAGS, 'button'],
+          FORBID_ATTR: purifyConfig.FORBID_ATTR.filter(
+            (attribute) =>
+              !REMOTE_IMAGE_RESERVED_ATTRS.includes(
+                attribute as (typeof REMOTE_IMAGE_RESERVED_ATTRS)[number],
+              ),
+          ),
+        }
+      : purifyConfig,
+  );
 }

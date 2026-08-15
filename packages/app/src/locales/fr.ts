@@ -750,6 +750,16 @@ export const messages = {
   },
   notebook: {
     startup: { aria: 'Démarrage de JotLuck', opening: 'Ouverture de JotLuck…' },
+    remoteImages: {
+      blocked: 'Image distante bloquée',
+      source: 'Source',
+      loadAll: 'Charger les images distantes de cette note',
+      loading: 'Chargement de l’image…',
+      failed: 'Échec du chargement de l’image',
+      retry: 'Réessayer',
+      insecure: 'Image HTTP non sécurisée bloquée',
+      unnamed: 'Image',
+    },
     actions: {
       newNote: 'Nouvelle note',
       newShort: 'Nouveau',

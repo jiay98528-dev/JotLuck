@@ -75,6 +75,9 @@
                 <article
                   v-else
                   class="markdown-body external-preview"
+                  @click="onRemoteImageClick"
+                  @load.capture="onRemoteImageLoad"
+                  @error.capture="onRemoteImageError"
                   v-html="externalPreviewHtml"
                 />
                 <!-- eslint-enable vue/no-v-html -->
@@ -233,8 +236,15 @@
                           />
                         </div>
                       </div>
-                      <!-- eslint-disable-next-line vue/no-v-html -->
-                      <article class="markdown-body reader-preview" v-html="splitPreviewHtml" />
+                      <!-- eslint-disable vue/no-v-html -->
+                      <article
+                        class="markdown-body reader-preview"
+                        @click="onRemoteImageClick"
+                        @load.capture="onRemoteImageLoad"
+                        @error.capture="onRemoteImageError"
+                        v-html="splitPreviewHtml"
+                      />
+                      <!-- eslint-enable vue/no-v-html -->
                     </div>
 
                     <template v-else>
@@ -264,6 +274,11 @@
                             :wiki-link-revision="wikiLinkRevision"
                             :resolve-image-src="previewImages.resolveImageSrc"
                             :image-revision="previewImages.imageRevision.value"
+                            :remote-images="remoteImagePolicy"
+                            :remote-image-revision="remoteImages.revision.value"
+                            :on-live-preview-remote-image-click="remoteImages.handleClick"
+                            :on-live-preview-remote-image-load="remoteImages.handleLoad"
+                            :on-live-preview-remote-image-error="remoteImages.handleError"
                             :completion-settings="completionSettings"
                             :predictor="completionPredictor"
                             :enable-autocomplete="!isExternalEditing && !isLargeDocument"
@@ -296,8 +311,15 @@
                           @mousedown="onSplitDragStart"
                         />
                         <div class="split-right" :style="{ flex: `0 0 ${100 - splitRatio}%` }">
-                          <!-- eslint-disable-next-line vue/no-v-html -->
-                          <div class="markdown-body split-preview" v-html="splitPreviewHtml" />
+                          <!-- eslint-disable vue/no-v-html -->
+                          <div
+                            class="markdown-body split-preview"
+                            @click="onRemoteImageClick"
+                            @load.capture="onRemoteImageLoad"
+                            @error.capture="onRemoteImageError"
+                            v-html="splitPreviewHtml"
+                          />
+                          <!-- eslint-enable vue/no-v-html -->
                         </div>
                       </div>
                       <!-- Live Mode: single editor with block-level live preview -->
@@ -320,6 +342,11 @@
                         :wiki-link-revision="wikiLinkRevision"
                         :resolve-image-src="previewImages.resolveImageSrc"
                         :image-revision="previewImages.imageRevision.value"
+                        :remote-images="remoteImagePolicy"
+                        :remote-image-revision="remoteImages.revision.value"
+                        :on-live-preview-remote-image-click="remoteImages.handleClick"
+                        :on-live-preview-remote-image-load="remoteImages.handleLoad"
+                        :on-live-preview-remote-image-error="remoteImages.handleError"
                         :completion-settings="completionSettings"
                         :predictor="completionPredictor"
                         :enable-autocomplete="!isExternalEditing && !isLargeDocument"
@@ -841,6 +868,7 @@ import { EditorView } from '@codemirror/view';
 import { useVersionCheck } from '@/composables/useVersionCheck';
 import { useImageUpload } from '@/composables/useImageUpload';
 import { usePreviewImageResolver } from '@/composables/usePreviewImageResolver';
+import { useRemoteImageSession } from '@/composables/useRemoteImageSession';
 import { useDialogFocus } from '@/composables/useDialogFocus';
 import { normalizeUrl } from '@/utils/urlUtils';
 import { revealLivePreviewSourceAt } from '@/utils/cm6-live-preview';
@@ -1593,6 +1621,20 @@ useDialogFocus({
 });
 
 const previewImages = usePreviewImageResolver(fs);
+const remoteImages = useRemoteImageSession();
+const remoteImagePolicy = computed(() => {
+  void remoteImages.revision.value;
+  return remoteImages.createPolicy({
+    blocked: t('notebook.remoteImages.blocked'),
+    source: t('notebook.remoteImages.source'),
+    loadAll: t('notebook.remoteImages.loadAll'),
+    loading: t('notebook.remoteImages.loading'),
+    failed: t('notebook.remoteImages.failed'),
+    retry: t('notebook.remoteImages.retry'),
+    insecure: t('notebook.remoteImages.insecure'),
+    unnamed: t('notebook.remoteImages.unnamed'),
+  });
+});
 const imageUpload = useImageUpload(
   fs,
   () => {
@@ -1619,10 +1661,29 @@ const imageUpload = useImageUpload(
 
 watch(
   [activeNotebookRoot, activePath, isExternalSession],
-  ([root, path, external]) => previewImages.setNotePath(external ? '' : path, root),
+  ([root, path, external]) => {
+    previewImages.setNotePath(external ? '' : path, root);
+    remoteImages.setScope(external ? 'external-file' : root, path);
+  },
   { immediate: true },
 );
 watch(previewImages.imageRevision, () => refreshSplitPreviewIfVisible());
+watch(remoteImages.revision, () => {
+  if (isExternalReadonly.value) updateExternalPreview();
+  else refreshSplitPreviewIfVisible();
+});
+
+function onRemoteImageClick(event: MouseEvent): void {
+  remoteImages.handleClick(event);
+}
+
+function onRemoteImageLoad(event: Event): void {
+  remoteImages.handleLoad(event);
+}
+
+function onRemoteImageError(event: Event): void {
+  remoteImages.handleError(event);
+}
 
 // --- View Mode ---
 const viewModeLabels = computed<Record<string, string>>(() => ({
@@ -3956,6 +4017,7 @@ function updateSplitPreview(): void {
       splitPreviewHtml.value = renderMarkdown(content, {
         wikiLinkExists,
         resolveImageSrc: previewImages.resolveImageSrc,
+        remoteImages: remoteImagePolicy.value,
       });
       void nextTick(() => {
         const previewEl = document.querySelector<HTMLElement>(
@@ -3973,7 +4035,9 @@ function updateSplitPreview(): void {
 
 function updateExternalPreview(): void {
   try {
-    externalPreviewHtml.value = renderMarkdown(currentContent.value);
+    externalPreviewHtml.value = renderMarkdown(currentContent.value, {
+      remoteImages: remoteImagePolicy.value,
+    });
     void nextTick(() => {
       const previewEl = document.querySelector<HTMLElement>('.external-preview');
       if (previewEl) highlightCodeBlocks(previewEl);

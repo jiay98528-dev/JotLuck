@@ -38,7 +38,7 @@ It opens and renders Markdown in seconds, beautifully. Read-only preview or full
 
 For everyone who works with text, and everyone who works with AI.
 
-Current status: `v0.12.0-preview`, a public Windows preview. Tested, usable, unsigned.
+Current source version: `v0.12.1-preview`, a public Windows preview. Tested and usable. Windows code signing is in progress.
 
 > **Download notice:** Official installers appear only on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases). The `v0.12.0-preview` installer is available there now — unsigned, so verify its SHA-256 before installing. Please don't download JotLuck from anywhere else.
 
@@ -97,7 +97,7 @@ See the full [Privacy Policy](./PRIVACY.md) and the identity and integrity proce
 
 | Item                     | Current scope                                                                                                                 |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| Current version          | `v0.12.0-preview`                                                                                                             |
+| Current source version   | `v0.12.1-preview`                                                                                                             |
 | Release stage            | Public preview, unsigned; not a stable release                                                                                |
 | Candidate platform       | Windows x64                                                                                                                   |
 | Desktop runtime          | Tauri 2 and Microsoft Edge WebView2                                                                                           |

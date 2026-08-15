@@ -723,6 +723,16 @@ export const messages = {
   },
   notebook: {
     startup: { aria: 'JotLuck 시작 중', opening: 'JotLuck을 여는 중…' },
+    remoteImages: {
+      blocked: '원격 이미지를 차단했습니다',
+      source: '출처',
+      loadAll: '이 노트의 원격 이미지 불러오기',
+      loading: '이미지 불러오는 중…',
+      failed: '이미지를 불러오지 못했습니다',
+      retry: '다시 시도',
+      insecure: '안전하지 않은 HTTP 이미지를 차단했습니다',
+      unnamed: '이미지',
+    },
     actions: {
       newNote: '새 노트',
       newShort: '새로 만들기',
