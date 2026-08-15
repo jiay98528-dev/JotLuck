@@ -17,7 +17,9 @@ test.describe('导出与分享', () => {
   test.beforeEach(async ({ page }) => {
     await waitForAppReady(page);
     // 确保有内容可导出
-    await typeInEditor(page, '# 测试导出\n\n这是一段用于导出测试的 Markdown 内容。');
+    await typeInEditor(page, '# 测试导出\n\n这是一段用于导出测试的 Markdown 内容。', {
+      insertText: true,
+    });
     await waitForAutoSave(page);
   });
 
