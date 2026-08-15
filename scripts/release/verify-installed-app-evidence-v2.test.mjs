@@ -32,7 +32,7 @@ afterEach(() =>
     rmSync(root, {
       recursive: true,
       force: true,
-      maxRetries: 3,
+      maxRetries: 10,
       retryDelay: 100,
     }),
   ),
@@ -844,6 +844,8 @@ function makeFixture(options = {}) {
   const root = mkdtempSync(path.join(os.tmpdir(), 'jotluck-installed-evidence-'));
   roots.push(root);
   git(root, ['init']);
+  git(root, ['config', 'gc.auto', '0']);
+  git(root, ['config', 'maintenance.auto', 'false']);
   git(root, ['config', 'core.autocrlf', 'false']);
   git(root, ['config', 'user.email', 'fixture@example.test']);
   git(root, ['config', 'user.name', 'Fixture']);
