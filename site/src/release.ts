@@ -2,10 +2,8 @@
 export const SITE_URL = 'https://jotluck.com';
 
 export const RELEASE = {
-  /** 首个正式签名 Windows x64 版本的预计日期（用户裁决：沿用 2026-08-15 + 保守估计俏皮注） */
-  dateISO: '2026-08-15',
   platform: 'Windows x64',
-  /** preview = 预览版已上架 GitHub Releases（当前 2026-08-12 v0.11.2-preview，公开 Pre-release）；下载按钮点亮，倒计时保留指正式版 */
+  /** preview = 预览版已上架 GitHub Releases（当前 2026-08-12 v0.11.2-preview，公开 Pre-release）；下载按钮点亮 */
   state: 'preview' as const,
   /** Preview 事实（裁决 33）：版本/链接/校验的唯一事实源，下载页模板引用；事实值不进五语 content */
   preview: {

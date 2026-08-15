@@ -17,7 +17,7 @@ export const zh: SiteContent = {
     },
     pageDescriptions: {
       download:
-        '下载 JotLuck Windows x64 版：Preview 预览版已上架，正式签名版 2026 年 8 月 15 日发布。本地优先、离线可用的 Markdown 笔记工具，每条笔记都是纯文本文件。',
+        '下载 JotLuck Windows x64 版：Preview 预览版已上架，未签名，安装前请核对 SHA-256。本地优先、离线可用的 Markdown 笔记工具，每条笔记都是纯文本文件。',
       themes:
         'JotLuck 工作区主题：Paper 纸、Halo Canvas、Lumen Field 三套主题——主题重新塑造工作区本身，从纸墨颜色到窗口布局。',
       studio:
@@ -38,8 +38,7 @@ export const zh: SiteContent = {
     emphasisHighlight: '生态',
     subline: '从一个文件开始，沿着思绪写下去。写下的一切，依然可以随你远行。',
     action: '下载 Preview',
-    dateLine: 'Preview 已上架 · 正式签名版 2026 年 8 月 15 日发布',
-    dateQuip: '保守估计——说不定更早。',
+    dateLine: 'Preview 已上架',
   },
   narrative: [
     {
@@ -77,22 +76,17 @@ export const zh: SiteContent = {
   download: {
     eyebrow: '下载',
     title: 'Preview 已上架。',
-    lead: 'Windows x64 预览版现在即可下载，正式签名版 2026 年 8 月 15 日发布。macOS 与 Linux 随后跟进——纯文本从不挑平台，你的笔记在任何系统上都是本地文件。',
+    lead: 'Windows x64 预览版现在即可下载。macOS 与 Linux 随后跟进——纯文本从不挑平台，你的笔记在任何系统上都是本地文件。',
     statusLabel: '首发平台',
     statusValue: 'Windows x64',
-    statusDate: '2026-08-15',
-    statusQuip: '保守估计——说不定更早。预览版果然更早。',
     platformTitle: '平台',
     platforms: [
-      { name: 'Windows x64', state: 'Preview 已上架 · 正式版 2026-08-15' },
+      { name: 'Windows x64', state: 'Preview 已上架' },
       { name: 'macOS', state: '随后跟进' },
       { name: 'Linux', state: '随后跟进' },
     ],
-    honestyTitle: '预览版先行，正式版 8 月 15 日。',
-    honestyBody:
-      '预览版安装包已上架 GitHub Releases——可下载、可校验、可回退。正式签名版将于 8 月 15 日同步上架本页与 Releases，每一份仍是可核验的完整版本。',
-    countdownLabel: '距离正式签名版',
-    countdownUnit: '天',
+    honestyTitle: '预览版先行。',
+    honestyBody: '预览版安装包已上架 GitHub Releases——可下载、可校验、可回退。',
     previewTitle: 'v0.11.2 Preview',
     downloadBtn: '下载 Preview（Windows x64）',
     releaseBtn: 'Release 说明与校验',

@@ -123,10 +123,7 @@ onMounted(async () => {
         <RouterLink :to="pagePath(locale, 'download')" class="btn btn-cta">{{
           hero.action
         }}</RouterLink>
-        <p class="date-note tech-rail">
-          {{ hero.dateLine }}<br />
-          <span class="quip">{{ hero.dateQuip }}</span>
-        </p>
+        <p class="date-note tech-rail">{{ hero.dateLine }}</p>
       </div>
     </div>
     <div class="stage-proof">

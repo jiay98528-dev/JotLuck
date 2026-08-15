@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
 import { useLocale } from '../composables/useLocale';
 import { usePageHead } from '../composables/usePageHead';
 import { EXTERNAL, RELEASE } from '../release';
@@ -7,17 +6,6 @@ import { EXTERNAL, RELEASE } from '../release';
 const { content } = useLocale();
 usePageHead('download');
 const d = () => content.value.download;
-
-/**
- * 发布倒计时邮戳：确定性日期差（无运行时随机），日期由 release.ts RELEASE.dateISO 单点派生。
- * SSR 先渲染占位符，挂载后填入真实天数，避免水合不一致。
- */
-const RELEASE_UTC = Date.parse(`${RELEASE.dateISO}T00:00:00Z`);
-const daysLeft = ref('––');
-onMounted(() => {
-  const diff = Math.ceil((RELEASE_UTC - Date.now()) / 86_400_000);
-  daysLeft.value = String(Math.max(0, diff));
-});
 </script>
 
 <template>
@@ -28,15 +16,14 @@ onMounted(() => {
       <p class="head-lead">{{ d().lead }}</p>
     </header>
 
-    <!-- 发布状态：邮戳日期卡 + 黄书签。日期是承诺，用等宽字体盖章 -->
+    <!-- 发布状态：邮戳日期卡 + 黄书签。邮戳日期 = Preview 上架日（RELEASE.preview.dateISO 单点派生） -->
     <section class="release-status" aria-labelledby="rs-title">
       <div class="status-card paper-sheet tex-2">
         <span id="rs-title" class="status-bookmark">{{ d().statusLabel }}</span>
         <p class="status-value">{{ d().statusValue }}</p>
         <p class="status-stamp" aria-hidden="true">
-          <span>{{ d().statusDate }}</span>
+          <span>{{ RELEASE.preview.dateISO }}</span>
         </p>
-        <p class="status-quip quip">{{ d().statusQuip }}</p>
       </div>
     </section>
 
@@ -77,7 +64,7 @@ onMounted(() => {
       </ul>
     </section>
 
-    <!-- 发布承诺：到期上架 + 倒计时邮戳 -->
+    <!-- 诚实说明 -->
     <section class="honesty" aria-labelledby="hn-title">
       <div class="honesty-text">
         <h2 id="hn-title">{{ d().honestyTitle }}</h2>
@@ -85,13 +72,6 @@ onMounted(() => {
         <a class="btn btn-secondary releases-link" :href="EXTERNAL.githubRepo" rel="noopener"
           >GitHub</a
         >
-      </div>
-      <div class="countdown">
-        <p class="countdown-label tech-rail">{{ d().countdownLabel }}</p>
-        <p class="countdown-stamp" :aria-label="`${daysLeft} ${d().countdownUnit}`">
-          <span class="cd-num" aria-hidden="true">{{ daysLeft }}</span>
-          <span class="cd-unit" aria-hidden="true">{{ d().countdownUnit }}</span>
-        </p>
       </div>
     </section>
 
@@ -145,9 +125,6 @@ onMounted(() => {
   font-size: clamp(1.75rem, 4.5vw, 3rem);
   letter-spacing: 0.04em;
   line-height: 1.1;
-}
-.status-quip {
-  margin-top: 18px;
 }
 
 /* ---------- Preview 下载区（裁决 33）：事实行 + 双按钮 + 签名提示 ---------- */
@@ -238,13 +215,9 @@ onMounted(() => {
   text-align: right;
 }
 
-/* ---------- 发布承诺：文本 + 倒计时邮戳 ---------- */
+/* ---------- 诚实说明 ---------- */
 .honesty {
   margin-top: clamp(56px, 7vw, 88px);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: clamp(32px, 5vw, 72px);
-  align-items: center;
   padding: clamp(28px, 4vw, 44px) 0;
   border-top: 1px solid var(--ink-14);
   border-bottom: 1px solid var(--ink-14);
@@ -256,41 +229,6 @@ onMounted(() => {
 }
 .releases-link {
   margin-top: 24px;
-}
-/* 倒计时邮戳：圆形双环印章，与日期卡同一盖章语汇 */
-.countdown {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-}
-.countdown-label {
-  color: var(--ink-70);
-}
-.countdown-stamp {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  width: 148px;
-  height: 148px;
-  border: 2px solid var(--orange);
-  border-radius: 50%;
-  outline: 1px dashed var(--ink-30);
-  outline-offset: -10px;
-  transform: rotate(-1.2deg);
-  font-family: var(--font-mono);
-  color: var(--ink);
-}
-.cd-num {
-  font-size: 2.75rem;
-  line-height: 1;
-  letter-spacing: 0.02em;
-}
-.cd-unit {
-  font-size: 0.8125rem;
-  color: var(--ink-70);
 }
 
 /* ---------- 值得知道 ---------- */
@@ -315,14 +253,5 @@ onMounted(() => {
   background: var(--orange);
   border-radius: 1.5px;
   transform: translateY(-1px);
-}
-
-@media (max-width: 720px) {
-  .honesty {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .countdown {
-    align-items: flex-start;
-  }
 }
 </style>

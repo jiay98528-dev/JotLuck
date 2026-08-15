@@ -27,8 +27,6 @@ export interface HeroContent {
   subline: string;
   action: string;
   dateLine: string;
-  /** 俏皮低可视注脚：保守估计 */
-  dateQuip: string;
 }
 
 export interface NarrativeAct {
@@ -54,15 +52,10 @@ export interface DownloadContent {
   lead: string;
   statusLabel: string;
   statusValue: string;
-  statusDate: string;
-  statusQuip: string;
   platformTitle: string;
   platforms: Array<{ name: string; state: string }>;
   honestyTitle: string;
   honestyBody: string;
-  /** 倒计时邮戳：标签行 + 天数单位（数字由客户端确定性计算） */
-  countdownLabel: string;
-  countdownUnit: string;
   /** Preview 下载区文案（裁决 33；版本/SHA-256/链接等事实值在 release.ts RELEASE.preview） */
   previewTitle: string;
   downloadBtn: string;

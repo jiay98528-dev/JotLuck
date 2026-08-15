@@ -17,7 +17,7 @@ export const ko: SiteContent = {
     },
     pageDescriptions: {
       download:
-        'Windows x64용 JotLuck을 다운로드하세요: Preview 버전이 공개되었고, 정식 서명 버전은 2026년 8월 15일에 출시됩니다. 가볍고 로컬 우선이며 오프라인에서도 쓸 수 있는 Markdown 노트 도구로, 모든 노트는 순수 텍스트 파일입니다.',
+        'Windows x64용 JotLuck을 다운로드하세요: Preview 버전 공개 중(서명 전이므로 설치 전 SHA-256을 확인하세요). 가볍고 로컬 우선이며 오프라인에서도 쓸 수 있는 Markdown 노트 도구로, 모든 노트는 순수 텍스트 파일입니다.',
       themes:
         'JotLuck 작업 공간 테마——Paper, Halo Canvas, Lumen Field 세 가지. 테마는 작업 공간 자체를 다시 만듭니다——종이와 먹의 색부터 창 레이아웃까지.',
       studio:
@@ -38,8 +38,7 @@ export const ko: SiteContent = {
     subline:
       '소프트웨어 생태계는 페이지 바깥에 두세요. 당신이 쓴 모든 것은 어디든 자유롭게 떠날 수 있습니다.',
     action: 'Preview 다운로드',
-    dateLine: 'Preview 공개 중 · 정식 서명 버전은 2026년 8월 15일 출시 예정입니다.',
-    dateQuip: '보수적인 추정입니다——어쩌면 더 일찍 나올지도 몰라요.',
+    dateLine: 'Preview 공개 중',
   },
   narrative: [
     {
@@ -77,22 +76,18 @@ export const ko: SiteContent = {
   download: {
     eyebrow: '다운로드',
     title: 'Preview가 공개되었습니다.',
-    lead: 'Windows x64 미리보기 버전은 지금 바로 다운로드할 수 있습니다. 정식 서명 버전은 2026년 8월 15일에 출시됩니다. macOS와 Linux도 뒤따릅니다——순수 텍스트는 플랫폼을 가리지 않으며, 당신의 노트는 어떤 시스템에서도 로컬 파일로 남습니다.',
+    lead: 'Windows x64 미리보기 버전은 지금 바로 다운로드할 수 있습니다. macOS와 Linux도 뒤따릅니다——순수 텍스트는 플랫폼을 가리지 않으며, 당신의 노트는 어떤 시스템에서도 로컬 파일로 남습니다.',
     statusLabel: '첫 번째 플랫폼',
     statusValue: 'Windows x64',
-    statusDate: '2026-08-15',
-    statusQuip: '보수적인 추정입니다——어쩌면 더 일찍 나올지도 몰라요. Preview가 그랬습니다.',
     platformTitle: '플랫폼',
     platforms: [
-      { name: 'Windows x64', state: 'Preview 공개 중 · 정식 버전 2026-08-15' },
+      { name: 'Windows x64', state: 'Preview 공개 중' },
       { name: 'macOS', state: '이어서 출시' },
       { name: 'Linux', state: '이어서 출시' },
     ],
-    honestyTitle: 'Preview가 먼저, 정식 서명 버전은 8월 15일.',
+    honestyTitle: 'Preview가 먼저입니다.',
     honestyBody:
-      'Preview 설치 파일은 이미 GitHub Releases에 공개되었습니다——다운로드 가능하고, 검증 가능하며, 되돌릴 수 있습니다. 정식 서명 버전은 8월 15일에 이 페이지와 Releases에 함께 공개되며, 모든 복사본은 여전히 검증 가능한 완전한 빌드입니다.',
-    countdownLabel: '정식 서명 버전까지',
-    countdownUnit: '일',
+      'Preview 설치 파일은 이미 GitHub Releases에 공개되었습니다——다운로드 가능하고, 검증 가능하며, 되돌릴 수 있습니다.',
     previewTitle: 'v0.11.2 Preview',
     downloadBtn: 'Preview 다운로드（Windows x64）',
     releaseBtn: 'Release 노트와 체크섬',
