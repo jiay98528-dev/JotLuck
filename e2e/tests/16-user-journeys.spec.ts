@@ -571,7 +571,7 @@ test.describe('V6 用户旅程', () => {
     test.setTimeout(45_000);
     const requests = { success: 0, failed: 0, insecure: 0 };
     const pixel = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlKQAAAAASUVORK5CYII=',
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
       'base64',
     );
     await page.route('https://remote-success.test/**', async (route) => {
