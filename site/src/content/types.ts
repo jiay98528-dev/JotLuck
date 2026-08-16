@@ -59,6 +59,8 @@ export interface DownloadContent {
   /** Preview 下载区文案（裁决 33；版本/SHA-256/链接等事实值在 release.ts RELEASE.preview） */
   previewTitle: string;
   downloadBtn: string;
+  /** GitHub 下载页分流按钮（品牌名不译；URL 在 release.ts EXTERNAL.githubReleases） */
+  githubBtn: string;
   releaseBtn: string;
   signNote: string;
   /** 代码签名政策链接文案（URL 在 release.ts EXTERNAL.codeSigning） */

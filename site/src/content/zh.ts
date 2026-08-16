@@ -87,8 +87,9 @@ export const zh: SiteContent = {
     ],
     honestyTitle: '预览版先行。',
     honestyBody: '预览版安装包已上架 GitHub Releases——可下载、可校验、可回退。',
-    previewTitle: 'v0.11.2 Preview',
+    previewTitle: 'v0.12.1 Preview',
     downloadBtn: '下载 Preview（Windows x64）',
+    githubBtn: 'GitHub',
     releaseBtn: 'Release 说明与校验',
     signNote:
       '预览版未签名。Windows SmartScreen 可能提示风险，安装前请核对 SHA-256 与 Release 页一致。',

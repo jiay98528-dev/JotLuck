@@ -61,10 +61,11 @@ const EXPECTED_ORG_ALT = 'LeankomStudio';
 
 /** (k) 下载页 Preview 事实期望（裁决 33，与 src/release.ts RELEASE.preview 同源；改版本须同步——护栏意义即在此） */
 const EXPECTED_PREVIEW = {
-  exe: 'https://github.com/jiay98528-dev/JotLuck/releases/download/v0.11.2-preview/JotLuck_0.11.2-preview_x64-setup.exe',
-  tag: 'https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.11.2-preview',
-  sha: '1df93e6426aa0b14d1dec3ddacc2c236880d26598d0d7a1c8968c378a75702c5',
+  exe: 'https://github.com/jiay98528-dev/JotLuck/releases/download/v0.12.1-preview/JotLuck_0.12.1_x64-setup.exe',
+  tag: 'https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.12.1-preview',
+  sha: '1cebc263801c22d40d7f8c4f9c2a5303d57a17ae8e9b754e8dd25f0dc6cddd28',
   policy: 'https://github.com/jiay98528-dev/JotLuck/blob/main/CODE_SIGNING.md',
+  releases: 'https://github.com/jiay98528-dev/JotLuck/releases',
 };
 
 let passCount = 0;
@@ -329,6 +330,12 @@ for (const rel of expectedFiles) {
     check(html.includes(EXPECTED_PREVIEW.sha), `Preview SHA-256`, EXPECTED_PREVIEW.sha);
     // (k2) 代码签名政策链接（裁决 35，SignPath 审查披露项）
     check(html.includes(EXPECTED_PREVIEW.policy), `签名政策链接`, EXPECTED_PREVIEW.policy);
+    // (k4) GitHub 分流按钮（裁决 39）：releases 索引直链（带引号精确匹配，区别 tag 链接）
+    check(
+      html.includes(`href="${EXPECTED_PREVIEW.releases}"`),
+      `GitHub 分流链接`,
+      EXPECTED_PREVIEW.releases,
+    );
   }
 
   // (h) 五语首页：h1.statement 结构

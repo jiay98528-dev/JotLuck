@@ -3,16 +3,16 @@ export const SITE_URL = 'https://jotluck.com';
 
 export const RELEASE = {
   platform: 'Windows x64',
-  /** preview = 预览版已上架 GitHub Releases（当前 2026-08-12 v0.11.2-preview，公开 Pre-release）；下载按钮点亮 */
+  /** preview = 预览版已上架 GitHub Releases（当前 2026-08-16 v0.12.1-preview，公开 Pre-release）；下载按钮点亮 */
   state: 'preview' as const,
   /** Preview 事实（裁决 33）：版本/链接/校验的唯一事实源，下载页模板引用；事实值不进五语 content */
   preview: {
-    version: '0.11.2-preview',
-    dateISO: '2026-08-12',
+    version: '0.12.1-preview',
+    dateISO: '2026-08-16',
     downloadUrl:
-      'https://github.com/jiay98528-dev/JotLuck/releases/download/v0.11.2-preview/JotLuck_0.11.2-preview_x64-setup.exe',
-    tagUrl: 'https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.11.2-preview',
-    sha256: '1df93e6426aa0b14d1dec3ddacc2c236880d26598d0d7a1c8968c378a75702c5',
+      'https://github.com/jiay98528-dev/JotLuck/releases/download/v0.12.1-preview/JotLuck_0.12.1_x64-setup.exe',
+    tagUrl: 'https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.12.1-preview',
+    sha256: '1cebc263801c22d40d7f8c4f9c2a5303d57a17ae8e9b754e8dd25f0dc6cddd28',
   },
 };
 

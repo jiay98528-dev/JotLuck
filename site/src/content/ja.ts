@@ -87,8 +87,9 @@ export const ja: SiteContent = {
     honestyTitle: 'Preview 先行。',
     honestyBody:
       'Preview インストーラーはすでに GitHub Releases に公開されています——ダウンロード可能、検証可能、巻き戻し可能。',
-    previewTitle: 'v0.11.2 Preview',
+    previewTitle: 'v0.12.1 Preview',
     downloadBtn: 'Preview をダウンロード（Windows x64）',
+    githubBtn: 'GitHub',
     releaseBtn: 'Release ノートとチェックサム',
     signNote:
       'この Preview は未署名です：Windows SmartScreen が警告を表示する場合があります。インストール前に SHA-256 が Release ページと一致することを確認してください。',

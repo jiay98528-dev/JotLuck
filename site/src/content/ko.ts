@@ -88,8 +88,9 @@ export const ko: SiteContent = {
     honestyTitle: 'Preview가 먼저입니다.',
     honestyBody:
       'Preview 설치 파일은 이미 GitHub Releases에 공개되었습니다——다운로드 가능하고, 검증 가능하며, 되돌릴 수 있습니다.',
-    previewTitle: 'v0.11.2 Preview',
+    previewTitle: 'v0.12.1 Preview',
     downloadBtn: 'Preview 다운로드（Windows x64）',
+    githubBtn: 'GitHub',
     releaseBtn: 'Release 노트와 체크섬',
     signNote:
       '이 Preview는 서명되지 않았습니다: Windows SmartScreen이 경고를 표시할 수 있습니다. 설치 전에 SHA-256이 Release 페이지와 일치하는지 확인하세요.',

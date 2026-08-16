@@ -92,8 +92,9 @@ export const fr: SiteContent = {
     honestyTitle: "La Preview d'abord.",
     honestyBody:
       "L'installateur Preview est déjà sur GitHub Releases — téléchargeable, vérifiable, réversible.",
-    previewTitle: 'v0.11.2 Preview',
+    previewTitle: 'v0.12.1 Preview',
     downloadBtn: 'Télécharger la Preview (Windows x64)',
+    githubBtn: 'GitHub',
     releaseBtn: 'Notes de version et checksum',
     signNote:
       "Cette Preview n'est pas signée : Windows SmartScreen peut afficher un avertissement. Vérifiez que le SHA-256 correspond à la page Release avant d'installer.",
