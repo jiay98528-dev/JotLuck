@@ -1,12 +1,12 @@
 # Code Signing Policy
 
 > JotLuck 项目 Windows 发布产物的代码签名政策
-> 更新日期：2026-08-14
+> 更新日期：2026-08-16
 
 ## 当前状态
 
 JotLuck 目前尚未配置 Windows 代码签名证书。公开发布的安装包（包括
-`v0.11.0-preview`、`v0.11.2-preview` 与 `v0.12.0-preview`）均为未签名产物，Windows SmartScreen 可能显示未知发布者警告；
+`v0.11.0-preview`、`v0.11.2-preview`、`v0.12.0-preview` 与 `v0.12.1-preview`）均为未签名产物，Windows SmartScreen 可能显示未知发布者警告；
 安装前请核对发布页公布的 SHA-256 校验值。
 
 JotLuck 的 Windows 代码签名正在处理中。在签名流程启用之前，所有下载入口都会明确标注未签名状态。
@@ -18,9 +18,9 @@ JotLuck 的 Windows 代码签名正在处理中。在签名流程启用之前，
 
 代码签名正在处理中。
 
-当前 `v0.12.0-preview` 安装包未签名；它绑定 commit
-`094d99071d8a2daa74e75045644ef438ab18729a`，公开安装包 SHA-256 为
-`a13ee468e77c17f238d57fd17f9951cd51b95f0a1060ec020f4d3cb513a873be`。
+当前 `v0.12.1-preview` 安装包未签名；它绑定 commit
+`5f397173c8fb7851c923efdc992f08c5a3bfaed6`，公开安装包 SHA-256 为
+`1cebc263801c22d40d7f8c4f9c2a5303d57a17ae8e9b754e8dd25f0dc6cddd28`。
 
 ## 签名范围
 
@@ -58,7 +58,7 @@ JotLuck 不收集、不存储、不上传任何用户数据。所有笔记数据
 
 - 无遥测或分析跟踪
 - 无用户账户或云端服务
-- 无网络通信（除用户主动触发的更新检查外）
+- 无后台遥测；网络请求仅来自用户主动触发的更新检查或远程 HTTPS 图片加载
 - 代码签名仅用于验证发布产物的真实性与完整性
 
 This program will not transfer any information to other networked systems unless
@@ -71,7 +71,7 @@ commit 与对应的 CI run，可在发布页直接核对。
 
 ```bash
 # 当前 preview 安装包（未签名）：核对 SHA-256
-certutil -hashfile V12-preview_x64-setup.exe SHA256
+certutil -hashfile JotLuck_0.12.1_x64-setup.exe SHA256
 
 # 签名版本发布后：验证 Authenticode 签名
 signtool verify /pa /v JotLuck_<version>_x64-setup.exe

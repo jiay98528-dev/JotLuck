@@ -6,10 +6,10 @@ behavior boundaries.
 
 ## Preview Status
 
-- `v0.12.1-preview` is the current public source version and is not a stable
-  release. The latest official installer remains the public, unsigned preview
-  `v0.12.0-preview` package on GitHub Releases and may trigger a Windows
-  SmartScreen warning. Windows code signing is in progress.
+- `v0.12.1-preview` is the current public source and Windows installer preview,
+  and is not a stable release. The installer is available on GitHub Releases
+  and may trigger a Windows SmartScreen warning. Windows code signing is in
+  progress.
 - This preview does not claim complete installed-app release evidence, final
   Rust audit evidence, signing, notarization, or host-specific validation for
   every supported platform.
@@ -36,7 +36,7 @@ behavior boundaries.
 ## Desktop App Limits
 
 - The current Windows preview is unsigned. Its only official public download is
-  the `v0.12.0-preview` GitHub Release; verify the SHA-256 published on that page
+  the `v0.12.1-preview` GitHub Release; verify the SHA-256 published on that page
   before installation.
 - Tauri shell access is limited to the scoped `shell:default` capability.
   Unscoped `shell:allow-open`, `process:*`, and `fs:*` capabilities are not

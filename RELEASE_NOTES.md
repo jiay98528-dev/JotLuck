@@ -6,7 +6,7 @@
 
 ## Important — Unsigned Preview
 
-JotLuck `v0.12.1-preview` is the current public source version. The latest published Windows NSIS installer remains the **public, unsigned `v0.12.0-preview`** package available only on GitHub Releases; verify SHA-256 `a13ee468e77c17f238d57fd17f9951cd51b95f0a1060ec020f4d3cb513a873be` before installing. Windows code signing is in progress and follows the pipeline in [`CODE_SIGNING.md`](./CODE_SIGNING.md): installed-app evidence capture, submission through an approved signing service, Authenticode verification, and a post-sign SHA-256 check.
+JotLuck `v0.12.1-preview` is the current public source and Windows NSIS preview available only on GitHub Releases; verify SHA-256 `1cebc263801c22d40d7f8c4f9c2a5303d57a17ae8e9b754e8dd25f0dc6cddd28` before installing. Windows code signing is in progress and follows the pipeline in [`CODE_SIGNING.md`](./CODE_SIGNING.md): installed-app evidence capture, submission through an approved signing service, Authenticode verification, and a post-sign SHA-256 check.
 
 ## Highlights
 
@@ -55,7 +55,7 @@ See [KNOWN_LIMITATIONS.md](./KNOWN_LIMITATIONS.md) for the complete list. Highli
 
 ## Verification
 
-This preview is bound to commit `094d99071d8a2daa74e75045644ef438ab18729a` and installer SHA-256 `a13ee468e77c17f238d57fd17f9951cd51b95f0a1060ec020f4d3cb513a873be`; Authenticode status is `NotSigned`. The package reports FileVersion and ProductVersion `0.12.0` and has a size of 6,166,624 bytes.
+This preview is bound to commit `5f397173c8fb7851c923efdc992f08c5a3bfaed6` and installer SHA-256 `1cebc263801c22d40d7f8c4f9c2a5303d57a17ae8e9b754e8dd25f0dc6cddd28`; Authenticode status is `NotSigned`. The package reports FileVersion and ProductVersion `0.12.1` and has a size of 6,225,244 bytes.
 
 ## What to Expect Next
 

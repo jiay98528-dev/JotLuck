@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.12.1-preview] - 2026-08-15
+## [0.12.1-preview] - 2026-08-16
 
 ### Added
 
@@ -29,6 +29,9 @@
 
 - Advanced application and Windows package metadata to `0.12.1`. Windows code signing is in
   progress.
+- Published the Windows x64 preview installer on GitHub Releases from commit
+  `5f397173c8fb7851c923efdc992f08c5a3bfaed6`, with SHA-256
+  `1cebc263801c22d40d7f8c4f9c2a5303d57a17ae8e9b754e8dd25f0dc6cddd28`.
 
 ## [0.12.0-preview] - 2026-08-14
 

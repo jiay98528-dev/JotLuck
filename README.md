@@ -40,7 +40,7 @@ For everyone who works with text, and everyone who works with AI.
 
 Current source version: `v0.12.1-preview`, a public Windows preview. Tested and usable. Windows code signing is in progress.
 
-> **Download notice:** Official installers appear only on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases). The `v0.12.0-preview` installer is available there now — unsigned, so verify its SHA-256 before installing. Please don't download JotLuck from anywhere else.
+> **Download notice:** Official installers appear only on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases). The `v0.12.1-preview` installer is available there now — unsigned, so verify its SHA-256 before installing. Please don't download JotLuck from anywhere else.
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck workspace with recent notes, a Markdown editor, outline, and backlinks">
