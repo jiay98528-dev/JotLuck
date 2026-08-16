@@ -5,22 +5,11 @@
 
 ## 当前状态
 
-JotLuck 目前尚未配置 Windows 代码签名证书。公开发布的安装包（包括
-`v0.11.0-preview`、`v0.11.2-preview`、`v0.12.0-preview` 与 `v0.12.1-preview`）均为未签名产物，Windows SmartScreen 可能显示未知发布者警告；
+代码签名正在处理中。在签名流程启用之前，公开发布的安装包（包括
+`v0.12.1-preview`）均为未签名产物，Windows SmartScreen 可能显示未知发布者警告；
 安装前请核对发布页公布的 SHA-256 校验值。
 
-JotLuck 的 Windows 代码签名正在处理中。在签名流程启用之前，所有下载入口都会明确标注未签名状态。
-
-`v0.11.0-preview` 发布于签名申请之前，没有对应的公开 CI 构建记录。首个签名
-版本将按下文流程，从精确 commit 经 GitHub Actions 以可验证方式构建。
-
-## 签名服务状态
-
-代码签名正在处理中。
-
-当前 `v0.12.1-preview` 安装包未签名；它绑定 commit
-`5f397173c8fb7851c923efdc992f08c5a3bfaed6`，公开安装包 SHA-256 为
-`1cebc263801c22d40d7f8c4f9c2a5303d57a17ae8e9b754e8dd25f0dc6cddd28`。
+首个签名版本将按下文流程，从精确 commit 经 GitHub Actions 以可验证方式构建。
 
 ## 签名范围
 
@@ -58,7 +47,7 @@ JotLuck 不收集、不存储、不上传任何用户数据。所有笔记数据
 
 - 无遥测或分析跟踪
 - 无用户账户或云端服务
-- 无后台遥测；网络请求仅来自用户主动触发的更新检查或远程 HTTPS 图片加载
+- 无网络通信（除用户主动触发的更新检查外）
 - 代码签名仅用于验证发布产物的真实性与完整性
 
 This program will not transfer any information to other networked systems unless
@@ -82,5 +71,6 @@ signtool verify /pa /v JotLuck_<version>_x64-setup.exe
 
 ## 证书撤销
 
-如发现与 JotLuck 相关的签名被滥用或涉及安全事件，请向 SignPath Foundation
-（support@signpath.io）报告；项目方将配合核实、调查与处理。
+签名证书启用后，如发现与 JotLuck 相关的签名被滥用或涉及安全事件，请通过
+[GitHub Issues](https://github.com/jiay98528-dev/JotLuck/issues) 报告；证书签发
+机构的撤销通道将随首个签名版本一并公布。
