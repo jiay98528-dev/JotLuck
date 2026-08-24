@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.12.2-preview] - 2026-08-25
+
+### Fixed
+
+- Open Markdown web links in the system browser from desktop read, preview, split, and live editing modes.
+
+### Distribution
+
+- Published the unsigned Windows x64 preview installer as `JotLuck_0.12.2_x64-setup.exe`.
+- Installer SHA-256: `efeba410d5747358a286468720f9c4fc448ac0c9286fdff1dcc0fa63a77c9494`.
+
 ## [0.12.1-preview] - 2026-08-16
 
 ### Added

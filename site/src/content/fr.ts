@@ -92,7 +92,7 @@ export const fr: SiteContent = {
     honestyTitle: "La Preview d'abord.",
     honestyBody:
       "L'installateur Preview est déjà sur GitHub Releases — téléchargeable, vérifiable, réversible.",
-    previewTitle: 'v0.12.1 Preview',
+    previewTitle: 'v0.12.2 Preview',
     downloadBtn: 'Télécharger la Preview (Windows x64)',
     githubBtn: 'GitHub',
     releaseBtn: 'Notes de version et checksum',

@@ -2,10 +2,11 @@
 
 ## Supported Versions
 
-JotLuck `v0.12.1-preview` is the current public source and Windows installer
-preview on GitHub Releases. It is not a stable release or an RC support line.
-Windows code signing is in progress. Security reports for the source tree and
-the preview installer are handled on a best-effort basis.
+JotLuck `v0.12.2-preview` is the current public source release, and the
+public preview installer on GitHub Releases is unsigned. It is not a stable
+release or an RC support line. Windows code signing is in progress. Security
+reports for the source tree and the preview installer are handled on a
+best-effort basis.
 
 ## Reporting A Vulnerability
 

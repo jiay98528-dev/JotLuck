@@ -1,3 +1,6 @@
+import { open as openWithSystem } from '@tauri-apps/plugin-shell';
+import { isDesktopRuntime } from './runtime';
+
 /**
  * URL 规范化工具
  *
@@ -16,4 +19,16 @@ export function normalizeUrl(url: string): string {
   if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return url;
   // Bare domain or www.xxx — prepend https://
   return 'https://' + url;
+}
+
+/**
+ * 在系统默认应用中打开外部链接。
+ *
+ * Tauri WebView 不能依赖 window.open 唤起桌面浏览器，因此桌面端
+ * 显式交给 shell 插件；Web 版保留原生新标签行为。
+ */
+export function openExternalUrl(url: string): Promise<void> | void {
+  const normalized = normalizeUrl(url);
+  if (isDesktopRuntime()) return openWithSystem(normalized);
+  window.open(normalized, '_blank', 'noopener,noreferrer');
 }

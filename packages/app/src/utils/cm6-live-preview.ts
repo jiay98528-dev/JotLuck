@@ -29,7 +29,7 @@ import {
 import type { RendererOptions } from '@jotluck/renderer';
 import DOMPurify from 'dompurify';
 import { translate } from '@/i18n';
-import { normalizeUrl } from '@/utils/urlUtils';
+import { openExternalUrl } from '@/utils/urlUtils';
 
 // ---- HTML 转义 ----
 
@@ -1001,7 +1001,7 @@ function handleLiveAnchorClick(anchor: HTMLAnchorElement, options: LivePreviewOp
     if (options.onExternalLinkClick) {
       options.onExternalLinkClick(href);
     } else {
-      window.open(normalizeUrl(href), '_blank', 'noopener,noreferrer');
+      void openExternalUrl(href);
     }
     return true;
   }

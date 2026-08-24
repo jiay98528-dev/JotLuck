@@ -88,7 +88,7 @@ export const ko: SiteContent = {
     honestyTitle: 'Preview가 먼저입니다.',
     honestyBody:
       'Preview 설치 파일은 이미 GitHub Releases에 공개되었습니다——다운로드 가능하고, 검증 가능하며, 되돌릴 수 있습니다.',
-    previewTitle: 'v0.12.1 Preview',
+    previewTitle: 'v0.12.2 Preview',
     downloadBtn: 'Preview 다운로드（Windows x64）',
     githubBtn: 'GitHub',
     releaseBtn: 'Release 노트와 체크섬',

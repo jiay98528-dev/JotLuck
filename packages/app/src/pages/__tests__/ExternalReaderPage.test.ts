@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ExternalReaderPage from '../ExternalReaderPage.vue';
 
-const { invoke, replace, Channel, channels } = vi.hoisted(() => {
+const { invoke, replace, isTauri, shellOpen, Channel, channels } = vi.hoisted(() => {
   const channelInstances: Array<{ onmessage?: (event: unknown) => void }> = [];
   class MockChannel {
     onmessage?: (event: unknown) => void;
@@ -14,12 +14,15 @@ const { invoke, replace, Channel, channels } = vi.hoisted(() => {
   return {
     invoke: vi.fn(),
     replace: vi.fn(),
+    isTauri: vi.fn(),
+    shellOpen: vi.fn(),
     Channel: MockChannel,
     channels: channelInstances,
   };
 });
 
-vi.mock('@tauri-apps/api/core', () => ({ Channel, invoke }));
+vi.mock('@tauri-apps/api/core', () => ({ Channel, invoke, isTauri }));
+vi.mock('@tauri-apps/plugin-shell', () => ({ open: shellOpen }));
 vi.mock('vue-router', () => ({ useRouter: () => ({ replace }) }));
 
 function mountReader() {
@@ -39,6 +42,9 @@ describe('ExternalReaderPage', () => {
   beforeEach(() => {
     invoke.mockReset();
     replace.mockReset();
+    isTauri.mockReset();
+    isTauri.mockReturnValue(false);
+    shellOpen.mockReset();
     channels.splice(0);
     document.title = 'JotLuck';
   });
@@ -112,6 +118,10 @@ describe('ExternalReaderPage', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     await wrapper.find('article a[href="https://example.com"]').trigger('click');
     expect(open).toHaveBeenCalledWith('https://example.com', '_blank', 'noopener,noreferrer');
+    isTauri.mockReturnValue(true);
+    shellOpen.mockResolvedValue(undefined);
+    await wrapper.find('article a[href="https://example.com"]').trigger('click');
+    expect(shellOpen).toHaveBeenCalledWith('https://example.com');
     await wrapper.find('article a[data-note="Related"]').trigger('click');
     expect(wrapper.text()).toContain('Wiki-link“Related”跳转需要笔记本上下文');
     open.mockRestore();

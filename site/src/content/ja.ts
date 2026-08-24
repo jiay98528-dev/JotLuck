@@ -87,7 +87,7 @@ export const ja: SiteContent = {
     honestyTitle: 'Preview 先行。',
     honestyBody:
       'Preview インストーラーはすでに GitHub Releases に公開されています——ダウンロード可能、検証可能、巻き戻し可能。',
-    previewTitle: 'v0.12.1 Preview',
+    previewTitle: 'v0.12.2 Preview',
     downloadBtn: 'Preview をダウンロード（Windows x64）',
     githubBtn: 'GitHub',
     releaseBtn: 'Release ノートとチェックサム',

@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "JotLuck default capabilities - dialog and shell only; file I/O uses custom Rust commands",
-  "windows": ["main"],
+  "windows": ["main", "file-*"],
   "permissions": [
     "core:default",
     "dialog:default",

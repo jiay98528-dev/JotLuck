@@ -322,7 +322,7 @@ import type {
   WindowBootstrapPayload,
 } from '@/types';
 import type { RightWingRegion } from '@/types/theme-pack';
-import { normalizeUrl } from '@/utils/urlUtils';
+import { openExternalUrl } from '@/utils/urlUtils';
 import { useI18n } from 'vue-i18n';
 import { normalizeCommandError } from '@/services/command-errors';
 import { useDialogFocus } from '@/composables/useDialogFocus';
@@ -886,7 +886,7 @@ function onMarkdownClick(event: MouseEvent): void {
     return;
   }
   if (/^(?:https?:\/\/|mailto:|tel:|ftp:|www\.)/i.test(href)) {
-    window.open(normalizeUrl(href), '_blank', 'noopener,noreferrer');
+    void openExternalUrl(href);
     return;
   }
   showNotebookCapabilityNotice('externalReader.relativeNavigation', { href });

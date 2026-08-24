@@ -75,7 +75,7 @@
                 <article
                   v-else
                   class="markdown-body external-preview"
-                  @click="onRemoteImageClick"
+                  @click="onPreviewClick"
                   @load.capture="onRemoteImageLoad"
                   @error.capture="onRemoteImageError"
                   v-html="externalPreviewHtml"
@@ -239,7 +239,7 @@
                       <!-- eslint-disable vue/no-v-html -->
                       <article
                         class="markdown-body reader-preview"
-                        @click="onRemoteImageClick"
+                        @click="onPreviewClick"
                         @load.capture="onRemoteImageLoad"
                         @error.capture="onRemoteImageError"
                         v-html="splitPreviewHtml"
@@ -314,7 +314,7 @@
                           <!-- eslint-disable vue/no-v-html -->
                           <div
                             class="markdown-body split-preview"
-                            @click="onRemoteImageClick"
+                            @click="onPreviewClick"
                             @load.capture="onRemoteImageLoad"
                             @error.capture="onRemoteImageError"
                             v-html="splitPreviewHtml"
@@ -870,7 +870,7 @@ import { useImageUpload } from '@/composables/useImageUpload';
 import { usePreviewImageResolver } from '@/composables/usePreviewImageResolver';
 import { useRemoteImageSession } from '@/composables/useRemoteImageSession';
 import { useDialogFocus } from '@/composables/useDialogFocus';
-import { normalizeUrl } from '@/utils/urlUtils';
+import { openExternalUrl } from '@/utils/urlUtils';
 import { revealLivePreviewSourceAt } from '@/utils/cm6-live-preview';
 import {
   getCompletionSettings,
@@ -1673,8 +1673,15 @@ watch(remoteImages.revision, () => {
   else refreshSplitPreviewIfVisible();
 });
 
-function onRemoteImageClick(event: MouseEvent): void {
-  remoteImages.handleClick(event);
+function onPreviewClick(event: MouseEvent): void {
+  if (remoteImages.handleClick(event)) return;
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const anchor = target.closest('a');
+  const href = anchor?.getAttribute('href');
+  if (!href || !/^(?:https?:\/\/|mailto:|tel:|ftp:|www\.)/i.test(href)) return;
+  event.preventDefault();
+  void openExternalUrl(href);
 }
 
 function onRemoteImageLoad(event: Event): void {
@@ -4668,7 +4675,7 @@ function onTagSelect(tagName: string): void {
 }
 
 function onLivePreviewExternalLinkClick(href: string): void {
-  window.open(normalizeUrl(href), '_blank', 'noopener,noreferrer');
+  void openExternalUrl(href);
 }
 
 function onLivePreviewTagClick(tagName: string): void {
