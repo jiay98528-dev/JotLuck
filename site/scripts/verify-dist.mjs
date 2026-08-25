@@ -55,6 +55,14 @@ const EXPECTED_H1 = {
   fr: 'Écrire devait être léger. Commencez par un fichier.',
 };
 
+const EXPECTED_FONT_PRELOADS = {
+  zh: ['display-zh-hans', 'body-zh-hans-400', 'body-zh-hans-700', 'mono-400'],
+  en: ['display-en', 'body-en-400', 'body-en-700', 'mono-400'],
+  ja: ['display-ja', 'body-ja-400', 'body-ja-700', 'mono-400'],
+  ko: ['display-ko', 'body-ko-400', 'body-ko-700', 'mono-400'],
+  fr: ['display-fr', 'body-fr-400', 'body-fr-700', 'mono-400'],
+};
+
 /** (i) JSON-LD 实体语义期望（与 src/release.ts 的 LEGAL_ENTITY / STUDIO_NAME 同源） */
 const EXPECTED_ORG_NAME = '鸰湖科技（深圳）有限公司';
 const EXPECTED_ORG_ALT = 'LeankomStudio';
@@ -117,7 +125,8 @@ function expectationFor(path) {
   if (!m) return null;
   const locale = m[1];
   const pageKind = m[2] === 'index.html' ? 'home' : m[3];
-  const canonical = pageKind === 'home' ? `${SITE_URL}/${locale}/` : `${SITE_URL}/${locale}/${pageKind}`;
+  const canonical =
+    pageKind === 'home' ? `${SITE_URL}/${locale}/` : `${SITE_URL}/${locale}/${pageKind}`;
   return { pageKind, lang: TAGS[locale], canonical };
 }
 
@@ -146,12 +155,13 @@ function locToRel(loc) {
 /** (h) 五语首页 h1.statement 结构断言。 */
 function checkStatementH1(html, rel) {
   const label = `dist/${rel} h1.statement`;
-  const m = /<h1\b[^>]*class="[^"]*\bstatement\b[^"]*"[^>]*>([\s\S]*?)<\/h1>/i.exec(html);
+  const m = /(<h1\b[^>]*class="[^"]*\bstatement\b[^"]*"[^>]*>)([\s\S]*?)<\/h1>/i.exec(html);
   if (!m) {
     check(false, `${label} 存在`, '未找到 <h1 class="statement">');
     return;
   }
-  const inner = m[1];
+  const h1Attrs = extractAttrs(m[1]);
+  const inner = m[2];
 
   // SSG 态 H1 必须是连续纯文本行：零 .ch 字符 span（字符动画仅在水合后挂载，
   // 字符 span 化曾致行边界断词「wasmeant」——裁决 23 定为 SSG 纯文本方案）
@@ -161,15 +171,39 @@ function checkStatementH1(html, rel) {
   check(chSpans.length === 0, `${label} 无字符 span`, `期望 0 个 .ch span，实际 ${chSpans.length}`);
 
   // display-line 行容器存在、为纯文本（无嵌套标签）
-  const lineSpans = [...inner.matchAll(/<span\b[^>]*class="[^"]*\bdisplay-line\b[^"]*"[^>]*>([\s\S]*?)<\/span>/gi)];
+  const lineSpans = [
+    ...inner.matchAll(/<span\b[^>]*class="[^"]*\bdisplay-line\b[^"]*"[^>]*>([\s\S]*?)<\/span>/gi),
+  ];
   check(lineSpans.length > 0, `${label} display-line 存在`, `${lineSpans.length} 行`);
+  const namedLines = lineSpans.filter((s) => /\saria-label=/.test(s[0]));
+  check(
+    namedLines.length === 0,
+    `${label} display-line 无非法 aria-label`,
+    `期望 0 个，实际 ${namedLines.length}`,
+  );
   const nested = lineSpans.filter((s) => /<[a-z]/i.test(s[1]));
-  check(nested.length === 0, `${label} 行为纯文本`, nested.length ? `${nested.length} 行含嵌套标签` : '全部行无嵌套标签');
+  check(
+    nested.length === 0,
+    `${label} 行为纯文本`,
+    nested.length ? `${nested.length} 行含嵌套标签` : '全部行无嵌套标签',
+  );
 
   // 去标签文本非空 + 与预期完整句逐字比对（防"纯文本但断词/缺句"回归）
-  const text = inner.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-  check(text.length > 0, `${label} 文本非空`, `"${text.slice(0, 60)}${text.length > 60 ? '…' : ''}"`);
+  const text = inner
+    .replace(/<[^>]+>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  check(
+    text.length > 0,
+    `${label} 文本非空`,
+    `"${text.slice(0, 60)}${text.length > 60 ? '…' : ''}"`,
+  );
   const expected = EXPECTED_H1[rel.slice(0, 2)];
+  check(
+    h1Attrs['aria-label'] === expected,
+    `${label} 可访问名称精确匹配`,
+    `期望 "${expected}"，实际 "${h1Attrs['aria-label'] ?? ''}"`,
+  );
   check(
     text === expected,
     `${label} 文本精确匹配`,
@@ -180,7 +214,9 @@ function checkStatementH1(html, rel) {
 /** (i) JSON-LD：恰好 1 个 application/ld+json <script>，可解析且实体语义正确。 */
 function checkJsonLd(html, rel) {
   const label = `dist/${rel} JSON-LD`;
-  const scripts = [...html.matchAll(/<script\b[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)];
+  const scripts = [
+    ...html.matchAll(/<script\b[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi),
+  ];
   check(scripts.length === 1, `${label} 数量`, `期望恰好 1 个，实际 ${scripts.length}`);
   if (scripts.length !== 1) return;
   const raw = scripts[0][1].trim();
@@ -207,7 +243,9 @@ function checkJsonLd(html, rel) {
     `publisher['@id']=${site?.publisher?.['@id'] ?? '(缺失)'}`,
   );
   check(
-    org?.name === EXPECTED_ORG_NAME && org?.alternateName === EXPECTED_ORG_ALT && org?.url === SITE_URL,
+    org?.name === EXPECTED_ORG_NAME &&
+      org?.alternateName === EXPECTED_ORG_ALT &&
+      org?.url === SITE_URL,
     `${label} Organization 语义`,
     org ? `name=${org.name} alternateName=${org.alternateName}` : '缺 Organization 节点',
   );
@@ -245,6 +283,30 @@ for (const rel of expectedFiles) {
   const exp = expectationFor(rel);
   const { htmlLang, links, metas } = parseHtml(html);
 
+  // 构建 CSS 必须原文内联，首屏不再依赖 render-blocking stylesheet 请求。
+  const stylesheetLinks = links.filter((a) => a.rel === 'stylesheet');
+  const inlineStyles = [
+    ...html.matchAll(/<style\b[^>]*data-inline-source="\/assets\/[^"]+\.css"[^>]*>/gi),
+  ];
+  check(stylesheetLinks.length === 0, `无外链样式表`, `实际 ${stylesheetLinks.length} 个`);
+  check(inlineStyles.length > 0, `构建 CSS 已内联`, `${inlineStyles.length} 个 style`);
+
+  if (exp.pageKind !== 'gate') {
+    const locale = rel.slice(0, 2);
+    const actualFonts = links
+      .filter((a) => a.rel === 'preload' && a.as === 'font')
+      .map((a) => a.href)
+      .sort();
+    const expectedFonts = EXPECTED_FONT_PRELOADS[locale]
+      .map((file) => `/assets/fonts/files/${file}.woff2`)
+      .sort();
+    check(
+      JSON.stringify(actualFonts) === JSON.stringify(expectedFonts),
+      `首屏字体 preload 精确匹配`,
+      actualFonts.join(', '),
+    );
+  }
+
   // (b) html lang
   check(htmlLang === exp.lang, `html lang`, `期望 ${exp.lang}，实际 ${htmlLang ?? '(缺失)'}`);
 
@@ -274,8 +336,16 @@ for (const rel of expectedFiles) {
   }
   const extraLangs = Object.keys(byLang).filter((t) => !(t in expectHreflang));
   const dupLangs = langNames.filter((t) => alternates.filter((a) => a.hreflang === t).length !== 1);
-  check(extraLangs.length === 0, `hreflang 无多余语言`, extraLangs.length ? `多余: ${extraLangs.join(', ')}` : '通过');
-  check(dupLangs.length === 0, `hreflang 无重复`, dupLangs.length ? `重复: ${dupLangs.join(', ')}` : '通过');
+  check(
+    extraLangs.length === 0,
+    `hreflang 无多余语言`,
+    extraLangs.length ? `多余: ${extraLangs.join(', ')}` : '通过',
+  );
+  check(
+    dupLangs.length === 0,
+    `hreflang 无重复`,
+    dupLangs.length ? `重复: ${dupLangs.join(', ')}` : '通过',
+  );
 
   // (e) 社卡片
   const ogImage = metas.find((m) => m.property === 'og:image');
@@ -318,7 +388,11 @@ for (const rel of expectedFiles) {
   const twTitle = metas.find((m) => m.name === 'twitter:title');
   const twDesc = metas.find((m) => m.name === 'twitter:description');
   check(Boolean(twTitle?.content?.trim()), `twitter:title 存在`, twTitle?.content ? '有' : '缺失');
-  check(Boolean(twDesc?.content?.trim()), `twitter:description 存在`, twDesc?.content ? '有' : '缺失');
+  check(
+    Boolean(twDesc?.content?.trim()),
+    `twitter:description 存在`,
+    twDesc?.content ? '有' : '缺失',
+  );
 
   // (i) 全站 26 页（含门页，裁决 32 门页补 JSON-LD）：恰好 1 个且可解析
   checkJsonLd(html, rel);
@@ -388,13 +462,19 @@ if (!existsSync(sitemapPath)) {
   for (const l of LOCALES) for (const p of PAGES) expectedLocs.push(`${SITE_URL}/${l}/${p}`);
   check(locs.length === 26, `loc 数量 = 26`, `实际 ${locs.length} 条`);
   const dupLocs = locs.filter((loc, i) => locs.indexOf(loc) !== i);
-  check(dupLocs.length === 0, `loc 无重复`, dupLocs.length ? `重复: ${[...new Set(dupLocs)].join(', ')}` : '通过');
+  check(
+    dupLocs.length === 0,
+    `loc 无重复`,
+    dupLocs.length ? `重复: ${[...new Set(dupLocs)].join(', ')}` : '通过',
+  );
   const missing = expectedLocs.filter((u) => !locs.includes(u));
   const extra = locs.filter((u) => !expectedLocs.includes(u));
   check(
     missing.length === 0 && extra.length === 0,
     `loc 与预期集合相等`,
-    missing.length || extra.length ? `缺: ${missing.join(', ') || '无'}｜多: ${extra.join(', ') || '无'}` : '26 条完全匹配',
+    missing.length || extra.length
+      ? `缺: ${missing.join(', ') || '无'}｜多: ${extra.join(', ') || '无'}`
+      : '26 条完全匹配',
   );
   for (const loc of locs) {
     let rel;

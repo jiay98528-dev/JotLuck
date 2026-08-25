@@ -53,6 +53,14 @@ const lineChars = computed(() => {
  */
 const lineSep = computed(() => (props.locale === 'zh' || props.locale === 'ja' ? '' : ' '));
 
+/**
+ * H1 的单一可访问名称：视觉字符保持逐字动画，辅助技术仍只读一次完整标题。
+ * 名称放在 heading 本身，避免 generic display-line span 使用不允许的 aria-label。
+ */
+const statementLabel = computed(() =>
+  [...props.hero.lines, props.hero.emphasis].join(lineSep.value).trim(),
+);
+
 onMounted(async () => {
   mounted.value = true;
   const img = inkImg.value;
@@ -72,7 +80,7 @@ onMounted(async () => {
       <p class="eyebrow tech-rail">
         <span class="eyebrow-tick" aria-hidden="true"></span>{{ hero.eyebrow }}
       </p>
-      <h1 class="statement">
+      <h1 class="statement" :aria-label="statementLabel">
         <!-- SSG/无 JS 态：连续纯文本行（爬虫与屏幕阅读器读到的唯一版本）。
              行间补 lineSep 真实空格文本节点：相邻块级 span 无空白会在文本抽取时粘连断词 -->
         <template v-if="!mounted">
@@ -80,14 +88,10 @@ onMounted(async () => {
             >{{ line }}{{ lineSep }}</span
           >
         </template>
-        <!-- 水合后：逐字落版动画（字符 span 全部 aria-hidden，行级 aria-label 供屏幕阅读器；
+        <!-- 水合后：逐字落版动画（字符 span 全部 aria-hidden，H1 aria-label 供屏幕阅读器；
              行尾 lineSep 空格文本节点防渲染态文本抽取行边界粘连） -->
         <template v-else>
-          <span
-            v-for="(chars, li) in lineChars"
-            :key="li"
-            class="display-line"
-            :aria-label="hero.lines[li]"
+          <span v-for="(chars, li) in lineChars" :key="li" class="display-line"
             ><span
               v-for="(c, ci) in chars"
               :key="ci"

@@ -43,13 +43,13 @@ export const JSON_LD = JSON.stringify({
   ],
 });
 
-/** 弱网适配：每语页面只 preload 本语展示体 + 正文 400 + 等宽（与 site.css 的 locale 字体绑定一致） */
+/** 弱网适配：每语页面只 preload 首屏使用的展示体 + 正文 400/700 + 等宽。 */
 const LOCALE_FONT_FILES: Record<Locale, string[]> = {
-  zh: ['display-zh-hans', 'body-zh-hans-400'],
-  en: ['display-en', 'body-en-400'],
-  fr: ['display-fr', 'body-fr-400'],
-  ja: ['display-ja', 'body-ja-400'],
-  ko: ['display-ko', 'body-ko-400'],
+  zh: ['display-zh-hans', 'body-zh-hans-400', 'body-zh-hans-700'],
+  en: ['display-en', 'body-en-400', 'body-en-700'],
+  fr: ['display-fr', 'body-fr-400', 'body-fr-700'],
+  ja: ['display-ja', 'body-ja-400', 'body-ja-700'],
+  ko: ['display-ko', 'body-ko-400', 'body-ko-700'],
 };
 
 /** 每页 SEO：title/description 按页面差异化（子页用导航标签 + 页首 lead），canonical/hreflang 五语互链 + x-default 指门页 + 社卡片。 */
