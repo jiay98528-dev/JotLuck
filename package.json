@@ -1,6 +1,6 @@
 {
   "name": "jotluck",
-  "version": "0.12.2",
+  "version": "0.12.3",
   "private": true,
   "description": "Lightweight, local-first Markdown note-taking tool",
   "author": "Linghu Technology (Shenzhen) Co., Ltd.",

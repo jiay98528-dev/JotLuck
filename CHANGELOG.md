@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.12.3-preview] - 2026-09-02
+
+### Fixed
+
+- Failed external-link opens are no longer silent on desktop: the system open
+  failure is logged and surfaced as a localized toast instead of doing nothing.
+- The update-notification release link and the share-via-email action now route
+  through the system opener; the scoped shell-open regex allows `mailto:` links
+  without a recipient while still rejecting non-http(s)/mailto/tel schemes.
+- Desktop WebView default context menu (back/refresh/save-as items that do
+  nothing in Tauri) is suppressed outside editable surfaces; right-click
+  copy/paste in inputs and the editor keeps working.
+
+### Performance
+
+- Speed up cold start to first preview: preload the NotebookHome module graph
+  (CodeMirror, renderer, and markdown vendors included) at document start,
+  share one `get_window_bootstrap` IPC between the bootstrap page and the
+  workspace, and run search indexing and custom template loading off the
+  first-frame path with new startup timing marks. Production cold start
+  reaches the editable shell in roughly 0.2s on the reference machine.
+
+### Distribution
+
+- Built the unsigned Windows x64 installer as `JotLuck_0.12.3_x64-setup.exe`.
+- Installer SHA-256: `17681727cdefb993a8c5604907cff25cbaba50b72363ebbec247328d50873a37`.
+
 ## [0.12.2-preview] - 2026-08-25
 
 ### Fixed
