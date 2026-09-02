@@ -830,6 +830,7 @@ import ThemeSlotBoundary from '@/components/theme/ThemeSlotBoundary.vue';
 import ToastContainer, { useToast } from '@/components/common/Toast.vue';
 import { MockFSService } from '@/services/MockFSService';
 import { TauriIPCService } from '@/services/TauriIPCService';
+import { getWindowBootstrap } from '@/services/windowBootstrapCache';
 import {
   applyGuidedSampleEdit,
   createGuidedSampleSession,
@@ -3320,7 +3321,7 @@ async function initNotebook(): Promise<void> {
     let initialRelativePath: string | undefined;
     if (isDesktopRuntime()) {
       const bootstrap = await withTimeout(
-        invoke<WindowBootstrapPayload>('get_window_bootstrap'),
+        getWindowBootstrap(),
         STARTUP_IPC_TIMEOUT_MS,
         t('notebook.startup.aria'),
       );
@@ -3376,15 +3377,35 @@ async function initNotebook(): Promise<void> {
     markStartupReady(notebookReady ? 'workspace' : 'gate');
   }
   if (!notebookReady || isGuidedSampleSession.value) return;
-  try {
-    await indexStore.initialize(fs, true);
-    await refreshCustomTemplates(true);
-    wikiLinkRevision.value++;
-    refreshSplitPreviewIfVisible();
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn('[NotebookHome] indexStore.initialize failed', e);
-  }
+  // 索引与自定义模板加载不阻塞首帧：与编辑器挂载并行执行，完成后才刷新
+  // 反链面板与预览。守卫防止快速切换笔记本时旧根目录的结果串台。
+  const expectedRoot = activeNotebookRoot.value;
+  const expectedGeneration = notebookDataGeneration;
+  void (async () => {
+    try {
+      await indexStore.initialize(fs, true);
+      await refreshCustomTemplates(true, expectedRoot, expectedGeneration);
+      if (
+        expectedGeneration !== notebookDataGeneration ||
+        !notebookRootsEqual(expectedRoot, activeNotebookRoot.value)
+      ) {
+        return;
+      }
+      wikiLinkRevision.value++;
+      refreshSplitPreviewIfVisible();
+      performance.mark('jotluck:indexer-ready');
+      if (performance.getEntriesByName('jotluck:bootstrap-start').length > 0) {
+        performance.measure(
+          'jotluck:index-ready',
+          'jotluck:bootstrap-start',
+          'jotluck:indexer-ready',
+        );
+      }
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[NotebookHome] indexStore.initialize failed', e);
+    }
+  })();
 }
 
 async function refreshCustomTemplates(
@@ -4026,6 +4047,19 @@ function updateSplitPreview(): void {
         resolveImageSrc: previewImages.resolveImageSrc,
         remoteImages: remoteImagePolicy.value,
       });
+      if (
+        splitPreviewHtml.value &&
+        performance.getEntriesByName('jotluck:preview-1st-paint').length === 0
+      ) {
+        performance.mark('jotluck:preview-1st-paint');
+        if (performance.getEntriesByName('jotluck:bootstrap-start').length > 0) {
+          performance.measure(
+            'jotluck:cold-start-to-preview',
+            'jotluck:bootstrap-start',
+            'jotluck:preview-1st-paint',
+          );
+        }
+      }
       void nextTick(() => {
         const previewEl = document.querySelector<HTMLElement>(
           '.split-preview, .markdown-body--full',

@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { resolve } from 'path';
 import { readFileSync } from 'fs';
@@ -7,8 +7,55 @@ const packageJson = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 
   version: string;
 };
 
+/**
+ * 冷启动预加载：NotebookHome 由路由在 mount 后才发现，CodeMirror/markdown 等
+ * 大 chunk 又要等 NotebookHome 或 MarkdownEditor 解析后才发起请求，形成串行瀑布。
+ * 在 index.html 预注入 modulepreload：NotebookHome 的 link 会递归拉取其全部静态
+ * 依赖图（CodeMirror 三块 + markdown + renderer + vue 系列），再补两个动态入口
+ * （MarkdownEditor / BootstrapPage）与对应 CSS。只预取不执行，无可见行为变化。
+ */
+function startupModulePreload(): Plugin {
+  const jsChunkPrefixes = [
+    'assets/NotebookHome-',
+    'assets/MarkdownEditor-',
+    'assets/BootstrapPage-',
+  ];
+  const cssChunkPrefixes = [
+    'assets/NotebookHome-',
+    'assets/MarkdownEditor-',
+    'assets/BootstrapPage-',
+  ];
+  return {
+    name: 'jotluck:startup-module-preload',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'post',
+      handler(_html, ctx) {
+        if (!ctx.bundle) return [];
+        const files = Object.keys(ctx.bundle);
+        const pick = (prefixes: string[], ext: string) =>
+          prefixes.flatMap((prefix) =>
+            files.filter((name) => name.startsWith(prefix) && name.endsWith(ext)),
+          );
+        return [
+          ...pick(jsChunkPrefixes, '.js').map((name) => ({
+            tag: 'link',
+            attrs: { rel: 'modulepreload', href: `/${name}` },
+            injectTo: 'head',
+          })),
+          ...pick(cssChunkPrefixes, '.css').map((name) => ({
+            tag: 'link',
+            attrs: { rel: 'preload', as: 'style', href: `/${name}` },
+            injectTo: 'head',
+          })),
+        ];
+      },
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), startupModulePreload()],
   define: {
     __APP_VERSION__: JSON.stringify(packageJson.version),
   },

@@ -7,10 +7,9 @@
 
 <script setup lang="ts">
 import { onMounted } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
-import type { WindowBootstrapPayload } from '@/types';
+import { getWindowBootstrap } from '@/services/windowBootstrapCache';
 import { isDesktopRuntime } from '@/utils/runtime';
 
 const router = useRouter();
@@ -23,7 +22,7 @@ onMounted(async () => {
   }
 
   try {
-    const bootstrap = await invoke<WindowBootstrapPayload>('get_window_bootstrap');
+    const bootstrap = await getWindowBootstrap();
     await router.replace(
       bootstrap.mode === 'external-readonly' || bootstrap.mode === 'document-import-readonly'
         ? '/reader'
