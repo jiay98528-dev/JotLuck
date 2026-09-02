@@ -1,16 +1,22 @@
-# JotLuck v0.12.2-preview — Preview Release Notes
+# JotLuck v0.12.3-preview — Preview Release Notes
 
-> Date: 2026-08-25
+> Date: 2026-09-02
 > This document describes the current public Windows x64 preview source track.
 > The latest published installer remains unsigned and is not a stable release.
 
 ## Important — Unsigned Preview
 
-JotLuck `v0.12.2-preview` is the current public source and Windows NSIS preview available only on GitHub Releases; verify SHA-256 `efeba410d5747358a286468720f9c4fc448ac0c9286fdff1dcc0fa63a77c9494` before installing. Windows code signing is in progress and follows the pipeline in [`CODE_SIGNING.md`](./CODE_SIGNING.md): installed-app evidence capture, submission through an approved signing service, Authenticode verification, and a post-sign SHA-256 check.
+JotLuck `v0.12.3-preview` is the current public source and Windows NSIS preview available only on GitHub Releases; verify SHA-256 `17681727cdefb993a8c5604907cff25cbaba50b72363ebbec247328d50873a37` before installing. Windows code signing is in progress and follows the pipeline in [`CODE_SIGNING.md`](./CODE_SIGNING.md): installed-app evidence capture, submission through an approved signing service, Authenticode verification, and a post-sign SHA-256 check.
+
+## What's new in 0.12.3
+
+- **Failed link opens are no longer silent.** When the system browser cannot be opened from a note, JotLuck now logs the failure and shows a localized notice instead of doing nothing. The update-notification release link and share-via-email now use the same system opener, and `mailto:` links without a recipient are explicitly allowed by a narrowed shell-open allowlist (`mailto:`/`tel:`/`https?:` only).
+- **No more dead right-click menu.** The WebView default context menu (back/refresh/save-as items that do nothing in a desktop app) is suppressed outside editable surfaces. Right-click copy/paste in inputs and the editor keeps working, and custom menus such as the file-tree context menu are unchanged.
+- **Cold start is several times faster.** The workspace module graph is preloaded at document start, the startup bootstrap IPC is shared instead of issued twice, and search indexing plus custom-template loading run after the first frame instead of blocking it. On the reference machine the production build reaches the editable shell in roughly 0.2s, previously 1–2s.
 
 ## Highlights
 
-- **Web links open in the default browser again.** Markdown links now leave the desktop WebView through the system shell in read mode, split preview, external read-only documents, and Live Preview. The web build keeps its normal new-tab behavior.
+- **Web links open in the default browser.** Markdown links leave the desktop WebView through the system shell in read mode, split preview, external read-only documents, and Live Preview. The web build keeps its normal new-tab behavior.
 - **Remote images now require an explicit choice.** HTTPS images start as in-place controls and make zero requests until the reader chooses to load them for the current note. Permission stays in window memory, is isolated by note, and clears on refresh.
 - **Unsafe image sources stay blocked.** HTTP URLs, credential-bearing URLs, unsupported protocols, and forged remote-image controls cannot trigger a request. Raw HTML images follow the same policy and are sanitized again before display.
 - **Local images continue to work automatically.** Notebook assets keep their existing local-first rendering path across Live Preview, split view, reading view, and external reading.

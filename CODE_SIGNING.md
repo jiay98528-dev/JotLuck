@@ -6,7 +6,7 @@
 ## 当前状态
 
 代码签名正在处理中。在签名流程启用之前，公开发布的安装包（包括
-`v0.12.2-preview`）均为未签名产物，Windows SmartScreen 可能显示未知发布者警告；
+`v0.12.3-preview`）均为未签名产物，Windows SmartScreen 可能显示未知发布者警告；
 安装前请核对发布页公布的 SHA-256 校验值。
 
 首个签名版本将按下文流程，从精确 commit 经 GitHub Actions 以可验证方式构建。
@@ -60,7 +60,7 @@ commit 与对应的 CI run，可在发布页直接核对。
 
 ```bash
 # 当前 preview 安装包（未签名）：核对 SHA-256
-certutil -hashfile JotLuck_0.12.2_x64-setup.exe SHA256
+certutil -hashfile JotLuck_0.12.3_x64-setup.exe SHA256
 
 # 签名版本发布后：验证 Authenticode 签名
 signtool verify /pa /v JotLuck_<version>_x64-setup.exe

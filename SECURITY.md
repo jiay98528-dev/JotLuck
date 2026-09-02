@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-JotLuck `v0.12.2-preview` is the current public source release, and the
+JotLuck `v0.12.3-preview` is the current public source release, and the
 public preview installer on GitHub Releases is unsigned. It is not a stable
 release or an RC support line. Windows code signing is in progress. Security
 reports for the source tree and the preview installer are handled on a
