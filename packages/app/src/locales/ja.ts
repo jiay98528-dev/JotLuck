@@ -990,6 +990,7 @@ export const messages = {
     notebookNotOpen: '先にノートブックを開いてください。',
     indexUnavailable: '検索は一時的に利用できません。しばらくしてから再試行してください。',
     operationFailed: '操作に失敗しました。もう一度お試しください。',
+    openExternalLink: '外部リンクを開けませんでした：{url}',
   },
 } satisfies MessageSchema;
 

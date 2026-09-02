@@ -56,7 +56,7 @@
  */
 import { ref, watch, onUnmounted, computed } from 'vue';
 import { APP_NAME } from '@/config/app-meta';
-import { normalizeUrl } from '@/utils/urlUtils';
+import { openExternalUrl } from '@/utils/urlUtils';
 import { useI18n } from 'vue-i18n';
 
 // ─── Props ────────────────────────────────────────────────────────────
@@ -145,7 +145,7 @@ function close(): void {
 }
 
 function openRelease(): void {
-  window.open(normalizeUrl(props.releaseUrl), '_blank');
+  void openExternalUrl(props.releaseUrl);
 }
 
 // ─── Watchers ──────────────────────────────────────────────────────────

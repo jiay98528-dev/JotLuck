@@ -982,6 +982,7 @@ export const messages = {
     notebookNotOpen: '먼저 노트북을 여세요.',
     indexUnavailable: '검색을 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도하세요.',
     operationFailed: '작업에 실패했습니다. 다시 시도하세요.',
+    openExternalLink: '외부 링크를 열 수 없습니다: {url}',
   },
 } satisfies MessageSchema;
 

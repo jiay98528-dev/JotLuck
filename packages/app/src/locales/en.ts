@@ -1006,6 +1006,7 @@ export const messages = {
     notebookNotOpen: 'Open a notebook first.',
     indexUnavailable: 'Search is temporarily unavailable. Try again shortly.',
     operationFailed: 'The operation failed. Try again.',
+    openExternalLink: 'Could not open the external link: {url}',
   },
 } satisfies MessageSchema;
 

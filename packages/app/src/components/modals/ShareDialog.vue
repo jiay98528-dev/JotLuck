@@ -100,6 +100,7 @@ import { ref, computed, watch } from 'vue';
 import { ExportFormat, ShareChannel } from '@/types';
 import Button from '@/components/common/Button.vue';
 import { exportNote } from '@/services/Exporter';
+import { openExternalUrl } from '@/utils/urlUtils';
 import { useDialogFocus } from '@/composables/useDialogFocus';
 import { getCurrentLocale, getLocaleFontStack } from '@/i18n';
 import { useI18n } from 'vue-i18n';
@@ -370,7 +371,7 @@ async function shareViaSystem(title: string, content: string): Promise<void> {
 function shareViaEmail(title: string, content: string): void {
   const subject = encodeURIComponent(title);
   const body = encodeURIComponent(content);
-  window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
+  void openExternalUrl(`mailto:?subject=${subject}&body=${body}`);
 }
 
 async function shareViaClipboard(content: string): Promise<void> {

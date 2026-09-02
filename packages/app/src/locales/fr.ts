@@ -1036,6 +1036,7 @@ export const messages = {
     notebookNotOpen: 'Ouvrez d’abord un carnet.',
     indexUnavailable: 'La recherche est momentanément indisponible. Réessayez dans un instant.',
     operationFailed: 'L’opération a échoué. Réessayez.',
+    openExternalLink: 'Impossible d’ouvrir le lien externe : {url}',
   },
 } satisfies MessageSchema;
 
