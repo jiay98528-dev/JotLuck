@@ -104,6 +104,12 @@ spec/progress.md
 # 本地调研素材（不入库）
 _research_assets/
 
+# V2.5 训练语料与代码缓存（本地，含版权书籍正文，不入库）
+/b25/
+/b25stg/
+/b25-staging/
+/b25-backup/
+
 # 本地诊断探针与临时页面（不入库）
 /scratch/
 
