@@ -25,30 +25,27 @@ export function normalizeUrl(url: string): string {
 /**
  * 在系统默认应用中打开外部链接。
  *
- * Tauri WebView 不能依赖 window.open 唤起桌面浏览器，因此桌面端
- * 显式交给 shell 插件；Web 版保留原生新标签行为。
+ * Tauri WebView 不能依赖 window.open 唤起桌面浏览器（wry 会拦截新窗口），
+ * 因此桌面端显式交给 shell 插件并在失败时报告错误（console + 全局 Toast），
+ * 避免“点击无反应”无从诊断。本函数不会 reject，调用方可安全地
+ * `void openExternalUrl(...)`。
  *
- * 失败不再静默：桌面端 shell 打开失败时回退 window.open，仍失败时
- * 报告错误（console + 全局 Toast），避免“点击无反应”无从诊断。
- * 本函数不会 reject，调用方可安全地 `void openExternalUrl(...)`。
+ * Web 端保留原生新标签行为；noopener 语义下 window.open 成功时也返回
+ * null，返回值不能作为失败信号，因此 Web 端维持浏览器原生静默结果。
  */
 export async function openExternalUrl(url: string): Promise<void> {
   const normalized = normalizeUrl(url);
   if (isDesktopRuntime()) {
     try {
       await openWithSystem(normalized);
-      return;
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(`[urlUtils] shell open failed for ${normalized}`, error);
-      if (window.open(normalized, '_blank', 'noopener,noreferrer')) return;
       reportOpenFailure(normalized);
-      return;
     }
+    return;
   }
-  if (!window.open(normalized, '_blank', 'noopener,noreferrer')) {
-    reportOpenFailure(normalized);
-  }
+  window.open(normalized, '_blank', 'noopener,noreferrer');
 }
 
 function reportOpenFailure(url: string): void {

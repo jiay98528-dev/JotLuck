@@ -3308,6 +3308,7 @@ async function initNotebook(): Promise<void> {
   errorMessage.value = '';
   let pendingOpenedFile: OpenedFilePayload | null = null;
   let notebookReady = false;
+  let notebookInitializationDelegated = false;
   try {
     pendingOpenedFile = await getPendingOpenedFile();
     if (pendingOpenedFile) {
@@ -3365,6 +3366,8 @@ async function initNotebook(): Promise<void> {
         activeNotebookRoot.value,
         notebookDataGeneration,
       );
+      // 索引已委托给上面的后台助手；尾部通用后台块不得再次 force 重建。
+      notebookInitializationDelegated = true;
     } else {
       await loadDirectory('/');
     }
@@ -3376,7 +3379,7 @@ async function initNotebook(): Promise<void> {
     loading.value = false;
     markStartupReady(notebookReady ? 'workspace' : 'gate');
   }
-  if (!notebookReady || isGuidedSampleSession.value) return;
+  if (!notebookReady || isGuidedSampleSession.value || notebookInitializationDelegated) return;
   // 索引与自定义模板加载不阻塞首帧：与编辑器挂载并行执行，完成后才刷新
   // 反链面板与预览。守卫防止快速切换笔记本时旧根目录的结果串台。
   const expectedRoot = activeNotebookRoot.value;
@@ -3393,6 +3396,9 @@ async function initNotebook(): Promise<void> {
       }
       wikiLinkRevision.value++;
       refreshSplitPreviewIfVisible();
+      // 索引就绪后补全引擎才能拿到标题/路径数据；onMounted 首次连接可能
+      // 早于后台索引完成（与 initialRelativePath 路径的兜底行为对齐）。
+      connectPredictor();
       performance.mark('jotluck:indexer-ready');
       if (performance.getEntriesByName('jotluck:bootstrap-start').length > 0) {
         performance.measure(

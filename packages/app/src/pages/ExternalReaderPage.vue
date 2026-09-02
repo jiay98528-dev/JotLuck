@@ -294,6 +294,8 @@
           </section>
         </div>
       </Teleport>
+      <!-- 外链打开失败等全局 toast 在阅读窗口内也要可见（模块级单例状态） -->
+      <ToastContainer />
     </main>
   </ExternalReaderSlotBoundary>
 </template>
@@ -303,6 +305,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { useRouter } from 'vue-router';
 import Button from '@/components/common/Button.vue';
+import ToastContainer from '@/components/common/Toast.vue';
 import RightWing from '@/components/layout/RightWing.vue';
 import ExternalReaderSlotBoundary from '@/components/theme/ExternalReaderSlotBoundary.vue';
 import { useHeadings } from '@/composables/useHeadings';

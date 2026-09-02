@@ -39,9 +39,10 @@ describe('openExternalUrl', () => {
 
     expect(shellOpen).toHaveBeenCalledWith('https://www.example.com');
     expect(browserOpen).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
   });
 
-  it('opens a new browser tab on the web', async () => {
+  it('opens a new browser tab on the web without misreading the noopener null return', async () => {
     isTauri.mockReturnValue(false);
 
     await openExternalUrl('https://example.com');
@@ -52,42 +53,31 @@ describe('openExternalUrl', () => {
       'noopener,noreferrer',
     );
     expect(shellOpen).not.toHaveBeenCalled();
+    // noopener 下成功也返回 null：不允许据此误报失败
+    expect(toastError).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalled();
   });
 
-  it('falls back to window.open when the shell open rejects on desktop', async () => {
+  it('reports a user-visible failure when the desktop shell open rejects', async () => {
     isTauri.mockReturnValue(true);
-    shellOpen.mockRejectedValue(new Error('not allowed'));
-    browserOpen.mockImplementation(() => ({}) as WindowProxy);
+    shellOpen.mockRejectedValue(new Error('os refused'));
 
     await openExternalUrl('https://example.com');
 
     expect(shellOpen).toHaveBeenCalledWith('https://example.com');
-    expect(browserOpen).toHaveBeenCalledWith(
-      'https://example.com',
-      '_blank',
-      'noopener,noreferrer',
-    );
+    expect(browserOpen).not.toHaveBeenCalled();
     expect(consoleError).toHaveBeenCalled();
-    expect(toastError).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+    expect(toastError).toHaveBeenCalledWith(expect.stringContaining('https://example.com'));
   });
 
-  it('reports a user-visible failure when desktop shell and window.open both fail', async () => {
+  it('does not throw and stays silent when the desktop shell resolves', async () => {
     isTauri.mockReturnValue(true);
-    shellOpen.mockRejectedValue(new Error('os refused'));
+    shellOpen.mockResolvedValue(undefined);
 
-    const settled = await openExternalUrl('https://example.com');
+    await expect(openExternalUrl('mailto:?subject=hi')).resolves.toBeUndefined();
 
-    expect(settled).toBeUndefined();
-    expect(consoleError).toHaveBeenCalled();
-    await vi.waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
-  });
-
-  it('reports a failure when the web runtime blocks window.open', async () => {
-    isTauri.mockReturnValue(false);
-
-    await openExternalUrl('https://example.com');
-
-    expect(consoleError).toHaveBeenCalled();
-    await vi.waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+    expect(shellOpen).toHaveBeenCalledWith('mailto:?subject=hi');
+    expect(toastError).not.toHaveBeenCalled();
   });
 });
