@@ -6,24 +6,24 @@ import type { SiteContent } from './types';
  */
 export const fr: SiteContent = {
   meta: {
-    title: "JotLuck — Écrire en paix · Notes Markdown, local d'abord",
+    title: 'JotLuck — Application de notes Markdown gratuite et open source · Écrire en paix',
     description:
-      "Un outil de notes Markdown léger, local d'abord, utilisable hors ligne. Chaque note est un fichier texte brut ; chaque dossier est un carnet.",
+      'JotLuck, application de notes Markdown gratuite et open source, hors ligne. Notes en texte brut, liens Wiki, recherche plein texte — sans compte, votre base de connaissances reste dans votre dossier.',
     pageTitles: {
-      download: 'Téléchargement · JotLuck — Notes Markdown locales (Windows)',
-      themes: "Thèmes · JotLuck — Notes Markdown, local d'abord",
-      studio: "Studio · JotLuck — Notes Markdown, local d'abord",
-      privacy: "Confidentialité · JotLuck — Notes Markdown, local d'abord",
+      download: 'Téléchargement · JotLuck — Notes Markdown gratuites et open source (Windows)',
+      themes: 'Thèmes · JotLuck — Notes Markdown gratuites et open source',
+      studio: 'Studio · JotLuck — Notes Markdown gratuites et open source',
+      privacy: 'Confidentialité · JotLuck — Notes Markdown gratuites et open source',
     },
     pageDescriptions: {
       download:
-        'Télécharger JotLuck Windows x64 : Preview disponible — non signée, vérifiez le SHA-256. Un outil de notes Markdown — chaque note est un fichier texte brut.',
+        'Téléchargez JotLuck Windows x64 : notes Markdown gratuites et open source, hors ligne, Preview publiée. Chaque note reste un fichier texte dans votre dossier.',
       themes:
-        "Les thèmes de JotLuck — Paper, Halo Canvas et Lumen Field. Chaque thème remodèle l'espace de travail, du papier et de l'encre à la disposition des fenêtres.",
+        "Thèmes de JotLuck, notes Markdown gratuites et open source : Paper, Halo Canvas, Lumen Field — chacun remodèle l'espace de travail, du papier aux fenêtres.",
       studio:
-        "LeankomStudio aide les idées à traverser les genres et à trouver la forme qui leur convient. JotLuck, l'outil de notes Markdown local, est notre première page.",
+        'LeankomStudio aide les idées à traverser les genres. JotLuck, notre application de notes Markdown open source, est la première page que nous déplions.',
       privacy:
-        'JotLuck — vie privée : notes en fichiers texte dans votre dossier ; app 100 % hors ligne — pas de compte pour écrire, pas de télémétrie, ni cookies ni analyse.',
+        'Vie privée : JotLuck, notes Markdown open source, 100 % hors ligne. Notes en fichiers texte, dans votre dossier — sans compte, sans télémétrie, ni cookies.',
     },
   },
   localeName: 'Français',
@@ -32,11 +32,10 @@ export const fr: SiteContent = {
     langSelectorLabel: 'Choisir la langue',
   },
   hero: {
-    eyebrow: "Notes Markdown, local d'abord",
+    eyebrow: "Gratuit et open source · Notes Markdown, local d'abord · Hors ligne",
     lines: ['Écrire devait être léger.'],
     emphasis: 'Commencez par un fichier.',
-    subline:
-      "Laissez l'écosystème logiciel au bord de la page. Tout ce que vous écrivez reste libre de voyager.",
+    subline: 'Gratuit et open source. Tout ce que vous écrivez reste à vous — et libre de voyager.',
     action: 'Télécharger la Preview',
     dateLine: 'Preview disponible',
   },
@@ -44,13 +43,13 @@ export const fr: SiteContent = {
     {
       id: 'file',
       title: "Tout part d'un fichier.",
-      body: "Pas de compte, pas de nouveau réceptacle pour vos mots. Ouvrez-le, et continuez d'écrire.",
-      rail: ['Fichiers locaux', '.md', '.mdx', '.txt'],
+      body: "Pas de compte, utilisable hors ligne, pas de nouveau réceptacle pour vos mots. Ouvrez-le, et continuez d'écrire.",
+      rail: ['Hors ligne', 'Fichiers locaux', '.md', '.mdx', '.txt'],
     },
     {
       id: 'link',
       title: 'Laissez les notes se relier.',
-      body: "Passez d'une phrase à une autre note, et voyez quelles idées pointent vers l'endroit où vous êtes.",
+      body: "Passez d'une phrase à une autre note, et voyez quelles idées pointent vers l'endroit où vous êtes — une base de connaissances qui pousse dans votre propre dossier.",
       rail: ['Liens Wiki', 'Rétroliens', 'Recherche plein texte', 'Étiquettes', 'Plan'],
     },
     {
@@ -66,10 +65,14 @@ export const fr: SiteContent = {
     {
       id: 'export',
       title: 'Quand vous posez le stylo, la route continue.',
-      body: "Votre travail est libre d'aller partout.",
-      rail: ['PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'HTML'],
+      body: "Exportez en PDF, Word, Excel et plus encore — le format suit votre lecteur. Votre travail est libre d'aller partout.",
+      rail: ['Exporter', 'PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'HTML'],
     },
   ],
+  film: {
+    title: 'Film de présentation',
+    ariaLabel: 'Film de présentation de JotLuck, 60 secondes',
+  },
   multilingual: {
     eyebrow: 'Cinq langues',
     title: 'JotLuck parle désormais cinq langues.',

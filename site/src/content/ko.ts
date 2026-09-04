@@ -6,24 +6,24 @@ import type { SiteContent } from './types';
  */
 export const ko: SiteContent = {
   meta: {
-    title: 'JotLuck — 마음 편히 적어내려가다 · 로컬 우선 Markdown 노트',
+    title: 'JotLuck — 무료 · 오픈 소스 Markdown 노트 앱 · 마음 편히 적어내려가다',
     description:
-      '가볍고, 로컬 우선이며, 오프라인에서도 쓸 수 있는 Markdown 노트 도구입니다. 모든 노트는 순수 텍스트 파일이고, 폴더가 곧 노트북입니다.',
+      'JotLuck은 무료 오픈 소스 Markdown 노트 앱입니다. 오프라인에서 동작하며, 모든 노트는 순수 텍스트——Wiki 링크와 전체 텍스트 검색을 지원하고, 계정도 필요 없습니다. 지식 베이스는 당신의 폴더 안에 있습니다.',
     pageTitles: {
-      download: '다운로드 · JotLuck — 로컬 우선 Markdown 노트（Windows）',
-      themes: '테마 · JotLuck — 로컬 우선 Markdown 노트',
-      studio: '스튜디오 · JotLuck — 로컬 우선 Markdown 노트',
-      privacy: '개인정보 · JotLuck — 로컬 우선 Markdown 노트',
+      download: '다운로드 · JotLuck — 무료 오픈 소스 Markdown 노트 앱（Windows）',
+      themes: '테마 · JotLuck — 무료 오픈 소스 Markdown 노트 앱',
+      studio: '스튜디오 · JotLuck — 무료 오픈 소스 Markdown 노트 앱',
+      privacy: '개인정보 · JotLuck — 무료 오픈 소스 Markdown 노트 앱',
     },
     pageDescriptions: {
       download:
-        'Windows x64용 JotLuck을 다운로드하세요: Preview 버전 공개 중(서명 전이므로 설치 전 SHA-256을 확인하세요). 가볍고 로컬 우선이며 오프라인에서도 쓸 수 있는 Markdown 노트 도구로, 모든 노트는 순수 텍스트 파일입니다.',
+        'Windows x64용 JotLuck을 다운로드하세요: 무료 오픈 소스로 오프라인에서도 쓸 수 있는 Markdown 노트 앱, Preview 공개 중. 모든 노트는 순수 텍스트 파일로 당신의 폴더에 저장됩니다.',
       themes:
-        'JotLuck 작업 공간 테마——Paper, Halo Canvas, Lumen Field 세 가지. 테마는 작업 공간 자체를 다시 만듭니다——종이와 먹의 색부터 창 레이아웃까지.',
+        '무료 오픈 소스 Markdown 노트 앱 JotLuck의 테마——Paper, Halo Canvas, Lumen Field 세 가지. 테마는 작업 공간 자체를 다시 만듭니다——종이와 먹의 색부터 창 레이아웃까지.',
       studio:
-        'LeankomStudio는 鸰湖科技의 제품 스튜디오입니다. 아이디어가 범주를 넘어, 가장 잘 어울리는 형태를 만나게 하세요——JotLuck은 우리가 바깥으로 펼쳐 낸 첫 번째 페이지입니다.',
+        'LeankomStudio는 鸰湖科技의 제품 스튜디오입니다. 무료 오픈 소스 Markdown 노트 앱 JotLuck은 우리가 바깥으로 펼쳐 낸 첫 번째 페이지——아이디어가 범주를 넘어, 가장 잘 어울리는 형태를 만나게 하세요.',
       privacy:
-        'JotLuck 개인정보 안내: 노트는 순수 텍스트 파일로 당신의 폴더에 저장됩니다. 앱은 완전히 오프라인으로 동작하며——글을 쓰는 데 계정이 필요 없고, 원격 측정도 없습니다. 이 사이트는 정적 사이트이며, Cookie나 분석 추적을 사용하지 않습니다.',
+        'JotLuck 개인정보 안내: 이 오픈 소스 Markdown 노트 앱은 완전히 오프라인으로 동작하며, 노트는 순수 텍스트 파일로 당신의 폴더에 저장됩니다. 계정 불필요, 원격 측정 없음. 이 사이트는 정적 사이트로 Cookie를 사용하지 않습니다.',
     },
   },
   localeName: '한국어',
@@ -32,11 +32,11 @@ export const ko: SiteContent = {
     langSelectorLabel: '언어 선택',
   },
   hero: {
-    eyebrow: '로컬 우선 Markdown 노트',
+    eyebrow: '무료 · 오픈 소스 · 로컬 우선 Markdown 노트 앱 · 오프라인 지원',
     lines: ['글쓰기는 본래', '가벼워야 했다.'],
     emphasis: '파일 하나에서 시작합니다.',
     subline:
-      '소프트웨어 생태계는 페이지 바깥에 두세요. 당신이 쓴 모든 것은 어디든 자유롭게 떠날 수 있습니다.',
+      '무료이자 오픈 소스입니다. 당신이 쓴 모든 것은 당신의 것——어디든 자유롭게 떠날 수 있습니다.',
     action: 'Preview 다운로드',
     dateLine: 'Preview 공개 중',
   },
@@ -44,13 +44,13 @@ export const ko: SiteContent = {
     {
       id: 'file',
       title: '모든 것은 파일에서 시작됩니다.',
-      body: '계정이 필요 없고, 글을 담을 새로운 그릇도 없습니다. 열고, 계속 쓰면 됩니다.',
-      rail: ['로컬 파일', '.md', '.mdx', '.txt'],
+      body: '계정도 필요 없고, 오프라인에서도 쓸 수 있으며, 글을 담을 새로운 그릇도 없습니다. 열고, 계속 쓰면 됩니다.',
+      rail: ['오프라인', '로컬 파일', '.md', '.mdx', '.txt'],
     },
     {
       id: 'link',
       title: '노트를 서로 잇습니다.',
-      body: '한 문장에서 다른 노트로 옮겨 가며, 어떤 생각이 지금 서 있는 곳을 다시 가리키는지 볼 수 있습니다.',
+      body: '한 문장에서 다른 노트로 옮겨 가며, 어떤 생각이 지금 서 있는 곳을 다시 가리키는지 볼 수 있습니다——지식 베이스는 폴더 안에서 자연스럽게 자랍니다.',
       rail: ['Wiki 링크', '백링크', '전체 텍스트 검색', '태그', '개요'],
     },
     {
@@ -62,10 +62,14 @@ export const ko: SiteContent = {
     {
       id: 'export',
       title: '펜을 내려놓아도, 길은 계속됩니다.',
-      body: '당신의 작업물은 어디든 자유롭게 갈 수 있습니다.',
-      rail: ['PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'HTML'],
+      body: '내보내기는 PDF, Word, Excel 등 읽는 이에게 맞는 형식으로. 당신의 작업물은 어디든 자유롭게 갈 수 있습니다.',
+      rail: ['내보내기', 'PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'HTML'],
     },
   ],
+  film: {
+    title: '홍보 필름',
+    ariaLabel: 'JotLuck 홍보 필름, 60초',
+  },
   multilingual: {
     eyebrow: '다섯 가지 언어',
     title: 'JotLuck은 이제 다섯 가지 언어로 말합니다.',

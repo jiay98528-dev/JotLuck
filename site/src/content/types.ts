@@ -37,6 +37,12 @@ export interface NarrativeAct {
   rail: string[];
 }
 
+/** 首页宣传片区块：zh 用中文版影片，其余语言回退英文版（资源按 locale 在组件内路由） */
+export interface FilmContent {
+  title: string;
+  ariaLabel: string;
+}
+
 export interface MultilingualContent {
   eyebrow: string;
   title: string;
@@ -169,6 +175,7 @@ export interface SiteContent {
   hero: HeroContent;
   narrative: NarrativeAct[];
   multilingual: MultilingualContent;
+  film: FilmContent;
   download: DownloadContent;
   themes: ThemesContent;
   themePreview: ThemePreviewContent;

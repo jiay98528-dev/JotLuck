@@ -6,24 +6,24 @@ import type { SiteContent } from './types';
  */
 export const en: SiteContent = {
   meta: {
-    title: 'JotLuck — Set words down · Local-first Markdown notes',
+    title: 'JotLuck — Free, open-source Markdown notes app · Local-first, set words down',
     description:
-      'A lightweight, local-first, offline-capable Markdown note tool. Every note is a plain-text file; every folder is a notebook.',
+      'JotLuck is a free, open-source Markdown notes app that works offline — every note a plain-text file, with wiki links and full-text search. No account; your knowledge base stays in your own folder.',
     pageTitles: {
-      download: 'Download · JotLuck — Local-first Markdown notes for Windows',
-      themes: 'Themes · JotLuck — Local-first Markdown notes',
-      studio: 'Studio · JotLuck — Local-first Markdown notes',
-      privacy: 'Privacy · JotLuck — Local-first Markdown notes',
+      download: 'Download · JotLuck — Free, open-source Markdown notes for Windows',
+      themes: 'Themes · JotLuck — Free, open-source Markdown notes',
+      studio: 'Studio · JotLuck — Free, open-source Markdown notes',
+      privacy: 'Privacy · JotLuck — Free, open-source Markdown notes',
     },
     pageDescriptions: {
       download:
-        'Download JotLuck for Windows x64: preview live now — unsigned, verify the SHA-256. A lightweight local-first Markdown note tool; every note a plain-text file.',
+        'Download JotLuck for Windows x64 — a free, open-source Markdown notes app, offline, Preview live now. Every note is a plain-text file in your own folder.',
       themes:
-        'JotLuck workspace themes — Paper, Halo Canvas and Lumen Field. Each theme reshapes the workspace itself, from paper and ink to window layout.',
+        'Themes for JotLuck, a free open-source Markdown notes app: Paper, Halo Canvas, Lumen Field — each reshapes the workspace, from paper and ink to window layout.',
       studio:
-        'LeankomStudio helps ideas cross genres and find the shape that fits them best. JotLuck, a local-first Markdown note tool, is the first page we unfold outward.',
+        'LeankomStudio helps ideas cross genres and find the shape that fits them. JotLuck, our open-source Markdown notes app, is the first page we unfold outward.',
       privacy:
-        'JotLuck privacy: notes stay plain-text files in your folder; fully offline — no account for writing, no telemetry, no cookies or analytics.',
+        'Privacy: JotLuck, an open-source Markdown notes app, runs fully offline — notes stay plain-text in your folder. No account, no telemetry, no cookies.',
     },
   },
   localeName: 'English',
@@ -32,11 +32,11 @@ export const en: SiteContent = {
     langSelectorLabel: 'Choose language',
   },
   hero: {
-    eyebrow: 'Local-first Markdown notes',
+    eyebrow: 'Free & open-source · Local-first Markdown notes app · Offline',
     lines: ['Writing was', 'meant to feel', 'light.'],
     emphasis: 'Begin with a file.',
     subline:
-      'Leave the software ecosystem at the edge of the page. Everything you write remains free to travel.',
+      'Free and open-source. Everything you write remains yours to keep — and free to travel.',
     action: 'Download Preview',
     dateLine: 'Preview live now',
   },
@@ -44,13 +44,13 @@ export const en: SiteContent = {
     {
       id: 'file',
       title: 'A file is where it begins.',
-      body: 'No account, and no new container for your words. Open it and keep writing.',
-      rail: ['Local files', '.md', '.mdx', '.txt'],
+      body: 'No account, works offline, and no new container for your words. Open it and keep writing.',
+      rail: ['Offline', 'Local files', '.md', '.mdx', '.txt'],
     },
     {
       id: 'link',
       title: 'Let notes connect.',
-      body: 'Move from one sentence into another note, and see which ideas point back to where you are.',
+      body: 'Move from one sentence into another note, and see which ideas point back to where you are — a knowledge base that grows in your own folder.',
       rail: ['Wiki links', 'Backlinks', 'Full-text search', 'Tags', 'Outline'],
     },
     {
@@ -62,10 +62,14 @@ export const en: SiteContent = {
     {
       id: 'export',
       title: 'When you set down the pen, the road goes on.',
-      body: 'Your work is free to go anywhere.',
-      rail: ['PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'HTML'],
+      body: 'Export to PDF, Word, Excel and more — whatever format your reader needs. Your work is free to go anywhere.',
+      rail: ['Export', 'PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'HTML'],
     },
   ],
+  film: {
+    title: 'Promo film',
+    ariaLabel: 'JotLuck promo film, 60 seconds',
+  },
   multilingual: {
     eyebrow: 'Five languages',
     title: 'JotLuck now speaks five languages.',

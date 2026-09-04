@@ -6,24 +6,24 @@ import type { SiteContent } from './types';
  */
 export const zh: SiteContent = {
   meta: {
-    title: 'JotLuck — 落字为安 · 本地优先 Markdown 笔记',
+    title: 'JotLuck — 免费开源的 Markdown 笔记软件 · 本地优先，落字为安',
     description:
-      '一款轻量、本地优先、离线可用的 Markdown 笔记工具。每一条笔记都是纯文本文件，文件夹即笔记本。',
+      'JotLuck 是一款免费开源的 Markdown 笔记软件：离线可用，每条笔记都是纯文本文件，支持双向链接与全文搜索——无需账号，知识库就在你自己的文件夹里。',
     pageTitles: {
-      download: '下载 · JotLuck — 本地优先 Markdown 笔记（Windows）',
-      themes: '主题 · JotLuck — 本地优先 Markdown 笔记',
-      studio: '工作室 · JotLuck — 本地优先 Markdown 笔记',
-      privacy: '隐私 · JotLuck — 本地优先 Markdown 笔记',
+      download: '下载 · JotLuck — 免费开源的 Markdown 笔记软件（Windows）',
+      themes: '主题 · JotLuck — 免费开源的 Markdown 笔记软件',
+      studio: '工作室 · JotLuck — 免费开源的 Markdown 笔记软件',
+      privacy: '隐私 · JotLuck — 免费开源的 Markdown 笔记软件',
     },
     pageDescriptions: {
       download:
-        '下载 JotLuck Windows x64 版：Preview 预览版已上架，未签名，安装前请核对 SHA-256。本地优先、离线可用的 Markdown 笔记工具，每条笔记都是纯文本文件。',
+        '下载 JotLuck Windows x64 版：免费开源、离线可用的 Markdown 笔记软件，Preview 已上架。每条笔记都是纯文本文件，保存在你自己的文件夹里。',
       themes:
-        'JotLuck 工作区主题：Paper 纸、Halo Canvas、Lumen Field 三套主题——主题重新塑造工作区本身，从纸墨颜色到窗口布局。',
+        'JotLuck 免费开源的 Markdown 笔记软件提供三套工作区主题：Paper 纸、Halo Canvas、Lumen Field——主题重新塑造工作区本身，从纸墨颜色到窗口布局。',
       studio:
-        'LeankomStudio 是鸰湖科技的产品工作室。让想法越过类型，找到最适合它的形状——JotLuck 本地 Markdown 笔记是我们向外展开的第一页。',
+        'LeankomStudio 是鸰湖科技的产品工作室，免费开源的 Markdown 笔记软件 JotLuck 是我们向外展开的第一页——让想法越过类型，找到最适合它的形状。',
       privacy:
-        'JotLuck 隐私说明：笔记以纯文本文件保存在你自己的文件夹中，应用完全离线运行——写作无需账号、无遥测。本站为静态网站，不使用 Cookie 与分析追踪。',
+        'JotLuck 隐私说明：这款开源 Markdown 笔记软件完全离线运行，笔记以纯文本文件保存在你自己的文件夹中——写作无需账号、无遥测。本站为静态网站，不使用 Cookie 与分析追踪。',
     },
   },
   localeName: '中文',
@@ -32,11 +32,11 @@ export const zh: SiteContent = {
     langSelectorLabel: '选择语言',
   },
   hero: {
-    eyebrow: '本地优先的 Markdown 笔记工具',
+    eyebrow: '免费开源 · 本地优先的 Markdown 笔记软件 · 离线可用',
     lines: ['写作，', '本应轻盈。'],
     emphasis: '把生态留在纸页之外。',
     emphasisHighlight: '生态',
-    subline: '从一个文件开始，沿着思绪写下去。写下的一切，依然可以随你远行。',
+    subline: '它免费开源，从一个文件开始：沿着思绪写下去，写下的一切，依然可以随你远行。',
     action: '下载 Preview',
     dateLine: 'Preview 已上架',
   },
@@ -44,13 +44,13 @@ export const zh: SiteContent = {
     {
       id: 'file',
       title: '一份文件，就是开始。',
-      body: '无需账户，也无需把文字搬进新的容器。打开它，写下去。',
-      rail: ['本地文件', '.md', '.mdx', '.txt'],
+      body: '无需账户，离线可写，也不用把文字搬进新的容器。打开它，写下去。',
+      rail: ['离线可用', '本地文件', '.md', '.mdx', '.txt'],
     },
     {
       id: 'link',
       title: '让笔记彼此相连。',
-      body: '从一句话走进另一篇笔记，也能看见，此刻正有哪些想法，指向你所在的位置。',
+      body: '从一句话走进另一篇笔记，也能看见，此刻正有哪些想法，指向你所在的位置——知识库在文件夹里自然生长。',
       rail: ['双向链接', '反向查看', '全文搜索', '标签系统', '大纲导航'],
     },
     {
@@ -62,10 +62,14 @@ export const zh: SiteContent = {
     {
       id: 'export',
       title: '写完以后，路还很长。',
-      body: '作品不必停在这里。',
-      rail: ['PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'HTML'],
+      body: '写完即可导出为 PDF、Word、Excel 等格式，格式随收件人而定——作品不必停在这里。',
+      rail: ['导出', 'PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'HTML'],
     },
   ],
+  film: {
+    title: '宣传视频',
+    ariaLabel: 'JotLuck 宣传视频，时长 60 秒',
+  },
   multilingual: {
     eyebrow: '五语适配',
     title: 'JotLuck 现在说五种语言。',

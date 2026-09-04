@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, computed } from 'vue';
 import { useLocale } from '../composables/useLocale';
 import { usePageHead } from '../composables/usePageHead';
 import HeroPressStage from '../components/HeroPressStage.vue';
@@ -7,6 +7,10 @@ import NarrativeFigure from '../components/NarrativeFigure.vue';
 
 const { locale, content } = useLocale();
 usePageHead('home');
+
+/** 宣传片资源：zh 页用中文版影片与海报，其余语言回退英文版 */
+const filmSrc = computed(() => `/assets/film/promo-60s-${locale.value === 'zh' ? 'zh' : 'en'}.mp4`);
+const filmPoster = computed(() => `/assets/film/poster-${locale.value === 'zh' ? 'zh' : 'en'}.jpg`);
 
 /** 叙事段滚动入场：IntersectionObserver 一次性加 .is-in；不支持则直接终态 */
 const actsEl = ref<HTMLOListElement | null>(null);
@@ -50,6 +54,20 @@ onMounted(() => {
           <NarrativeFigure :id="act.id" />
         </li>
       </ol>
+    </section>
+
+    <section class="film page-flow" aria-labelledby="film-title">
+      <h2 id="film-title">{{ content.film.title }}</h2>
+      <video
+        class="film-video paper-sheet tex-2"
+        controls
+        muted
+        playsinline
+        preload="none"
+        :poster="filmPoster"
+        :src="filmSrc"
+        :aria-label="content.film.ariaLabel"
+      ></video>
     </section>
 
     <section class="multilingual page-flow" aria-labelledby="ml-title">
@@ -134,6 +152,24 @@ onMounted(() => {
     margin-top: 8px;
     max-width: 200px;
   }
+}
+
+/* ---------- 宣传片：极简声明 + 影片本体，不设解释文案 ---------- */
+.film {
+  padding: 72px 0 96px;
+  border-top: 1px solid var(--ink-14);
+}
+.film h2 {
+  font-size: clamp(1.5rem, 2.5vw, 2.25rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+.film-video {
+  display: block;
+  width: min(100%, 960px);
+  margin: 36px auto 0;
+  background: var(--paper);
 }
 
 /* ---------- 五语声明：每种语言用它自己的展示字体现身 ---------- */

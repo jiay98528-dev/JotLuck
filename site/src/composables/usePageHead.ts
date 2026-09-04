@@ -10,15 +10,17 @@ import {
   LEGAL_ENTITY,
   STUDIO_NAME,
   EXTERNAL,
+  RELEASE,
 } from '../release';
 
 /** 社卡片绝对 URL（单张中英双语默认卡，五语页面共用） */
 const CARD_URL = `${SITE_URL}${SOCIAL_CARD}`;
 
 /**
- * 结构化数据（裁决 23/24）：WebSite + Organization 真实事实，实体分层——
+ * 结构化数据（裁决 23/24）：WebSite + Organization + SoftwareApplication 真实事实，实体分层——
  * Organization.name = 法律主体、alternateName = 工作室品牌、JotLuck 为产品品牌，
- * WebSite 经 publisher 关联 Organization；SoftwareApplication 待正式发布。
+ * WebSite 经 publisher 关联 Organization；SoftwareApplication 为已上架 Preview 的产品节点
+ * （免费 + MIT 开源口径经用户 2026-09-04 确认可对外宣称）。
  */
 export const JSON_LD = JSON.stringify({
   '@context': 'https://schema.org',
@@ -39,6 +41,27 @@ export const JSON_LD = JSON.stringify({
       url: SITE_URL,
       logo: `${SITE_URL}/assets/brand/jotluck-icon.png`,
       sameAs: [EXTERNAL.githubRepo],
+    },
+    {
+      '@type': 'SoftwareApplication',
+      '@id': `${SITE_URL}/#software`,
+      name: 'JotLuck',
+      applicationCategory: 'BusinessApplication',
+      operatingSystem: 'Windows',
+      softwareVersion: RELEASE.preview.version,
+      url: SITE_URL,
+      description:
+        'Free, open-source Markdown notes app — local-first and offline; every note is a plain-text file.',
+      offers: {
+        '@type': 'Offer',
+        price: '0',
+        priceCurrency: 'USD',
+        url: `${SITE_URL}/en/download`,
+      },
+      license: 'https://opensource.org/licenses/MIT',
+      keywords:
+        'Markdown notes, open source, local-first, offline notes, plain text, wiki links, backlinks, knowledge base, Windows',
+      publisher: { '@id': `${SITE_URL}/#organization` },
     },
   ],
 });

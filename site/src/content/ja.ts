@@ -6,24 +6,24 @@ import type { SiteContent } from './types';
  */
 export const ja: SiteContent = {
   meta: {
-    title: 'JotLuck — 書き留める、安心して · ローカルファーストの Markdown ノート',
+    title: 'JotLuck — 無料・オープンソースの Markdown ノートアプリ · 書き留める、安心して',
     description:
-      '軽量で、ローカルファースト、オフラインでも使える Markdown ノートツール。すべてのノートはプレーンテキストファイルであり、フォルダはそのままノートブックです。',
+      'JotLuck は、無料でオープンソースの Markdown ノートアプリです。オフラインで動作し、ノートはすべてプレーンテキスト——Wikiリンクと全文検索に対応し、アカウント登録も不要。ナレッジベースは、あなた自身のフォルダの中に。',
     pageTitles: {
-      download: 'ダウンロード · JotLuck — ローカルファーストの Markdown ノート（Windows）',
-      themes: 'テーマ · JotLuck — ローカルファーストの Markdown ノート',
-      studio: 'スタジオ · JotLuck — ローカルファーストの Markdown ノート',
-      privacy: 'プライバシー · JotLuck — ローカルファーストの Markdown ノート',
+      download: 'ダウンロード · JotLuck — 無料・オープンソースの Markdown ノートアプリ（Windows）',
+      themes: 'テーマ · JotLuck — 無料・オープンソースの Markdown ノートアプリ',
+      studio: 'スタジオ · JotLuck — 無料・オープンソースの Markdown ノートアプリ',
+      privacy: 'プライバシー · JotLuck — 無料・オープンソースの Markdown ノートアプリ',
     },
     pageDescriptions: {
       download:
-        'JotLuck Windows x64 版をダウンロード：Preview 版公開中（未署名。SHA-256 を確認してからインストール）。軽量でローカルファースト、オフラインでも使える Markdown ノートツールで、すべてのノートはプレーンテキストファイルです。',
+        'JotLuck Windows x64 版をダウンロード：無料・オープンソースでオフラインでも使える Markdown ノートアプリ、Preview 公開中。ノートはすべてプレーンテキストで、あなたのフォルダの中に保存されます。',
       themes:
-        'JotLuck のワークスペーステーマ——Paper・Halo Canvas・Lumen Field の 3 種類。テーマはワークスペースそのものを再形成します——紙と墨の色から、ウィンドウのレイアウトまで。',
+        '無料・オープンソースの Markdown ノートアプリ JotLuck のテーマ——Paper・Halo Canvas・Lumen Field の 3 種類。テーマはワークスペースそのものを再形成します——紙と墨の色から、ウィンドウのレイアウトまで。',
       studio:
-        'LeankomStudio は鸰湖科技のプロダクトスタジオです。アイデアがカテゴリを越え、いちばん合う形に出会うように——JotLuck は私たちが外に向かって開いた最初のページです。',
+        'LeankomStudio は鸰湖科技のプロダクトスタジオです。無料・オープンソースの Markdown ノートアプリ JotLuck は、私たちが外に向かって開いた最初のページ——アイデアがカテゴリを越え、いちばん合う形に出会えるように。',
       privacy:
-        'JotLuck のプライバシーについて：ノートはプレーンテキストファイルとしてあなたのフォルダーに保存されます。アプリは完全にオフラインで動作——書くのにアカウントは不要で、テレメトリもありません。このサイトは静的サイトで、Cookie も分析トラッキングも使いません。',
+        'JotLuck のプライバシーについて：このオープンソースの Markdown ノートアプリは完全にオフラインで動作し、ノートはプレーンテキストとしてあなたのフォルダーに保存されます。アカウント不要、テレメトリなし。このサイトは静的サイトで、Cookie も使いません。',
     },
   },
   localeName: '日本語',
@@ -32,10 +32,10 @@ export const ja: SiteContent = {
     langSelectorLabel: '言語を選ぶ',
   },
   hero: {
-    eyebrow: 'ローカルファーストの Markdown ノート',
+    eyebrow: '無料・オープンソース · ローカルファーストの Markdown ノートアプリ · オフライン対応',
     lines: ['書くことは、', 'もともと', '軽やかなもの。'],
     emphasis: 'まずは、ひとつのファイルから。',
-    subline: 'ソフトウェアの生態系は、紙面の外に置いておく。書いたものはすべて、自由に旅立てる。',
+    subline: '無料でオープンソース。書いたものはすべて、あなたのもの——そして、自由に旅立てる。',
     action: 'Preview をダウンロード',
     dateLine: 'Preview 公開中',
   },
@@ -43,13 +43,13 @@ export const ja: SiteContent = {
     {
       id: 'file',
       title: 'すべては、ファイルから始まる。',
-      body: 'アカウントも、ことばのための新しい入れ物もいりません。開いて、書き続けるだけ。',
-      rail: ['ローカルファイル', '.md', '.mdx', '.txt'],
+      body: 'アカウントも不要、オフラインで書けます。ことばのための新しい入れ物もいりません。開いて、書き続けるだけ。',
+      rail: ['オフライン', 'ローカルファイル', '.md', '.mdx', '.txt'],
     },
     {
       id: 'link',
       title: 'ノートを、つなげよう。',
-      body: '一文から別のノートへ渡り歩き、どの考えが、いま自分がいる場所へ指し示しているかが見える。',
+      body: '一文から別のノートへ渡り歩き、どの考えが、いま自分がいる場所へ指し示しているかが見える——ナレッジベースは、フォルダの中で自然に育っていく。',
       rail: ['Wikiリンク', 'バックリンク', '全文検索', 'タグ', 'アウトライン'],
     },
     {
@@ -61,10 +61,14 @@ export const ja: SiteContent = {
     {
       id: 'export',
       title: '筆を置いたあとも、道は続く。',
-      body: '作品は、どこへでも自由に旅立てる。',
-      rail: ['PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'HTML'],
+      body: '書き出しは PDF・Word・Excel など、読み手に合わせた形式で。作品は、どこへでも自由に旅立てる。',
+      rail: ['書き出し', 'PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'HTML'],
     },
   ],
+  film: {
+    title: 'プロモーションフィルム',
+    ariaLabel: 'JotLuck プロモーションフィルム、60秒',
+  },
   multilingual: {
     eyebrow: '五つの言語',
     title: 'JotLuck は五つの言語を話します。',
