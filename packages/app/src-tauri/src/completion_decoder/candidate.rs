@@ -101,7 +101,10 @@ pub(super) fn validate_manifest(
         || (!v25_joint_runtime && !valid_training_data_policy(manifest))
         || (!v25_joint_runtime
             && manifest.measured_peak_memory_bytes > PEAK_MEMORY_LIMIT_BYTES as u64)
-        || (routed_contract && !v25_joint_runtime && manifest.release_eligible)
+        || (routed_contract
+            && !v25_joint_runtime
+            && !is_v25_one_unit_runtime(manifest)
+            && manifest.release_eligible)
     {
         return Err("decoder manifest contract is invalid".to_string());
     }
@@ -138,12 +141,21 @@ fn valid_training_data_policy(manifest: &DecoderManifest) -> bool {
         return manifest.distribution_policy.as_deref() == Some("local-research-only");
     }
     if v25_one_unit_evaluation {
-        return manifest.distribution_policy.as_deref() == Some("local-research-only")
-            && manifest.lifecycle == "trained"
+        let evaluation_release = manifest.lifecycle == "trained"
             && manifest.evaluation_only
             && manifest.runtime_eligible
             && !manifest.release_eligible
             && manifest.release_evidence.is_none();
+        // Integration release: shipped by an explicit integration decision
+        // instead of the publisher pipeline; no release evidence exists and
+        // none may be fabricated.
+        let integration_release = manifest.lifecycle == "integrationRelease"
+            && !manifest.evaluation_only
+            && manifest.runtime_eligible
+            && manifest.release_eligible
+            && manifest.release_evidence.is_none();
+        return manifest.distribution_policy.as_deref() == Some("local-research-only")
+            && (evaluation_release || integration_release);
     }
     manifest.distribution_policy.as_deref() == Some("local-research-only")
         && manifest.lifecycle == "trained"
@@ -233,6 +245,12 @@ pub(super) fn valid_manifest_lifecycle(manifest: &DecoderManifest) -> bool {
                         && valid_sha256(&evidence.windows_gui_evidence_sha256)
                         && valid_sha256(&evidence.baseline_sha256)
                 })
+        }
+        "integrationRelease" => {
+            !manifest.evaluation_only
+                && manifest.runtime_eligible
+                && manifest.release_eligible
+                && manifest.release_evidence.is_none()
         }
         _ => false,
     }

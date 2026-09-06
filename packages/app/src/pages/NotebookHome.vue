@@ -888,7 +888,10 @@ import {
   type CompletionTrainingMeta,
 } from '@/services/CompletionTrainingService';
 import { MarkdownPredictor } from '@/services/MarkdownPredictor';
-import { createFlaggedPublicFreeDecoderEngine } from '@/services/completion/public-free-decoder-factory';
+import {
+  createCanonicalPublicFreeDecoderEngine,
+  createFlaggedPublicFreeDecoderEngine,
+} from '@/services/completion/public-free-decoder-factory';
 import {
   applyParagraphPreset,
   clearMarkdownFormatting,
@@ -1082,6 +1085,7 @@ let completionTrainer: CompletionTrainingService | null = null;
 let unlistenWindowClose: (() => void) | null = null;
 let componentUnmounted = false;
 let flaggedPublicDecoderSetup: Promise<void> | null = null;
+let canonicalPublicDecoderSetup: Promise<void> | null = null;
 let externalSessionGeneration = 0;
 let allowWindowClose = false;
 let unwatchNotebook: UnwatchFn | null = null;
@@ -4975,6 +4979,21 @@ function setupFlaggedPublicDecoderOnce(): Promise<void> {
   return flaggedPublicDecoderSetup;
 }
 
+function setupCanonicalPublicDecoderOnce(): Promise<void> {
+  canonicalPublicDecoderSetup ??= createCanonicalPublicFreeDecoderEngine().then(async (engine) => {
+    if (engine) {
+      if (componentUnmounted) {
+        await engine.dispose();
+        return;
+      }
+      await completionPredictor.installPublicEngineForEvaluation(engine);
+      return;
+    }
+    await setupFlaggedPublicDecoderOnce();
+  });
+  return canonicalPublicDecoderSetup;
+}
+
 function scheduleBackgroundTraining(): void {
   if (!completionSettings.value.backgroundTraining || isExternalSession.value) return;
   if (backgroundTrainingTimer) clearTimeout(backgroundTrainingTimer);
@@ -5287,9 +5306,11 @@ onMounted(async () => {
 
   await nextTick();
   connectPredictor();
-  // The evaluation engine is constructed at most once per workspace page.
-  // Its factory rejects production modes and missing/ineligible manifests.
-  void setupFlaggedPublicDecoderOnce();
+  // The canonical production engine (V2.5 one-unit, integrationRelease) is
+  // preferred; when its manifest is absent the workspace falls back to the
+  // dev/E2E evaluation engine, then to no public engine at all. Both factories
+  // are invoked at most once per workspace page.
+  void setupCanonicalPublicDecoderOnce();
   unsubscribeCompletionSettings = subscribeCompletionSettings((settings) => {
     completionSettings.value = settings;
     completionPredictor.configure(settings);

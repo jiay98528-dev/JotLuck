@@ -12,7 +12,7 @@ import {
 export const PUBLIC_FREE_DECODER_CACHE_NAME = 'jotluck-public-v2-free-decoder-v1';
 export const PUBLIC_FREE_DECODER_EXPERIMENT_FLAG = 'VITE_AUTOCOMPLETE_PUBLIC_FREE_DECODER';
 export const PUBLIC_FREE_DECODER_CANONICAL_MANIFEST_URL =
-  '/autocomplete/autocomplete-public.manifest.json';
+  '/autocomplete-v25/autocomplete-public.manifest.json';
 const MAX_MANIFEST_BYTES = 256 * 1024;
 
 export interface CreatePublicFreeDecoderEvaluationEngineOptions {

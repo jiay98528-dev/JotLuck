@@ -12,15 +12,27 @@ pub(super) fn warmup_runtime(
         .canonicalize()
         .map_err(|error| format!("unable to resolve completion decoder manifest: {error}"))?;
     let loaded = load_candidate(&manifest_path)?;
-    if loaded.manifest.evaluation_only || is_v25_joint_runtime(&loaded.manifest) {
+    let v25_joint_runtime = is_v25_joint_runtime(&loaded.manifest);
+    let v25_one_unit_runtime = is_v25_one_unit_runtime(&loaded.manifest);
+    let evaluation_branch =
+        loaded.manifest.evaluation_only
+            || v25_joint_runtime
+            || (v25_one_unit_runtime && !loaded.manifest.release_eligible);
+    if evaluation_branch {
         if !evaluation_runtime_allowed() {
             return Err("completion decoder is restricted to dev/E2E evaluation".to_string());
         }
         validate_evaluation_manifest_path(&manifest_path)?;
     } else {
         validate_canonical_manifest_path(&manifest_path)?;
+        if loaded.manifest.evaluation_only || !loaded.manifest.release_eligible {
+            return Err(
+                "canonical decoder manifest must declare release eligibility".to_string(),
+            );
+        }
     }
     if !is_v25_joint_runtime(&loaded.manifest)
+        && !is_v25_one_unit_runtime(&loaded.manifest)
         && loaded.manifest.candidate_id != request.expected_candidate_id
     {
         return Err("completion decoder candidate identity mismatch".to_string());

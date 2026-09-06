@@ -61,7 +61,7 @@ export interface PublicFreeDecoderManifest {
   route?: 'joint' | 'writing';
   candidateId: string;
   candidateArtifactSha256: string;
-  lifecycle: 'trained' | 'oraclePassed' | 'releaseEligible';
+  lifecycle: 'trained' | 'oraclePassed' | 'releaseEligible' | 'integrationRelease';
   evaluationOnly: boolean;
   runtimeEligible: boolean;
   releaseEligible: boolean;
@@ -325,14 +325,30 @@ function hasValidTrainingPolicy(
     manifest.engine === PUBLIC_V25_ONE_UNIT_WRITING_ENGINE_ID &&
     manifest.route === 'writing';
   if (v25OneUnitWritingRuntime) {
-    return (
+    const evaluationOnlyRelease =
       training.licenseAuditPassed === false &&
       manifest.lifecycle === 'trained' &&
       manifest.evaluationOnly === true &&
       manifest.runtimeEligible === true &&
       manifest.releaseEligible === false &&
-      manifest.releaseEvidence === undefined
-    );
+      manifest.releaseEvidence === undefined;
+    const canonicalRelease =
+      manifest.lifecycle === 'releaseEligible' &&
+      manifest.evaluationOnly === false &&
+      manifest.runtimeEligible === true &&
+      manifest.releaseEligible === true &&
+      typeof manifest.releaseEvidence === 'object' &&
+      manifest.releaseEvidence !== null;
+    // Integration release: shipped by an explicit integration decision instead
+    // of the publisher pipeline. No release evidence exists and none may be
+    // fabricated; the license audit remains unpassed and is reported as such.
+    const integrationRelease =
+      manifest.lifecycle === 'integrationRelease' &&
+      manifest.evaluationOnly === false &&
+      manifest.runtimeEligible === true &&
+      manifest.releaseEligible === true &&
+      manifest.releaseEvidence === undefined;
+    return evaluationOnlyRelease || canonicalRelease || integrationRelease;
   }
   return (
     training.licenseAuditPassed === false &&
@@ -368,6 +384,14 @@ function hasValidLifecycle(manifest: Record<string, unknown>): boolean {
       manifest.releaseEligible === false &&
       manifest.releaseEvidence === undefined &&
       hasPassingOraclePrecheck(manifest.oraclePrecheck)
+    );
+  }
+  if (manifest.lifecycle === 'integrationRelease') {
+    return (
+      manifest.evaluationOnly === false &&
+      manifest.runtimeEligible === true &&
+      manifest.releaseEligible === true &&
+      manifest.releaseEvidence === undefined
     );
   }
   if (

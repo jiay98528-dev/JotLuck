@@ -275,7 +275,7 @@ pub(super) fn validate_evaluation_manifest_path(path: &Path) -> Result<(), Strin
 
 pub(super) fn validate_canonical_manifest_path(path: &Path) -> Result<(), String> {
     let normalized = path.to_string_lossy().replace('\\', "/").to_lowercase();
-    if !normalized.ends_with("/autocomplete/autocomplete-public.manifest.json") {
+    if !normalized.ends_with("/autocomplete-v25/autocomplete-public.manifest.json") {
         return Err("release decoder must use the unique canonical manifest".to_string());
     }
     Ok(())
@@ -290,7 +290,7 @@ pub(super) fn resolve_requested_manifest_path(
     }
     app.path()
         .resource_dir()
-        .map(|root| root.join("autocomplete/autocomplete-public.manifest.json"))
+        .map(|root| root.join("autocomplete-v25/autocomplete-public.manifest.json"))
         .map_err(|error| format!("unable to resolve canonical decoder resources: {error}"))
 }
 
