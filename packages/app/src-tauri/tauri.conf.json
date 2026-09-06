@@ -28,7 +28,7 @@
     ],
     "resources": {
       "icons/file-icon.ico": "file-icon.ico",
-      "resources/autocomplete": "autocomplete"
+      "resources/autocomplete-v25": "autocomplete-v25"
     },
     "windows": {
       "webviewInstallMode": {
