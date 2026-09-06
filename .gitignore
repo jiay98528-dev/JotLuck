@@ -115,3 +115,18 @@ _research_assets/
 
 # WebView2 驱动（msedgedriver-tool 本地下载物，CI 亦生成于工作区根）
 msedgedriver.exe
+
+# 模型权重兜底（任何目录下的权重文件一律不入库；MIT 应用仓库不含非 MIT 资产）
+*.jlfd
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.gguf
+*.q4.decoder.bin
+
+# 会话与本地归档（训练文档/审计报告等叙述性内部记录，不入库）
+.codex-tmp/
+.zcode/
+local-archive/
