@@ -3,7 +3,11 @@ import {
   PUBLIC_ENGINE_PROTOCOL_VERSION,
   type PublicEngineGenerateRequest,
 } from '../public-engine-types';
-import { decoderManifest } from './decoder-manifest.fixture';
+import {
+  decoderManifest,
+  v25JointManifest,
+  v25OneUnitWritingManifest,
+} from './decoder-manifest.fixture';
 import {
   PublicFreeDecoderEngine,
   type PublicFreeDecoderTauriAdapter,
@@ -75,6 +79,94 @@ function adapter(): PublicFreeDecoderTauriAdapter {
 }
 
 describe('PublicFreeDecoderEngine', () => {
+  it('uses fixed-1 and the frozen G0 floor for one-unit Writing', async () => {
+    const manifest = v25OneUnitWritingManifest();
+    const tauri = adapter();
+    tauri.warmup = vi.fn(async () => ({
+      protocolVersion: 1,
+      engineId: manifest.engine,
+      candidateId: manifest.candidateId,
+      workerPid: 42,
+      manifestBytes: 2_048,
+      modelBytes: manifest.assets.model.bytes,
+      tokenizerBytes: manifest.assets.tokenizer.bytes,
+      runtimeStaticDeltaBytes: 0,
+      peakMemoryLimitBytes: 192 * 1024 * 1024,
+    }));
+    const engine = new PublicFreeDecoderEngine({
+      manifest,
+      manifestPath: 'candidate/one-unit.manifest.json',
+      manifestBytes: 2_048,
+      adapter: tauri,
+    });
+
+    await expect(engine.warmup()).resolves.toBe(true);
+    await engine.generate(request());
+    expect(tauri.generate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({ searchMode: 'fixed-1' }),
+      }),
+    );
+    expect(
+      engine.visibilityThreshold({ route: 'writing', language: 'en', modelScore: 0.5 }),
+    ).toBeCloseTo(0.0745673611471674);
+  });
+
+  it('uses manifest-bound V2.5 calibration and the joint engine identity', async () => {
+    const manifest = v25JointManifest();
+    const tauri = adapter();
+    tauri.warmup = vi.fn(async () => ({
+      protocolVersion: 1,
+      engineId: manifest.engine,
+      candidateId: manifest.candidateId,
+      workerPid: 42,
+      manifestBytes: 2_048,
+      modelBytes: manifest.assets.model.bytes,
+      tokenizerBytes: manifest.assets.tokenizer.bytes,
+      runtimeStaticDeltaBytes: manifest.runtimeStaticDeltaBytes,
+      peakMemoryLimitBytes: 192 * 1024 * 1024,
+    }));
+    const engine = new PublicFreeDecoderEngine({
+      manifest,
+      manifestPath: 'candidate/v25.manifest.json',
+      manifestBytes: 2_048,
+      adapter: tauri,
+    });
+
+    await expect(engine.warmup()).resolves.toBe(true);
+    await engine.generate(request());
+    expect(engine.id).toBe('public-v2.5-joint-v1');
+    expect(tauri.generate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({ searchMode: 'fixed-4' }),
+      }),
+    );
+    expect(
+      engine.calibrateVisibility({
+        route: 'writing',
+        language: 'zh',
+        modelScore: 0.8,
+        searchMode: 'fixed-4',
+      }),
+    ).toBeCloseTo(0.8);
+    expect(
+      engine.visibilityThreshold({
+        route: 'writing',
+        language: 'zh',
+        modelScore: 0.8,
+        searchMode: 'fixed-4',
+      }),
+    ).toBe(0.5);
+    expect(
+      engine.visibilityThreshold({
+        route: 'code',
+        language: 'en',
+        modelScore: 0.8,
+        searchMode: 'fixed-4',
+      }),
+    ).toBe(0.5);
+  });
+
   it('warms a hash-bound Tauri worker and returns untrusted raw candidates', async () => {
     const tauri = adapter();
     const engine = new PublicFreeDecoderEngine({

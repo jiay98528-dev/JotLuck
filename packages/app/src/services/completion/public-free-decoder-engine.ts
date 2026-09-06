@@ -6,15 +6,22 @@ import {
   type PublicEngineDiagnostics,
   type PublicEngineGenerateRequest,
   type PublicEngineGenerateResponse,
+  type PublicEngineRequestProbe,
+  type PublicEngineVisibilityCalibrationInput,
 } from './public-engine-types';
 import {
-  PUBLIC_FREE_DECODER_ENGINE_ID,
-  PUBLIC_FREE_DECODER_EN_MAX_CODE_POINTS,
   PUBLIC_FREE_DECODER_PEAK_MEMORY_LIMIT_BYTES,
   PUBLIC_FREE_DECODER_PROTOCOL_VERSION,
+  PUBLIC_V25_JOINT_ENGINE_ID,
+  PUBLIC_V25_ONE_UNIT_WRITING_ENGINE_ID,
   type PublicFreeDecoderManifest,
+  type PublicV25VisibilityProfile,
 } from './public-free-decoder-contract';
-import { isPublicEngineContextCapsule } from './public-free-context-capsule';
+import {
+  isPublicEngineContextCapsule,
+  serializePublicFreeContextCapsule,
+} from './public-free-context-capsule';
+import { V25_ONE_UNIT_MODEL_SCORE_FLOORS } from './v25-one-unit-trigger';
 
 export interface PublicFreeDecoderReadyResponse {
   protocolVersion: number;
@@ -56,10 +63,10 @@ export interface PublicFreeDecoderEngineOptions {
 }
 
 export class PublicFreeDecoderEngine implements CompletionPublicEngine {
-  readonly id = PUBLIC_FREE_DECODER_ENGINE_ID;
+  readonly id: string;
   readonly protocolVersion = PUBLIC_ENGINE_PROTOCOL_VERSION;
   readonly sourceKind = 'neural' as const;
-  readonly maxOutputCodePoints = PUBLIC_FREE_DECODER_EN_MAX_CODE_POINTS;
+  readonly maxOutputCodePoints: number;
 
   private readonly adapter: PublicFreeDecoderTauriAdapter;
   private readonly diagnosticsState: PublicEngineDiagnostics;
@@ -70,6 +77,11 @@ export class PublicFreeDecoderEngine implements CompletionPublicEngine {
   private disposed = false;
 
   constructor(private readonly options: PublicFreeDecoderEngineOptions) {
+    this.id = options.manifest.engine;
+    this.maxOutputCodePoints = Math.max(
+      options.manifest.output.chineseMaximumCodePoints,
+      options.manifest.output.englishMaximumCodePoints,
+    );
     this.adapter = options.adapter ?? createTauriAdapter();
     this.diagnosticsState = {
       engineId: this.id,
@@ -88,6 +100,8 @@ export class PublicFreeDecoderEngine implements CompletionPublicEngine {
       lateResponses: 0,
       invalidResponses: 0,
       workerErrors: 0,
+      staleResponses: 0,
+      lastRequestProbe: null,
       assets: createEmptyPublicEngineAssetDiagnostics(),
     };
     this.diagnosticsState.assets.manifestBytes = options.manifestBytes;
@@ -130,8 +144,15 @@ export class PublicFreeDecoderEngine implements CompletionPublicEngine {
     this.diagnosticsState.generateRequests += 1;
     const startedAt = performance.now();
     try {
+      const workerRequest =
+        request.searchMode === undefined && this.id === PUBLIC_V25_JOINT_ENGINE_ID
+          ? { ...request, searchMode: 'fixed-4' as const }
+          : request.searchMode === undefined && this.id === PUBLIC_V25_ONE_UNIT_WRITING_ENGINE_ID
+            ? { ...request, searchMode: 'fixed-1' as const }
+            : request;
+      this.diagnosticsState.lastRequestProbe = describeWorkerRequest(workerRequest);
       const envelope = await abortable(
-        this.adapter.generate({ requestId, request }),
+        this.adapter.generate({ requestId, request: workerRequest }),
         signal,
         () => {
           this.diagnosticsState.cancellations += 1;
@@ -157,7 +178,11 @@ export class PublicFreeDecoderEngine implements CompletionPublicEngine {
       return envelope.response;
     } catch (error) {
       if (!(error instanceof DOMException && error.name === 'AbortError')) {
-        this.diagnosticsState.lastError = error instanceof Error ? error.message : String(error);
+        const message = error instanceof Error ? error.message : String(error);
+        if (WORKER_STALE_ERROR_MARKERS.some((marker) => message.includes(marker))) {
+          this.diagnosticsState.staleResponses += 1;
+        }
+        this.diagnosticsState.lastError = message;
       }
       throw error;
     } finally {
@@ -168,6 +193,27 @@ export class PublicFreeDecoderEngine implements CompletionPublicEngine {
 
   diagnostics(): PublicEngineDiagnostics {
     return { ...this.diagnosticsState, assets: { ...this.diagnosticsState.assets } };
+  }
+
+  calibrateVisibility(input: PublicEngineVisibilityCalibrationInput): number {
+    if (this.id === PUBLIC_V25_ONE_UNIT_WRITING_ENGINE_ID) return input.modelScore;
+    if (this.id !== PUBLIC_V25_JOINT_ENGINE_ID) return input.modelScore;
+    const profile = this.visibilityProfile(input);
+    if (!profile) return Number.NaN;
+    const probability = Math.min(1 - Number.EPSILON, Math.max(Number.EPSILON, input.modelScore));
+    const logit = Math.log(probability / (1 - probability));
+    const calibrated = 1 / (1 + Math.exp(-(profile.scale * logit + profile.bias)));
+    return Math.min(1, Math.max(0, calibrated));
+  }
+
+  visibilityThreshold(input: PublicEngineVisibilityCalibrationInput): number {
+    if (this.id === PUBLIC_V25_ONE_UNIT_WRITING_ENGINE_ID) {
+      return input.route === 'writing'
+        ? V25_ONE_UNIT_MODEL_SCORE_FLOORS[input.language]
+        : Number.NaN;
+    }
+    if (this.id !== PUBLIC_V25_JOINT_ENGINE_ID) return 0;
+    return this.visibilityProfile(input)?.threshold ?? Number.NaN;
   }
 
   async dispose(): Promise<void> {
@@ -196,7 +242,7 @@ export class PublicFreeDecoderEngine implements CompletionPublicEngine {
       );
       if (
         ready.protocolVersion !== PUBLIC_FREE_DECODER_PROTOCOL_VERSION ||
-        ready.engineId !== PUBLIC_FREE_DECODER_ENGINE_ID ||
+        ready.engineId !== this.id ||
         ready.candidateId !== this.options.manifest.candidateId ||
         ready.manifestBytes !== this.options.manifestBytes ||
         ready.modelBytes !== this.options.manifest.assets.model.bytes ||
@@ -237,6 +283,57 @@ export class PublicFreeDecoderEngine implements CompletionPublicEngine {
     this.diagnosticsState.visibleInferenceP90Ms =
       sorted[Math.max(0, Math.ceil(sorted.length * 0.9) - 1)] ?? 0;
   }
+
+  private visibilityProfile(
+    input: PublicEngineVisibilityCalibrationInput,
+  ): PublicV25VisibilityProfile | undefined {
+    const mode = input.searchMode ?? 'fixed-4';
+    return this.options.manifest.visibilityCalibration?.profiles.find(
+      (profile) =>
+        profile.route === input.route &&
+        profile.language === input.language &&
+        profile.searchMode === mode,
+    );
+  }
+}
+
+/** Rust host_actor error markers for requests the worker dropped without a response frame. */
+const WORKER_STALE_ERROR_MARKERS = [
+  'completion decoder request was superseded',
+  'completion decoder deadline expired',
+] as const;
+
+/** Synchronous FNV-1a 64-bit over the serialized capsule — enough to diff requests. */
+function capsuleFingerprint(capsule: string): string {
+  let high = 0xcbf29ce4n;
+  let low = 0x84222325n;
+  const mask = 0xffffffffn;
+  for (const byte of new TextEncoder().encode(capsule)) {
+    low = (low ^ BigInt(byte)) * 0x100000001b3n;
+    high = (high ^ BigInt(byte)) * 0x100000001b3n;
+    high &= mask;
+    // Fold overflow back in so the digest stays sensitive to every byte.
+    low = (low & mask) ^ (low >> 32n);
+  }
+  return (high.toString(16).padStart(8, '0') + (low & mask).toString(16).padStart(8, '0')).slice(
+    0,
+    16,
+  );
+}
+
+function describeWorkerRequest(
+  request: PublicEngineGenerateRequest,
+): PublicEngineRequestProbe | null {
+  if (!request.contextCapsule) return null;
+  const capsule = serializePublicFreeContextCapsule(request.contextCapsule);
+  return {
+    capsuleSha: capsuleFingerprint(capsule),
+    capsuleHead: capsule.slice(0, 200),
+    maxTokens: request.contextCapsule.maxTokens,
+    searchMode: request.searchMode ?? 'unset',
+    languageHint: request.languageHint,
+    blockType: request.blockType,
+  };
 }
 
 function createTauriAdapter(): PublicFreeDecoderTauriAdapter {

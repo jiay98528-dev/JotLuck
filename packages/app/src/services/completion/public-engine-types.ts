@@ -14,11 +14,14 @@ export const PUBLIC_ENGINE_MAX_CANDIDATES = 32;
 export const PUBLIC_ENGINE_PROVIDER_PRIORITY = 35;
 export const PUBLIC_ENGINE_PROTOCOL_VERSION = 1;
 export const PUBLIC_ENGINE_CONTEXT_MAX_UTF8_BYTES = 256;
+export const PUBLIC_ENGINE_SUFFIX_MAX_UTF8_BYTES = 256;
 export const PUBLIC_ENGINE_MAX_OUTPUT_CODE_POINTS = 48;
+export const PUBLIC_V25_ENGINE_ID_PREFIX = 'public-v2.5-';
 
 export type PublicEngineSourceKind = Extract<CompletionSourceKind, 'ngram' | 'neural'>;
 
 export type PublicEngineCursorBoundary = 'word' | 'space' | 'punctuation' | 'other';
+export type PublicEngineSearchMode = 'fixed-1' | 'fixed-4' | 'adaptive-1-to-4';
 export type PublicEngineHealthStatus =
   | 'idle'
   | 'warming'
@@ -29,7 +32,7 @@ export type PublicEngineHealthStatus =
 
 export interface PublicEngineContextCapsule {
   schemaVersion: 1;
-  maxTokens: 256;
+  maxTokens: number;
   languageHint: CompletionLanguageHint;
   headingTrail: readonly string[];
   currentParagraph: string;
@@ -46,12 +49,22 @@ export interface PublicEngineGenerateRequest {
   /** Host-trimmed UTF-8 suffix. It must never contain the full document by default. */
   contextTail: string;
   contextTailUtf8Bytes: number;
+  /** Host-trimmed text after the cursor on the current line; used only to validate FIM edits. */
+  contextSuffix?: string;
   /** Optional V2.2 bounded capsule. Legacy public engines ignore this field. */
   contextCapsule?: PublicEngineContextCapsule;
   languageHint: CompletionLanguageHint;
   blockType: CompletionBlockType;
+  /** Canonical fenced-code language and cursor lexical state, derived by the host. */
+  codeLanguage?: string;
+  codeLexicalContext?: 'code' | 'string' | 'comment' | 'unknown';
   cursorBoundary: PublicEngineCursorBoundary;
   maxCandidates: number;
+  /** Optional V2.4 evaluation-only identity and search controls. */
+  editorSessionId?: string;
+  documentSessionId?: string;
+  documentRevision?: number;
+  searchMode?: PublicEngineSearchMode;
   /** Absolute Unix time in milliseconds. */
   deadlineAt: number;
 }
@@ -78,6 +91,24 @@ export interface PublicEngineGenerateResponse {
   documentVersion: string;
   cursorPos: number;
   candidates: readonly PublicEngineRawCandidate[];
+  diagnostics?: PublicEngineRuntimeDiagnostics;
+}
+
+export interface PublicEngineRuntimeDiagnostics {
+  cacheStatus: 'hit' | 'miss' | 'invalidated';
+  reusedTokens: number;
+  computedTokens: number;
+  invalidationReason?: string;
+  finalBeamWidth: 1 | 4 | 32;
+  escalationStep?: number;
+  escalationReasons: readonly string[];
+}
+
+export interface PublicEngineVisibilityCalibrationInput {
+  route: 'writing' | 'code';
+  language: 'zh' | 'en';
+  modelScore: number;
+  searchMode?: PublicEngineSearchMode;
 }
 
 export interface PublicCompletionCandidate extends CompletionCandidate {
@@ -98,6 +129,17 @@ export interface PublicEngineAssetDiagnostics {
   staticDeltaBytes: number;
 }
 
+export interface PublicEngineRequestProbe {
+  /** First 16 hex chars of a stable hash over the serialized context capsule. */
+  capsuleSha: string;
+  /** Leading characters of the serialized capsule, for E2E forensics. */
+  capsuleHead: string;
+  maxTokens: number;
+  searchMode: string;
+  languageHint: string;
+  blockType: string;
+}
+
 export interface PublicEngineDiagnostics {
   engineId: string;
   backendKind: string;
@@ -115,6 +157,10 @@ export interface PublicEngineDiagnostics {
   lateResponses: number;
   invalidResponses: number;
   workerErrors: number;
+  /** Requests the worker dropped as superseded or deadline-expired without a response frame. */
+  staleResponses: number;
+  /** Summary of the most recent request handed to the worker adapter, for E2E forensics. */
+  lastRequestProbe: PublicEngineRequestProbe | null;
   assets: PublicEngineAssetDiagnostics;
 }
 
@@ -128,6 +174,14 @@ export interface CompletionPublicEngine {
     request: PublicEngineGenerateRequest,
     signal?: AbortSignal,
   ): Promise<PublicEngineGenerateResponse>;
+  /**
+   * Trusted adapter-side calibration bound to the installed V2.5 manifest,
+   * route, search mode and hardware profile. Worker-provided gate scores are
+   * never used for a V2.5 display decision.
+   */
+  calibrateVisibility?(input: PublicEngineVisibilityCalibrationInput): number;
+  /** Route/search/hardware-specific display threshold from the same signed manifest. */
+  visibilityThreshold?(input: PublicEngineVisibilityCalibrationInput): number;
   diagnostics(): PublicEngineDiagnostics;
   dispose(): void | Promise<void>;
 }

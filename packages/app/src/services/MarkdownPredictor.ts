@@ -10,6 +10,8 @@ import {
   mergeTables,
   subtractFrom,
   serialize,
+  serializedEntryByteLength,
+  serializedTableByteLength,
   deserialize,
 } from '@/utils/ngram-engine';
 import {
@@ -101,6 +103,7 @@ import {
   createCompletionCandidateBatch,
   takeLastUtf8Bytes,
 } from './completion/engine-router';
+import type { V24SearchMode } from './completion/v24-completion-contract';
 import { HybridRetrievalService } from './completion/hybrid-retrieval-backend';
 import type {
   HybridRetrievalCandidate,
@@ -114,7 +117,17 @@ import {
   type PublicEngineDiagnostics,
   type PublicEngineCursorBoundary,
 } from './completion/public-engine-types';
+import { isV25HostCandidate, stampV25HostPrediction } from './completion/v25-host-proof';
 import { createPublicFreeContextCapsule } from './completion/public-free-context-capsule';
+import { PUBLIC_V25_ONE_UNIT_WRITING_ENGINE_ID } from './completion/public-free-decoder-contract';
+import { CodeSyntaxProvider } from './completion/code-syntax-provider';
+import { createV24LocalCascade } from './completion/v24-local-cascade';
+import {
+  V24DocumentPhraseStore,
+  V24PhraseProvider,
+  V24RetainedPhraseStore,
+  type V24PhraseRecord,
+} from './completion/v24-phrase-cascade';
 import type {
   CompletionAblationMode,
   CompletionCandidate,
@@ -146,7 +159,6 @@ const LEGACY_SHORT_L2_STORAGE_KEY = 'jotluck:ngram:short:v1';
 export const ACCEPTED_LEXICON_STORAGE_KEY = 'jotluck:autocomplete:acceptedLexicon:v1';
 const PERSONAL_MODEL_HEADER = '# jotluck-personal-ngram-v5';
 const LEGACY_PERSONAL_MODEL_HEADER = '# jotluck-personal-ngram-v4';
-const STRONG_LOCAL_PUBLIC_SUPPRESSION_SCORE = 0.68;
 const HYBRID_RETRIEVAL_SOFT_BUDGET_MS = 35;
 const LEGACY_ACCEPTED_WEIGHT = 0.5;
 const PERSONAL_MODEL_MAX_BYTES = 4.5 * 1024 * 1024;
@@ -173,6 +185,7 @@ interface PersonalModelPartitions {
   legacyLong: NGramTable;
   legacyShort2: NGramTable;
   legacyShort3: NGramTable;
+  retainedPhrases: NGramTable;
 }
 
 interface DocumentContribution {
@@ -186,8 +199,10 @@ interface DocumentContribution {
 }
 
 interface OpenedParagraphContribution {
+  phraseParagraphId: string;
   from: number;
   to: number;
+  text: string;
   long: NGramTable;
   short: NGramTable;
   lexiconTerms: readonly string[];
@@ -198,6 +213,8 @@ const OPENED_PARAGRAPH_SAMPLE_LIMIT = 16 * 1024;
 const MAX_NOTEBOOK_DOCUMENTS = 2_000;
 const MAX_NOTEBOOK_INPUT_BYTES = 16 * 1024 * 1024;
 const MAX_NOTEBOOK_ENTRIES = 300_000;
+const V24_OPENED_DOCUMENT_SESSION_ID = 'opened-document';
+const V24_RETAINED_PHRASE_SENTINEL = '\u0001';
 
 export interface NotebookModelDiagnostics {
   documentCount: number;
@@ -293,6 +310,8 @@ export interface CompletionRequestOptions {
   documentVersion?: string;
   documentRevision?: number;
   editorSessionId?: string;
+  documentSessionId?: string;
+  searchMode?: V24SearchMode;
   mode?: CompletionMode;
   contextSnapshot?: CompletionDocumentContextSnapshot;
 }
@@ -363,6 +382,9 @@ function removeLegacyLearningStorage(): void {
 export class MarkdownPredictor {
   private l1: NGramTable = new Map();
   private openedParagraphContributions: OpenedParagraphContribution[] = [];
+  private openedParagraphSequence = 0;
+  private readonly v24DocumentPhraseStore = new V24DocumentPhraseStore();
+  private readonly v24AcceptedPhraseStore = new V24RetainedPhraseStore();
   private documentLexiconCounts = new Map<string, number>();
   /** Personal L2: only retained prose, persisted per notebook. */
   private l2: NGramTable = new Map();
@@ -708,9 +730,11 @@ export class MarkdownPredictor {
           indexData: this.indexData,
           n: this.n,
         });
-    if (context.disabled) return finish(null);
+    const codeSyntaxCandidate = new CodeSyntaxProvider().provide(context);
+    if (context.disabled && context.blockType !== 'code') return finish(null);
     if (
       !context.emptyLine &&
+      context.blockType !== 'code' &&
       this.extractContext(context.localCursorPos, context.doc).length < 2 &&
       context.syntax.type === 'general'
     ) {
@@ -724,7 +748,37 @@ export class MarkdownPredictor {
       options.mode,
       (providerId) => this.isProviderEnabledForAblation(providerId),
     );
-    const rawCandidates = providerCollection.candidates;
+    const rawCandidates = providerCollection.candidates.map((candidate) =>
+      this.annotateDocumentPhraseSupport(candidate, context),
+    );
+    if (codeSyntaxCandidate) rawCandidates.push(codeSyntaxCandidate);
+    const localCascade = createV24LocalCascade({
+      markdownProviders: [candidateListProvider('v24-markdown', rawCandidates, isStructured)],
+      codeSyntaxProviders: [],
+      sessionProviders: [candidateListProvider('v24-session', rawCandidates, isSessionCandidate)],
+      acceptedProviders: [
+        new V24PhraseProvider(
+          this.v24AcceptedPhraseStore,
+          () => this.storageScope,
+          'accepted-phrase',
+          'l2',
+        ),
+      ],
+      documentProviders: [
+        candidateListProvider('v24-document', rawCandidates, isDocumentCandidate),
+      ],
+      personalNotebookProviders: [
+        candidateListProvider('v24-personal-notebook', rawCandidates, isPersonalNotebookCandidate),
+      ],
+      routeModelProviders: [],
+      fallbackProviders: [
+        candidateListProvider('v24-fallback', rawCandidates, isFallbackCandidate),
+      ],
+    }).resolve(context);
+    if (localCascade.shortCircuited && localCascade.candidate) {
+      rankedCandidates = [localCascade.candidate];
+      return finish(this.toPredictionResult(localCascade.candidate));
+    }
     const hasStructuredCandidate = rawCandidates.some(
       (candidate) => candidate.source === 'structured',
     );
@@ -765,26 +819,17 @@ export class MarkdownPredictor {
         ...retrieval.candidates.map((candidate) => this.toRetrievalCandidate(candidate, cursorPos)),
       );
     }
-    const hasStrongLocalCandidate = rawCandidates.some(
-      (candidate) =>
-        (candidate.sourceLayer === 'l1' ||
-          candidate.sourceLayer === 'short-l1' ||
-          candidate.sourceLayer === 'session' ||
-          candidate.sourceLayer === 'l2' ||
-          candidate.sourceLayer === 'short-l2' ||
-          candidate.sourceLayer === 'notebook' ||
-          candidate.sourceLayer === 'short-notebook' ||
-          candidate.sourceLayer === 'provider') &&
-        (candidate.calibratedScore ?? candidate.confidence) >=
-          STRONG_LOCAL_PUBLIC_SUPPRESSION_SCORE,
-    );
     publicEngineAttempted =
       options.mode !== 'structured' &&
       this.isPublicEngineEnabled(context) &&
       !hasStructuredCandidate &&
-      !hasStrongLocalCandidate &&
       this.engineRouter.getActivePublicEngineId() !== null;
-    const publicDeadlineAt = Date.now() + Math.max(0, deadlineAt - performance.now());
+    const publicDeadlineAt = Math.ceil(Date.now() + Math.max(0, deadlineAt - performance.now()));
+    const publicLanguageHint = getLocalLanguageHint(context);
+    const publicContext =
+      publicLanguageHint === context.languageHint
+        ? context
+        : { ...context, languageHint: publicLanguageHint };
     const publicGeneration = publicEngineAttempted
       ? await this.engineRouter.generatePublic(
           {
@@ -795,11 +840,31 @@ export class MarkdownPredictor {
               context.doc.slice(0, context.localCursorPos),
               PUBLIC_ENGINE_CONTEXT_MAX_UTF8_BYTES,
             ),
-            contextCapsule: createPublicFreeContextCapsule(context),
-            languageHint: context.languageHint,
+            contextSuffix: context.line ? context.line.text.slice(context.line.cursorColumn) : '',
+            contextCapsule: createPublicFreeContextCapsule(publicContext, undefined, {
+              maximumTokens:
+                this.engineRouter.getActivePublicEngineId() ===
+                PUBLIC_V25_ONE_UNIT_WRITING_ENGINE_ID
+                  ? 128
+                  : undefined,
+              preserveRoutedBoundaryWhitespace:
+                this.engineRouter.getActivePublicEngineId() ===
+                PUBLIC_V25_ONE_UNIT_WRITING_ENGINE_ID,
+            }),
+            languageHint: publicLanguageHint,
             blockType: context.blockType,
+            codeLanguage: context.codeLanguage,
+            codeLexicalContext: context.codeLexicalContext,
             cursorBoundary: detectPublicCursorBoundary(context.doc, context.localCursorPos),
             maxCandidates: PUBLIC_ENGINE_MAX_CANDIDATES,
+            ...(options.editorSessionId && options.documentSessionId && options.searchMode
+              ? {
+                  editorSessionId: options.editorSessionId,
+                  documentSessionId: options.documentSessionId,
+                  documentRevision: options.documentRevision ?? context.documentRevision,
+                  searchMode: options.searchMode,
+                }
+              : {}),
             deadlineAt: publicDeadlineAt,
           },
           engineEpoch,
@@ -1010,6 +1075,8 @@ export class MarkdownPredictor {
     this.l1 = new Map();
     this.shortL1 = new Map();
     this.documentLexiconCounts.clear();
+    this.v24DocumentPhraseStore.clear(V24_OPENED_DOCUMENT_SESSION_ID);
+    this.openedParagraphSequence = 0;
     this.openedParagraphContributions = collectOpenedParagraphSlices(text).map((paragraph) => {
       const contribution = this.createOpenedParagraphContribution(paragraph);
       this.addOpenedParagraphContribution(contribution);
@@ -1161,6 +1228,7 @@ export class MarkdownPredictor {
     this.l1.clear();
     this.shortL1.clear();
     this.openedParagraphContributions = [];
+    this.v24DocumentPhraseStore.clear(V24_OPENED_DOCUMENT_SESSION_ID);
     this.documentLexiconCounts.clear();
     this.documentLexicon = [];
   }
@@ -1287,6 +1355,7 @@ export class MarkdownPredictor {
     this.personalLongCache = null;
     this.shortL2 = new Map();
     this.acceptedLexicon = [];
+    this.v24AcceptedPhraseStore.clear(this.storageScope);
     this.accessTimestamps.clear();
     this.entryFlags.clear();
     this.invalidatePredictionCaches();
@@ -1410,20 +1479,38 @@ export class MarkdownPredictor {
 
   private isHybridRetrievalEnabled(context: CompletionContext): boolean {
     return (
-      !context.emptyLine && (this.ablationMode === 'full-stack' || this.ablationMode === 'l2-only')
+      context.blockType !== 'code' &&
+      !context.emptyLine &&
+      (this.ablationMode === 'full-stack' || this.ablationMode === 'l2-only')
     );
   }
 
   private isPublicEngineEnabled(context: CompletionContext): boolean {
+    if (context.emptyLine || context.syntax.type !== 'general') return false;
+    if (!(this.ablationMode === 'full-stack' || this.ablationMode === 'l3-only')) return false;
+    if (context.blockType === 'code') return true;
     return (
-      !context.emptyLine &&
       context.atEndOfLine &&
-      context.syntax.type === 'general' &&
       (context.blockType === 'paragraph' ||
         context.blockType === 'list' ||
-        context.blockType === 'quote') &&
-      (this.ablationMode === 'full-stack' || this.ablationMode === 'l3-only')
+        context.blockType === 'quote')
     );
+  }
+
+  private annotateDocumentPhraseSupport(
+    candidate: CompletionCandidate,
+    context: CompletionContext,
+  ): CompletionCandidate {
+    if (candidate.sourceLayer !== 'l1' && candidate.sourceLayer !== 'short-l1') return candidate;
+    const phrase = candidate.edit?.insertText ?? candidate.text;
+    const beforeCursor = context.doc.slice(0, context.localCursorPos);
+    const paragraphSupport = this.v24DocumentPhraseStore.exactSupport(
+      V24_OPENED_DOCUMENT_SESSION_ID,
+      beforeCursor,
+      phrase,
+      this.n,
+    );
+    return { ...candidate, documentParagraphSupport: paragraphSupport };
   }
 
   private toRetrievalCandidate(
@@ -1476,7 +1563,7 @@ export class MarkdownPredictor {
       to: candidate.from,
       insertText: candidate.text,
     };
-    return {
+    const result: PredictionResult = {
       text: candidate.text,
       displayText: candidate.displayText ?? candidate.text,
       confidence: candidate.confidence,
@@ -1499,8 +1586,10 @@ export class MarkdownPredictor {
       informationScore: candidate.informationScore,
       learningBoost: candidate.learningBoost,
       learningPenalty: candidate.learningPenalty,
+      v25Validation: candidate.v25Validation,
       feedbackToken,
     };
+    return isV25HostCandidate(candidate) ? stampV25HostPrediction(result) : result;
   }
 
   private shouldWriteAcceptedNgram(feedback = this.currentPredictionFeedback()): boolean {
@@ -1570,6 +1659,28 @@ export class MarkdownPredictor {
     }
     if (admission !== 'persist') return;
 
+    const phraseLanguage = inferV24PhraseLanguage(`${ctx}${retainedText}`);
+    let retainedPhraseRecord: V24PhraseRecord | null = null;
+    if (phraseLanguage) {
+      const recorded = this.v24AcceptedPhraseStore.recordRetained({
+        scope: this.storageScope,
+        context: ctx,
+        phrase: retainedText,
+        language: phraseLanguage,
+        sessionKind: 'workspace',
+        blockType: feedback.blockType,
+        mode: feedback.mode,
+      });
+      if (recorded) {
+        retainedPhraseRecord = this.v24AcceptedPhraseStore.exactRecord(
+          this.storageScope,
+          ctx,
+          retainedText,
+          phraseLanguage,
+        );
+      }
+    }
+
     const now = Date.now();
     this.accessTimestamps.set(ctx, now);
     this.entryFlags.set(ctx, 'u');
@@ -1589,7 +1700,7 @@ export class MarkdownPredictor {
       this.markPersonalContextsAccessed(ctx, retainedText, now);
       this.maybeEliminate();
     }
-    this.persistRetainedPersonalFeedback(ctx, retainedText, shouldWriteNgram);
+    this.persistRetainedPersonalFeedback(ctx, retainedText, shouldWriteNgram, retainedPhraseRecord);
   }
 
   private capturePredictionFeedback(
@@ -1810,8 +1921,10 @@ export class MarkdownPredictor {
     paragraph: OpenedDocumentParagraphSlice,
   ): OpenedParagraphContribution {
     return {
+      phraseParagraphId: `paragraph-${++this.openedParagraphSequence}`,
       from: paragraph.from,
       to: paragraph.to,
+      text: paragraph.text,
       long: scanText(paragraph.text, this.n),
       short: mergeTables(scanText(paragraph.text, 2), scanText(paragraph.text, 3)),
       lexiconTerms: extractLexiconTerms(paragraph.text),
@@ -1824,6 +1937,11 @@ export class MarkdownPredictor {
     for (const term of contribution.lexiconTerms) {
       this.documentLexiconCounts.set(term, (this.documentLexiconCounts.get(term) ?? 0) + 1);
     }
+    this.v24DocumentPhraseStore.updateParagraphText({
+      documentSessionId: V24_OPENED_DOCUMENT_SESSION_ID,
+      paragraphId: contribution.phraseParagraphId,
+      text: contribution.text,
+    });
   }
 
   private subtractOpenedParagraphContribution(contribution: OpenedParagraphContribution): void {
@@ -1834,6 +1952,10 @@ export class MarkdownPredictor {
       if (remaining > 0) this.documentLexiconCounts.set(term, remaining);
       else this.documentLexiconCounts.delete(term);
     }
+    this.v24DocumentPhraseStore.removeParagraph(
+      V24_OPENED_DOCUMENT_SESSION_ID,
+      contribution.phraseParagraphId,
+    );
   }
 
   private refreshDocumentLexiconFromCounts(): void {
@@ -1843,7 +1965,12 @@ export class MarkdownPredictor {
       .map(([term]) => term);
   }
 
-  private persistRetainedPersonalFeedback(ctx: string, text: string, writeNgram: boolean): void {
+  private persistRetainedPersonalFeedback(
+    ctx: string,
+    text: string,
+    writeNgram: boolean,
+    retainedPhraseRecord: V24PhraseRecord | null,
+  ): void {
     const scope = this.storageScope;
     const keys = this.storageKeys();
     const n = this.n;
@@ -1851,6 +1978,13 @@ export class MarkdownPredictor {
     runCompletionStorageMutation(`personal:${scope}`, () => {
       const stored =
         deserializePersonalModel(readStorage(keys.model), n) ?? createEmptyPersonalModel();
+
+      if (retainedPhraseRecord) {
+        stored.retainedPhrases = incrementSerializedV24PhraseRecord(
+          stored.retainedPhrases,
+          retainedPhraseRecord,
+        );
+      }
 
       if (writeNgram) {
         const short2Context = takeLastCodePoints(ctx, 2);
@@ -1939,6 +2073,10 @@ export class MarkdownPredictor {
       this.legacyAcceptedL2 = model.legacyLong;
       this.legacyAcceptedShort2 = model.legacyShort2;
       this.legacyAcceptedShort3 = model.legacyShort3;
+      this.v24AcceptedPhraseStore.replace(
+        this.storageScope,
+        deserializeV24PhraseRecords(model.retainedPhrases),
+      );
       this.rebuildPersonalShortTable();
       for (const ctx of this.l2.keys()) this.entryFlags.set(ctx, 'u');
     } else if (readStorage(keys.model) !== null) {
@@ -1970,15 +2108,14 @@ export class MarkdownPredictor {
   }
 
   private maybeEliminate(): void {
-    const model = serializePersonalModel(this.createPersonalModelSnapshot());
-    const size = utf8ByteLength(model);
+    const size = serializedPersonalModelByteLength(this.createPersonalModelSnapshot());
     if (size > PERSONAL_MODEL_MAX_BYTES) this.forceEliminate(PERSONAL_MODEL_TARGET_BYTES, size);
   }
 
   private forceEliminate(targetSize?: number, currentSize?: number): void {
     const target = targetSize ?? PERSONAL_MODEL_TARGET_BYTES;
     let projectedSize =
-      currentSize ?? utf8ByteLength(serializePersonalModel(this.createPersonalModelSnapshot()));
+      currentSize ?? serializedPersonalModelByteLength(this.createPersonalModelSnapshot());
     if (projectedSize <= target) return;
     const scored: Array<{
       table: NGramTable;
@@ -2093,6 +2230,9 @@ export class MarkdownPredictor {
       legacyLong: this.legacyAcceptedL2,
       legacyShort2: this.legacyAcceptedShort2,
       legacyShort3: this.legacyAcceptedShort3,
+      retainedPhrases: serializeV24PhraseRecords(
+        this.v24AcceptedPhraseStore.snapshot(this.storageScope),
+      ),
     };
   }
 
@@ -2147,6 +2287,45 @@ export class MarkdownPredictor {
   detectOpenFormat(lineText: string, colInLine: number): string | null {
     return detectOpenFormat(lineText, colInLine);
   }
+}
+
+function candidateListProvider(
+  id: string,
+  candidates: readonly CompletionCandidate[],
+  predicate: (candidate: CompletionCandidate) => boolean,
+): CompletionProvider {
+  return {
+    id,
+    priority: 0,
+    canProvide: () => candidates.some(predicate),
+    provide: () => candidates.find(predicate) ?? null,
+    provideMany: () => candidates.filter(predicate),
+  };
+}
+
+function isStructured(candidate: CompletionCandidate): boolean {
+  return candidate.source === 'structured';
+}
+
+function isSessionCandidate(candidate: CompletionCandidate): boolean {
+  return candidate.sourceLayer === 'session';
+}
+
+function isDocumentCandidate(candidate: CompletionCandidate): boolean {
+  return candidate.sourceLayer === 'l1' || candidate.sourceLayer === 'short-l1';
+}
+
+function isPersonalNotebookCandidate(candidate: CompletionCandidate): boolean {
+  return (
+    candidate.sourceLayer === 'l2' ||
+    candidate.sourceLayer === 'short-l2' ||
+    candidate.sourceLayer === 'notebook' ||
+    candidate.sourceLayer === 'short-notebook'
+  );
+}
+
+function isFallbackCandidate(candidate: CompletionCandidate): boolean {
+  return candidate.sourceLayer === 'fallback';
 }
 
 function getBaselineUrls(): string[] {
@@ -2499,18 +2678,42 @@ function serializePersonalModel(model: PersonalModelPartitions): string {
     serialize(model.legacyShort2),
     '[legacy-short3]',
     serialize(model.legacyShort3),
+    '[retained-phrases]',
+    serialize(model.retainedPhrases),
   ].join('\n');
 }
 
+function serializedPersonalModelByteLength(model: PersonalModelPartitions): number {
+  const sections: readonly (readonly [string, NGramTable])[] = [
+    ['retained-long', model.long],
+    ['retained-short2', model.short2],
+    ['retained-short3', model.short3],
+    ['legacy-long', model.legacyLong],
+    ['legacy-short2', model.legacyShort2],
+    ['legacy-short3', model.legacyShort3],
+    ['retained-phrases', model.retainedPhrases],
+  ];
+  let bytes = utf8ByteLength(PERSONAL_MODEL_HEADER);
+  for (const [name, table] of sections) {
+    bytes += 1 + utf8ByteLength(`[${name}]`) + 1 + serializedTableByteLength(table);
+  }
+  return bytes;
+}
+
 function deserializePersonalModel(raw: string | null, n: number): PersonalModelPartitions | null {
-  const sections = deserializeModelSections(raw, PERSONAL_MODEL_HEADER, [
-    'retained-long',
-    'retained-short2',
-    'retained-short3',
-    'legacy-long',
-    'legacy-short2',
-    'legacy-short3',
-  ]);
+  const sections = deserializeModelSections(
+    raw,
+    PERSONAL_MODEL_HEADER,
+    [
+      'retained-long',
+      'retained-short2',
+      'retained-short3',
+      'legacy-long',
+      'legacy-short2',
+      'legacy-short3',
+    ],
+    ['retained-phrases'],
+  );
   if (!sections) return null;
   const model: PersonalModelPartitions = {
     long: sections['retained-long']!,
@@ -2519,6 +2722,7 @@ function deserializePersonalModel(raw: string | null, n: number): PersonalModelP
     legacyLong: sections['legacy-long']!,
     legacyShort2: sections['legacy-short2']!,
     legacyShort3: sections['legacy-short3']!,
+    retainedPhrases: sections['retained-phrases'] ?? new Map(),
   };
   return isValidPersonalModel(model, n) ? model : null;
 }
@@ -2545,17 +2749,19 @@ function deserializeModelSections(
   raw: string | null,
   header: string,
   sectionNames: readonly string[],
+  optionalSectionNames: readonly string[] = [],
 ): Record<string, NGramTable> | null {
   if (!raw) return null;
   const lines = raw.split('\n');
   if (lines.shift() !== header) return null;
   const serializedBySection = new Map<string, string[]>();
+  const allowedSectionNames = [...sectionNames, ...optionalSectionNames];
   let current: string | null = null;
   for (const line of lines) {
     const match = /^\[([^\]]+)\]$/u.exec(line);
     if (match) {
       const name = match[1]!;
-      if (!sectionNames.includes(name) || serializedBySection.has(name)) return null;
+      if (!allowedSectionNames.includes(name) || serializedBySection.has(name)) return null;
       current = name;
       serializedBySection.set(name, []);
       continue;
@@ -2565,7 +2771,9 @@ function deserializeModelSections(
   }
   if (sectionNames.some((name) => !serializedBySection.has(name))) return null;
   return Object.fromEntries(
-    sectionNames.map((name) => [name, deserialize(serializedBySection.get(name)!.join('\n'))]),
+    allowedSectionNames
+      .filter((name) => serializedBySection.has(name))
+      .map((name) => [name, deserialize(serializedBySection.get(name)!.join('\n'))]),
   );
 }
 
@@ -2577,7 +2785,80 @@ function createEmptyPersonalModel(): PersonalModelPartitions {
     legacyLong: new Map(),
     legacyShort2: new Map(),
     legacyShort3: new Map(),
+    retainedPhrases: new Map(),
   };
+}
+
+function serializeV24PhraseRecords(records: readonly V24PhraseRecord[]): NGramTable {
+  const table: NGramTable = new Map();
+  for (const record of records) {
+    const key = JSON.stringify([
+      record.language,
+      record.contextSuffix,
+      record.phrase,
+      record.lastRetainedAt,
+    ]);
+    table.set(key, new Map([[V24_RETAINED_PHRASE_SENTINEL, record.retainedCount]]));
+  }
+  return table;
+}
+
+function deserializeV24PhraseRecords(table: NGramTable): V24PhraseRecord[] {
+  const records: V24PhraseRecord[] = [];
+  for (const [key, counts] of table) {
+    try {
+      const value = JSON.parse(key) as unknown;
+      if (
+        !Array.isArray(value) ||
+        (value[0] !== 'zh' && value[0] !== 'en') ||
+        typeof value[1] !== 'string' ||
+        typeof value[2] !== 'string' ||
+        typeof value[3] !== 'number'
+      ) {
+        continue;
+      }
+      const retainedCount = counts.get(V24_RETAINED_PHRASE_SENTINEL);
+      if (!retainedCount) continue;
+      records.push({
+        language: value[0],
+        contextSuffix: value[1],
+        phrase: value[2],
+        lastRetainedAt: value[3],
+        retainedCount,
+      });
+    } catch {
+      // A damaged optional phrase record does not invalidate valid v5 n-grams.
+    }
+  }
+  return records;
+}
+
+function incrementSerializedV24PhraseRecord(
+  table: NGramTable,
+  record: V24PhraseRecord,
+): NGramTable {
+  const records = deserializeV24PhraseRecords(table);
+  const existing = records.find(
+    (item) =>
+      item.contextSuffix === record.contextSuffix &&
+      item.phrase === record.phrase &&
+      item.language === record.language,
+  );
+  if (existing) {
+    existing.retainedCount += 1;
+    existing.lastRetainedAt = record.lastRetainedAt;
+  } else {
+    records.push({ ...record, retainedCount: 1 });
+  }
+  records.sort((left, right) => right.lastRetainedAt - left.lastRetainedAt);
+  return serializeV24PhraseRecords(records.slice(0, 200));
+}
+
+function inferV24PhraseLanguage(value: string): 'zh' | 'en' | null {
+  const hasChinese = /[\u3400-\u9fff]/u.test(value);
+  const hasEnglish = /[A-Za-z]/u.test(value);
+  if (hasChinese === hasEnglish) return null;
+  return hasChinese ? 'zh' : 'en';
 }
 
 function isValidPersonalModel(model: PersonalModelPartitions, n: number): boolean {
@@ -2773,8 +3054,7 @@ function mergeAcceptedLexicon(existing: string[], additions: string[]): string[]
 }
 
 function prunePersonalTablesToBudget(model: PersonalModelPartitions): void {
-  const initial = serializePersonalModel(model);
-  let projectedSize = utf8ByteLength(initial);
+  let projectedSize = serializedPersonalModelByteLength(model);
   if (projectedSize <= PERSONAL_MODEL_MAX_BYTES) return;
 
   const entries: Array<{
@@ -2810,7 +3090,7 @@ function prunePersonalTablesToBudget(model: PersonalModelPartitions): void {
 }
 
 function estimateSerializedEntryBytes(ctx: string, preds: Map<string, number>): number {
-  return utf8ByteLength(serialize(new Map([[ctx, preds]]))) + 1;
+  return serializedEntryByteLength(ctx, preds) + 1;
 }
 
 function utf8ByteLength(text: string): number {

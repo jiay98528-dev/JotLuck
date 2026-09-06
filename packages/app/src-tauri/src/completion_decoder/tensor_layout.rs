@@ -112,9 +112,13 @@ pub(super) fn validate_quantized_tensor_layout(
         return Err("decoder tensor payload coverage is incomplete".to_string());
     }
 
-    expect_tensor_shape(&tensors, "token_embedding.weight", &[8_000, width])?;
+    expect_tensor_shape(
+        &tensors,
+        "token_embedding.weight",
+        &[header.vocabulary_size, width],
+    )?;
     expect_tensor_shape(&tensors, "position_embedding.weight", &[256, width])?;
-    expect_tensor_shape(&tensors, "output.weight", &[8_000, width])?;
+    expect_tensor_shape(&tensors, "output.weight", &[header.vocabulary_size, width])?;
     expect_tensor_shape(&tensors, "final_norm.weight", &[width])?;
     expect_tensor_shape(&tensors, "final_norm.bias", &[width])?;
     for layer in 0..layers {
@@ -154,6 +158,27 @@ pub(super) fn validate_quantized_tensor_layout(
         for norm in ["norm1", "norm2"] {
             expect_tensor_shape(&tensors, &format!("{prefix}.{norm}.weight"), &[width])?;
             expect_tensor_shape(&tensors, &format!("{prefix}.{norm}.bias"), &[width])?;
+        }
+    }
+    if header.architecture.block_size == 5 {
+        for index in 0..header.architecture.future_projection_count {
+            expect_tensor_shape(
+                &tensors,
+                &format!("future_projections.{index}.weight"),
+                &[width, width],
+            )?;
+        }
+        if header.architecture.sequential_head == "markov" {
+            expect_tensor_shape(
+                &tensors,
+                "markov_embedding.weight",
+                &[header.vocabulary_size, header.architecture.markov_rank],
+            )?;
+            expect_tensor_shape(
+                &tensors,
+                "markov_output.weight",
+                &[header.vocabulary_size, header.architecture.markov_rank],
+            )?;
         }
     }
     Ok(())
@@ -230,7 +255,7 @@ pub(super) fn ready_response(
 ) -> CompletionDecoderReadyResponse {
     CompletionDecoderReadyResponse {
         protocol_version: PROTOCOL_VERSION,
-        engine_id: ENGINE_ID.to_string(),
+        engine_id: candidate.manifest.engine.clone(),
         candidate_id: candidate.manifest.candidate_id.clone(),
         worker_pid,
         manifest_bytes: candidate.manifest_bytes,
@@ -242,11 +267,8 @@ pub(super) fn ready_response(
 }
 
 pub(super) fn validate_evaluation_manifest_path(path: &Path) -> Result<(), String> {
-    let normalized = path.to_string_lossy().replace('\\', "/").to_lowercase();
-    if !normalized.contains("/autocomplete-v2-free/") || !normalized.contains("/candidates/") {
-        return Err(
-            "evaluation manifest must remain in the V2 free candidate directory".to_string(),
-        );
+    if !path.is_absolute() {
+        return Err("evaluation manifest path must be absolute".to_string());
     }
     Ok(())
 }

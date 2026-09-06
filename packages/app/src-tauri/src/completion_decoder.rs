@@ -11,9 +11,17 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{Manager, State};
+use unicode_normalization::UnicodeNormalization;
 
 const ENGINE_ID: &str = "public-v2-free-decoder-v1";
 const MANIFEST_SCHEMA: &str = "jotluck.autocomplete.public-free-decoder.v1";
+const BLOCK_ENGINE_ID: &str = "public-v2-free-block-v1";
+const BLOCK_MANIFEST_SCHEMA: &str = "jotluck.autocomplete.public-free-block-decoder.v1";
+const ROUTED_CODE_ENGINE_ID: &str = "public-v2.4-code-fim-v1";
+const ROUTED_WRITING_ENGINE_ID: &str = "public-v2.4-writing-v1";
+const ROUTED_JOINT_ENGINE_ID: &str = "public-v2.5-joint-v1";
+const V25_ONE_UNIT_WRITING_ENGINE_ID: &str = "public-v2.5-one-unit-writing-v1";
+const ROUTED_MANIFEST_SCHEMA: &str = "jotluck.autocomplete.public-routed-decoder.v1";
 const WORKER_ARGUMENT: &str = "--jotluck-completion-worker";
 const PARITY_ARGUMENT: &str = "--jotluck-completion-parity";
 const PROTOCOL_VERSION: u32 = 1;
@@ -25,8 +33,12 @@ const WARMUP_TIMEOUT: Duration = Duration::from_secs(10);
 const ACTOR_POLL_INTERVAL: Duration = Duration::from_millis(2);
 const RESPONSE_GRACE: Duration = Duration::from_millis(5);
 const MODEL_MAGIC: &[u8; 8] = b"JLFDQ02\0";
+const BLOCK_MODEL_MAGIC: &[u8; 8] = b"JLFDQ03\0";
+const ROUTED_MODEL_MAGIC: &[u8; 8] = b"JLFDQ04\0";
 const MAX_MODEL_HEADER_BYTES: usize = 256 * 1024;
 const QUANTIZED_MODEL_SCHEMA: &str = "jotluck.autocomplete.quantized-decoder.v2";
+const QUANTIZED_BLOCK_MODEL_SCHEMA: &str = "jotluck.autocomplete.quantized-block-decoder.v1";
+const QUANTIZED_ROUTED_MODEL_SCHEMA: &str = "jotluck.autocomplete.quantized-routed-decoder.v1";
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -79,11 +91,25 @@ pub struct DecoderGenerateRequest {
     cursor_pos: usize,
     context_tail: String,
     context_tail_utf8_bytes: usize,
+    #[serde(default)]
+    context_suffix: String,
+    #[serde(default)]
+    code_language: String,
     context_capsule: DecoderContextCapsule,
     language_hint: String,
     block_type: String,
     cursor_boundary: String,
     max_candidates: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    search_beam_width: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    editor_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    document_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    document_revision: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    search_mode: Option<String>,
     deadline_at: u64,
 }
 
@@ -97,6 +123,10 @@ struct DecoderContextCapsule {
     current_paragraph: String,
     previous_paragraph_tail: String,
     retrieval_snippet: String,
+    #[serde(default)]
+    code_suffix: String,
+    #[serde(default)]
+    code_language: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -107,6 +137,7 @@ pub struct DecoderRawCandidate {
     confidence: f64,
     model_score: f64,
     gate_score: f64,
+    log_score: f64,
     language: String,
 }
 
@@ -119,6 +150,22 @@ pub struct DecoderGenerateResponse {
     document_version: String,
     cursor_pos: usize,
     candidates: Vec<DecoderRawCandidate>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    diagnostics: Option<DecoderRuntimeDiagnostics>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DecoderRuntimeDiagnostics {
+    cache_status: String,
+    reused_tokens: usize,
+    computed_tokens: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    invalidation_reason: Option<String>,
+    final_beam_width: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    escalation_step: Option<usize>,
+    escalation_reasons: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -133,6 +180,12 @@ struct DecoderManifest {
     evaluation_only: bool,
     runtime_eligible: bool,
     release_eligible: bool,
+    #[serde(default)]
+    distribution_policy: Option<String>,
+    #[serde(default)]
+    route: Option<String>,
+    #[serde(default)]
+    matrix_id: Option<String>,
     parameter_count: u64,
     quantization: String,
     tokenizer: TokenizerContract,
@@ -143,6 +196,8 @@ struct DecoderManifest {
     assets: DecoderAssets,
     runtime_static_delta_bytes: u64,
     measured_peak_memory_bytes: u64,
+    #[serde(default)]
+    adaptive_thresholds: Option<AdaptiveBeamThresholds>,
     release_evidence: Option<ReleaseEvidence>,
 }
 
@@ -184,6 +239,10 @@ struct OutputContract {
 struct TrainingContract {
     cleaned_pool_bytes: u64,
     license_audit_passed: bool,
+    #[serde(default)]
+    dataset_recipe: Option<String>,
+    #[serde(default)]
+    dataset_manifest_sha256: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -198,12 +257,19 @@ struct OraclePrecheck {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AdaptiveBeamThresholds {
+    floor: f32,
+    margin_floor: f32,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 struct DecoderAssets {
     model: DecoderAsset,
     tokenizer: DecoderAsset,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 struct DecoderAsset {
     file: String,
     sha256: String,
@@ -215,6 +281,8 @@ struct DecoderAsset {
 struct QuantizedDecoderHeader {
     schema: String,
     engine: String,
+    #[serde(default)]
+    route: Option<String>,
     candidate_id: String,
     nominal_parameter_count: u64,
     actual_parameter_count: u64,
@@ -236,6 +304,32 @@ struct QuantizedDecoderArchitecture {
     activation: String,
     tied_embedding: bool,
     layer_norm_epsilon: f64,
+    #[serde(default = "default_decoder_block_size")]
+    block_size: usize,
+    #[serde(default)]
+    future_projection_count: usize,
+    #[serde(default = "default_decoder_sequential_head")]
+    sequential_head: String,
+    #[serde(default)]
+    markov_rank: usize,
+    #[serde(default = "default_decoder_confidence_head")]
+    confidence_head: String,
+    #[serde(default)]
+    training_objective: String,
+    #[serde(default)]
+    position_loss_weights: Vec<f64>,
+}
+
+const fn default_decoder_block_size() -> usize {
+    1
+}
+
+fn default_decoder_sequential_head() -> String {
+    "none".to_string()
+}
+
+fn default_decoder_confidence_head() -> String {
+    "none".to_string()
 }
 
 #[derive(Debug, Deserialize)]
@@ -397,6 +491,8 @@ mod host_actor;
 mod parity;
 mod protocol;
 mod tensor_layout;
+mod v24_cache;
+mod v24_mtp;
 mod worker;
 
 use candidate::*;
@@ -404,6 +500,8 @@ use host_actor::*;
 pub(crate) use parity::run_completion_parity_if_requested;
 use protocol::*;
 use tensor_layout::*;
+use v24_cache::*;
+use v24_mtp::*;
 pub(crate) use worker::run_completion_worker_if_requested;
 
 #[cfg(test)]

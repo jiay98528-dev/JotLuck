@@ -19,6 +19,8 @@ import {
   mergeTables,
   pruneTable,
   serialize,
+  serializedEntryByteLength,
+  serializedTableByteLength,
   deserialize,
   deserializeAsync,
   createParseDiagnostics,
@@ -336,6 +338,31 @@ describe('pruneTable', () => {
 // ---- serialize / deserialize ----
 
 describe('serialize ↔ deserialize', () => {
+  it('computes an entry byte length identical to its canonical JSONL representation', () => {
+    const context = '你😀|,\n';
+    const predictions = new Map([
+      ['世', 101],
+      ['\n', 3],
+      ['|', 3],
+    ]);
+    const canonicalLine = serialize(new Map([[context, predictions]]));
+
+    expect(serializedEntryByteLength(context, predictions)).toBe(
+      new TextEncoder().encode(canonicalLine).byteLength,
+    );
+    expect(serializedEntryByteLength(context, new Map())).toBe(
+      new TextEncoder().encode(serialize(new Map([[context, new Map()]]))).byteLength,
+    );
+    const table = new Map([
+      [context, predictions],
+      ['plain', new Map([['x', 2]])],
+    ]);
+    expect(serializedTableByteLength(table)).toBe(
+      new TextEncoder().encode(serialize(table)).byteLength,
+    );
+    expect(serializedTableByteLength(new Map())).toBe(0);
+  });
+
   it('往返保持数据一致', () => {
     const text =
       'The quick brown fox jumps over the lazy dog. ' +

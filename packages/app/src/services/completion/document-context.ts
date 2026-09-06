@@ -1,6 +1,11 @@
 import { syntaxTree } from '@codemirror/language';
 import { StateField, type ChangeSet, type EditorState, type Text } from '@codemirror/state';
-import { detectLanguageHint, detectSyntaxContext } from './context';
+import {
+  detectLanguageHint,
+  detectSyntaxContext,
+  normalizeFencedCodeLanguage,
+  scanCodeLexicalContext,
+} from './context';
 import type {
   BoundedTextSlice,
   CompletionBlockType,
@@ -203,6 +208,7 @@ function buildSnapshot(
   const nodePath = getNodePath(state, cursor);
   const inFrontmatter = frontmatterEnd !== null && cursor <= frontmatterEnd;
   const blockType = resolveBlockType(nodePath, line.text, inFrontmatter);
+  const codeContext = getFencedCodeContext(state, cursor, blockType);
   const disabled = blockType === 'code' || blockType === 'frontmatter';
   const paragraphFloor =
     frontmatterEnd !== null && cursor > frontmatterEnd
@@ -229,6 +235,8 @@ function buildSnapshot(
     cursor,
     nodePath,
     blockType,
+    codeLanguage: codeContext.language,
+    codeLexicalContext: codeContext.lexicalContext,
     headingTrail: getHeadingTrail(headings, cursor),
     line,
     currentParagraph,
@@ -254,6 +262,35 @@ function getNodePath(state: EditorState, cursor: number): readonly string[] {
     node = node.parent;
   }
   return path;
+}
+
+function getFencedCodeContext(
+  state: EditorState,
+  cursor: number,
+  blockType: CompletionBlockType,
+): { language?: string; lexicalContext?: 'code' | 'string' | 'comment' | 'unknown' } {
+  if (blockType !== 'code') return {};
+  let node: ReturnType<typeof syntaxTree>['topNode'] | null = syntaxTree(state).resolveInner(
+    cursor,
+    -1,
+  );
+  while (node && node.name.toLocaleLowerCase('en-US') !== 'fencedcode') {
+    node = node.parent;
+  }
+  if (!node) return { lexicalContext: 'unknown' };
+  const openerLine = state.doc.lineAt(node.from);
+  const opener = state.doc.sliceString(openerLine.from, openerLine.to);
+  const match = /^ {0,3}(?:`{3,}|~{3,})(.*)$/u.exec(opener);
+  const language = normalizeFencedCodeLanguage(match?.[1] ?? '');
+  if (!language) return { lexicalContext: 'unknown' };
+  const bodyStart = Math.min(state.doc.length, openerLine.to + 1);
+  if (cursor < bodyStart || cursor - bodyStart > DOCUMENT_WINDOW_BEFORE) {
+    return { language, lexicalContext: 'unknown' };
+  }
+  return {
+    language,
+    lexicalContext: scanCodeLexicalContext(state.doc.sliceString(bodyStart, cursor), language),
+  };
 }
 
 function resolveBlockType(

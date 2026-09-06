@@ -1139,6 +1139,9 @@ const customTemplateDisabledReason = computed(() => {
 let forcedE2ESaveFailure: string | null = null;
 const e2eBridge = getJotLuckE2EBridge();
 if (e2eBridge) {
+  e2eBridge.focusWindow = async () => {
+    if (isDesktopRuntime()) await getCurrentWindow().setFocus();
+  };
   e2eBridge.debugState = () => ({
     activePath: activePath.value,
     currentContent: currentContent.value,

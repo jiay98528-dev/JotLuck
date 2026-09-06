@@ -1,6 +1,7 @@
 import type { PredictionResult } from '@/utils/ngram-engine';
 import type { CompletionRequestDiagnostics } from '@/services/MarkdownPredictor';
 import type { CompletionAblationMode } from '@/services/completion/types';
+import type { PublicEngineDiagnostics } from '@/services/completion/public-engine-types';
 import type { HybridRetrievalHealthDiagnostics } from '@/services/completion/hybrid-retrieval-types';
 import type { FileChangeEvent } from '@/types';
 
@@ -17,6 +18,8 @@ export interface JotLuckE2EEditorBridge {
   id: string;
   getContent: () => string;
   setContent: (content: string) => void;
+  setCursor: (cursorOffset: number) => void;
+  focus: () => void;
   getCursor: () => number;
   getPrediction: () => PredictionResult | null;
   getVisiblePredictionDiagnostics: () => {
@@ -30,7 +33,9 @@ export interface JotLuckE2EEditorBridge {
     cursorOffset?: number,
     deadlineMs?: number,
   ) => Promise<CompletionRequestDiagnostics>;
-  seedCompletionCorpus: (excerpts: string[]) => void;
+  clearLearningState: () => void;
+  getCompletionEngineHealthSnapshot: () => PublicEngineDiagnostics | null;
+  seedCompletionCorpus: (excerpts: string[]) => Promise<void>;
   seedWorkspaceDocuments: (documents: Array<{ path: string; content: string }>) => Promise<void>;
   getHybridRetrievalHealth: () => HybridRetrievalHealthDiagnostics;
   seedPersonalCompletion: (context: string, acceptedText: string) => Promise<void>;
@@ -49,6 +54,7 @@ export interface JotLuckE2EMockNotebookConfig {
 
 export interface JotLuckE2EBridge {
   editor?: JotLuckE2EEditorBridge;
+  focusWindow?: () => Promise<void>;
   mockNotebook?: JotLuckE2EMockNotebookConfig;
   mockOpenedFile?: JotLuckE2EOpenedFile;
   externalFiles?: Record<string, string>;

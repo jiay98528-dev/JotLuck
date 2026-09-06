@@ -244,7 +244,7 @@ export class MarkdownStructureProvider implements CompletionProvider {
     const text = /^\d{1,9}[.)、．]$/u.test(prefix)
       ? ' '
       : prefix.startsWith('-') || prefix.startsWith('*') || prefix.startsWith('+')
-        ? '[ ] '
+        ? `${/\s$/u.test(prefix) ? '' : ' '}[ ] `
         : prefix.startsWith('#')
           ? '标题'
           : '引用';
@@ -783,7 +783,8 @@ export class NgramProvider implements CompletionProvider {
       )
       .map(({ layer, result }) => ({
         layer,
-        result: languageHint === 'en' ? toEnglishSpellingResult(result) : result,
+        result:
+          languageHint === 'en' && insideEnglishWord ? toEnglishSpellingResult(result) : result,
       }))
       .filter((item): item is { layer: LongNgramLayer; result: PredictionResult } =>
         Boolean(item.result),
@@ -798,6 +799,7 @@ export class NgramProvider implements CompletionProvider {
       .map(({ layer, result }) => ({
         text: result.text,
         confidence: result.confidence,
+        support: result.support,
         from: result.from ? result.from + context.documentFrom : context.cursorPos,
         providerId: this.id,
         source: 'ngram' as const,

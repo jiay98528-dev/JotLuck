@@ -121,7 +121,7 @@ impl DecoderModel {
         })
     }
 
-    fn project_output(
+    pub(super) fn project_output(
         &self,
         hidden: &[f32],
         should_stop: &(impl Fn() -> bool + Sync),
@@ -136,6 +136,7 @@ impl DecoderModel {
             layer.values.push(value);
         }
         cache.key_validity.push(pending.key_is_valid);
+        cache.hidden.push(pending.hidden);
     }
 
     pub(super) fn validate_cache(&self, cache: &DecoderCache) -> Result<(), String> {
@@ -153,6 +154,14 @@ impl DecoderModel {
                     || layer.keys.iter().any(|value| value.len() != self.width)
                     || layer.values.iter().any(|value| value.len() != self.width)
             })
+            || cache.prefix.hidden.len() != cache.prefix.key_validity.len()
+            || cache.hidden.len() != cache.key_validity.len()
+            || cache
+                .prefix
+                .hidden
+                .iter()
+                .chain(&cache.hidden)
+                .any(|value| value.len() != self.width)
         {
             return Err("decoder KV cache is inconsistent".to_string());
         }

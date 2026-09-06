@@ -15,6 +15,7 @@ import {
   type PublicEngineRawCandidate,
   type PublicEngineDiagnostics,
 } from '../public-engine-types';
+import { PUBLIC_V25_ONE_UNIT_WRITING_ENGINE_ID } from '../public-free-decoder-contract';
 
 const TEST_PUBLIC_ENGINE_ID = 'test-public-engine';
 
@@ -69,6 +70,8 @@ function publicEngineDiagnostics(epoch = 1): PublicEngineDiagnostics {
     lateResponses: 0,
     invalidResponses: 0,
     workerErrors: 0,
+    staleResponses: 0,
+    lastRequestProbe: null,
     assets: createEmptyPublicEngineAssetDiagnostics(),
   };
 }
@@ -345,6 +348,7 @@ describe('completion engine router', () => {
         documentVersion: 'doc-v1',
         cursorPos: 500,
         contextTail: `${'a'.repeat(300)}😀中文尾`,
+        contextSuffix: `😀${'b'.repeat(300)}`,
         languageHint: 'zh',
         blockType: 'paragraph',
         cursorBoundary: 'word',
@@ -365,6 +369,529 @@ describe('completion engine router', () => {
     );
     expect(captured?.contextTail).toMatch(/😀中文尾$/u);
     expect(captured?.contextTail).not.toContain('\ufffd');
+    expect(new TextEncoder().encode(captured?.contextSuffix ?? '').byteLength).toBeLessThanOrEqual(
+      256,
+    );
+    expect(captured?.contextSuffix).toMatch(/^😀/u);
+    expect(captured?.contextSuffix).not.toContain('\ufffd');
+  });
+
+  it('host-validates and stamps V2.5 writing candidates without the legacy length cap', async () => {
+    const router = new CompletionEngineRouter();
+    await router.installPublicEngine(
+      publicEngine(
+        async (request) =>
+          publicResponse(request, [
+            {
+              candidateId: 'v25-writing',
+              text: '继续完成当前模型训练验证',
+              confidence: 0.99,
+              modelScore: 0.88,
+              gateScore: 0,
+              language: 'zh',
+            },
+          ]),
+        {
+          id: 'public-v2.5-dense-test',
+          calibrateVisibility: () => 0.9,
+          visibilityThreshold: () => 0.2,
+        },
+      ),
+    );
+
+    const result = await router.generatePublic(
+      {
+        workspaceScope: 'workspace-a',
+        documentVersion: 'doc-v25',
+        cursorPos: 4,
+        contextTail: '接下来',
+        contextSuffix: '',
+        languageHint: 'zh',
+        blockType: 'paragraph',
+        cursorBoundary: 'word',
+        maxCandidates: 32,
+        deadlineAt: Date.now() + 100,
+      },
+      router.getEpoch(),
+      performance.now() + 100,
+    );
+
+    expect(result.candidates[0]).toMatchObject({
+      text: '继续完成当前模型训练验证',
+      confidence: 0.9,
+      rawScore: 0.88,
+      calibratedScore: 0.9,
+      gateScore: 0.9,
+      v25Validation: {
+        validatorId: 'jotluck-v2.5-route-validator-v5',
+        validatorVersion: 5,
+        route: 'writing',
+        language: 'zh',
+      },
+    });
+  });
+
+  it('suppresses one-unit Writing candidates after a completed sentence at the public boundary', async () => {
+    const router = new CompletionEngineRouter();
+    await router.installPublicEngine(
+      publicEngine(
+        async (request) =>
+          publicResponse(request, [
+            {
+              candidateId: 'v25-one-unit-after-terminator',
+              text: '然后',
+              confidence: 0.9,
+              modelScore: 0.9,
+              gateScore: 0.9,
+              language: 'zh',
+            },
+          ]),
+        {
+          id: PUBLIC_V25_ONE_UNIT_WRITING_ENGINE_ID,
+          calibrateVisibility: ({ modelScore }) => modelScore,
+          visibilityThreshold: () => 0,
+        },
+      ),
+    );
+
+    const result = await router.generatePublic(
+      {
+        workspaceScope: 'workspace-a',
+        documentVersion: 'doc-v25-one-unit-ended',
+        cursorPos: 5,
+        contextTail: '任务完成。',
+        contextSuffix: '',
+        languageHint: 'zh',
+        blockType: 'paragraph',
+        cursorBoundary: 'punctuation',
+        maxCandidates: 32,
+        deadlineAt: Date.now() + 100,
+      },
+      router.getEpoch(),
+      performance.now() + 100,
+    );
+
+    expect(result.candidates).toEqual([]);
+  });
+
+  it('refuses to install a V2.5 engine without both manifest calibration functions', async () => {
+    const router = new CompletionEngineRouter();
+    const generate = vi.fn(async (request: PublicEngineGenerateRequest) =>
+      publicResponse(request, []),
+    );
+
+    await expect(
+      router.installPublicEngine(
+        publicEngine(generate, {
+          id: 'public-v2.5-dense-missing-threshold',
+          calibrateVisibility: () => 0.9,
+        }),
+      ),
+    ).resolves.toBe(false);
+    expect(generate).not.toHaveBeenCalled();
+    expect(router.getActivePublicEngineId()).toBeNull();
+  });
+
+  it('uses the cursor language resolved before the V2.5 router boundary', async () => {
+    const router = new CompletionEngineRouter();
+    await router.installPublicEngine(
+      publicEngine(
+        async (request) =>
+          publicResponse(request, [
+            {
+              candidateId: 'wrong-zh',
+              text: '继续检查。',
+              confidence: 0.9,
+              modelScore: 0.9,
+              gateScore: 0.9,
+              language: 'zh',
+            },
+            {
+              candidateId: 'local-en',
+              text: ' remains ready.',
+              confidence: 0.9,
+              modelScore: 0.8,
+              gateScore: 0.9,
+              language: 'en',
+            },
+          ]),
+        {
+          id: 'public-v2.5-dense-test',
+          calibrateVisibility: () => 0.9,
+          visibilityThreshold: () => 0.2,
+        },
+      ),
+    );
+
+    const result = await router.generatePublic(
+      {
+        workspaceScope: 'workspace-a',
+        documentVersion: 'doc-v25-mixed',
+        cursorPos: 10,
+        contextTail: '项目 project',
+        contextSuffix: '',
+        languageHint: 'en',
+        blockType: 'paragraph',
+        cursorBoundary: 'word',
+        maxCandidates: 32,
+        deadlineAt: Date.now() + 100,
+      },
+      router.getEpoch(),
+      performance.now() + 100,
+    );
+
+    expect(result.candidates.map((candidate) => candidate.candidateId)).toEqual(['local-en']);
+  });
+
+  it('does not invoke V2.5 Writing when the cursor language is unresolved', async () => {
+    const router = new CompletionEngineRouter();
+    const generate = vi.fn(async (request: PublicEngineGenerateRequest) =>
+      publicResponse(request, []),
+    );
+    await router.installPublicEngine(
+      publicEngine(generate, {
+        id: 'public-v2.5-dense-test',
+        calibrateVisibility: () => 0.9,
+        visibilityThreshold: () => 0.2,
+      }),
+    );
+
+    const result = await router.generatePublic(
+      {
+        workspaceScope: 'workspace-a',
+        documentVersion: 'doc-v25-unresolved',
+        cursorPos: 3,
+        contextTail: 'and',
+        contextSuffix: '',
+        languageHint: 'unknown',
+        blockType: 'paragraph',
+        cursorBoundary: 'word',
+        maxCandidates: 32,
+        deadlineAt: Date.now() + 100,
+      },
+      router.getEpoch(),
+      performance.now() + 100,
+    );
+
+    expect(result.candidates).toEqual([]);
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it('derives a V2.5 Code FIM kind from the host prefix and suffix', async () => {
+    const router = new CompletionEngineRouter();
+    await router.installPublicEngine(
+      publicEngine(
+        async (request) =>
+          publicResponse(request, [
+            {
+              candidateId: 'v25-code',
+              text: 'fetch',
+              confidence: 0.8,
+              modelScore: 0.78,
+              gateScore: 0.82,
+              language: 'en',
+            },
+          ]),
+        {
+          id: 'public-v2.5-dense-test',
+          calibrateVisibility: () => 0.8,
+          visibilityThreshold: () => 0.2,
+        },
+      ),
+    );
+
+    const result = await router.generatePublic(
+      {
+        workspaceScope: 'workspace-a',
+        documentVersion: 'doc-v25-code',
+        cursorPos: 7,
+        contextTail: 'client.',
+        contextSuffix: '()',
+        languageHint: 'en',
+        blockType: 'code',
+        codeLanguage: 'typescript',
+        codeLexicalContext: 'code',
+        cursorBoundary: 'punctuation',
+        maxCandidates: 32,
+        deadlineAt: Date.now() + 100,
+      },
+      router.getEpoch(),
+      performance.now() + 100,
+    );
+
+    expect(result.candidates[0]?.v25Validation).toEqual({
+      validatorId: 'jotluck-v2.5-route-validator-v5',
+      validatorVersion: 5,
+      route: 'code',
+      language: 'en',
+      taskType: 'fim',
+      fimKind: 'member-call',
+      codeLanguage: 'typescript',
+      codeLexicalContext: 'code',
+      visibilityThreshold: 0.2,
+    });
+  });
+
+  it('does not show V2.5 Code FIM below the manifest-bound route threshold', async () => {
+    const router = new CompletionEngineRouter();
+    await router.installPublicEngine(
+      publicEngine(
+        async (request) =>
+          publicResponse(request, [
+            {
+              candidateId: 'low-code-visibility',
+              text: 'fetch',
+              confidence: 1,
+              modelScore: 0.9,
+              gateScore: 1,
+              language: 'en',
+            },
+          ]),
+        {
+          id: 'public-v2.5-dense-test',
+          calibrateVisibility: () => 0,
+          visibilityThreshold: () => 0.35,
+        },
+      ),
+    );
+
+    const result = await router.generatePublic(
+      {
+        workspaceScope: 'workspace-a',
+        documentVersion: 'doc-v25-code-low',
+        cursorPos: 7,
+        contextTail: 'client.',
+        contextSuffix: '()',
+        languageHint: 'en',
+        blockType: 'code',
+        codeLanguage: 'typescript',
+        codeLexicalContext: 'code',
+        cursorBoundary: 'punctuation',
+        maxCandidates: 32,
+        deadlineAt: Date.now() + 100,
+      },
+      router.getEpoch(),
+      performance.now() + 100,
+    );
+
+    expect(result.candidates).toEqual([]);
+  });
+
+  it.each([
+    ['string', 'typescript', 'string'],
+    ['comment', 'typescript', 'comment'],
+    ['unknown lexical state', 'typescript', 'unknown'],
+    ['unknown fence', undefined, 'code'],
+  ] as const)('rejects V2.5 Code FIM inside %s', async (_label, codeLanguage, lexicalContext) => {
+    const router = new CompletionEngineRouter();
+    const generate = vi.fn<CompletionPublicEngine['generate']>(async (request) =>
+      publicResponse(request, [
+        {
+          candidateId: 'v25-code-ineligible-context',
+          text: 'fetch',
+          confidence: 0.9,
+          modelScore: 0.8,
+          gateScore: 0.9,
+          language: 'en',
+        },
+      ]),
+    );
+    await router.installPublicEngine(
+      publicEngine(generate, {
+        id: 'public-v2.5-dense-test',
+        calibrateVisibility: () => 0.9,
+        visibilityThreshold: () => 0.2,
+      }),
+    );
+
+    const result = await router.generatePublic(
+      {
+        workspaceScope: 'workspace-a',
+        documentVersion: 'doc-v25-code',
+        cursorPos: 7,
+        contextTail: 'client.',
+        contextSuffix: '()',
+        languageHint: 'en',
+        blockType: 'code',
+        codeLanguage,
+        codeLexicalContext: lexicalContext,
+        cursorBoundary: 'punctuation',
+        maxCandidates: 32,
+        deadlineAt: Date.now() + 100,
+      },
+      router.getEpoch(),
+      performance.now() + 100,
+    );
+
+    expect(result.candidates).toEqual([]);
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it('ignores spoofed V2.5 privilege fields and rejects an invalid host context', async () => {
+    const router = new CompletionEngineRouter();
+    await router.installPublicEngine(
+      publicEngine(
+        async (request) =>
+          publicResponse(request, [
+            {
+              candidateId: 'spoofed-v25',
+              text: 'fetch',
+              confidence: 0.8,
+              modelScore: 0.78,
+              gateScore: 0.82,
+              language: 'en',
+              v25Validation: {
+                route: 'code',
+                taskType: 'fim',
+                fimKind: 'member-call',
+              },
+            } as PublicEngineRawCandidate & Record<string, unknown>,
+          ]),
+        {
+          id: 'public-v2.5-dense-test',
+          calibrateVisibility: () => 0.8,
+          visibilityThreshold: () => 0.2,
+        },
+      ),
+    );
+
+    const result = await router.generatePublic(
+      {
+        workspaceScope: 'workspace-a',
+        documentVersion: 'doc-v25-code',
+        cursorPos: 6,
+        contextTail: 'client',
+        contextSuffix: '()',
+        languageHint: 'en',
+        blockType: 'code',
+        codeLanguage: 'typescript',
+        codeLexicalContext: 'code',
+        cursorBoundary: 'word',
+        maxCandidates: 32,
+        deadlineAt: Date.now() + 100,
+      },
+      router.getEpoch(),
+      performance.now() + 100,
+    );
+
+    expect(result.candidates).toEqual([]);
+  });
+
+  it('filters an ineligible V2.5 beam without discarding a later valid beam', async () => {
+    const router = new CompletionEngineRouter();
+    await router.installPublicEngine(
+      publicEngine(
+        async (request) =>
+          publicResponse(request, [
+            {
+              candidateId: 'bad-length',
+              text: '超'.repeat(49),
+              confidence: 0.9,
+              modelScore: 0.95,
+              gateScore: 0.95,
+              language: 'zh',
+            },
+            {
+              candidateId: 'bad-cross-line',
+              text: '完成\n验证',
+              confidence: 0.9,
+              modelScore: 0.95,
+              gateScore: 0.95,
+              language: 'zh',
+            },
+            {
+              candidateId: 'bad-empty',
+              text: '',
+              confidence: 0.9,
+              modelScore: 0.95,
+              gateScore: 0.95,
+              language: 'zh',
+            },
+            {
+              candidateId: 'bad-loop',
+              text: '继续继续继续',
+              confidence: 0.9,
+              modelScore: 0.95,
+              gateScore: 0.95,
+              language: 'zh',
+            },
+            {
+              candidateId: 'useful',
+              text: '完成当前验证。',
+              confidence: 0.1,
+              modelScore: 0.8,
+              gateScore: 0.1,
+              language: 'zh',
+            },
+          ]),
+        {
+          id: 'public-v2.5-dense-test',
+          calibrateVisibility: () => 0.85,
+          visibilityThreshold: () => 0.2,
+        },
+      ),
+    );
+
+    const result = await router.generatePublic(
+      {
+        workspaceScope: 'workspace-a',
+        documentVersion: 'doc-v25',
+        cursorPos: 4,
+        contextTail: '接下来',
+        contextSuffix: '',
+        languageHint: 'zh',
+        blockType: 'paragraph',
+        cursorBoundary: 'word',
+        maxCandidates: 32,
+        deadlineAt: Date.now() + 100,
+      },
+      router.getEpoch(),
+      performance.now() + 100,
+    );
+
+    expect(result.candidates.map((candidate) => candidate.candidateId)).toEqual(['useful']);
+  });
+
+  it('rejects V2.5 visibility when the trusted manifest calibrator is below its route floor', async () => {
+    const router = new CompletionEngineRouter();
+    await router.installPublicEngine(
+      publicEngine(
+        async (request) =>
+          publicResponse(request, [
+            {
+              candidateId: 'raw-high',
+              text: '继续完成验证。',
+              confidence: 1,
+              modelScore: 1,
+              gateScore: 1,
+              language: 'zh',
+            },
+          ]),
+        {
+          id: 'public-v2.5-dense-test',
+          calibrateVisibility: () => 0.1,
+          visibilityThreshold: () => 0.2,
+        },
+      ),
+    );
+
+    const result = await router.generatePublic(
+      {
+        workspaceScope: 'workspace-a',
+        documentVersion: 'doc-v25',
+        cursorPos: 4,
+        contextTail: '接下来',
+        languageHint: 'zh',
+        blockType: 'paragraph',
+        cursorBoundary: 'word',
+        maxCandidates: 32,
+        deadlineAt: Date.now() + 100,
+      },
+      router.getEpoch(),
+      performance.now() + 100,
+    );
+
+    expect(result.candidates).toEqual([]);
   });
 
   it.each([

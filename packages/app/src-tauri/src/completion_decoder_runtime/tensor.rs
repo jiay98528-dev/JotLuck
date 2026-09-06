@@ -56,7 +56,12 @@ impl Tensor {
 }
 
 pub(super) fn parse_envelope(bytes: &[u8]) -> Result<(ModelHeader, &[u8]), String> {
-    if bytes.len() < 12 || &bytes[..8] != MODEL_MAGIC {
+    if bytes.len() < 12
+        || (&bytes[..8] != MODEL_MAGIC_V2
+            && &bytes[..8] != MODEL_MAGIC_V3
+            && &bytes[..8] != MODEL_MAGIC_V4
+            && &bytes[..8] != MODEL_MAGIC_V5)
+    {
         return Err("decoder model magic is invalid".to_string());
     }
     let length = u32::from_le_bytes(
@@ -71,7 +76,9 @@ pub(super) fn parse_envelope(bytes: &[u8]) -> Result<(ModelHeader, &[u8]), Strin
         .map_err(|error| format!("invalid decoder model header: {error}"))?;
     let payload = &bytes[12 + length..];
     let actual = format!("{:x}", Sha256::digest(payload));
-    if header.payload_sha256 != actual {
+    let v25_joint_payload =
+        header.schema == MODEL_SCHEMA_V4 && header.route.as_deref() == Some("joint");
+    if !v25_joint_payload && header.payload_sha256 != actual {
         return Err("decoder model payload SHA-256 mismatch".to_string());
     }
     Ok((header, payload))

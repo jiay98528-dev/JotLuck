@@ -11,28 +11,48 @@ const MAX_CURRENT_PARAGRAPH_CODE_POINTS = 2_048;
 const MAX_PREVIOUS_PARAGRAPH_CODE_POINTS = 768;
 const MAX_RETRIEVAL_CODE_POINTS = 768;
 
+export interface PublicFreeContextCapsuleOptions {
+  maximumTokens?: number;
+  preserveRoutedBoundaryWhitespace?: boolean;
+}
+
 export function createPublicFreeContextCapsule(
   context: CompletionContext,
   retrievalSnippet?: string,
+  options: PublicFreeContextCapsuleOptions = {},
 ): PublicEngineContextCapsule {
   const snapshot = context.contextSnapshot;
   const capsule: PublicEngineContextCapsule = {
     schemaVersion: PUBLIC_FREE_CONTEXT_CAPSULE_SCHEMA_VERSION,
-    maxTokens: PUBLIC_FREE_CONTEXT_MAX_TOKENS,
+    maxTokens:
+      Number.isInteger(options.maximumTokens) &&
+      options.maximumTokens! >= 1 &&
+      options.maximumTokens! <= PUBLIC_FREE_CONTEXT_MAX_TOKENS
+        ? options.maximumTokens!
+        : PUBLIC_FREE_CONTEXT_MAX_TOKENS,
     languageHint: context.languageHint,
     headingTrail: (snapshot?.headingTrail ?? [])
       .slice(-MAX_HEADING_COUNT)
-      .map((heading) => normalizeSegment(heading, MAX_HEADING_CODE_POINTS))
+      .map((heading) =>
+        normalizeSegment(
+          heading,
+          MAX_HEADING_CODE_POINTS,
+          false,
+          !options.preserveRoutedBoundaryWhitespace,
+        ),
+      )
       .filter(Boolean),
     currentParagraph: normalizeSegment(
       snapshot?.currentParagraph.text ?? context.paragraphBeforeCursor,
       MAX_CURRENT_PARAGRAPH_CODE_POINTS,
       true,
+      !options.preserveRoutedBoundaryWhitespace,
     ),
     previousParagraphTail: normalizeSegment(
       snapshot?.previousParagraph?.text ?? '',
       MAX_PREVIOUS_PARAGRAPH_CODE_POINTS,
       true,
+      !options.preserveRoutedBoundaryWhitespace,
     ),
     retrievalSnippet: normalizeSegment(retrievalSnippet ?? '', MAX_RETRIEVAL_CODE_POINTS, true),
   };
@@ -55,9 +75,13 @@ export function serializePublicFreeContextCapsule(capsule: PublicEngineContextCa
 
 export function isPublicEngineContextCapsule(value: unknown): value is PublicEngineContextCapsule {
   if (!isRecord(value)) return false;
+  const maxTokens = value.maxTokens;
   return (
     value.schemaVersion === PUBLIC_FREE_CONTEXT_CAPSULE_SCHEMA_VERSION &&
-    value.maxTokens === PUBLIC_FREE_CONTEXT_MAX_TOKENS &&
+    typeof maxTokens === 'number' &&
+    Number.isInteger(maxTokens) &&
+    maxTokens >= 1 &&
+    maxTokens <= PUBLIC_FREE_CONTEXT_MAX_TOKENS &&
     isLanguageHint(value.languageHint) &&
     Array.isArray(value.headingTrail) &&
     value.headingTrail.length <= MAX_HEADING_COUNT &&
@@ -95,8 +119,14 @@ function fitCapsuleToByteLimit(capsule: PublicEngineContextCapsule): PublicEngin
   return fitted;
 }
 
-function normalizeSegment(value: string, maximumCodePoints: number, keepTail = false): string {
-  const normalized = value.normalize('NFC').replace(/\r\n?/gu, '\n').trim();
+function normalizeSegment(
+  value: string,
+  maximumCodePoints: number,
+  keepTail = false,
+  trimBoundaryWhitespace = true,
+): string {
+  const canonical = value.normalize('NFC').replace(/\r\n?/gu, '\n');
+  const normalized = trimBoundaryWhitespace ? canonical.trim() : canonical;
   const points = [...normalized];
   if (points.length <= maximumCodePoints) return normalized;
   return (keepTail ? points.slice(-maximumCodePoints) : points.slice(0, maximumCodePoints)).join(

@@ -121,7 +121,7 @@ test.describe('five-language localization', () => {
   }) => {
     await waitForCleanAppReady(page);
     await ensureEditorReady(page);
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
       localStorage.setItem(
         'jotluck:autocomplete:settings',
         JSON.stringify({
@@ -137,7 +137,7 @@ test.describe('five-language localization', () => {
         'jotluck:scope:unscoped:autocomplete:acceptedLexicon:v1',
         '["continuation"]',
       );
-      window.__jotluck_e2e?.editor?.seedCompletionCorpus([
+      await window.__jotluck_e2e?.editor?.seedCompletionCorpus([
         'Alpha beta gamma delta. Alpha beta gamma delta. Alpha beta gamma delta.',
       ]);
     });

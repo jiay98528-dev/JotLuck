@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { decoderManifest } from './decoder-manifest.fixture';
+import { decoderManifest, v25JointManifest } from './decoder-manifest.fixture';
 import {
   createCanonicalPublicFreeDecoderEngine,
   createPublicFreeDecoderEvaluationEngine,
@@ -63,6 +63,21 @@ describe('public free decoder evaluation factory', () => {
         adapter: unusedAdapter,
       }),
     ).resolves.toBeNull();
+  });
+
+  it('constructs V2.5 from real assets even when control-plane flags drift', async () => {
+    const manifest = v25JointManifest();
+    manifest.evaluationOnly = false;
+    manifest.runtimeEligible = false;
+    manifest.releaseEligible = true;
+    const engine = await createPublicFreeDecoderEvaluationEngine({
+      manifestUrl: '/candidate/manifest.json',
+      manifestPath: 'D:/candidate/manifest.json',
+      fetcher: vi.fn(async () => response(manifest)) as unknown as typeof fetch,
+      adapter: unusedAdapter,
+    });
+
+    expect(engine?.id).toBe('public-v2.5-joint-v1');
   });
 
   it('keeps release construction separate from the dev/E2E constructor', async () => {

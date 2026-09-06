@@ -71,6 +71,8 @@ export class PublicV2sEngine implements CompletionPublicEngine {
       lateResponses: 0,
       invalidResponses: 0,
       workerErrors: 0,
+      staleResponses: 0,
+      lastRequestProbe: null,
       assets: createEmptyPublicEngineAssetDiagnostics(),
     };
     this.diagnosticsState.assets.manifestBytes = options.manifestBytes ?? 0;

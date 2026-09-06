@@ -221,13 +221,16 @@ impl DecoderModel {
                 prefix: Arc::new(SharedKeyValuePrefix {
                     key_validity: tokens.iter().map(|token_id| *token_id != 0).collect(),
                     layers: prefix_layers,
+                    hidden,
                 }),
                 key_validity: Vec::new(),
                 layers: (0..self.layers)
                     .map(|_| LayerKeyValueCache::default())
                     .collect(),
+                hidden: Vec::new(),
             },
             logits,
+            hidden: normalized,
         })
     }
 
@@ -370,6 +373,7 @@ impl DecoderModel {
             }
         }
 
+        let cache_hidden = hidden.clone();
         let normalized = {
             let _profile = super::q4::profile_span("advance.final_norm");
             self.layer_norm_batch(&hidden, "final_norm.weight", "final_norm.bias")?
@@ -381,12 +385,18 @@ impl DecoderModel {
         if should_stop() {
             return Err("decoder inference cancelled or expired".to_string());
         }
-        for ((cache, layers), is_valid) in caches.iter_mut().zip(pending).zip(key_validity) {
+        for (((cache, layers), is_valid), hidden) in caches
+            .iter_mut()
+            .zip(pending)
+            .zip(key_validity)
+            .zip(cache_hidden)
+        {
             for (layer, (key, value)) in cache.layers.iter_mut().zip(layers) {
                 layer.keys.push(key);
                 layer.values.push(value);
             }
             cache.key_validity.push(is_valid);
+            cache.hidden.push(hidden);
         }
         Ok(logits)
     }

@@ -2,6 +2,7 @@ import type { CompletionSettings } from '../CompletionSettings';
 
 export type CompletionSourceKind = 'structured' | 'ngram' | 'recent' | 'neural';
 export type CompletionLanguageHint = 'zh' | 'en' | 'mixed' | 'unknown';
+export type CompletionCodeLexicalContext = 'code' | 'string' | 'comment' | 'unknown';
 export type CompletionMode = 'structured' | 'predictive';
 export type CompletionFeedbackPolicy = 'none' | 'session' | 'retained';
 export type CompletionLearningAdmission = 'persist' | 'memoryOnly' | 'skip';
@@ -13,6 +14,7 @@ export type CompletionPriorityTier =
   | 'fallback';
 export type CompletionCandidateKind =
   | 'format'
+  | 'code-syntax'
   | 'wiki-link'
   | 'tag'
   | 'file-path'
@@ -85,6 +87,18 @@ export interface CompletionContributor {
   calibratedScore: number;
 }
 
+export interface CompletionV25ValidationContract {
+  validatorId: 'jotluck-v2.5-route-validator-v5';
+  validatorVersion: 5;
+  route: 'writing' | 'code';
+  language: string;
+  taskType?: 'fim';
+  fimKind?: 'member-call' | 'call-argument' | 'expression';
+  codeLanguage?: string;
+  codeLexicalContext?: 'code';
+  visibilityThreshold: number;
+}
+
 export interface BoundedTextSlice {
   from: number;
   to: number;
@@ -98,6 +112,8 @@ export interface CompletionDocumentContextSnapshot {
   cursor: number;
   nodePath: readonly string[];
   blockType: CompletionBlockType;
+  codeLanguage?: string;
+  codeLexicalContext?: CompletionCodeLexicalContext;
   headingTrail: readonly string[];
   line: CompletionLine | null;
   currentParagraph: BoundedTextSlice;
@@ -135,6 +151,8 @@ export interface CompletionContext {
   atEndOfLine: boolean;
   languageHint: CompletionLanguageHint;
   blockType: CompletionBlockType;
+  codeLanguage?: string;
+  codeLexicalContext?: CompletionCodeLexicalContext;
   paragraphBeforeCursor: string;
   paragraphStart: number;
   sentencePrefix: string;
@@ -167,6 +185,12 @@ export interface CompletionCandidate {
   rawScore?: number;
   calibratedScore?: number;
   feedbackPolicy?: CompletionFeedbackPolicy;
+  /** Retained observations supporting a Personal-v5 candidate. */
+  support?: number;
+  /** Distinct opened-document paragraphs supporting the complete phrase. */
+  documentParagraphSupport?: number;
+  /** Host-stamped V2.5 model-layer contract; never accepted from an arbitrary provider verbatim. */
+  v25Validation?: CompletionV25ValidationContract;
 }
 
 export type CompletionProviderDataAccess =

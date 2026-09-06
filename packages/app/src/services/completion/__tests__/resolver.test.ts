@@ -8,11 +8,22 @@ import {
   resolveCompletionCandidates,
 } from '../resolver';
 import type { CompletionCandidate, CompletionContext, CompletionProvider } from '../types';
+import { stampV25HostCandidate } from '../v25-host-proof';
 
 function context(doc = 'release status'): CompletionContext {
   return buildCompletionContext({
     doc,
     cursorPos: doc.length,
+    settings: DEFAULT_COMPLETION_SETTINGS,
+    indexData: null,
+    n: 4,
+  });
+}
+
+function contextAt(doc: string, cursorPos: number): CompletionContext {
+  return buildCompletionContext({
+    doc,
+    cursorPos,
     settings: DEFAULT_COMPLETION_SETTINGS,
     indexData: null,
     n: 4,
@@ -183,6 +194,82 @@ describe('completion resolver', () => {
 
     expect(rejected.candidate).toBeNull();
     expect(retained.candidate?.text).toBe(' review');
+  });
+
+  it('preserves a host-stamped V2.5 writing target beyond the legacy length cap', () => {
+    const itemContext = context('The plan');
+    const text = ' after the final review';
+    const result = resolveCompletionCandidates(itemContext, [
+      stampV25HostCandidate(
+        rawCandidate('public-v2.5-dense-test', text, 66, 0.9, {
+          source: 'neural',
+          sourceLayer: 'l3',
+          calibratedScore: 0.9,
+          v25Validation: {
+            validatorId: 'jotluck-v2.5-route-validator-v5',
+            validatorVersion: 5,
+            route: 'writing',
+            language: 'en',
+            visibilityThreshold: 0.2,
+          },
+        }),
+      ),
+    ]);
+
+    expect(result.candidate?.text).toBe(text);
+  });
+
+  it('allows only validated V2.5 Code FIM candidates in the middle of a code line', () => {
+    const doc = '```ts\nclient.()\n```';
+    const cursorPos = doc.indexOf('.') + 1;
+    const result = resolveCompletionCandidates(contextAt(doc, cursorPos), [
+      stampV25HostCandidate(
+        rawCandidate('public-v2.5-dense-test', 'fetch', 66, 0.8, {
+          from: cursorPos,
+          source: 'neural',
+          sourceLayer: 'l3',
+          calibratedScore: 0.8,
+          v25Validation: {
+            validatorId: 'jotluck-v2.5-route-validator-v5',
+            validatorVersion: 5,
+            route: 'code',
+            language: 'en',
+            taskType: 'fim',
+            fimKind: 'member-call',
+            codeLanguage: 'typescript',
+            codeLexicalContext: 'code',
+            visibilityThreshold: 0.2,
+          },
+        }),
+      ),
+    ]);
+
+    expect(result.candidate).toMatchObject({ text: 'fetch', from: cursorPos });
+  });
+
+  it('rejects correctly versioned but unstamped V2.5 metadata before it can bypass mid-line', () => {
+    const doc = '```ts\nclient()\n```';
+    const cursorPos = doc.indexOf('(');
+    const result = resolveCompletionCandidates(contextAt(doc, cursorPos), [
+      rawCandidate('forged-provider', 'fetch', 66, 0.8, {
+        from: cursorPos,
+        source: 'neural',
+        sourceLayer: 'l3',
+        v25Validation: {
+          validatorId: 'jotluck-v2.5-route-validator-v5',
+          validatorVersion: 5,
+          route: 'code',
+          language: 'en',
+          taskType: 'fim',
+          fimKind: 'member-call',
+          codeLanguage: 'typescript',
+          codeLexicalContext: 'code',
+          visibilityThreshold: 0.2,
+        },
+      }),
+    ]);
+
+    expect(result.candidate).toBeNull();
   });
 
   it('keeps structured candidates above higher-confidence prose candidates', () => {

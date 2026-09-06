@@ -27,7 +27,10 @@ import {
 } from '@/utils/markdown-formatting';
 import { getJotLuckE2EBridge } from '@/utils/e2e-bridge';
 import { flushCompletionStorageMutations } from '@/services/completion/learning-repository';
-import { createOpenedDocumentParagraphChange } from '@/services/completion/document-context';
+import {
+  createOpenedDocumentParagraphChange,
+  getCompletionDocumentContext,
+} from '@/services/completion/document-context';
 import type { RendererOptions } from '@jotluck/renderer';
 import { currentLocale, translate } from '@/i18n';
 
@@ -162,6 +165,13 @@ function registerE2EEditorBridge(): void {
       emit('update:modelValue', view.state.doc.toString());
       view.focus();
     },
+    setCursor: (cursorOffset) => {
+      if (!view) return;
+      const anchor = Math.max(0, Math.min(view.state.doc.length, Math.trunc(cursorOffset)));
+      view.dispatch({ selection: { anchor } });
+      view.focus();
+    },
+    focus: () => view?.focus(),
     getCursor: () => view?.state.selection.main.head ?? 0,
     getPrediction: () => {
       if (!view) return null;
@@ -190,15 +200,33 @@ function registerE2EEditorBridge(): void {
         ).__jotluckGetVisibleGhostDiagnostics?.() ?? null
       );
     },
-    requestCompletionDiagnostics: (content, cursorOffset = content.length, deadlineMs = 110) =>
-      predictor.requestGhostTextWithDiagnostics(cursorOffset, content, { deadlineMs }),
-    seedCompletionCorpus: (excerpts) => {
+    requestCompletionDiagnostics: (content, cursorOffset = content.length, deadlineMs = 110) => {
+      // Mirror the live ghost-text path when the editor already reflects the
+      // requested document: diagnostics then see the same CM6 snapshot (heading
+      // trail + paragraphs) a real keystroke does. Otherwise fall back to the
+      // text-only context so synthetic warmup probes keep working.
+      const editorView = view;
+      const snapshotMatchesRequest =
+        editorView !== null &&
+        editorView.state.doc.toString() === content &&
+        editorView.state.selection.main.head === cursorOffset;
+      return predictor.requestGhostTextWithDiagnostics(cursorOffset, content, {
+        deadlineMs,
+        contextSnapshot: snapshotMatchesRequest
+          ? getCompletionDocumentContext(editorView.state)
+          : undefined,
+      });
+    },
+    getCompletionEngineHealthSnapshot: () => predictor.getPublicEngineDiagnostics(),
+    clearLearningState: () => predictor.clearLearningData(),
+    seedCompletionCorpus: async (excerpts) => {
       // N2 intentionally requires cross-document support. Mirror two distinct
       // notebook files per excerpt instead of inflating one synthetic file.
       excerpts.forEach((excerpt, index) => {
         predictor.replaceDocumentContribution(`__e2e_seed__/${index}-a.md`, excerpt);
         predictor.replaceDocumentContribution(`__e2e_seed__/${index}-b.md`, excerpt);
       });
+      await predictor.flushHybridRetrievalMutations();
     },
     seedWorkspaceDocuments: async (documents) => {
       // Independent workspace evaluation provides distinct support documents.

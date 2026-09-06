@@ -19,6 +19,8 @@ struct ParityRequest {
     include_beam_sequences: bool,
     #[serde(default = "unknown_language_hint")]
     language_hint: String,
+    #[serde(default)]
+    block_position: Option<usize>,
 }
 
 #[derive(Debug, Serialize)]
@@ -36,6 +38,8 @@ struct ParityResponse {
     logits: EncodedVector,
     top32: Vec<ParityTopToken>,
     generation_steps: Vec<ParityGenerationStep>,
+    block_draft: Option<ParityBlockDraft>,
+    block_position_logits: Option<EncodedVector>,
     beam_sequences: Vec<ParityBeamSequence>,
 }
 
@@ -52,7 +56,19 @@ struct ParityError {
 #[serde(untagged)]
 enum ParityEnvelope {
     Response(Box<ParityResponse>),
+    BlockPosition(Box<ParityBlockPositionResponse>),
     Error(ParityError),
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ParityBlockPositionResponse {
+    schema: &'static str,
+    protocol_version: u32,
+    request_id: u64,
+    candidate_id: String,
+    token_ids: Vec<usize>,
+    block_position_logits: EncodedVector,
 }
 
 #[derive(Debug, Serialize)]
@@ -81,6 +97,15 @@ struct ParityGenerationStep {
     selected_token_id: usize,
     decoded_text: String,
     top32: Vec<ParityTopToken>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ParityBlockDraft {
+    token_ids: Vec<usize>,
+    decoded_text: String,
+    conditional_confidence: Vec<f32>,
+    per_position_top32: Vec<Vec<ParityTopToken>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -139,7 +164,9 @@ fn parity_enabled(value: Option<std::ffi::OsString>) -> bool {
 
 fn run_parity(manifest_path: &Path) -> Result<(), String> {
     let candidate = load_candidate(manifest_path)?;
-    if candidate.manifest.lifecycle != "trained" || !candidate.manifest.evaluation_only {
+    if !is_v25_joint_runtime(&candidate.manifest)
+        && (candidate.manifest.lifecycle != "trained" || !candidate.manifest.evaluation_only)
+    {
         return Err("completion parity requires a trained evaluation manifest".to_string());
     }
     let mut reader = BufReader::new(io::stdin().lock());
@@ -147,14 +174,14 @@ fn run_parity(manifest_path: &Path) -> Result<(), String> {
         read_frame(&mut reader).map_err(|error| format!("invalid parity frame: {error}"))?;
     let response = evaluate_request(&candidate, request)?;
     let mut writer = BufWriter::new(io::stdout().lock());
-    write_frame(&mut writer, &ParityEnvelope::Response(Box::new(response)))
+    write_frame(&mut writer, &response)
         .map_err(|error| format!("unable to write parity frame: {error}"))
 }
 
 fn evaluate_request(
     candidate: &LoadedCandidate,
     request: ParityRequest,
-) -> Result<ParityResponse, String> {
+) -> Result<ParityEnvelope, String> {
     if request.protocol_version != PROTOCOL_VERSION {
         return Err("completion parity protocol mismatch".to_string());
     }
@@ -175,14 +202,78 @@ fn evaluate_request(
             > 256
         || !matches!(request.language_hint.as_str(), "zh" | "en" | "unknown")
         || (request.include_beam_sequences && tokens.len() > 232)
+        || request.block_position.is_some_and(|position| position >= 5)
     {
         return Err("parity generation length is invalid".to_string());
+    }
+    if request.block_position.is_some()
+        && (!candidate.runtime.is_block_decoder() || request.maximum_new_tokens == 0)
+    {
+        return Err(
+            "parity block position requires a generated block decoder position".to_string(),
+        );
+    }
+    if let Some(position) = request.block_position {
+        let draft =
+            candidate
+                .runtime
+                .draft_block(&tokens, request.maximum_new_tokens.min(5), &|| false)?;
+        let logits = draft
+            .per_position_logits
+            .get(position)
+            .ok_or_else(|| "parity block position exceeds generated positions".to_string())?;
+        return Ok(ParityEnvelope::BlockPosition(Box::new(
+            ParityBlockPositionResponse {
+                schema: PARITY_SCHEMA,
+                protocol_version: PROTOCOL_VERSION,
+                request_id: request.request_id,
+                candidate_id: candidate.manifest.candidate_id.clone(),
+                token_ids: tokens,
+                block_position_logits: encode_vector(logits)?,
+            },
+        )));
     }
     let trace = candidate.runtime.parity_trace(&tokens)?;
     let generation =
         candidate
             .runtime
             .greedy_trace(&tokens, request.maximum_new_tokens, &|| false)?;
+    let (block_draft, block_position_logits) = if candidate.runtime.is_block_decoder()
+        && request.maximum_new_tokens > 0
+    {
+        let draft =
+            candidate
+                .runtime
+                .draft_block(&tokens, request.maximum_new_tokens.min(5), &|| false)?;
+        let per_position_top32 = draft
+            .per_position_logits
+            .iter()
+            .map(|logits| {
+                candidate.runtime.rank_logits(logits, 32).map(|ranked| {
+                    ranked
+                        .into_iter()
+                        .enumerate()
+                        .map(|(rank, token)| ParityTopToken {
+                            token_id: token.token_id,
+                            logit: token.logit,
+                            rank,
+                        })
+                        .collect()
+                })
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        (
+            Some(ParityBlockDraft {
+                decoded_text: candidate.runtime.decode_tokens(&draft.token_ids),
+                token_ids: draft.token_ids,
+                conditional_confidence: draft.conditional_confidence,
+                per_position_top32,
+            }),
+            None,
+        )
+    } else {
+        (None, None)
+    };
     let beam_sequences = if request.include_beam_sequences {
         super::worker::beam_sequences_for_parity(
             &candidate.runtime,
@@ -198,8 +289,11 @@ fn evaluate_request(
         tokens,
         trace,
         generation,
+        block_draft,
+        block_position_logits,
         beam_sequences,
     )
+    .map(|response| ParityEnvelope::Response(Box::new(response)))
 }
 
 fn build_response(
@@ -208,6 +302,8 @@ fn build_response(
     tokens: Vec<usize>,
     trace: DecoderParityTrace,
     generation: Vec<crate::completion_decoder_runtime::DecoderGenerationStep>,
+    block_draft: Option<ParityBlockDraft>,
+    block_position_logits: Option<EncodedVector>,
     beam_sequences: Vec<super::worker::BeamParitySequence>,
 ) -> Result<ParityResponse, String> {
     let mut indices: Vec<usize> = (0..trace.logits.len()).collect();
@@ -280,6 +376,8 @@ fn build_response(
         logits: encode_vector(&trace.logits)?,
         top32,
         generation_steps,
+        block_draft,
+        block_position_logits,
         beam_sequences,
     })
 }
@@ -331,5 +429,20 @@ mod tests {
         assert_eq!(encoded.minimum, -2.0);
         assert_eq!(encoded.maximum, 1.0);
         assert_eq!(encoded.sha256.len(), 64);
+    }
+
+    #[test]
+    fn block_position_diagnostic_fits_the_bounded_parity_frame() {
+        let response = ParityEnvelope::BlockPosition(Box::new(ParityBlockPositionResponse {
+            schema: PARITY_SCHEMA,
+            protocol_version: PROTOCOL_VERSION,
+            request_id: 7,
+            candidate_id: "writing-mtp-wm4-20260812".to_string(),
+            token_ids: vec![1; 256],
+            block_position_logits: encode_vector(&vec![0.0; 8_000]).unwrap(),
+        }));
+        let mut frame = Vec::new();
+        write_frame(&mut frame, &response).unwrap();
+        assert!(frame.len() <= MAX_FRAME_BYTES + 4);
     }
 }

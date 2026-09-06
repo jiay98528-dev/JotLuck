@@ -9,8 +9,15 @@ impl DecoderModel {
         let bytes = fs::read(path)
             .map_err(|error| format!("unable to read quantized decoder model: {error}"))?;
         let (header, payload) = parse_envelope(&bytes)?;
-        if header.schema != MODEL_SCHEMA
-            || header.vocabulary_size != 8_000
+        let block_model = header.schema == MODEL_SCHEMA_V3;
+        let routed_model = header.schema == MODEL_SCHEMA_V4;
+        let writing_mtp_model = header.schema == MODEL_SCHEMA_V5;
+        let vocabulary_valid = header.vocabulary_size == 8_000
+            || (routed_model
+                && header.route.as_deref() == Some("writing")
+                && header.vocabulary_size == 12_000);
+        if (!block_model && !routed_model && !writing_mtp_model && header.schema != MODEL_SCHEMA_V2)
+            || !vocabulary_valid
             || header.maximum_context_tokens != 256
             || header.architecture.width == 0
             || header.architecture.layers == 0
@@ -18,6 +25,38 @@ impl DecoderModel {
             || header.architecture.width % header.architecture.heads != 0
             || !header.architecture.layer_norm_epsilon.is_finite()
             || header.architecture.layer_norm_epsilon <= 0.0
+            || header.architecture.confidence_head != "none"
+            || (routed_model
+                && !matches!(
+                    header.route.as_deref(),
+                    Some("code") | Some("writing") | Some("joint")
+                ))
+            || (writing_mtp_model && header.route.as_deref() != Some("writing"))
+            || (!routed_model && !writing_mtp_model && header.route.is_some())
+            || (block_model
+                && (header.architecture.block_size != 5
+                    || header.architecture.future_projection_count != 4
+                    || !matches!(
+                        header.architecture.sequential_head.as_str(),
+                        "none" | "markov"
+                    )
+                    || !matches!(header.architecture.markov_rank, 0 | 32 | 64)
+                    || header.architecture.position_loss_weights.len() != 5
+                    || header.architecture.training_objective.is_empty()))
+            || (writing_mtp_model
+                && (header.route.as_deref() != Some("writing")
+                    || !matches!(header.architecture.block_size, 2 | 4)
+                    || !header.architecture.direct_head
+                    || header.architecture.mtp_head_count != header.architecture.block_size - 1
+                    || header.architecture.future_projection_count != 0
+                    || header.architecture.sequential_head != "none"
+                    || header.architecture.markov_rank != 0))
+            || (!block_model
+                && !writing_mtp_model
+                && (header.architecture.block_size != 1
+                    || header.architecture.future_projection_count != 0
+                    || header.architecture.sequential_head != "none"
+                    || header.architecture.markov_rank != 0))
         {
             return Err("decoder model runtime header is invalid".to_string());
         }
@@ -99,15 +138,167 @@ impl DecoderModel {
                 return Err("decoder runtime tensor alias is invalid".to_string());
             }
         }
-        Ok(Self {
+        let model = Self {
+            route: header.route,
             width: header.architecture.width,
             layers: header.architecture.layers,
             heads: header.architecture.heads,
             layer_norm_epsilon: header.architecture.layer_norm_epsilon,
             maximum_context_tokens: header.maximum_context_tokens,
+            block_size: header.architecture.block_size,
+            future_projection_count: header.architecture.future_projection_count,
+            sequential_head: header.architecture.sequential_head,
+            markov_rank: header.architecture.markov_rank,
+            direct_mtp: writing_mtp_model,
             tensors,
             aliases,
+        };
+        model.validate_block_tensors()?;
+        Ok(model)
+    }
+
+    pub(super) fn validate_block_tensors(&self) -> Result<(), String> {
+        if self.block_size == 1 {
+            return Ok(());
+        }
+        if self.direct_mtp {
+            for index in 0..self.block_size - 1 {
+                for suffix in ["rms_hidden.weight", "rms_embedding.weight"] {
+                    let tensor = self.tensor(&format!("mtp_heads.{index}.{suffix}"))?;
+                    if tensor.shape != [self.width] {
+                        return Err("decoder MTP RMSNorm shape is invalid".to_string());
+                    }
+                }
+                let projection = self.tensor(&format!("mtp_heads.{index}.projection.weight"))?;
+                if projection.shape != [self.width, 2 * self.width] {
+                    return Err("decoder MTP projection shape is invalid".to_string());
+                }
+            }
+            return Ok(());
+        }
+        for index in 0..self.future_projection_count {
+            let tensor = self.tensor(&format!("future_projections.{index}.weight"))?;
+            if tensor.shape != [self.width, self.width] {
+                return Err("decoder future projection shape is invalid".to_string());
+            }
+        }
+        if self.sequential_head == "markov" {
+            for name in ["markov_embedding.weight", "markov_output.weight"] {
+                let tensor = self.tensor(name)?;
+                if tensor.shape != [8_000, self.markov_rank] {
+                    return Err("decoder Markov tensor shape is invalid".to_string());
+                }
+            }
+        } else if self.markov_rank != 0 {
+            return Err("decoder sequential head metadata is inconsistent".to_string());
+        }
+        Ok(())
+    }
+
+    pub(super) fn draft_block(
+        &self,
+        tokens: &[usize],
+        maximum_tokens: usize,
+        should_stop: &(impl Fn() -> bool + Sync),
+    ) -> Result<BlockDraft, String> {
+        let prefill = self.prefill(tokens, should_stop)?;
+        self.draft_block_from_prefill(prefill, maximum_tokens, should_stop)
+    }
+
+    pub(super) fn draft_block_from_prefill(
+        &self,
+        prefill: DecoderPrefill,
+        maximum_tokens: usize,
+        should_stop: &(impl Fn() -> bool + Sync),
+    ) -> Result<BlockDraft, String> {
+        if self.block_size <= 1 {
+            return Err("decoder model does not contain a block head".to_string());
+        }
+        let maximum = maximum_tokens.min(self.block_size);
+        if maximum == 0 {
+            return Err("decoder block draft requires at least one token".to_string());
+        }
+        let mut hidden = prefill.hidden.clone();
+        let mut logits = prefill.logits.clone();
+        let mut token_ids = Vec::with_capacity(maximum);
+        let mut per_position_logits = Vec::with_capacity(maximum);
+        let mut conditional_confidence = Vec::with_capacity(maximum);
+        for position in 0..maximum {
+            if should_stop() {
+                return Err("decoder inference cancelled or expired".to_string());
+            }
+            if position > 0 && self.direct_mtp {
+                let previous = *token_ids
+                    .last()
+                    .ok_or_else(|| "decoder MTP prefix is missing".to_string())?;
+                let embedding = self.matrix_row("token_embedding.weight", previous)?;
+                let normalized_hidden = self.rms_norm(
+                    &hidden,
+                    &format!("mtp_heads.{}.rms_hidden.weight", position - 1),
+                )?;
+                let normalized_embedding = self.rms_norm(
+                    &embedding,
+                    &format!("mtp_heads.{}.rms_embedding.weight", position - 1),
+                )?;
+                let mut combined = normalized_hidden;
+                combined.extend(normalized_embedding);
+                hidden = self.matvec(
+                    &format!("mtp_heads.{}.projection.weight", position - 1),
+                    &combined,
+                    should_stop,
+                )?;
+                logits = self.matvec("output.weight", &hidden, should_stop)?;
+            } else if position > 0 {
+                let projection = self.matvec(
+                    &format!("future_projections.{}.weight", position - 1),
+                    &hidden,
+                    should_stop,
+                )?;
+                let mut projected = hidden.clone();
+                add_in_place(&mut projected, &projection)?;
+                logits = self.matvec("output.weight", &projected, should_stop)?;
+                if self.sequential_head == "markov" {
+                    let previous = *token_ids
+                        .last()
+                        .ok_or_else(|| "decoder block prefix is missing".to_string())?;
+                    let embedding = self.matrix_row("markov_embedding.weight", previous)?;
+                    let transition =
+                        self.matvec("markov_output.weight", &embedding, should_stop)?;
+                    add_in_place(&mut logits, &transition)?;
+                }
+            }
+            let selected = rank_logits(&logits, 1)?
+                .into_iter()
+                .next()
+                .ok_or_else(|| "decoder block logits produced no token".to_string())?;
+            token_ids.push(selected.token_id);
+            conditional_confidence.push(selected.log_probability.exp().clamp(0.0, 1.0));
+            per_position_logits.push(logits.clone());
+        }
+        Ok(BlockDraft {
+            prefill,
+            token_ids,
+            per_position_logits,
+            conditional_confidence,
         })
+    }
+
+    fn rms_norm(&self, input: &[f32], weight_name: &str) -> Result<Vec<f32>, String> {
+        if input.len() != self.width {
+            return Err("decoder MTP RMSNorm input width is invalid".to_string());
+        }
+        let weight = self.vector(weight_name)?;
+        if weight.len() != input.len() {
+            return Err("decoder MTP RMSNorm weight width is invalid".to_string());
+        }
+        let mean_square =
+            input.iter().map(|value| value * value).sum::<f32>() / input.len().max(1) as f32;
+        let denominator = (mean_square + self.layer_norm_epsilon).sqrt();
+        Ok(input
+            .iter()
+            .zip(weight)
+            .map(|(value, scale)| value / denominator * scale)
+            .collect())
     }
 
     pub(super) fn vocabulary_size(&self) -> Result<usize, String> {

@@ -162,6 +162,76 @@ fn assert_cache_close(
     }
 }
 
+fn assert_logical_cache_close(
+    actual: &DecoderCache,
+    expected: &DecoderCache,
+    absolute: f32,
+    relative: f32,
+) {
+    assert_eq!(
+        actual
+            .prefix
+            .key_validity
+            .iter()
+            .chain(&actual.key_validity)
+            .collect::<Vec<_>>(),
+        expected
+            .prefix
+            .key_validity
+            .iter()
+            .chain(&expected.key_validity)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(actual.prefix.layers.len(), expected.prefix.layers.len());
+    assert_eq!(actual.layers.len(), expected.layers.len());
+    for layer in 0..actual.prefix.layers.len() {
+        let actual_keys = actual.prefix.layers[layer]
+            .keys
+            .iter()
+            .chain(&actual.layers[layer].keys)
+            .collect::<Vec<_>>();
+        let expected_keys = expected.prefix.layers[layer]
+            .keys
+            .iter()
+            .chain(&expected.layers[layer].keys)
+            .collect::<Vec<_>>();
+        let actual_values = actual.prefix.layers[layer]
+            .values
+            .iter()
+            .chain(&actual.layers[layer].values)
+            .collect::<Vec<_>>();
+        let expected_values = expected.prefix.layers[layer]
+            .values
+            .iter()
+            .chain(&expected.layers[layer].values)
+            .collect::<Vec<_>>();
+        assert_eq!(actual_keys.len(), expected_keys.len());
+        assert_eq!(actual_values.len(), expected_values.len());
+        for (actual, expected) in actual_keys.into_iter().zip(expected_keys) {
+            assert_vectors_close(actual, expected, absolute, relative);
+        }
+        for (actual, expected) in actual_values.into_iter().zip(expected_values) {
+            assert_vectors_close(actual, expected, absolute, relative);
+        }
+    }
+    let actual_hidden = actual
+        .prefix
+        .hidden
+        .iter()
+        .chain(&actual.hidden)
+        .collect::<Vec<_>>();
+    let expected_hidden = expected
+        .prefix
+        .hidden
+        .iter()
+        .chain(&expected.hidden)
+        .collect::<Vec<_>>();
+    assert_eq!(actual_hidden.len(), expected_hidden.len());
+    for (actual, expected) in actual_hidden.into_iter().zip(expected_hidden) {
+        assert_vectors_close(actual, expected, absolute, relative);
+    }
+}
+
 fn synthetic_model() -> DecoderModel {
     let width = 2;
     let vocabulary = 4;
@@ -240,14 +310,164 @@ fn synthetic_model() -> DecoderModel {
         );
     }
     DecoderModel {
+        route: None,
         width,
         layers: 1,
         heads: 1,
         layer_norm_epsilon: 1e-5,
         maximum_context_tokens: context,
+        block_size: 1,
+        future_projection_count: 0,
+        sequential_head: "none".to_string(),
+        markov_rank: 0,
+        direct_mtp: false,
         tensors,
         aliases: HashMap::new(),
     }
+}
+
+#[test]
+fn block_draft_uses_one_prefill_hidden_state_for_five_positions() {
+    let mut model = synthetic_model();
+    model.block_size = 5;
+    model.future_projection_count = 4;
+    for index in 0..4 {
+        model.tensors.insert(
+            format!("future_projections.{index}.weight"),
+            float_tensor(&[2, 2], vec![0.0; 4]),
+        );
+    }
+    let draft = model.draft_block(&[1], 5, &|| false).unwrap();
+    assert!(draft.prefill.cache.truncate_to(1).is_some());
+    assert_eq!(draft.prefill.logits, draft.per_position_logits[0]);
+    assert_eq!(draft.token_ids.len(), 5);
+    assert_eq!(draft.per_position_logits.len(), 5);
+    assert_eq!(draft.conditional_confidence.len(), 5);
+    assert!(draft
+        .conditional_confidence
+        .iter()
+        .all(|value| value.is_finite() && (0.0..=1.0).contains(value)));
+}
+
+#[test]
+fn block_draft_reuses_a_prepared_prefill_without_changing_outputs() {
+    let mut model = synthetic_model();
+    model.block_size = 5;
+    model.future_projection_count = 4;
+    for index in 0..4 {
+        model.tensors.insert(
+            format!("future_projections.{index}.weight"),
+            float_tensor(&[2, 2], vec![0.0; 4]),
+        );
+    }
+    let expected = model.draft_block(&[1], 5, &|| false).unwrap();
+    let prefill = model.prefill(&[1], &|| false).unwrap();
+    let reused = model
+        .draft_block_from_prefill(prefill, 5, &|| false)
+        .unwrap();
+
+    assert_eq!(reused.token_ids, expected.token_ids);
+    assert_eq!(reused.per_position_logits, expected.per_position_logits);
+    assert_eq!(
+        reused.conditional_confidence,
+        expected.conditional_confidence
+    );
+    assert_eq!(reused.prefill.cache, expected.prefill.cache);
+}
+
+#[test]
+fn block_draft_observes_cancellation_before_committing_a_result() {
+    let mut model = synthetic_model();
+    model.block_size = 5;
+    model.future_projection_count = 4;
+    for index in 0..4 {
+        model.tensors.insert(
+            format!("future_projections.{index}.weight"),
+            float_tensor(&[2, 2], vec![0.0; 4]),
+        );
+    }
+    assert!(model.draft_block(&[1], 5, &|| true).is_err());
+}
+
+#[test]
+fn direct_mtp_head_uses_jlfdq05_rmsnorm_concat_projection() {
+    let mut model = synthetic_model();
+    model.block_size = 2;
+    model.direct_mtp = true;
+    model.tensors.insert(
+        "mtp_heads.0.rms_hidden.weight".to_string(),
+        float_tensor(&[2], vec![1.0, 1.0]),
+    );
+    model.tensors.insert(
+        "mtp_heads.0.rms_embedding.weight".to_string(),
+        float_tensor(&[2], vec![1.0, 1.0]),
+    );
+    model.tensors.insert(
+        "mtp_heads.0.projection.weight".to_string(),
+        float_tensor(&[2, 4], vec![1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
+    );
+    model.validate_block_tensors().unwrap();
+    let draft = model.draft_block(&[1], 2, &|| false).unwrap();
+    assert_eq!(draft.token_ids.len(), 2);
+    assert_eq!(draft.per_position_logits.len(), 2);
+    assert!(draft.prefill.cache.truncate_to(1).is_some());
+}
+
+#[test]
+fn runtime_envelope_parser_accepts_jlfdq05_schema() {
+    let payload = b"";
+    let header = serde_json::json!({
+        "schema": MODEL_SCHEMA_V5,
+        "route": "writing",
+        "payloadSha256": format!("{:x}", Sha256::digest(payload)),
+        "vocabularySize": 8000,
+        "maximumContextTokens": 256,
+        "architecture": {
+            "width": 2,
+            "layers": 1,
+            "heads": 1,
+            "layerNormEpsilon": 0.00001,
+            "blockSize": 2,
+            "directHead": true,
+            "mtpHeadCount": 1
+        },
+        "tensors": []
+    });
+    let encoded = serde_json::to_vec(&header).unwrap();
+    let mut envelope = MODEL_MAGIC_V5.to_vec();
+    envelope.extend((encoded.len() as u32).to_le_bytes());
+    envelope.extend(encoded);
+    let (parsed, parsed_payload) = parse_envelope(&envelope).unwrap();
+    assert_eq!(parsed.schema, MODEL_SCHEMA_V5);
+    assert_eq!(parsed_payload, payload);
+}
+
+#[test]
+fn v25_joint_runtime_uses_tensor_structure_instead_of_digest_metadata() {
+    let payload = b"actual joint payload";
+    let header = serde_json::json!({
+        "schema": MODEL_SCHEMA_V4,
+        "route": "joint",
+        "payloadSha256": "advisory-only",
+        "vocabularySize": 8000,
+        "maximumContextTokens": 256,
+        "architecture": {
+            "width": 512,
+            "layers": 10,
+            "heads": 8,
+            "layerNormEpsilon": 0.00001
+        },
+        "tensors": []
+    });
+    let encoded = serde_json::to_vec(&header).unwrap();
+    let mut envelope = MODEL_MAGIC_V4.to_vec();
+    envelope.extend((encoded.len() as u32).to_le_bytes());
+    envelope.extend(encoded);
+    envelope.extend(payload);
+
+    let (parsed, parsed_payload) = parse_envelope(&envelope).unwrap();
+    assert_eq!(parsed.route.as_deref(), Some("joint"));
+    assert_eq!(parsed_payload, payload);
 }
 
 #[test]
@@ -361,6 +581,75 @@ fn incremental_kv_cache_matches_full_causal_rebuild() {
 }
 
 #[test]
+#[ignore = "requires real model/tokenizer paths through JOTLUCK_COMPLETION_BENCH_MODEL and JOTLUCK_COMPLETION_BENCH_TOKENIZER"]
+fn real_incremental_kv_cache_matches_full_causal_rebuild() {
+    let model_path = PathBuf::from(
+        std::env::var_os("JOTLUCK_COMPLETION_BENCH_MODEL")
+            .expect("JOTLUCK_COMPLETION_BENCH_MODEL must point to a real decoder model"),
+    );
+    let tokenizer_path = PathBuf::from(
+        std::env::var_os("JOTLUCK_COMPLETION_BENCH_TOKENIZER")
+            .expect("JOTLUCK_COMPLETION_BENCH_TOKENIZER must point to a runtime tokenizer"),
+    );
+    let context = std::env::var("JOTLUCK_COMPLETION_BENCH_CONTEXT")
+        .unwrap_or_else(|_| "今天我们继续验证增量缓存，并保持候选顺序稳定。".to_string());
+    let runtime = DecoderRuntime::load(&model_path, &tokenizer_path).unwrap();
+    let original_tokens = runtime.encode_generation_context(&context, 24);
+    assert!(original_tokens.len() >= 8);
+
+    let lcp = original_tokens.len() - 3;
+    let prefix = runtime.prefill(&original_tokens[..lcp], &|| false).unwrap();
+    let replacement = runtime
+        .rank_logits(&prefix.logits, 32)
+        .unwrap()
+        .into_iter()
+        .map(|token| token.token_id)
+        .find(|token_id| *token_id != original_tokens[lcp] && !runtime.is_terminal(*token_id))
+        .expect("real model must expose one non-terminal replacement token");
+    let mut edited_tokens = original_tokens[..lcp].to_vec();
+    edited_tokens.push(replacement);
+    edited_tokens.extend_from_slice(&original_tokens[lcp + 1..]);
+
+    let original = runtime.prefill(&original_tokens, &|| false).unwrap();
+    let mut incremental_cache = original
+        .cache
+        .truncate_to(lcp)
+        .expect("real cache must be truncatable to the exact LCP");
+    let mut incremental_logits = Vec::new();
+    for token_id in edited_tokens.iter().skip(lcp).copied() {
+        incremental_logits = runtime
+            .advance(&mut incremental_cache, token_id, &|| false)
+            .unwrap();
+    }
+    let rebuilt = runtime.prefill(&edited_tokens, &|| false).unwrap();
+    let maximum_logit_difference = maximum_difference(&incremental_logits, &rebuilt.logits);
+    assert!(
+        maximum_logit_difference <= 1e-3,
+        "real incremental cache logits differ by {maximum_logit_difference:e}"
+    );
+    let incremental_top4 = runtime
+        .rank_logits(&incremental_logits, 4)
+        .unwrap()
+        .into_iter()
+        .map(|token| token.token_id)
+        .collect::<Vec<_>>();
+    let rebuilt_top4 = runtime
+        .rank_logits(&rebuilt.logits, 4)
+        .unwrap()
+        .into_iter()
+        .map(|token| token.token_id)
+        .collect::<Vec<_>>();
+    assert_eq!(incremental_top4, rebuilt_top4);
+    assert_logical_cache_close(&incremental_cache, &rebuilt.cache, 1e-3, 1e-4);
+    eprintln!(
+        "real-cache-parity tokens={} lcp={} edited-tokens={} logits-max-diff={maximum_logit_difference:e} top4={incremental_top4:?}",
+        original_tokens.len(),
+        lcp,
+        edited_tokens.len(),
+    );
+}
+
+#[test]
 fn cancelled_cache_append_is_transactional() {
     let model = synthetic_model();
     let mut cache = model.prefill(&[1, 2], &|| false).unwrap().cache;
@@ -442,18 +731,18 @@ fn parallel_matvec_preserves_row_and_accumulation_order() {
 }
 
 #[test]
-#[ignore = "requires a real decoder bundle through JOTLUCK_COMPLETION_BENCH_BUNDLE"]
+#[ignore = "requires JOTLUCK_COMPLETION_BENCH_MODEL and JOTLUCK_COMPLETION_BENCH_TOKENIZER"]
 fn profiles_real_q4_prefill_advance_and_rank() {
-    let bundle = PathBuf::from(
-        std::env::var_os("JOTLUCK_COMPLETION_BENCH_BUNDLE")
-            .expect("JOTLUCK_COMPLETION_BENCH_BUNDLE must point to a real decoder bundle"),
+    let model_path = PathBuf::from(
+        std::env::var_os("JOTLUCK_COMPLETION_BENCH_MODEL")
+            .expect("JOTLUCK_COMPLETION_BENCH_MODEL must point to a real decoder model"),
+    );
+    let tokenizer_path = PathBuf::from(
+        std::env::var_os("JOTLUCK_COMPLETION_BENCH_TOKENIZER")
+            .expect("JOTLUCK_COMPLETION_BENCH_TOKENIZER must point to a runtime tokenizer"),
     );
     let load_started = Instant::now();
-    let runtime = DecoderRuntime::load(
-        &bundle.join("v2-free-16m-formal-32mib-20260807-b.q4.decoder.bin"),
-        &bundle.join("tokenizer.runtime.json"),
-    )
-    .unwrap();
+    let runtime = DecoderRuntime::load(&model_path, &tokenizer_path).unwrap();
     let load_elapsed = load_started.elapsed();
     let tokens = runtime.encode_generation_context("今天我们需要继续完善离线补全", 24);
 
@@ -496,14 +785,16 @@ fn profiles_real_q4_prefill_advance_and_rank() {
 }
 
 #[test]
-#[ignore = "requires a real decoder bundle through JOTLUCK_COMPLETION_BENCH_BUNDLE"]
+#[ignore = "requires JOTLUCK_COMPLETION_BENCH_MODEL and JOTLUCK_COMPLETION_BENCH_TOKENIZER"]
 fn real_q4_matches_dequantized_layers_logits_cache_and_tokens() {
-    let bundle = PathBuf::from(
-        std::env::var_os("JOTLUCK_COMPLETION_BENCH_BUNDLE")
-            .expect("JOTLUCK_COMPLETION_BENCH_BUNDLE must point to a real decoder bundle"),
+    let model_path = PathBuf::from(
+        std::env::var_os("JOTLUCK_COMPLETION_BENCH_MODEL")
+            .expect("JOTLUCK_COMPLETION_BENCH_MODEL must point to a real decoder model"),
     );
-    let model_path = bundle.join("v2-free-16m-formal-32mib-20260807-b.q4.decoder.bin");
-    let tokenizer_path = bundle.join("tokenizer.runtime.json");
+    let tokenizer_path = PathBuf::from(
+        std::env::var_os("JOTLUCK_COMPLETION_BENCH_TOKENIZER")
+            .expect("JOTLUCK_COMPLETION_BENCH_TOKENIZER must point to a runtime tokenizer"),
+    );
     let packed = DecoderRuntime::load(&model_path, &tokenizer_path).unwrap();
     let mut reference = DecoderRuntime::load(&model_path, &tokenizer_path).unwrap();
     let packed_tensors = packed

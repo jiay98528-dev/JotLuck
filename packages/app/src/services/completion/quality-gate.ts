@@ -1,4 +1,5 @@
 import type { PredictionResult } from '@/utils/ngram-engine';
+import { evaluateV25OneUnitWritingTrigger } from './v25-one-unit-trigger';
 
 export type PredictionQualityGateReason =
   | 'empty'
@@ -7,7 +8,8 @@ export type PredictionQualityGateReason =
   | 'markdown-marker-run'
   | 'leading-whitespace'
   | 'language-mismatch'
-  | 'sentence-already-ended';
+  | 'sentence-already-ended'
+  | 'low-v25-model-score';
 
 export interface PredictionQualityGateEvaluation {
   result: PredictionResult | null;
@@ -41,7 +43,15 @@ export function evaluatePredictionQualityGate(
   ) {
     return rejected('language-mismatch');
   }
-  if (/[。！？!?；;：:]$/u.test(localContext.trim())) {
+  const v25Writing = result.v25Validation?.route === 'writing' ? result.v25Validation : null;
+  if (v25Writing && (v25Writing.language === 'en' || v25Writing.language === 'zh')) {
+    const trigger = evaluateV25OneUnitWritingTrigger({
+      language: v25Writing.language,
+      prefix: localContext,
+      modelScore: result.rawScore ?? Number.NaN,
+    });
+    if (!trigger.allowed) return rejected(trigger.reason);
+  } else if (/[。！？!?；;：:]$/u.test(localContext.trim())) {
     return rejected('sentence-already-ended');
   }
 

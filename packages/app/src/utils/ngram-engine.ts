@@ -39,6 +39,17 @@ export interface PredictionResult {
   informationScore?: number;
   learningBoost?: number;
   learningPenalty?: number;
+  v25Validation?: {
+    validatorId: 'jotluck-v2.5-route-validator-v5';
+    validatorVersion: 5;
+    route: 'writing' | 'code';
+    language: string;
+    taskType?: 'fim';
+    fimKind?: 'member-call' | 'call-argument' | 'expression';
+    codeLanguage?: string;
+    codeLexicalContext?: 'code';
+    visibilityThreshold: number;
+  };
   /** Opaque token binding accept/reject feedback to the prediction that was shown. */
   feedbackToken?: string;
 }
@@ -74,6 +85,7 @@ interface RankedNextCodePoint {
 }
 
 const CONFIDENCE_SUPPORT_PRIOR = 2;
+const UTF8_ENCODER = new TextEncoder();
 
 export function scanText(text: string, n: number = 4): NGramTable {
   const table: NGramTable = new Map();
@@ -296,16 +308,35 @@ export function pruneTable(
 }
 
 export function serialize(table: NGramTable): string {
-  const lines: string[] = [];
-  const contexts = [...table.entries()].sort((a, b) =>
-    _toHex(a[0]).localeCompare(_toHex(b[0]), 'en'),
-  );
-  for (const [ctx, preds] of contexts) {
-    const predParts = [...preds].sort((a, b) => b[1] - a[1]).map(([ch, cnt]) => [_toHex(ch), cnt]);
-    const flags = [...preds].some(([, c]) => c > 100) ? 'u' : 'b';
-    lines.push(JSON.stringify([_toHex(ctx), predParts, flags]));
+  const contexts = [...table.entries()]
+    .map(([ctx, preds]) => ({ ctxHex: _toHex(ctx), preds }))
+    .sort((a, b) => a.ctxHex.localeCompare(b.ctxHex, 'en'));
+  return contexts.map(({ ctxHex, preds }) => serializeEntryFromHex(ctxHex, preds)).join('\n');
+}
+
+/** Exact byte length of one v3 JSONL entry, excluding its separating newline. */
+export function serializedEntryByteLength(ctx: string, preds: Map<string, number>): number {
+  // v3 emits `["<ctx-hex>",[["<next-hex>",count],...],"b|u"]`. Everything emitted is
+  // ASCII, and ordering does not affect length, so this avoids allocating a temporary table,
+  // sorting it, serializing JSON, and UTF-8 encoding the resulting line for every entry.
+  let bytes = utf8Length(ctx) * 2 + 11;
+  let predictionCount = 0;
+  for (const [next, count] of preds) {
+    bytes += utf8Length(next) * 2 + (JSON.stringify(count)?.length ?? 4) + 5;
+    predictionCount++;
   }
-  return lines.join('\n');
+  return bytes + Math.max(0, predictionCount - 1);
+}
+
+/** Exact byte length of a canonical v3 JSONL table without materializing or sorting it. */
+export function serializedTableByteLength(table: NGramTable): number {
+  let bytes = 0;
+  let entryCount = 0;
+  for (const [ctx, predictions] of table) {
+    bytes += serializedEntryByteLength(ctx, predictions);
+    entryCount++;
+  }
+  return bytes + Math.max(0, entryCount - 1);
 }
 
 export function deserialize(compact: string): NGramTable {
@@ -371,10 +402,41 @@ function _increment(table: NGramTable, ctx: string, next: string): void {
 }
 
 function _toHex(s: string): string {
-  const bytes = new TextEncoder().encode(s);
+  const bytes = UTF8_ENCODER.encode(s);
   let hex = '';
   for (const b of bytes) hex += b.toString(16).padStart(2, '0');
   return hex;
+}
+
+function serializeEntryFromHex(ctxHex: string, preds: Map<string, number>): string {
+  const predParts = [...preds].sort((a, b) => b[1] - a[1]).map(([ch, cnt]) => [_toHex(ch), cnt]);
+  const flags = [...preds].some(([, count]) => count > 100) ? 'u' : 'b';
+  return JSON.stringify([ctxHex, predParts, flags]);
+}
+
+function utf8Length(value: string): number {
+  let bytes = 0;
+  for (let index = 0; index < value.length; index++) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit < 0x80) {
+      bytes++;
+    } else if (codeUnit < 0x800) {
+      bytes += 2;
+    } else if (
+      codeUnit >= 0xd800 &&
+      codeUnit <= 0xdbff &&
+      index + 1 < value.length &&
+      value.charCodeAt(index + 1) >= 0xdc00 &&
+      value.charCodeAt(index + 1) <= 0xdfff
+    ) {
+      bytes += 4;
+      index++;
+    } else {
+      // TextEncoder replaces isolated UTF-16 surrogates with U+FFFD, which is three bytes.
+      bytes += 3;
+    }
+  }
+  return bytes;
 }
 
 function _fromHex(hex: string): string {

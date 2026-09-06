@@ -943,8 +943,8 @@ async function runStructuredProbes(
 }
 
 async function seedCompletionCorpus(page: Page, excerpts: string[]): Promise<void> {
-  await page.evaluate((items) => {
-    window.__jotluck_e2e?.editor?.seedCompletionCorpus?.(items);
+  await page.evaluate(async (items) => {
+    await window.__jotluck_e2e?.editor?.seedCompletionCorpus?.(items);
   }, excerpts);
 }
 

@@ -6,6 +6,7 @@ use unicode_normalization::UnicodeNormalization;
 
 const TOKENIZER_SCHEMA: &str = "jotluck.autocomplete.unigram-runtime.v1";
 const EXPECTED_VOCABULARY_SIZE: usize = 8_000;
+const ONE_UNIT_VOCABULARY_SIZE: usize = 12_000;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -110,9 +111,12 @@ impl UnigramTokenizer {
 
     fn from_asset(asset: TokenizerAsset) -> Result<Self, String> {
         if asset.schema != TOKENIZER_SCHEMA
-            || asset.vocabulary_size != EXPECTED_VOCABULARY_SIZE
+            || !matches!(
+                asset.vocabulary_size,
+                EXPECTED_VOCABULARY_SIZE | ONE_UNIT_VOCABULARY_SIZE
+            )
             || asset.normalization != "nfkc"
-            || asset.pieces.len() != EXPECTED_VOCABULARY_SIZE
+            || asset.pieces.len() != asset.vocabulary_size
         {
             return Err("decoder tokenizer contract is invalid".to_string());
         }

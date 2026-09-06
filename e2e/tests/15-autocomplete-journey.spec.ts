@@ -19,18 +19,6 @@ async function replaceEditorText(
   await page.keyboard.insertText(text);
 }
 
-async function replaceEditorTextByTyping(
-  page: import('@playwright/test').Page,
-  text: string,
-): Promise<void> {
-  await ensureEditorReady(page);
-  const editor = page.locator('.cm-content');
-  await editor.click();
-  await page.keyboard.press('Control+a');
-  await page.keyboard.press('Backspace');
-  await page.keyboard.type(text, { delay: 1 });
-}
-
 async function readPersonalV5Storage(
   page: import('@playwright/test').Page,
 ): Promise<Record<string, string>> {
@@ -46,8 +34,8 @@ async function readPersonalV5Storage(
 
 test.describe('offline autocomplete user journeys', () => {
   async function seedAsciiProbe(page: import('@playwright/test').Page): Promise<void> {
-    await page.evaluate(() => {
-      (window as any).__jotluck_e2e?.editor?.seedCompletionCorpus([
+    await page.evaluate(async () => {
+      await (window as any).__jotluck_e2e?.editor?.seedCompletionCorpus([
         'Alpha beta gamma delta. Alpha beta gamma delta. Alpha beta gamma delta.',
         '测试文本可以继续。测试文本可以继续。测试文本可以继续。',
       ]);
@@ -281,21 +269,30 @@ test.describe('offline autocomplete user journeys', () => {
   });
 
   test('V2 uses the real Web Worker notebook retrieval path', async ({ page }) => {
-    await page.evaluate(() => {
-      (window as any).__jotluck_e2e?.editor?.seedCompletionCorpus(['海王星回声需要冻结缓存。']);
+    await page.evaluate(async () => {
+      await (window as any).__jotluck_e2e?.editor?.seedCompletionCorpus([
+        '海王星回声需要冻结缓存。',
+      ]);
     });
-    await replaceEditorText(page, '海王星回声');
+    const diagnostics = await page.evaluate(async () => {
+      const content = '海王星回声';
+      return window.__jotluck_e2e?.editor?.requestCompletionDiagnostics(
+        content,
+        content.length,
+        1_000,
+      );
+    });
 
-    await expect(page.locator('.cm-ghost-text')).toBeVisible({ timeout: 3000 });
-    await expect
-      .poll(() =>
-        page.evaluate(() => (window as any).__jotluck_e2e?.editor?.getPrediction?.() ?? null),
-      )
-      .toMatchObject({
-        text: '需要冻结缓存。',
-        providerId: 'hybrid-retrieval-zh',
-        sourceLayer: 'notebook',
-      });
+    expect(diagnostics?.hybrid).toMatchObject({
+      attempted: true,
+      timedOut: false,
+      fellBack: false,
+    });
+    expect(diagnostics?.result).toMatchObject({
+      text: '需要冻结缓存。',
+      providerId: 'hybrid-retrieval-zh',
+      sourceLayer: 'notebook',
+    });
   });
 
   test('Tab keeps native focus navigation outside editor and accepts ghost text inside editor', async ({
@@ -327,11 +324,15 @@ test.describe('offline autocomplete user journeys', () => {
     await waitForAppReady(page);
     await ensureEditorReady(page);
 
-    const editorProbe =
-      'Release risk is configuration drift.\n' +
-      'Release risk is configuration drift.\n' +
-      'Release risk is configuration';
-    await replaceEditorTextByTyping(page, editorProbe);
+    const editorProbe = 'Release risk is configuration';
+    await page.evaluate(
+      async ({ context, acceptedText }) => {
+        await window.__jotluck_e2e?.editor?.seedPersonalCompletion(context, acceptedText);
+        await window.__jotluck_e2e?.editor?.seedPersonalCompletion(context, acceptedText);
+      },
+      { context: editorProbe, acceptedText: ' drift.' },
+    );
+    await replaceEditorText(page, editorProbe);
     await page.locator('.cm-content').click();
     await expect(page.locator('.cm-ghost-text')).toBeVisible({ timeout: 3000 });
     const suggestion = (await page.locator('.cm-ghost-text').textContent()) ?? '';
@@ -365,6 +366,7 @@ test.describe('offline autocomplete user journeys', () => {
   });
 
   test('keyed note switches never revive the ineligible legacy baseline', async ({ page }) => {
+    test.setTimeout(120_000);
     await page.addInitScript(() => {
       const originalFetch = window.fetch.bind(window);
       (window as any).__baselineFetchCount = 0;

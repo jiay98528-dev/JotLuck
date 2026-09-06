@@ -5,12 +5,14 @@ import type {
   CompletionLanguageHint,
   CompletionMode,
   CompletionTextEdit,
+  CompletionV25ValidationContract,
 } from './types';
 import type {
   CompletionPublicEngine,
   PublicCompletionCandidate,
   PublicEngineDiagnostics,
   PublicEngineGenerateRequest,
+  PublicEngineVisibilityCalibrationInput,
 } from './public-engine-types';
 import {
   PUBLIC_ENGINE_CONTEXT_MAX_UTF8_BYTES,
@@ -18,7 +20,18 @@ import {
   PUBLIC_ENGINE_MAX_OUTPUT_CODE_POINTS,
   PUBLIC_ENGINE_PROTOCOL_VERSION,
   PUBLIC_ENGINE_PROVIDER_PRIORITY,
+  PUBLIC_ENGINE_SUFFIX_MAX_UTF8_BYTES,
+  PUBLIC_V25_ENGINE_ID_PREFIX,
 } from './public-engine-types';
+import {
+  V25_ROUTE_VALIDATOR_ID,
+  V25_ROUTE_VALIDATOR_VERSION,
+  validateV25DisplayCandidate,
+  type V25DisplayValidationInput,
+} from './v25-route-validator';
+import { stampV25HostCandidate } from './v25-host-proof';
+import { PUBLIC_V25_ONE_UNIT_WRITING_ENGINE_ID } from './public-free-decoder-contract';
+import { evaluateV25OneUnitWritingTrigger } from './v25-one-unit-trigger';
 
 export const COMPLETION_CANDIDATE_BATCH_LIMIT = 8;
 export const COMPLETION_RANK_CONTEXT_LIMIT = 256;
@@ -271,6 +284,9 @@ export class CompletionEngineRouter {
     if (!engine || signal?.aborted || requestRouterEpoch !== this.epoch) {
       return { candidates: [], usedEngineId: null, fellBack: true, timedOut: false };
     }
+    if (!isEligibleV25Request(engine, request)) {
+      return { candidates: [], usedEngineId: null, fellBack: true, timedOut: false };
+    }
 
     const timeoutMs = Math.max(0, monotonicDeadlineAt - performance.now());
     if (timeoutMs <= 0) {
@@ -295,6 +311,14 @@ export class CompletionEngineRouter {
         engineEpoch,
         contextTail,
         contextTailUtf8Bytes: utf8ByteLength(contextTail),
+        ...(request.contextSuffix === undefined
+          ? {}
+          : {
+              contextSuffix: takeFirstUtf8Bytes(
+                request.contextSuffix,
+                PUBLIC_ENGINE_SUFFIX_MAX_UTF8_BYTES,
+              ),
+            }),
         maxCandidates: Math.min(PUBLIC_ENGINE_MAX_CANDIDATES, Math.max(0, requestedCandidates)),
       };
       const response = await Promise.race([
@@ -489,13 +513,17 @@ function hasStructuredCandidate(candidates: readonly CompletionCandidate[]): boo
 }
 
 function isSupportedPublicEngine(engine: CompletionPublicEngine): boolean {
+  const isV25Engine = engine.id.startsWith(PUBLIC_V25_ENGINE_ID_PREFIX);
   return (
     engine.protocolVersion === PUBLIC_ENGINE_PROTOCOL_VERSION &&
     (engine.sourceKind === 'ngram' || engine.sourceKind === 'neural') &&
     Number.isInteger(engine.maxOutputCodePoints) &&
     engine.maxOutputCodePoints > 0 &&
     engine.maxOutputCodePoints <= PUBLIC_ENGINE_MAX_OUTPUT_CODE_POINTS &&
-    engine.id.trim().length > 0
+    engine.id.trim().length > 0 &&
+    (!isV25Engine ||
+      (typeof engine.calibrateVisibility === 'function' &&
+        typeof engine.visibilityThreshold === 'function'))
   );
 }
 
@@ -520,6 +548,11 @@ function validateAndStampPublicResponse(
 
   const candidateIds = new Set<string>();
   const candidates: PublicCompletionCandidate[] = [];
+  const isV25Engine = engine.id.startsWith(PUBLIC_V25_ENGINE_ID_PREFIX);
+  const v25Route = isV25Engine ? routeForV25Block(request.blockType) : null;
+  if (isV25Engine && (!v25Route || !engine.calibrateVisibility || !engine.visibilityThreshold)) {
+    return null;
+  }
   for (const raw of value.candidates) {
     if (!isRecord(raw)) return null;
     const { candidateId, text, confidence, modelScore, gateScore, language } = raw;
@@ -529,9 +562,6 @@ function validateAndStampPublicResponse(
       candidateId.length > 128 ||
       candidateIds.has(candidateId) ||
       typeof text !== 'string' ||
-      text.length === 0 ||
-      /[\r\n\0]/u.test(text) ||
-      codePointLength(text) > engine.maxOutputCodePoints ||
       typeof confidence !== 'number' ||
       !Number.isFinite(confidence) ||
       confidence < 0 ||
@@ -544,29 +574,218 @@ function validateAndStampPublicResponse(
       !Number.isFinite(gateScore) ||
       gateScore < 0 ||
       gateScore > 1 ||
-      (language !== 'zh' && language !== 'en') ||
-      !candidateMatchesLanguage(text, language, request.languageHint, request.cursorBoundary)
+      (language !== 'zh' && language !== 'en')
     ) {
       return null;
     }
     candidateIds.add(candidateId);
-    candidates.push({
+    if (
+      text.length === 0 ||
+      /[\r\n\0]/u.test(text) ||
+      codePointLength(text) > engine.maxOutputCodePoints
+    ) {
+      if (isV25Engine) continue;
+      return null;
+    }
+    let calibratedVisibility: number | null = null;
+    let visibilityThreshold: number | null = null;
+    if (isV25Engine && v25Route) {
+      const calibrationInput: PublicEngineVisibilityCalibrationInput = {
+        route: v25Route,
+        language,
+        modelScore,
+        searchMode: request.searchMode,
+      };
+      calibratedVisibility = engine.calibrateVisibility!(calibrationInput);
+      visibilityThreshold = engine.visibilityThreshold!(calibrationInput);
+      if (
+        !Number.isFinite(calibratedVisibility) ||
+        calibratedVisibility < 0 ||
+        calibratedVisibility > 1 ||
+        !Number.isFinite(visibilityThreshold) ||
+        visibilityThreshold < 0 ||
+        visibilityThreshold > 1
+      ) {
+        return null;
+      }
+      if (calibratedVisibility < visibilityThreshold) continue;
+    }
+    if (
+      engine.id === PUBLIC_V25_ONE_UNIT_WRITING_ENGINE_ID &&
+      v25Route === 'writing' &&
+      !evaluateV25OneUnitWritingTrigger({
+        language,
+        prefix: currentLinePrefix(request.contextTail),
+        modelScore,
+      }).allowed
+    ) {
+      continue;
+    }
+    const v25Validation =
+      isV25Engine && calibratedVisibility !== null && visibilityThreshold !== null
+        ? validateAndStampV25Candidate(
+            request,
+            text,
+            language,
+            calibratedVisibility,
+            visibilityThreshold,
+          )
+        : undefined;
+    if (isV25Engine && !v25Validation) {
+      continue;
+    }
+    if (
+      !isV25Engine &&
+      !candidateMatchesLanguage(text, language, request.languageHint, request.cursorBoundary)
+    ) {
+      return null;
+    }
+    const candidate: PublicCompletionCandidate = {
       candidateId,
       text,
-      confidence,
+      confidence: calibratedVisibility ?? confidence,
       modelScore,
-      gateScore,
+      gateScore: calibratedVisibility ?? gateScore,
       from: request.cursorPos,
       providerId: engine.id,
       source: engine.sourceKind,
       sourceLayer: 'l3',
       syntaxType: 'general',
-      learnable: true,
+      learnable: v25Validation?.route !== 'code',
       priority: PUBLIC_ENGINE_PROVIDER_PRIORITY,
       language,
-    });
+      ...(isV25Engine ? { rawScore: modelScore, calibratedScore: calibratedVisibility! } : {}),
+      ...(v25Validation ? { v25Validation } : {}),
+    };
+    candidates.push(v25Validation ? stampV25HostCandidate(candidate) : candidate);
   }
   return candidates;
+}
+
+function routeForV25Block(blockType: CompletionBlockType): 'writing' | 'code' | null {
+  if (blockType === 'code') return 'code';
+  if (blockType === 'paragraph' || blockType === 'list' || blockType === 'quote') {
+    return 'writing';
+  }
+  return null;
+}
+
+function isEligibleV25Request(
+  engine: CompletionPublicEngine,
+  request: PublicCompletionGenerateOptions,
+): boolean {
+  if (!engine.id.startsWith(PUBLIC_V25_ENGINE_ID_PREFIX)) return true;
+  const route = routeForV25Block(request.blockType);
+  if (!route) return false;
+  if (route === 'writing') {
+    return request.languageHint === 'zh' || request.languageHint === 'en';
+  }
+  return (
+    request.codeLexicalContext === 'code' &&
+    request.codeLanguage !== undefined &&
+    V25_FIM_CODE_LANGUAGES.has(request.codeLanguage)
+  );
+}
+
+function validateAndStampV25Candidate(
+  request: PublicEngineGenerateRequest,
+  text: string,
+  language: 'zh' | 'en',
+  confidence: number,
+  visibilityThreshold: number,
+): CompletionV25ValidationContract | null {
+  const prefix = currentLinePrefix(request.contextTail);
+  const suffix = request.contextSuffix ?? '';
+  if (
+    request.blockType === 'paragraph' ||
+    request.blockType === 'list' ||
+    request.blockType === 'quote'
+  ) {
+    const localLanguage = localLanguageForV25Writing(request, prefix);
+    if (!localLanguage || language !== localLanguage) return null;
+    const decision = validateV25DisplayCandidate({
+      route: 'writing',
+      text,
+      language,
+      prefix,
+      suffix,
+      blockType: request.blockType,
+      confidence,
+    });
+    return decision.allowed
+      ? {
+          validatorId: V25_ROUTE_VALIDATOR_ID,
+          validatorVersion: V25_ROUTE_VALIDATOR_VERSION,
+          route: 'writing',
+          language,
+          visibilityThreshold,
+        }
+      : null;
+  }
+  if (request.blockType !== 'code') return null;
+  if (
+    request.codeLexicalContext !== 'code' ||
+    !request.codeLanguage ||
+    !V25_FIM_CODE_LANGUAGES.has(request.codeLanguage)
+  ) {
+    return null;
+  }
+
+  const fimKinds = ['member-call', 'call-argument', 'expression'] as const;
+  const matches = fimKinds.filter((fimKind) => {
+    const input: V25DisplayValidationInput = {
+      route: 'code',
+      text,
+      language,
+      prefix,
+      suffix,
+      blockType: 'code',
+      confidence,
+      taskType: 'fim',
+      fimKind,
+      codeLanguage: request.codeLanguage as 'typescript' | 'javascript' | 'rust' | 'json',
+    };
+    return validateV25DisplayCandidate(input).allowed;
+  });
+  if (matches.length !== 1) return null;
+  return {
+    validatorId: V25_ROUTE_VALIDATOR_ID,
+    validatorVersion: V25_ROUTE_VALIDATOR_VERSION,
+    route: 'code',
+    language,
+    taskType: 'fim',
+    fimKind: matches[0],
+    codeLanguage: request.codeLanguage,
+    codeLexicalContext: 'code',
+    visibilityThreshold,
+  };
+}
+
+function localLanguageForV25Writing(
+  request: PublicEngineGenerateRequest,
+  linePrefix: string,
+): 'zh' | 'en' | null {
+  if (request.languageHint === 'zh' || request.languageHint === 'en') {
+    return request.languageHint;
+  }
+  const fragments =
+    linePrefix.match(/[\p{Script=Han}]+|\p{Script=Latin}[\p{Script=Latin}\p{M}'’-]*/gu) ?? [];
+  const nearest = fragments.at(-1);
+  if (!nearest) return null;
+  if (/\p{Script=Han}/u.test(nearest)) return 'zh';
+  if (/^(?:a|an|the|and|or|but|to|of|in|on|for|with|is|are|was|were)$/iu.test(nearest)) {
+    return null;
+  }
+  return 'en';
+}
+
+// JSON completion remains deterministic CodeSyntax work. The Dense FIM route
+// only receives languages for which the host validator admits semantic atoms.
+const V25_FIM_CODE_LANGUAGES = new Set(['typescript', 'javascript', 'rust']);
+
+function currentLinePrefix(contextTail: string): string {
+  const lastBreak = Math.max(contextTail.lastIndexOf('\n'), contextTail.lastIndexOf('\r'));
+  return contextTail.slice(lastBreak + 1);
 }
 
 function candidateMatchesLanguage(
@@ -627,6 +846,27 @@ export function takeLastUtf8Bytes(text: string, maxBytes: number): string {
     start = previous;
   }
   return text.slice(start);
+}
+
+export function takeFirstUtf8Bytes(text: string, maxBytes: number): string {
+  if (!Number.isFinite(maxBytes) || maxBytes <= 0 || text.length === 0) return '';
+  const byteLimit = Math.trunc(maxBytes);
+  const encoder = new TextEncoder();
+  let end = 0;
+  let bytes = 0;
+  while (end < text.length) {
+    let next = end + 1;
+    const firstUnit = text.charCodeAt(end);
+    if (firstUnit >= 0xd800 && firstUnit <= 0xdbff && next < text.length) {
+      const secondUnit = text.charCodeAt(next);
+      if (secondUnit >= 0xdc00 && secondUnit <= 0xdfff) next += 1;
+    }
+    const pointBytes = encoder.encode(text.slice(end, next)).byteLength;
+    if (bytes + pointBytes > byteLimit) break;
+    bytes += pointBytes;
+    end = next;
+  }
+  return text.slice(0, end);
 }
 
 function createLinkedAbortController(signal?: AbortSignal): {

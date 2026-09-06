@@ -16,8 +16,13 @@ import {
   type PredictorIndexData,
 } from '../MarkdownPredictor';
 import { loadCompletionMetrics } from '../completion/metrics';
+import { buildCompletionContext } from '../completion/context';
+import { DEFAULT_COMPLETION_SETTINGS } from '../CompletionSettings';
 import { learningSignalsStorageKey } from '../completion/learning-signals';
-import { flushCompletionStorageMutationsForTests } from '../completion/learning-repository';
+import {
+  flushCompletionStorageMutationsForTests,
+  scopedCompletionStorageKey,
+} from '../completion/learning-repository';
 import {
   HybridRetrievalService,
   LocalHybridRetrievalBackend,
@@ -72,6 +77,39 @@ function mockIndexData(overrides: Partial<PredictorIndexData> = {}): PredictorIn
       return paths.filter((p) => p.startsWith(prefix));
     },
     ...overrides,
+  };
+}
+
+function readyPublicEngine(generate: CompletionPublicEngine['generate']): CompletionPublicEngine {
+  return {
+    id: TEST_PUBLIC_ENGINE_ID,
+    protocolVersion: PUBLIC_ENGINE_PROTOCOL_VERSION,
+    sourceKind: 'neural',
+    maxOutputCodePoints: PUBLIC_ENGINE_MAX_OUTPUT_CODE_POINTS,
+    warmup: async () => true,
+    generate,
+    diagnostics: () => ({
+      engineId: TEST_PUBLIC_ENGINE_ID,
+      backendKind: 'worker',
+      status: 'ready',
+      epoch: 1,
+      profile: 'evaluation',
+      lastError: null,
+      warmupDurationMs: 1,
+      lastInferenceDurationMs: 0,
+      visibleInferenceP90Ms: 0,
+      generateRequests: 0,
+      generatedCandidates: 0,
+      cancellations: 0,
+      deadlineExpirations: 0,
+      lateResponses: 0,
+      invalidResponses: 0,
+      workerErrors: 0,
+      staleResponses: 0,
+      lastRequestProbe: null,
+      assets: createEmptyPublicEngineAssetDiagnostics(),
+    }),
+    dispose: () => undefined,
   };
 }
 
@@ -1997,6 +2035,8 @@ describe('MarkdownPredictor', () => {
           lateResponses: 0,
           invalidResponses: 0,
           workerErrors: 0,
+          staleResponses: 0,
+          lastRequestProbe: null,
           assets: createEmptyPublicEngineAssetDiagnostics(),
         }),
         dispose: () => undefined,
@@ -2022,10 +2062,153 @@ describe('MarkdownPredictor', () => {
         usedEngineId: TEST_PUBLIC_ENGINE_ID,
       });
       expect(generate).toHaveBeenCalledOnce();
+      expect(Number.isSafeInteger(generate.mock.calls[0]?.[0].deadlineAt)).toBe(true);
       await p.dispose();
     });
 
-    it('does not invoke the public generator when a strong local candidate exists', async () => {
+    it('carries a host-validated V2.5 Code FIM candidate through the real predictor path', async () => {
+      const generate = vi.fn<CompletionPublicEngine['generate']>(async (request) => ({
+        protocolVersion: PUBLIC_ENGINE_PROTOCOL_VERSION,
+        engineEpoch: request.engineEpoch,
+        workspaceScope: request.workspaceScope,
+        documentVersion: request.documentVersion,
+        cursorPos: request.cursorPos,
+        candidates: [
+          {
+            candidateId: 'candidate-v25-member',
+            text: 'fetch',
+            confidence: 0.9,
+            modelScore: 0.88,
+            gateScore: 0.92,
+            language: 'en',
+          },
+        ],
+      }));
+      const publicEngine = {
+        ...readyPublicEngine(generate),
+        id: 'public-v2.5-dense-test',
+        calibrateVisibility: () => 0.9,
+        visibilityThreshold: () => 0.2,
+      } satisfies CompletionPublicEngine;
+      const predictor = new MarkdownPredictor(4, undefined, publicEngine);
+      predictor.setAblationMode('l3-only');
+      await predictor.warmupPublicEngine();
+      const doc = '```ts\nclient.()\n```';
+      const cursor = doc.indexOf('.') + 1;
+
+      const diagnostics = await predictor.requestGhostTextWithDiagnostics(cursor, doc);
+
+      expect(generate).toHaveBeenCalledOnce();
+      expect(generate.mock.calls[0]?.[0].contextSuffix).toBe('()');
+      expect(diagnostics.result).toMatchObject({
+        text: 'fetch',
+        providerId: 'public-v2.5-dense-test',
+        v25Validation: {
+          validatorId: 'jotluck-v2.5-route-validator-v5',
+          validatorVersion: 5,
+          route: 'code',
+          taskType: 'fim',
+          fimKind: 'member-call',
+        },
+      });
+      await predictor.dispose();
+    });
+
+    it.each([
+      ['string', '```ts\nconst value = "client.()";\n```'],
+      ['comment', '```ts\n// client.()\n```'],
+      ['regex', '```ts\nconst value = /client.()/;\n```'],
+      ['line-start regex', '```ts\nif (ready) {\n}\n/client.()/;\n```'],
+      ['same-line control regex', '```ts\nif (ready) /client.()/;\n```'],
+      ['same-line block regex', '```ts\nif (ready) {} /client.()/;\n```'],
+    ])('does not invoke V2.5 Code FIM inside a %s', async (_label, doc) => {
+      const generate = vi.fn<CompletionPublicEngine['generate']>(async () => {
+        throw new Error('the model must not run outside executable code');
+      });
+      const publicEngine = {
+        ...readyPublicEngine(generate),
+        id: 'public-v2.5-dense-test',
+        calibrateVisibility: () => 0.9,
+        visibilityThreshold: () => 0.2,
+      } satisfies CompletionPublicEngine;
+      const predictor = new MarkdownPredictor(4, undefined, publicEngine);
+      predictor.setAblationMode('l3-only');
+      await predictor.warmupPublicEngine();
+      const cursor = doc.indexOf('.') + 1;
+
+      const diagnostics = await predictor.requestGhostTextWithDiagnostics(cursor, doc);
+
+      expect(diagnostics.result).toBeNull();
+      expect(generate).not.toHaveBeenCalled();
+      await predictor.dispose();
+    });
+
+    it('keeps JSON punctuation completion in CodeSyntax and never invokes Dense FIM', async () => {
+      const generate = vi.fn<CompletionPublicEngine['generate']>(async () => {
+        throw new Error('JSON punctuation belongs to the deterministic code layer');
+      });
+      const publicEngine = {
+        ...readyPublicEngine(generate),
+        id: 'public-v2.5-dense-test',
+        calibrateVisibility: () => 0.9,
+        visibilityThreshold: () => 0.2,
+      } satisfies CompletionPublicEngine;
+      const predictor = new MarkdownPredictor(4, undefined, publicEngine);
+      predictor.setAblationMode('l3-only');
+      await predictor.warmupPublicEngine();
+      const doc = '```json\n{"key": }\n```';
+      const cursor = doc.indexOf(':') + 1;
+
+      const diagnostics = await predictor.requestGhostTextWithDiagnostics(cursor, doc);
+
+      expect(diagnostics.result).toBeNull();
+      expect(generate).not.toHaveBeenCalled();
+      await predictor.dispose();
+    });
+
+    it('rejects a V2.5 writing candidate that disagrees with the nearest mixed-language fragment', async () => {
+      const generate = vi.fn<CompletionPublicEngine['generate']>(async (request) => ({
+        protocolVersion: PUBLIC_ENGINE_PROTOCOL_VERSION,
+        engineEpoch: request.engineEpoch,
+        workspaceScope: request.workspaceScope,
+        documentVersion: request.documentVersion,
+        cursorPos: request.cursorPos,
+        candidates: [
+          {
+            candidateId: 'wrong-local-language',
+            text: '继续检查。',
+            confidence: 0.9,
+            modelScore: 0.9,
+            gateScore: 0.9,
+            language: 'zh',
+          },
+        ],
+      }));
+      const publicEngine = {
+        ...readyPublicEngine(generate),
+        id: 'public-v2.5-dense-test',
+        calibrateVisibility: () => 0.9,
+        visibilityThreshold: () => 0.2,
+      } satisfies CompletionPublicEngine;
+      const predictor = new MarkdownPredictor(4, undefined, publicEngine);
+      predictor.setAblationMode('l3-only');
+      await predictor.warmupPublicEngine();
+
+      const diagnostics = await predictor.requestGhostTextWithDiagnostics(
+        '项目 project'.length,
+        '项目 project',
+      );
+
+      expect(generate).toHaveBeenCalledOnce();
+      expect(generate.mock.calls[0]?.[0]).toMatchObject({
+        languageHint: 'en',
+        contextCapsule: { languageHint: 'en' },
+      });
+      expect(diagnostics.result).toBeNull();
+      await predictor.dispose();
+    });
+
+    it('uses Personal v5 accepted evidence before the public generator and makes zero model calls', async () => {
       const generate = vi.fn<CompletionPublicEngine['generate']>(async () => {
         throw new Error('public generator must remain suppressed');
       });
@@ -2053,20 +2236,101 @@ describe('MarkdownPredictor', () => {
           lateResponses: 0,
           invalidResponses: 0,
           workerErrors: 0,
+          staleResponses: 0,
+          lastRequestProbe: null,
           assets: createEmptyPublicEngineAssetDiagnostics(),
         }),
         dispose: () => undefined,
       };
+      const scope = 'v24-local-cascade-zero-model';
+      const trainer = new MarkdownPredictor(4);
+      trainer.setStorageScope(scope);
+      trainer.acceptCompletion('plan,', ' is now set');
+      trainer.acceptCompletion('plan,', ' is now set');
+      await flushCompletionStorageMutationsForTests();
+
       const predictor = new MarkdownPredictor(4, undefined, publicEngine);
-      predictor.scanOpenedDocument('项目复盘需要记录转化成本。\n转化成本需要持续观察。');
+      predictor.setStorageScope(scope);
       await predictor.warmupPublicEngine();
+      const diagnostics = await predictor.requestGhostTextWithDiagnostics('plan,'.length, 'plan,');
 
-      const diagnostics = await predictor.requestGhostTextWithDiagnostics('转化'.length, '转化');
-
-      expect(diagnostics.result).toMatchObject({ providerId: 'lexicon', sourceLayer: 'l1' });
+      expect(diagnostics.result).toMatchObject({ sourceLayer: 'l2' });
+      expect(diagnostics.result?.text.startsWith(' ')).toBe(true);
       expect(diagnostics.publicEngine.attempted).toBe(false);
       expect(generate).not.toHaveBeenCalled();
+      expect(
+        localStorage.getItem(`jotluck:scope:${scope}:autocomplete:v24AcceptedPhrases:v1`),
+      ).toBeNull();
+      expect(localStorage.getItem(scopedCompletionStorageKey(scope, 'ngram:v5'))).toContain(
+        '[retained-phrases]',
+      );
+      await trainer.dispose();
       await predictor.dispose();
+    });
+
+    it('does not treat two different retained phrases with the same first character as exact support', async () => {
+      const generate = vi.fn<CompletionPublicEngine['generate']>(async (request) => ({
+        protocolVersion: PUBLIC_ENGINE_PROTOCOL_VERSION,
+        engineEpoch: request.engineEpoch,
+        workspaceScope: request.workspaceScope,
+        documentVersion: request.documentVersion,
+        cursorPos: request.cursorPos,
+        candidates: [],
+      }));
+      const scope = 'v24-exact-accepted-evidence';
+      const trainer = new MarkdownPredictor(4);
+      trainer.setStorageScope(scope);
+      trainer.acceptCompletion('plan,', ' is carefully reviewed');
+      trainer.acceptCompletion('plan,', ' is completely rewritten');
+      await flushCompletionStorageMutationsForTests();
+
+      const predictor = new MarkdownPredictor(4, undefined, readyPublicEngine(generate));
+      predictor.setStorageScope(scope);
+      await predictor.warmupPublicEngine();
+      const diagnostics = await predictor.requestGhostTextWithDiagnostics('plan,'.length, 'plan,');
+
+      expect(diagnostics.publicEngine.attempted).toBe(true);
+      expect(generate).toHaveBeenCalledOnce();
+      await trainer.dispose();
+      await predictor.dispose();
+    });
+
+    it('uses exact paragraph evidence in MarkdownPredictor instead of split transitions', () => {
+      const predictor = new MarkdownPredictor(4);
+      const exactPhrase = 'plan needs owner review.';
+      const splitTransitions = Array.from({ length: exactPhrase.length - 4 }, (_, index) =>
+        Array.from(
+          { length: 6 },
+          (__, copy) => `fragment-${index}-${copy}-${exactPhrase.slice(index, index + 5)}-only`,
+        ),
+      ).flat();
+      predictor.scanOpenedDocument([exactPhrase, ...splitTransitions].join('\n\n'));
+      const context = buildCompletionContext({
+        doc: 'plan',
+        cursorPos: 4,
+        settings: DEFAULT_COMPLETION_SETTINGS,
+        indexData: null,
+        n: 4,
+      });
+      const candidate = {
+        text: ' needs owner review.',
+        from: 4,
+        confidence: 0.9,
+        providerId: 'ngram',
+        source: 'ngram' as const,
+        sourceLayer: 'l1' as const,
+        syntaxType: 'ngram-long',
+        learnable: true,
+        priority: 80,
+      };
+
+      const splitEvidence = priv(predictor).annotateDocumentPhraseSupport(candidate, context);
+      expect(splitEvidence.documentParagraphSupport).toBe(1);
+
+      predictor.scanOpenedDocument(Array.from({ length: 6 }, () => exactPhrase).join('\n\n'));
+      const exactEvidence = priv(predictor).annotateDocumentPhraseSupport(candidate, context);
+
+      expect(exactEvidence.documentParagraphSupport).toBe(6);
     });
 
     it('binds feedback to the shown prediction token instead of mutable last-prediction state', () => {

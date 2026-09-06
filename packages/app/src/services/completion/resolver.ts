@@ -5,6 +5,12 @@ import {
   normalizeCandidateContract,
 } from './candidate-contract';
 import type { CompletionCandidate, CompletionContext, CompletionProvider } from './types';
+import {
+  V25_ROUTE_VALIDATOR_ID,
+  V25_ROUTE_VALIDATOR_VERSION,
+  validateV25DisplayCandidate,
+} from './v25-route-validator';
+import { isV25HostCandidate } from './v25-host-proof';
 
 export interface CompletionResolverResult {
   candidate: CompletionCandidate | null;
@@ -26,6 +32,7 @@ export type CompletionResolverRejectionReason =
   | 'information'
   | 'low-value'
   | 'low-confidence'
+  | 'v25-validator'
   | 'rejected-suggestion';
 
 export interface CompletionResolverTrace {
@@ -198,20 +205,36 @@ function normalizeCandidate(
   const text = refineCandidateText(candidate.text, context, candidate);
   if (!text.trim()) return rejectedCandidate('empty');
   if (text.includes('\r') || text.includes('\n')) return rejectedCandidate('multiline');
-  if (!context.atEndOfLine && candidate.source !== 'structured') {
+  const v25Allowed = candidate.v25Validation
+    ? validateV25Candidate(text, candidate, context)
+    : null;
+  if (v25Allowed === false) return rejectedCandidate('v25-validator');
+  const isV25CodeFim = candidate.v25Validation?.route === 'code' && v25Allowed === true;
+  if (!context.atEndOfLine && candidate.source !== 'structured' && !isV25CodeFim) {
     return rejectedCandidate('mid-line');
   }
 
   const isStructured = candidate.source === 'structured';
-  if (!isStructured && !passesLanguageGate(text, context)) return rejectedCandidate('language');
-  const informationScore = isStructured ? 1 : getInformationScore(text, candidate, context);
-  if (!isStructured && !passesInformationGate(informationScore, text, candidate, context)) {
+  if (!isStructured && v25Allowed === null && !passesLanguageGate(text, context)) {
+    return rejectedCandidate('language');
+  }
+  const informationScore =
+    isStructured || v25Allowed === true ? 1 : getInformationScore(text, candidate, context);
+  if (
+    !isStructured &&
+    v25Allowed === null &&
+    !passesInformationGate(informationScore, text, candidate, context)
+  ) {
     return rejectedCandidate('information');
   }
-  if (!isStructured && isLowValueCandidate(text, candidate, context)) {
+  if (!isStructured && v25Allowed === null && isLowValueCandidate(text, candidate, context)) {
     return rejectedCandidate('low-value');
   }
-  if (!isStructured && candidate.confidence < context.settings.minConfidence) {
+  if (
+    !isStructured &&
+    v25Allowed === null &&
+    candidate.confidence < context.settings.minConfidence
+  ) {
     return rejectedCandidate('low-confidence');
   }
 
@@ -258,6 +281,7 @@ function refineCandidateText(
   context: CompletionContext,
   candidate: CompletionCandidate,
 ): string {
+  if (candidate.v25Validation) return rawText;
   const languageHint = getLocalLanguageHint(context);
   const maxLength =
     languageHint === 'zh' &&
@@ -276,6 +300,7 @@ function refineCandidateText(
     }
   }
   if (
+    rawPoints.length <= maxLength ||
     languageHint !== 'en' ||
     candidate.source === 'structured' ||
     candidate.providerId !== 'ngram' ||
@@ -287,6 +312,65 @@ function refineCandidateText(
 
   const trimmed = text.replace(/\s+[A-Za-z]{3,}$/u, '').trimEnd();
   return trimmed.length >= 2 ? trimmed : text;
+}
+
+function validateV25Candidate(
+  text: string,
+  candidate: CompletionCandidate,
+  context: CompletionContext,
+): boolean {
+  const contract = candidate.v25Validation;
+  if (!contract) return false;
+  if (!isV25HostCandidate(candidate)) return false;
+  if (
+    contract.validatorId !== V25_ROUTE_VALIDATOR_ID ||
+    contract.validatorVersion !== V25_ROUTE_VALIDATOR_VERSION ||
+    !Number.isFinite(contract.visibilityThreshold) ||
+    contract.visibilityThreshold < 0 ||
+    contract.visibilityThreshold > 1 ||
+    !Number.isFinite(candidate.calibratedScore) ||
+    candidate.calibratedScore! < contract.visibilityThreshold
+  ) {
+    return false;
+  }
+  if (contract.route === 'code' && context.blockType !== 'code') return false;
+  if (
+    contract.route === 'code' &&
+    (contract.codeLexicalContext !== 'code' ||
+      context.codeLexicalContext !== 'code' ||
+      !contract.codeLanguage ||
+      contract.codeLanguage !== context.codeLanguage)
+  ) {
+    return false;
+  }
+  if (
+    contract.route === 'writing' &&
+    !(['paragraph', 'list', 'quote'] as const).includes(
+      context.blockType as 'paragraph' | 'list' | 'quote',
+    )
+  ) {
+    return false;
+  }
+  const linePrefix = context.line?.beforeCursor ?? context.paragraphBeforeCursor;
+  const suffix = context.line ? context.line.text.slice(context.line.cursorColumn) : '';
+  return validateV25DisplayCandidate({
+    route: contract.route,
+    text,
+    language: contract.language,
+    prefix: linePrefix,
+    suffix,
+    blockType:
+      context.blockType === 'code' || context.blockType === 'list' || context.blockType === 'quote'
+        ? context.blockType
+        : 'paragraph',
+    confidence: candidate.calibratedScore ?? candidate.confidence,
+    taskType: contract.taskType,
+    fimKind: contract.fimKind,
+    codeLanguage:
+      contract.route === 'code'
+        ? (contract.codeLanguage as 'typescript' | 'javascript' | 'rust' | 'json')
+        : undefined,
+  }).allowed;
 }
 
 function passesLanguageGate(text: string, context: CompletionContext): boolean {

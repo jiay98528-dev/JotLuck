@@ -89,4 +89,41 @@ describe('public free decoder context capsule', () => {
     ).toBeLessThanOrEqual(16 * 1024);
     expect(capsule.maxTokens).toBe(256);
   });
+
+  it('preserves routed segment boundary spaces for one-unit models', () => {
+    const base = context();
+    const currentParagraph = {
+      ...base.contextSnapshot!.currentParagraph,
+      text: 'Project plan ',
+      to: 'Project plan '.length,
+    };
+    const input: CompletionContext = {
+      ...base,
+      paragraphBeforeCursor: 'Project plan ',
+      contextSnapshot: {
+        ...base.contextSnapshot!,
+        headingTrail: [' Plan '],
+        currentParagraph,
+        previousParagraph: {
+          ...base.contextSnapshot!.previousParagraph!,
+          text: ' Previous ',
+        },
+      },
+    };
+
+    expect(createPublicFreeContextCapsule(input).currentParagraph).toBe('Project plan');
+    expect(
+      createPublicFreeContextCapsule(input, undefined, {
+        preserveRoutedBoundaryWhitespace: true,
+      }).currentParagraph,
+    ).toBe('Project plan ');
+    const routed = createPublicFreeContextCapsule(input, undefined, {
+      maximumTokens: 128,
+      preserveRoutedBoundaryWhitespace: true,
+    });
+    expect(routed.maxTokens).toBe(128);
+    expect(isPublicEngineContextCapsule(routed)).toBe(true);
+    expect(routed.headingTrail).toEqual([' Plan ']);
+    expect(routed.previousParagraphTail).toBe(' Previous ');
+  });
 });

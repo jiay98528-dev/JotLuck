@@ -3,7 +3,11 @@ import { EditorState } from '@codemirror/state';
 import { describe, expect, it } from 'vitest';
 import { MarkdownPredictor } from '../../MarkdownPredictor';
 import { DEFAULT_COMPLETION_SETTINGS } from '../../CompletionSettings';
-import { buildCompletionContext, buildCompletionContextFromSnapshot } from '../context';
+import {
+  buildCompletionContext,
+  buildCompletionContextFromSnapshot,
+  scanCodeLexicalContext,
+} from '../context';
 import {
   completionDocumentContextField,
   createOpenedDocumentParagraphChange,
@@ -59,6 +63,84 @@ describe('CompletionDocumentContextField', () => {
       documentRevision: 1,
       headingTrail: ['One', 'Two'],
     });
+  });
+
+  it.each([
+    ['code', '```ts\nconst value = client.()\n```', 'typescript', 'code'],
+    ['string', '```ts\nconst value = "client.()\n```', 'typescript', 'string'],
+    ['line comment', '```ts\n// client.()\n```', 'typescript', 'comment'],
+    ['block comment', '```rs\n/* client.()\n```', 'rust', 'comment'],
+    [
+      'nested Rust block comment',
+      '```rs\n/* outer /* inner */ client.() */\n```',
+      'rust',
+      'comment',
+    ],
+    ['Rust raw byte string', '```rs\nlet value = br#"client.()"#;\n```', 'rust', 'string'],
+    ['JavaScript regex literal', '```ts\nconst value = /client.()/;\n```', 'typescript', 'string'],
+    [
+      'line-start JavaScript regex literal',
+      '```ts\nif (ready) {\n}\n/client.()/;\n```',
+      'typescript',
+      'string',
+    ],
+    [
+      'Rust lifetime before executable code',
+      "```rs\nfn borrow<'a>(value: &'a Item) { client.() }\n```",
+      'rust',
+      'code',
+    ],
+    [
+      'same-line JavaScript regex after control condition',
+      '```ts\nif (ready) /client.()/;\n```',
+      'typescript',
+      'string',
+    ],
+    [
+      'same-line JavaScript regex after block',
+      '```ts\nif (ready) {} /client.()/;\n```',
+      'typescript',
+      'string',
+    ],
+    ['unknown fence', '```brainfuck\nclient.()\n```', undefined, 'unknown'],
+  ] as const)(
+    'derives a fail-closed fenced-code lexical context for %s',
+    (_label, doc, language, lexicalContext) => {
+      const cursor = doc.indexOf('.') + 1;
+      const editorState = state(doc, cursor);
+      const snapshot = getCompletionDocumentContext(editorState);
+      const bounded = buildCompletionContextFromSnapshot({
+        snapshot,
+        settings: DEFAULT_COMPLETION_SETTINGS,
+        indexData: null,
+        n: 4,
+      });
+      const legacy = buildCompletionContext({
+        doc,
+        cursorPos: cursor,
+        settings: DEFAULT_COMPLETION_SETTINGS,
+        indexData: null,
+        n: 4,
+      });
+
+      expect(snapshot).toMatchObject({
+        blockType: 'code',
+        codeLanguage: language,
+        codeLexicalContext: lexicalContext,
+      });
+      expect(bounded.codeLanguage).toBe(language);
+      expect(bounded.codeLexicalContext).toBe(lexicalContext);
+      expect(legacy.codeLanguage).toBe(language);
+      expect(legacy.codeLexicalContext).toBe(lexicalContext);
+    },
+  );
+
+  it('keeps the bounded JavaScript slash scanner below the main-thread budget', () => {
+    const slashHeavyWindow = `${'a/'.repeat(16_380)}a`;
+    const startedAt = performance.now();
+
+    expect(scanCodeLexicalContext(slashHeavyWindow, 'typescript')).toBe('code');
+    expect(performance.now() - startedAt).toBeLessThan(50);
   });
 
   it('replaces a changed heading contribution instead of retaining a duplicate', () => {

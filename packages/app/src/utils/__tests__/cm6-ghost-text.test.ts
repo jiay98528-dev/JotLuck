@@ -4,11 +4,15 @@ import { history, undo } from '@codemirror/commands';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_COMPLETION_SETTINGS } from '@/services/CompletionSettings';
 import type { MarkdownPredictor } from '@/services/MarkdownPredictor';
+import { stampV25HostPrediction } from '@/services/completion/v25-host-proof';
 import { ghostTextPlugin } from '../cm6-ghost-text';
 
 const mountedViews: EditorView[] = [];
 
-function mountGhostEditor(overrides: Record<string, unknown> = {}) {
+function mountGhostEditor(
+  overrides: Record<string, unknown> = {},
+  initial: { doc: string; cursor: number } = { doc: 'reason is', cursor: 'reason is'.length },
+) {
   const host = document.createElement('div');
   document.body.append(host);
   const predictor = {
@@ -27,11 +31,11 @@ function mountGhostEditor(overrides: Record<string, unknown> = {}) {
     rejectCompletion: vi.fn(),
     ...overrides,
   } as unknown as MarkdownPredictor;
-  const doc = 'reason is';
+  const { doc } = initial;
   const view = new EditorView({
     state: EditorState.create({
       doc,
-      selection: { anchor: doc.length },
+      selection: { anchor: initial.cursor },
       extensions: [history(), ghostTextPlugin(predictor, DEFAULT_COMPLETION_SETTINGS)],
     }),
     parent: host,
@@ -169,6 +173,41 @@ describe('cm6 ghost text focus and Tab contract', () => {
       expect.objectContaining({ learn: false, feedbackToken: 'structured-1' }),
     );
     expect(retainCompletion).not.toHaveBeenCalled();
+  });
+
+  it('shows a host-validated V2.5 Code FIM ghost in the middle of a line', async () => {
+    const doc = '```ts\nclient.()\n```';
+    const cursor = doc.indexOf('.') + 1;
+    const { view } = mountGhostEditor(
+      {
+        getGhostText: vi.fn(() =>
+          stampV25HostPrediction({
+            text: 'fetch',
+            confidence: 0.9,
+            from: cursor,
+            source: 'neural' as const,
+            sourceLayer: 'l3',
+            providerId: 'public-v2.5-dense-test',
+            learnable: true,
+            v25Validation: {
+              validatorId: 'jotluck-v2.5-route-validator-v5' as const,
+              validatorVersion: 5 as const,
+              route: 'code' as const,
+              language: 'en',
+              visibilityThreshold: 0.2,
+              taskType: 'fim' as const,
+              fimKind: 'member-call' as const,
+              codeLanguage: 'typescript',
+              codeLexicalContext: 'code' as const,
+            },
+          }),
+        ),
+      },
+      { doc, cursor },
+    );
+
+    await waitForGhost(view);
+    expect(view.dom.querySelector('.cm-ghost-text')?.textContent).toContain('fetch');
   });
 
   it('settles an immediately undone accepted edit as reverted, without retaining it', async () => {

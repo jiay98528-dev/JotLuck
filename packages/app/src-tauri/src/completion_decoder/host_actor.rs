@@ -12,7 +12,7 @@ pub(super) fn warmup_runtime(
         .canonicalize()
         .map_err(|error| format!("unable to resolve completion decoder manifest: {error}"))?;
     let loaded = load_candidate(&manifest_path)?;
-    if loaded.manifest.evaluation_only {
+    if loaded.manifest.evaluation_only || is_v25_joint_runtime(&loaded.manifest) {
         if !evaluation_runtime_allowed() {
             return Err("completion decoder is restricted to dev/E2E evaluation".to_string());
         }
@@ -20,7 +20,9 @@ pub(super) fn warmup_runtime(
     } else {
         validate_canonical_manifest_path(&manifest_path)?;
     }
-    if loaded.manifest.candidate_id != request.expected_candidate_id {
+    if !is_v25_joint_runtime(&loaded.manifest)
+        && loaded.manifest.candidate_id != request.expected_candidate_id
+    {
         return Err("completion decoder candidate identity mismatch".to_string());
     }
 
@@ -28,7 +30,7 @@ pub(super) fn warmup_runtime(
         .lock()
         .map_err(|_| "completion decoder state lock poisoned".to_string())?;
     if let Some(current) = guard.as_ref() {
-        if current.ready.candidate_id == request.expected_candidate_id {
+        if current.ready.candidate_id == loaded.manifest.candidate_id {
             return Ok(current.ready.clone());
         }
     }

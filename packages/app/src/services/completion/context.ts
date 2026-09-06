@@ -1,5 +1,6 @@
 import type {
   CompletionBlockType,
+  CompletionCodeLexicalContext,
   CompletionContext,
   CompletionLanguageHint,
   CompletionLine,
@@ -32,6 +33,10 @@ export function buildCompletionContext(args: {
     inFencedCode,
     inFrontmatter,
   );
+  const codeContext =
+    blockType === 'code'
+      ? detectFencedCodeContext(args.cursorPos, args.doc)
+      : { language: undefined, lexicalContext: undefined };
   const paragraphStart = getParagraphStart(args.cursorPos, args.doc);
   const paragraphBeforeCursor = args.doc.slice(paragraphStart, args.cursorPos);
   const sentencePrefix = getSentencePrefix(line?.beforeCursor ?? '');
@@ -53,6 +58,8 @@ export function buildCompletionContext(args: {
     atEndOfLine,
     languageHint,
     blockType,
+    codeLanguage: codeContext.language,
+    codeLexicalContext: codeContext.lexicalContext,
     paragraphBeforeCursor,
     paragraphStart,
     sentencePrefix,
@@ -94,6 +101,8 @@ export function buildCompletionContextFromSnapshot(args: {
     atEndOfLine: snapshot.atEndOfLine,
     languageHint: snapshot.languageHint,
     blockType: snapshot.blockType,
+    codeLanguage: snapshot.codeLanguage,
+    codeLexicalContext: snapshot.codeLexicalContext,
     paragraphBeforeCursor,
     paragraphStart: snapshot.currentParagraph.from,
     sentencePrefix,
@@ -359,16 +368,219 @@ function isEscapedAt(text: string, index: number): boolean {
   return slashes % 2 === 1;
 }
 
-function parseFenceOpener(line: string): { marker: '`' | '~'; length: number } | null {
+interface FenceDescriptor {
+  marker: '`' | '~';
+  length: number;
+  language?: string;
+}
+
+interface FencedCodeContext {
+  language?: string;
+  lexicalContext?: CompletionCodeLexicalContext;
+}
+
+export function detectFencedCodeContext(cursorPos: number, doc: string): FencedCodeContext {
+  const cursor = Math.max(0, Math.min(cursorPos, doc.length));
+  let fence: FenceDescriptor | null = null;
+  let bodyStart = 0;
+  let lineStart = 0;
+  while (lineStart <= doc.length) {
+    const lineFeed = doc.indexOf('\n', lineStart);
+    const rawEnd = lineFeed < 0 ? doc.length : lineFeed;
+    const contentEnd = rawEnd > lineStart && doc[rawEnd - 1] === '\r' ? rawEnd - 1 : rawEnd;
+    const line = doc.slice(lineStart, contentEnd);
+    const cursorOnLine = cursor >= lineStart && cursor <= rawEnd;
+    if (fence) {
+      if (cursorOnLine) {
+        if (!fence.language) return { lexicalContext: 'unknown' };
+        const body = doc.slice(bodyStart, cursor);
+        return {
+          language: fence.language,
+          lexicalContext: scanCodeLexicalContext(body, fence.language),
+        };
+      }
+      if (isFenceCloser(line, fence)) fence = null;
+    } else {
+      const opener = parseFenceOpener(line);
+      if (opener) {
+        if (cursorOnLine) return { language: opener.language, lexicalContext: 'unknown' };
+        fence = opener;
+        bodyStart = lineFeed < 0 ? rawEnd : lineFeed + 1;
+      } else if (cursorOnLine) {
+        return {};
+      }
+    }
+    if (lineFeed < 0) break;
+    lineStart = lineFeed + 1;
+  }
+  return {};
+}
+
+export function scanCodeLexicalContext(
+  text: string,
+  language: string,
+): CompletionCodeLexicalContext {
+  if (!V25_CODE_LANGUAGES.has(language)) return 'unknown';
+  const supportsComments = language !== 'json';
+  const supportsTemplate = language === 'typescript' || language === 'javascript';
+  const supportsRegex = language === 'typescript' || language === 'javascript';
+  let state: CompletionCodeLexicalContext = 'code';
+  let quote: "'" | '"' | '`' | null = null;
+  let blockCommentDepth = 0;
+  let lineComment = false;
+  let regex = false;
+  let regexCharacterClass = false;
+  let escaped = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const current = text[index]!;
+    const next = text[index + 1] ?? '';
+    if (lineComment) {
+      if (current === '\n') lineComment = false;
+      continue;
+    }
+    if (blockCommentDepth > 0) {
+      if (language === 'rust' && current === '/' && next === '*') {
+        blockCommentDepth += 1;
+        index += 1;
+        continue;
+      }
+      if (current === '*' && next === '/') {
+        blockCommentDepth -= 1;
+        index += 1;
+      }
+      continue;
+    }
+    if (regex) {
+      if (escaped) {
+        escaped = false;
+      } else if (current === '\\') {
+        escaped = true;
+      } else if (current === '[') {
+        regexCharacterClass = true;
+      } else if (current === ']' && regexCharacterClass) {
+        regexCharacterClass = false;
+      } else if (current === '/' && !regexCharacterClass) {
+        regex = false;
+        while (/[A-Za-z]/u.test(text[index + 1] ?? '')) index += 1;
+      } else if (current === '\n') {
+        return 'unknown';
+      }
+      continue;
+    }
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (current === '\\') {
+        escaped = true;
+      } else if (current === quote) {
+        quote = null;
+      } else if (current === '\n' && quote !== '`') {
+        return 'unknown';
+      }
+      continue;
+    }
+    if (supportsComments && current === '/' && next === '/') {
+      lineComment = true;
+      index += 1;
+      continue;
+    }
+    if (supportsComments && current === '/' && next === '*') {
+      blockCommentDepth = 1;
+      index += 1;
+      continue;
+    }
+    if (language === 'rust') {
+      const raw = /^(?:br|r)(#{0,255})"/u.exec(text.slice(index));
+      const identifierBoundary = index === 0 || !/[A-Za-z0-9_]/u.test(text[index - 1]!);
+      if (raw && identifierBoundary) {
+        const delimiter = `"${raw[1] ?? ''}`;
+        const contentStart = index + raw[0].length;
+        const close = text.indexOf(delimiter, contentStart);
+        if (close < 0) return 'string';
+        index = close + delimiter.length - 1;
+        continue;
+      }
+    }
+    if (supportsRegex && current === '/' && startsJavaScriptRegex(text, index)) {
+      regex = true;
+      regexCharacterClass = false;
+      escaped = false;
+      continue;
+    }
+    if (language === 'rust' && current === "'") {
+      const rest = text.slice(index);
+      const character =
+        /^'(?:\\(?:[nrt0\\'"]|x[0-9A-Fa-f]{2}|u\{[0-9A-Fa-f_]{1,6}\})|[^\\'\r\n])'/u.exec(rest);
+      if (character) {
+        index += character[0].length - 1;
+        continue;
+      }
+      const lifetime = /^'[A-Za-z_][A-Za-z0-9_]*/u.exec(rest);
+      if (lifetime) {
+        const afterLifetime = rest[lifetime[0].length] ?? '';
+        if (!afterLifetime) return 'unknown';
+        index += lifetime[0].length - 1;
+        continue;
+      }
+    }
+    if (current === '"' || current === "'" || (supportsTemplate && current === '`')) {
+      quote = current as "'" | '"' | '`';
+    }
+  }
+  if (lineComment || blockCommentDepth > 0) state = 'comment';
+  else if (quote || regex) state = 'string';
+  return state;
+}
+
+function startsJavaScriptRegex(text: string, slashIndex: number): boolean {
+  let cursor = slashIndex - 1;
+  while (cursor >= 0 && /\s/u.test(text[cursor]!)) {
+    if (text[cursor] === '\n' || text[cursor] === '\r') return true;
+    cursor -= 1;
+  }
+  if (cursor < 0) return true;
+  // JavaScript permits a regex expression as the body following a control
+  // condition and after a completed block. A slash separated from `)`/`}` is
+  // ambiguous with division; fail closed so text inside that literal never
+  // receives semantic FIM privileges.
+  if (cursor < slashIndex - 1 && /[)}]/u.test(text[cursor]!)) return true;
+  if (/[=([{,:;!&|?+\-*%^~<>]/u.test(text[cursor]!)) return true;
+  const boundedTail = text.slice(Math.max(0, cursor - 15), cursor + 1);
+  return /(?:^|\b)(?:return|case|throw|yield|await)$/u.test(boundedTail);
+}
+
+const V25_CODE_LANGUAGE_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  ts: 'typescript',
+  typescript: 'typescript',
+  tsx: 'typescript',
+  js: 'javascript',
+  javascript: 'javascript',
+  jsx: 'javascript',
+  rs: 'rust',
+  rust: 'rust',
+  json: 'json',
+});
+const V25_CODE_LANGUAGES = new Set(Object.values(V25_CODE_LANGUAGE_ALIASES));
+
+export function normalizeFencedCodeLanguage(info: string): string | undefined {
+  const first = info.trim().split(/\s+/u)[0]?.toLocaleLowerCase('en-US') ?? '';
+  return V25_CODE_LANGUAGE_ALIASES[first];
+}
+
+function parseFenceOpener(line: string): FenceDescriptor | null {
   const match = /^ {0,3}(`{3,}|~{3,})(.*)$/u.exec(line);
   const run = match?.[1];
   if (!run) return null;
   const marker = run[0] as '`' | '~';
   if (marker === '`' && (match?.[2] ?? '').includes('`')) return null;
-  return { marker, length: run.length };
+  return {
+    marker,
+    length: run.length,
+    language: normalizeFencedCodeLanguage(match?.[2] ?? ''),
+  };
 }
 
-function isFenceCloser(line: string, fence: { marker: '`' | '~'; length: number }): boolean {
+function isFenceCloser(line: string, fence: Pick<FenceDescriptor, 'marker' | 'length'>): boolean {
   const match = /^ {0,3}(`{3,}|~{3,})[ \t]*$/u.exec(line);
   const run = match?.[1];
   return !!run && run[0] === fence.marker && run.length >= fence.length;

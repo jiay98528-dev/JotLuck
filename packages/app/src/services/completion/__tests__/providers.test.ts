@@ -88,6 +88,13 @@ describe('completion providers', () => {
     }
   });
 
+  it('keeps task-list syntax separated from a bare list marker', () => {
+    const provider = new MarkdownStructureProvider();
+
+    expect(provider.provide(completionContext('-'))).toMatchObject({ text: ' [ ] ' });
+    expect(provider.provide(completionContext('- '))).toMatchObject({ text: '[ ] ' });
+  });
+
   it('blocks ordinary providers in heading and table blocks', () => {
     const providers = [
       new SequencePatternProvider(),

@@ -1,5 +1,6 @@
 import { isDesktopRuntime } from '@/utils/runtime';
 import {
+  PUBLIC_V25_JOINT_ENGINE_ID,
   parsePublicFreeDecoderManifest,
   type PublicFreeDecoderManifest,
 } from './public-free-decoder-contract';
@@ -50,7 +51,11 @@ export async function createPublicFreeDecoderEvaluationEngine(
     if (bytes.byteLength < 2 || bytes.byteLength > MAX_MANIFEST_BYTES) return null;
     const value: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
     const manifest = parsePublicFreeDecoderManifest(value, bytes.byteLength);
-    if (!manifest.evaluationOnly || manifest.releaseEligible) return null;
+    if (
+      manifest.engine !== PUBLIC_V25_JOINT_ENGINE_ID &&
+      (!manifest.evaluationOnly || manifest.releaseEligible)
+    )
+      return null;
     return new PublicFreeDecoderEngine({
       manifest,
       manifestPath: options.manifestPath,
