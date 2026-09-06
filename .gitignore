@@ -130,3 +130,8 @@ msedgedriver.exe
 .codex-tmp/
 .zcode/
 local-archive/
+
+# V2.5 补全模型 canonical 资产（本地构建注入，模型文件非 MIT 不入库）
+/packages/app/public/autocomplete-v25/
+/packages/app/src-tauri/resources/autocomplete-v25/*
+!/packages/app/src-tauri/resources/autocomplete-v25/README.txt
