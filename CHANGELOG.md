@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.13.0-preview] - 2026-09-06
+
+### Added
+
+- Integrated the V2.5 completion engine (one-unit writing, bilingual). It is
+  enabled by default through the canonical manifest and silently falls back to
+  the built-in completion when the model artifact is missing, so existing
+  features and behavior remain unchanged.
+
+### Fixed
+
+- Single-character Chinese completions were previously rejected by the
+  validator. Validator v5 now treats a single Chinese character as a valid
+  token, restoring inline completions for short Chinese inputs.
+
+### Changed
+
+- Version bumped from `0.12.3-preview` to `0.13.0-preview` (minor version
+  advance).
+
 ## [0.12.3-preview] - 2026-09-02
 
 ### Fixed

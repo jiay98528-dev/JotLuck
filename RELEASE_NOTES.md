@@ -1,3 +1,39 @@
+# JotLuck v0.13.0-preview — Preview Release Notes
+
+> Date: 2026-09-06
+> Minor version advance from `v0.12.3-preview`. Source-level release notes; the
+> Windows x64 installer for this version is not yet published.
+
+## What's new in 0.13.0
+
+- **V2.5 completion engine integrated.** The bilingual one-unit writing
+  engine is wired in through the canonical manifest and is enabled by
+  default. When the model artifact is missing on the host, completion
+  silently falls back to the built-in engine so existing behavior is
+  preserved.
+- **Single-character Chinese completions are accepted.** Validator v5 now
+  treats a single Chinese character as a valid token, fixing inline
+  completions for short Chinese inputs that the previous validator
+  rejected.
+- **Version bumped to `0.13.0-preview`.** Minor version advance over
+  `0.12.3-preview`.
+
+## Important — Unsigned Preview
+
+The official Windows installer for `v0.13.0-preview` is not yet published.
+Until a build is uploaded, this section mirrors the 0.12.3-preview process:
+installers appear only on GitHub Releases and must be verified by SHA-256.
+Code signing follows the pipeline documented in
+[`CODE_SIGNING.md`](./CODE_SIGNING.md).
+
+## What's next
+
+- Publish the unsigned Windows x64 installer for `v0.13.0-preview` on
+  GitHub Releases, with SHA-256 and Authenticode status recorded here.
+- Continue macOS / Linux packaging work.
+
+---
+
 # JotLuck v0.12.3-preview — Preview Release Notes
 
 > Date: 2026-09-02
