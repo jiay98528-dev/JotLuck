@@ -20,6 +20,13 @@
 - Version bumped from `0.12.3-preview` to `0.13.0-preview` (minor version
   advance).
 
+### Distribution
+
+- Built the unsigned Windows x64 installer as `JotLuck_0.13.0_x64-setup.exe`.
+- Installer SHA-256: `4614c7fdce1455bc4b998a140bb5974203c10ccb0fd91852139bd4a8885f64b5`.
+- The installer bundles the V2.5 one-unit writing model locally
+  (`autocomplete-v25/`); the repository itself still contains no model assets.
+
 ## [0.12.3-preview] - 2026-09-02
 
 ### Fixed
