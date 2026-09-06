@@ -1,0 +1,392 @@
+{
+  "schema": "jotluck.autocomplete.v2.5-route-validator-golden.v1",
+  "validatorId": "jotluck-v2.5-route-validator-v5",
+  "validatorVersion": 5,
+  "cases": [
+    {
+      "id": "writing-zh-valid",
+      "input": {
+        "route": "writing",
+        "text": "继续检查结果。",
+        "language": "zh",
+        "prefix": "我们将",
+        "suffix": "",
+        "blockType": "paragraph",
+        "confidence": 1.0
+      },
+      "allowed": true,
+      "reasons": []
+    },
+    {
+      "id": "writing-zh-dangling",
+      "input": {
+        "route": "writing",
+        "text": "继续核验的",
+        "language": "zh",
+        "prefix": "下一步",
+        "suffix": "",
+        "blockType": "paragraph",
+        "confidence": 1.0
+      },
+      "allowed": false,
+      "reasons": ["writing-dangling-connector"]
+    },
+    {
+      "id": "writing-mixed",
+      "input": {
+        "route": "writing",
+        "text": "继续检查 API",
+        "language": "zh",
+        "prefix": "我们将",
+        "suffix": "",
+        "blockType": "paragraph",
+        "confidence": 1.0
+      },
+      "allowed": false,
+      "reasons": ["writing-mixed-language"]
+    },
+    {
+      "id": "writing-loop",
+      "input": {
+        "route": "writing",
+        "text": "继续继续继续",
+        "language": "zh",
+        "prefix": "随后",
+        "suffix": "",
+        "blockType": "paragraph",
+        "confidence": 1.0
+      },
+      "allowed": false,
+      "reasons": ["writing-loop"]
+    },
+    {
+      "id": "writing-en-valid",
+      "input": {
+        "route": "writing",
+        "text": " next step.",
+        "language": "en",
+        "prefix": "Review the",
+        "suffix": "",
+        "blockType": "paragraph",
+        "confidence": 1.0
+      },
+      "allowed": true,
+      "reasons": []
+    },
+    {
+      "id": "writing-en-boundary",
+      "input": {
+        "route": "writing",
+        "text": "next step.",
+        "language": "en",
+        "prefix": "Review the",
+        "suffix": "",
+        "blockType": "paragraph",
+        "confidence": 1.0
+      },
+      "allowed": false,
+      "reasons": ["writing-missing-word-boundary"]
+    },
+    {
+      "id": "writing-en-unicode-boundary",
+      "input": {
+        "route": "writing",
+        "text": "éclair arrives.",
+        "language": "en",
+        "prefix": "café",
+        "suffix": "",
+        "blockType": "paragraph",
+        "confidence": 1.0
+      },
+      "allowed": false,
+      "reasons": ["writing-missing-word-boundary"]
+    },
+    {
+      "id": "writing-en-six-words",
+      "input": {
+        "route": "writing",
+        "text": " a b c d e f",
+        "language": "en",
+        "prefix": "Continue",
+        "suffix": "",
+        "blockType": "paragraph",
+        "confidence": 1.0
+      },
+      "allowed": false,
+      "reasons": ["writing-too-long"]
+    },
+    {
+      "id": "writing-en-codepoint-length",
+      "input": {
+        "route": "writing",
+        "text": " hi😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+        "language": "en",
+        "prefix": "Continue",
+        "suffix": "",
+        "blockType": "paragraph",
+        "confidence": 1.0
+      },
+      "allowed": false,
+      "reasons": ["writing-too-long"]
+    },
+    {
+      "id": "writing-en-accented-sentence-boundary",
+      "input": {
+        "route": "writing",
+        "text": "éclair",
+        "language": "en",
+        "prefix": "Done.",
+        "suffix": "",
+        "blockType": "paragraph",
+        "confidence": 1.0
+      },
+      "allowed": false,
+      "reasons": ["writing-missing-sentence-space"]
+    },
+    {
+      "id": "writing-en-rejects-han-spoof",
+      "input": {
+        "route": "writing",
+        "text": "继续检查。",
+        "language": "en",
+        "prefix": "Continue ",
+        "suffix": "",
+        "blockType": "paragraph",
+        "confidence": 1.0
+      },
+      "allowed": false,
+      "reasons": ["writing-language-mismatch"]
+    },
+    {
+      "id": "writing-paragraph-marker",
+      "input": {
+        "route": "writing",
+        "text": "- item",
+        "language": "en",
+        "prefix": "Text ",
+        "suffix": "",
+        "blockType": "paragraph",
+        "confidence": 1.0
+      },
+      "allowed": false,
+      "reasons": ["writing-cross-block-marker"]
+    },
+    {
+      "id": "code-member-fim-valid",
+      "input": {
+        "route": "code",
+        "text": "parse",
+        "language": "rust",
+        "prefix": "let result = parser.",
+        "suffix": "(input);",
+        "blockType": "code",
+        "confidence": 1.0,
+        "taskType": "fim",
+        "fimKind": "member-call",
+        "codeLanguage": "rust"
+      },
+      "allowed": true,
+      "reasons": []
+    },
+    {
+      "id": "code-argument-fim-valid",
+      "input": {
+        "route": "code",
+        "text": "input_value",
+        "language": "typescript",
+        "prefix": "parse(",
+        "suffix": ", limit)",
+        "blockType": "code",
+        "confidence": 1.0,
+        "taskType": "fim",
+        "fimKind": "call-argument",
+        "codeLanguage": "typescript"
+      },
+      "allowed": true,
+      "reasons": []
+    },
+    {
+      "id": "code-fim-cross-line",
+      "input": {
+        "route": "code",
+        "text": "input_value\nunsafe",
+        "language": "typescript",
+        "prefix": "parse(",
+        "suffix": ", limit)",
+        "blockType": "code",
+        "confidence": 1.0,
+        "taskType": "fim",
+        "fimKind": "call-argument",
+        "codeLanguage": "typescript"
+      },
+      "allowed": false,
+      "reasons": ["code-cross-line", "code-no-validated-structural-join"]
+    },
+    {
+      "id": "code-string-fim-unicode-length",
+      "input": {
+        "route": "code",
+        "text": "\"😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\"",
+        "language": "typescript",
+        "prefix": "render(",
+        "suffix": ")",
+        "blockType": "code",
+        "confidence": 1.0,
+        "taskType": "fim",
+        "fimKind": "call-argument",
+        "codeLanguage": "typescript"
+      },
+      "allowed": true,
+      "reasons": []
+    },
+    {
+      "id": "code-fim-over-product-length",
+      "input": {
+        "route": "code",
+        "text": "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvw",
+        "language": "typescript",
+        "prefix": "object.",
+        "suffix": "()",
+        "blockType": "code",
+        "confidence": 1.0,
+        "taskType": "fim",
+        "fimKind": "member-call",
+        "codeLanguage": "typescript"
+      },
+      "allowed": false,
+      "reasons": ["code-no-validated-structural-join"]
+    },
+    {
+      "id": "code-typescript-rejects-python-none",
+      "input": {
+        "route": "code",
+        "text": "None",
+        "language": "en",
+        "prefix": "const value = ",
+        "suffix": ";",
+        "blockType": "code",
+        "confidence": 1.0,
+        "taskType": "fim",
+        "fimKind": "expression",
+        "codeLanguage": "typescript"
+      },
+      "allowed": false,
+      "reasons": ["code-no-validated-structural-join"]
+    },
+    {
+      "id": "code-rust-rejects-null",
+      "input": {
+        "route": "code",
+        "text": "null",
+        "language": "en",
+        "prefix": "let value = ",
+        "suffix": ";",
+        "blockType": "code",
+        "confidence": 1.0,
+        "taskType": "fim",
+        "fimKind": "expression",
+        "codeLanguage": "rust"
+      },
+      "allowed": false,
+      "reasons": ["code-no-validated-structural-join"]
+    },
+    {
+      "id": "code-typescript-rejects-rust-reference",
+      "input": {
+        "route": "code",
+        "text": "&value",
+        "language": "en",
+        "prefix": "render(",
+        "suffix": ")",
+        "blockType": "code",
+        "confidence": 1.0,
+        "taskType": "fim",
+        "fimKind": "call-argument",
+        "codeLanguage": "typescript"
+      },
+      "allowed": false,
+      "reasons": ["code-no-validated-structural-join"]
+    },
+    {
+      "id": "code-structural-stays-out-of-model-layer",
+      "input": {
+        "route": "code",
+        "text": "::",
+        "language": "rust",
+        "prefix": "std",
+        "suffix": "mem",
+        "blockType": "code",
+        "confidence": 1.0
+      },
+      "allowed": false,
+      "reasons": [
+        "code-insufficient-information",
+        "code-low-information-punctuation",
+        "code-no-validated-structural-join"
+      ]
+    },
+    {
+      "id": "code-unvalidated-punctuation",
+      "input": {
+        "route": "code",
+        "text": ".",
+        "language": "typescript",
+        "prefix": "value ",
+        "suffix": " next",
+        "blockType": "code",
+        "confidence": 1.0
+      },
+      "allowed": false,
+      "reasons": [
+        "code-insufficient-information",
+        "code-low-information-punctuation",
+        "code-no-validated-structural-join"
+      ]
+    },
+    {
+      "id": "writing-zh-one-unit-single-char",
+      "input": {
+        "route": "writing",
+        "language": "zh",
+        "prefix": "比如突然想到的一句话，",
+        "suffix": "",
+        "blockType": "paragraph",
+        "confidence": 1,
+        "diagnosticOneUnit": true,
+        "text": "我"
+      },
+      "allowed": true,
+      "reasons": []
+    },
+    {
+      "id": "writing-zh-one-unit-single-char-2",
+      "input": {
+        "route": "writing",
+        "language": "zh",
+        "prefix": "比如突然想到的一句话，",
+        "suffix": "",
+        "blockType": "paragraph",
+        "confidence": 1,
+        "diagnosticOneUnit": true,
+        "text": "就"
+      },
+      "allowed": true,
+      "reasons": []
+    },
+    {
+      "id": "writing-zh-one-unit-dangling-particle",
+      "input": {
+        "route": "writing",
+        "language": "zh",
+        "prefix": "比如突然想到的一句话，",
+        "suffix": "",
+        "blockType": "paragraph",
+        "confidence": 1,
+        "diagnosticOneUnit": true,
+        "text": "的"
+      },
+      "allowed": false,
+      "reasons": ["writing-dangling-connector"]
+    }
+  ]
+}
