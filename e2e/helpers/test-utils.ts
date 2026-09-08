@@ -20,6 +20,12 @@ export const MOD_KEY = process.platform === 'darwin' ? 'Meta' : 'Control';
 /** 跳到文档开头：macOS 为 Cmd+ArrowUp，其余平台为 Control+Home。 */
 export const DOC_START_KEY = process.platform === 'darwin' ? 'Meta+ArrowUp' : 'Control+Home';
 
+/**
+ * 重做：Windows/Linux 用 CM6 稳定绑定的 Ctrl+Y；macOS 的 Cmd+Y 会被 Chrome 当作
+ * 浏览器「历史」快捷键拦截，改用 CM6 同样绑定的 Cmd+Shift+Z。
+ */
+export const REDO_KEY = process.platform === 'darwin' ? 'Meta+Shift+z' : 'Control+y';
+
 /** 获取 CodeMirror 编辑器内容 */
 export async function getEditorContent(page: Page): Promise<string> {
   await ensureEditorReady(page);
