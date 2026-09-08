@@ -66,6 +66,15 @@ export const en: SiteContent = {
       rail: ['Export', 'PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'HTML'],
     },
   ],
+  completion: {
+    title: 'Text completion',
+    lines: [
+      'JotLuck ships with a small completion model we trained ourselves: Chinese and English are supported, it works out of the box, and it runs entirely on your machine.',
+      'Finish a sentence, and a word may appear quietly after the cursor. If it fits, press Tab to keep it; if not, keep writing — it stays out of your way.',
+      'It also learns dynamically — as you work together, completion adapts to your habitual wording.',
+      'You can turn it on or off in Settings at any time.',
+    ],
+  },
   film: {
     title: 'Promo film',
     ariaLabel: 'JotLuck promo film, 60 seconds',

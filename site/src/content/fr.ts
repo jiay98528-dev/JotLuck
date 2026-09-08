@@ -69,6 +69,15 @@ export const fr: SiteContent = {
       rail: ['Exporter', 'PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'HTML'],
     },
   ],
+  completion: {
+    title: 'Complétion de texte',
+    lines: [
+      "JotLuck embarque un petit modèle de complétion que nous avons entraîné nous-mêmes : chinois et anglais sont pris en charge, tout est prêt dès l'installation, et tout s'exécute localement.",
+      "Quand vous terminez une phrase, un mot peut apparaître discrètement après le curseur. S'il convient, appuyez sur Tab pour l'accepter ; sinon, continuez d'écrire — il s'efface de lui-même. Aucune interruption en cours de route.",
+      'Il apprend aussi dynamiquement : plus vous écrivez avec lui, plus la complétion épouse vos habitudes.',
+      "Vous pouvez l'activer ou le désactiver à tout moment dans les réglages.",
+    ],
+  },
   film: {
     title: 'Film de présentation',
     ariaLabel: 'Film de présentation de JotLuck, 60 secondes',

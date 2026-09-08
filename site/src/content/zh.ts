@@ -66,6 +66,15 @@ export const zh: SiteContent = {
       rail: ['导出', 'PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'HTML'],
     },
   ],
+  completion: {
+    title: '文本补全',
+    lines: [
+      'JotLuck 搭载了我们自己训练的补全小模型：支持中英双语，装好即用，完全在本地运行。',
+      '当你写完一句话，光标后面就有机会蹦出下一个词。合适就按 Tab 采纳，不合适继续写即可，全程低打扰。',
+      '它还具备动态学习机制——随着协作加深，补全会越来越贴合你的用词习惯。',
+      '设置页可随时开关。',
+    ],
+  },
   film: {
     title: '宣传视频',
     ariaLabel: 'JotLuck 宣传视频，时长 60 秒',

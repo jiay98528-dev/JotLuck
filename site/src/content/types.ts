@@ -37,6 +37,15 @@ export interface NarrativeAct {
   rail: string[];
 }
 
+/**
+ * 文本补全区块：自研本地补全的事实性说明（0.13.0+ 随应用内置，默认开启、可关闭）。
+ * 每个元素一段，按行渲染。
+ */
+export interface CompletionContent {
+  title: string;
+  lines: string[];
+}
+
 /** 首页宣传片区块：zh 用中文版影片，其余语言回退英文版（资源按 locale 在组件内路由） */
 export interface FilmContent {
   title: string;
@@ -174,6 +183,7 @@ export interface SiteContent {
   };
   hero: HeroContent;
   narrative: NarrativeAct[];
+  completion: CompletionContent;
   multilingual: MultilingualContent;
   film: FilmContent;
   download: DownloadContent;
