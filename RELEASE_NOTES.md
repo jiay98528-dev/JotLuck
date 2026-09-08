@@ -1,3 +1,38 @@
+# JotLuck v0.13.1-preview — Preview Release Notes
+
+> Date: 2026-09-08
+> Patch advance from `v0.13.0-preview`. Source-level release notes; the
+> Windows x64 installer for this version is not yet published.
+
+## What's new in 0.13.1
+
+- **The completion engine loader no longer fails silently or permanently.**
+  The first load failure of the public completion engine (manifest fetch
+  failure, warmup rejection, or a declined install) used to be cached for the
+  lifetime of the workspace page, disabling the V2.5 engine for the whole
+  session with no visible signal. Loading now leaves no failure cache,
+  retries automatically with bounded backoff (up to 3 attempts, 2s/5s), and
+  logs a console warning on every failure path.
+- **Settings shows live completion-engine health.** Settings → Autocomplete
+  now surfaces the public engine's status, last error, generated
+  requests/candidates, and visible inference p90, with a manual retry action
+  — in Simplified Chinese, English, French, Japanese, and Korean.
+- **Version bumped to `0.13.1-preview`.** Patch advance over `0.13.0-preview`.
+
+## Important — Unsigned Preview
+
+The official Windows installer for `v0.13.1-preview` is not yet published.
+Installers appear only on GitHub Releases and must be verified by SHA-256.
+Code signing follows the pipeline documented in
+[`CODE_SIGNING.md`](./CODE_SIGNING.md).
+
+## What's next
+
+- Publish the unsigned Windows x64 installer for `v0.13.1-preview` on GitHub
+  Releases, with SHA-256 and Authenticode status recorded here.
+
+---
+
 # JotLuck v0.13.0-preview — Preview Release Notes
 
 > Date: 2026-09-06

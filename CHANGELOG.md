@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.13.1-preview] - 2026-09-08
+
+### Fixed
+
+- The public completion engine loader cached its first failure for the
+  lifetime of the workspace page: a failed manifest fetch, a rejected warmup,
+  or a declined install permanently disabled the V2.5 engine for the session
+  with no signal. Loading now leaves no failure cache, retries automatically
+  with bounded backoff (up to 3 attempts, 2s/5s), and logs a console warning
+  on each failure path.
+
+### Added
+
+- Settings → Autocomplete now shows the public completion engine's health
+  snapshot (status, last error, generated requests/candidates, visible
+  inference p90) plus a manual retry action, localized in Simplified Chinese,
+  English, French, Japanese, and Korean.
+
+### Changed
+
+- Version bumped from `0.13.0-preview` to `0.13.1-preview` (patch version
+  advance).
+
 ## [0.13.0-preview] - 2026-09-06
 
 ### Added
