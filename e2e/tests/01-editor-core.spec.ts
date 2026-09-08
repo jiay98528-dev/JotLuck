@@ -315,8 +315,9 @@ test.describe('编辑器核心', () => {
     // 第二行内容应该已被撤销
     expect(contentAfterUndo).not.toContain('第二行内容');
 
-    // Step 4: 重做 — Ctrl+Y / Cmd+Y（CM6 绑定 Mod-Y，两平台一致生效）
-    await page.keyboard.press(`${MOD_KEY}+y`);
+    // Step 4: 重做 — Ctrl+Shift+Z / Cmd+Shift+Z（CM6 绑定 Shift-Mod-z；Cmd+Y 会被
+    // macOS Chrome 当作浏览器「历史」快捷键拦截，不可用于测试）
+    await page.keyboard.press(`${MOD_KEY}+Shift+z`);
     await page.waitForTimeout(500);
 
     const contentAfterRedo = await getEditorContent(page);
