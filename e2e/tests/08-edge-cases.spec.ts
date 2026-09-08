@@ -13,6 +13,7 @@ import {
   appendInEditor,
   createBlankNote,
   waitForAutoSave,
+  MOD_KEY,
 } from '../helpers/test-utils';
 
 // ============================================================
@@ -85,7 +86,7 @@ test.describe('边界与压力测试', () => {
 
     const longText = longLine(5500);
     await page.locator('.cm-content').click();
-    await page.keyboard.press('Control+a');
+    await page.keyboard.press(`${MOD_KEY}+a`);
     await page.keyboard.press('Backspace');
     await page.keyboard.insertText(longText);
 

@@ -17,6 +17,7 @@ import {
   expectEditorContains,
   expectToast,
   createBlankNote,
+  MOD_KEY,
 } from '../../e2e/helpers/test-utils';
 
 test.describe('文件操作', () => {
@@ -244,7 +245,7 @@ test.describe('文件操作', () => {
 
     // V1: 指标1 — 选中编辑器内文字，触发格式气泡提示 Toast
     await page.locator('.cm-content').click();
-    await page.keyboard.press('Control+a');
+    await page.keyboard.press(`${MOD_KEY}+a`);
 
     // V1: 指标2 — 格式气泡提示 Toast 应出现
     await expectToast(page, '选中文字后使用格式气泡');

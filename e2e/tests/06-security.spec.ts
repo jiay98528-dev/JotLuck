@@ -15,6 +15,7 @@ import {
   waitForAppReady,
   typeInEditor,
   getEditorContent,
+  MOD_KEY,
 } from '../helpers/test-utils';
 
 // ============================================================
@@ -54,7 +55,7 @@ async function setEditorContent(
 ): Promise<void> {
   await ensureEditorReady(page);
   await page.locator('.cm-content').click();
-  await page.keyboard.press('Control+a');
+  await page.keyboard.press(`${MOD_KEY}+a`);
   await page.keyboard.press('Backspace');
   await page.keyboard.insertText(text);
   await page.waitForTimeout(300);

@@ -11,6 +11,15 @@ import { expect, test } from '@playwright/test';
 // Editor Helpers
 // ============================================================
 
+/**
+ * OS 文本惯例修饰键：macOS 为 Cmd（Meta），其余平台为 Ctrl。
+ * 仅用于全选/撤销/重做等操作系统级文本惯例；应用内自定义快捷键（如 Ctrl+K）不适用。
+ */
+export const MOD_KEY = process.platform === 'darwin' ? 'Meta' : 'Control';
+
+/** 跳到文档开头：macOS 为 Cmd+ArrowUp，其余平台为 Control+Home。 */
+export const DOC_START_KEY = process.platform === 'darwin' ? 'Meta+ArrowUp' : 'Control+Home';
+
 /** 获取 CodeMirror 编辑器内容 */
 export async function getEditorContent(page: Page): Promise<string> {
   await ensureEditorReady(page);
@@ -42,8 +51,8 @@ export async function typeInEditor(
 ): Promise<void> {
   await ensureEditorReady(page);
   await focusEditor(page);
-  // 使用 Ctrl+A+Backspace 清除内容（经 CM6 key handler，避免 fill() 的 MutationObserver 竞态）
-  await page.keyboard.press('Control+a');
+  // 使用全选+Backspace 清除内容（经 CM6 key handler，避免 fill() 的 MutationObserver 竞态）
+  await page.keyboard.press(`${MOD_KEY}+a`);
   await page.keyboard.press('Backspace');
   await page.waitForTimeout(200); // 等待 CM6 调和状态
   // insertText：单次注入（等价 IME 提交），规避 Linux WebKit 逐键时序错乱；
@@ -70,7 +79,7 @@ export async function appendInEditor(
 export async function clearEditor(page: Page): Promise<void> {
   await ensureEditorReady(page);
   await focusEditor(page);
-  await page.keyboard.press('Control+a');
+  await page.keyboard.press(`${MOD_KEY}+a`);
   await page.keyboard.press('Backspace');
 }
 

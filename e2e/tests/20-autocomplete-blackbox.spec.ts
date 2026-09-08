@@ -1,6 +1,6 @@
 ﻿import { expect, test, type Page } from '@playwright/test';
 
-import { ensureEditorReady, waitForAppReady } from '../helpers/test-utils';
+import { ensureEditorReady, waitForAppReady, DOC_START_KEY, MOD_KEY } from '../helpers/test-utils';
 
 interface BlackboxCase {
   id: string;
@@ -268,7 +268,7 @@ async function replaceEditorTextThroughInput(
   const editor = page.locator('.split-left .cm-content');
   if (browserName !== 'webkit') {
     await editor.click();
-    await page.keyboard.press('Control+a');
+    await page.keyboard.press(`${MOD_KEY}+a`);
     await page.keyboard.press('Backspace');
     await page.keyboard.type(text, { delay: 1 });
     return;
@@ -286,7 +286,7 @@ async function replaceEditorTextThroughInput(
   const actual = await page.evaluate(() => window.__jotluck_e2e?.editor?.getContent?.() ?? '');
   if (actual === `\n${text}`) {
     await editor.evaluate((element) => (element as HTMLElement).focus());
-    await page.keyboard.press('Control+Home');
+    await page.keyboard.press(DOC_START_KEY);
     await page.keyboard.press('Delete');
   } else if (actual === `${text}\n`) {
     await editor.evaluate((element) => (element as HTMLElement).focus());
