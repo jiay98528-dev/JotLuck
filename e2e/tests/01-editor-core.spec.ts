@@ -20,6 +20,7 @@ import {
   waitForAutoSave,
   DOC_START_KEY,
   MOD_KEY,
+  REDO_KEY,
 } from '../helpers/test-utils';
 
 // ============================================================
@@ -315,9 +316,8 @@ test.describe('编辑器核心', () => {
     // 第二行内容应该已被撤销
     expect(contentAfterUndo).not.toContain('第二行内容');
 
-    // Step 4: 重做 — Ctrl+Shift+Z / Cmd+Shift+Z（CM6 绑定 Shift-Mod-z；Cmd+Y 会被
-    // macOS Chrome 当作浏览器「历史」快捷键拦截，不可用于测试）
-    await page.keyboard.press(`${MOD_KEY}+Shift+z`);
+    // Step 4: 重做 — 平台感知（见 REDO_KEY 注释）
+    await page.keyboard.press(REDO_KEY);
     await page.waitForTimeout(500);
 
     const contentAfterRedo = await getEditorContent(page);
