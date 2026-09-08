@@ -85,6 +85,27 @@ export const messages = {
         done: 'Terminé',
         idle: 'En attente d’analyse',
       },
+      engine: {
+        title: 'Moteur de complétion public',
+        status: 'État du moteur',
+        statusReady: 'Prêt',
+        statusWarming: 'Préchauffage',
+        statusIdle: 'Inactif',
+        statusDegraded: 'Mode dégradé',
+        statusDisabledEngine: 'Désactivé',
+        statusDisposed: 'Libéré',
+        statusDisabled: 'Non activé',
+        requests: 'Requêtes générées',
+        candidates: 'Candidats produits',
+        p90: 'Latence d’inférence P90',
+        p90Unavailable: 'Aucune donnée',
+        lastError: 'Dernière erreur : {error}',
+        helpEnabled:
+          'Les métriques proviennent de l’instantané de diagnostic de MarkdownPredictor. Utilisez le bouton à droite pour relancer le chargement.',
+        helpDisabled:
+          'Aucun moteur de complétion public n’est actif. JotLuck tente d’en charger un au démarrage et réessaie en arrière-plan en cas d’échec.',
+        retry: 'Relancer le chargement',
+      },
     },
     updates: {
       title: 'Mises à jour',

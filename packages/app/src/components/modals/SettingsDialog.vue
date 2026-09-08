@@ -273,9 +273,36 @@
                 <p class="local-note">{{ t('settings.autocomplete.localOnly') }}</p>
               </div>
 
+              <div class="autocomplete-meta engine-meta">
+                <h4 class="engine-meta-title">{{ t('settings.autocomplete.engine.title') }}</h4>
+                <div class="meta-row">
+                  <span>{{ t('settings.autocomplete.engine.status') }}</span>
+                  <strong>{{ engineStatusLabel }}</strong>
+                </div>
+                <div class="meta-row">
+                  <span>{{ t('settings.autocomplete.engine.requests') }}</span>
+                  <strong>{{ engineRequests }}</strong>
+                </div>
+                <div class="meta-row">
+                  <span>{{ t('settings.autocomplete.engine.candidates') }}</span>
+                  <strong>{{ engineCandidates }}</strong>
+                </div>
+                <div class="meta-row">
+                  <span>{{ t('settings.autocomplete.engine.p90') }}</span>
+                  <strong>{{ engineP90Label }}</strong>
+                </div>
+                <p v-if="engineLastError" class="engine-error" role="alert">
+                  {{ t('settings.autocomplete.engine.lastError', { error: engineLastError }) }}
+                </p>
+                <p class="local-note">{{ engineHelpText }}</p>
+              </div>
+
               <div class="settings-actions settings-actions--left">
                 <button class="segment-btn" type="button" @click="$emit('clear-completion-data')">
                   {{ t('settings.autocomplete.clearData') }}
+                </button>
+                <button class="segment-btn" type="button" @click="$emit('retry-completion-engine')">
+                  {{ t('settings.autocomplete.engine.retry') }}
                 </button>
               </div>
             </section>
@@ -367,6 +394,7 @@ import { useLocale } from '@/composables/useLocale';
 import type { AssociationGroupStatus, WindowsAssociationStatus } from '@/types';
 import type { SupportedLocale } from '@/types/i18n';
 import { isDesktopRuntime } from '@/utils/runtime';
+import type { PublicEngineDiagnostics } from '@/services/completion/public-engine-types';
 
 const { t } = useI18n();
 const { locale, localeDefinitions, setLocale } = useLocale();
@@ -376,10 +404,12 @@ const props = withDefaults(
     visible: boolean;
     completionSettings?: CompletionSettings;
     completionTrainingMeta?: CompletionTrainingMeta;
+    completionEngineHealth?: PublicEngineDiagnostics | null;
   }>(),
   {
     completionSettings: () => ({ ...DEFAULT_COMPLETION_SETTINGS }),
     completionTrainingMeta: undefined,
+    completionEngineHealth: null,
   },
 );
 
@@ -387,6 +417,7 @@ const emit = defineEmits<{
   'update:visible': [boolean];
   'update-completion-settings': [CompletionSettings];
   'clear-completion-data': [];
+  'retry-completion-engine': [];
 }>();
 
 interface TabDef {
@@ -464,6 +495,50 @@ const trainingStatusLabel = computed(() => {
   if (status === 'done') return t('settings.autocomplete.status.done');
   return t('settings.autocomplete.status.idle');
 });
+
+const engineSnapshot = computed<PublicEngineDiagnostics | null>(
+  () => props.completionEngineHealth ?? null,
+);
+
+const engineStatusLabel = computed(() => {
+  const snap = engineSnapshot.value;
+  if (!snap) return t('settings.autocomplete.engine.statusDisabled');
+  switch (snap.status) {
+    case 'ready':
+      return t('settings.autocomplete.engine.statusReady');
+    case 'warming':
+      return t('settings.autocomplete.engine.statusWarming');
+    case 'degraded':
+      return t('settings.autocomplete.engine.statusDegraded');
+    case 'disabled':
+      return t('settings.autocomplete.engine.statusDisabledEngine');
+    case 'disposed':
+      return t('settings.autocomplete.engine.statusDisposed');
+    case 'idle':
+    default:
+      return t('settings.autocomplete.engine.statusIdle');
+  }
+});
+
+const engineRequests = computed(() => engineSnapshot.value?.generateRequests ?? 0);
+const engineCandidates = computed(() => engineSnapshot.value?.generatedCandidates ?? 0);
+
+const engineP90Label = computed(() => {
+  const snap = engineSnapshot.value;
+  if (!snap) return t('settings.autocomplete.engine.p90Unavailable');
+  const p90 = snap.visibleInferenceP90Ms;
+  if (!Number.isFinite(p90) || p90 <= 0) return t('settings.autocomplete.engine.p90Unavailable');
+  if (p90 < 1000) return `${Math.round(p90)}ms`;
+  return `${(p90 / 1000).toFixed(2)}s`;
+});
+
+const engineLastError = computed(() => engineSnapshot.value?.lastError ?? null);
+
+const engineHelpText = computed(() =>
+  engineSnapshot.value
+    ? t('settings.autocomplete.engine.helpEnabled')
+    : t('settings.autocomplete.engine.helpDisabled'),
+);
 
 watch(
   () => props.completionSettings,
@@ -691,6 +766,23 @@ function close(): void {
   border: var(--border-thin) solid var(--rule);
   border-radius: var(--radius);
   background: var(--paper-surface);
+}
+
+.engine-meta-title {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+}
+
+.engine-error {
+  margin: 0;
+  color: var(--signal-error);
+  font-size: var(--text-xs);
+  line-height: var(--lh-ui);
+  word-break: break-word;
 }
 
 .association-settings {

@@ -84,6 +84,27 @@ export const messages = {
         done: 'Complete',
         idle: 'Waiting to train',
       },
+      engine: {
+        title: 'Public completion engine',
+        status: 'Engine status',
+        statusReady: 'Ready',
+        statusWarming: 'Warming up',
+        statusIdle: 'Idle',
+        statusDegraded: 'Running in degraded mode',
+        statusDisabledEngine: 'Disabled',
+        statusDisposed: 'Disposed',
+        statusDisabled: 'Not enabled',
+        requests: 'Generate requests',
+        candidates: 'Candidates produced',
+        p90: 'Inference latency P90',
+        p90Unavailable: 'No data yet',
+        lastError: 'Last error: {error}',
+        helpEnabled:
+          'Engine metrics come straight from the MarkdownPredictor diagnostics snapshot. Use the button on the right to retry loading now.',
+        helpDisabled:
+          'No public completion engine is active. JotLuck tries to load one when the app starts and keeps retrying in the background if it fails.',
+        retry: 'Retry engine load',
+      },
     },
     updates: {
       title: 'Updates',

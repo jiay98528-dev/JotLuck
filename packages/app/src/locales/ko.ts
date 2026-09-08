@@ -80,6 +80,27 @@ export const messages = {
         done: '완료',
         idle: '학습 대기',
       },
+      engine: {
+        title: '공개 완성 엔진',
+        status: '엔진 상태',
+        statusReady: '준비됨',
+        statusWarming: '웜업 중',
+        statusIdle: '대기 중',
+        statusDegraded: '저성능 모드',
+        statusDisabledEngine: '비활성화됨',
+        statusDisposed: '해제됨',
+        statusDisabled: '사용되지 않음',
+        requests: '생성 요청 수',
+        candidates: '생성된 후보 수',
+        p90: '추론 지연 P90',
+        p90Unavailable: '데이터 없음',
+        lastError: '최근 오류: {error}',
+        helpEnabled:
+          '지표는 MarkdownPredictor의 진단 스냅샷에서 직접 가져옵니다. 오른쪽 버튼으로 지금 다시 로드할 수 있습니다.',
+        helpDisabled:
+          '현재 활성 공개 완성 엔진이 없습니다. JotLuck는 시작 시 로드를 시도하고 실패하면 백그라운드에서 계속 재시도합니다.',
+        retry: '엔진 다시 로드',
+      },
     },
     updates: {
       title: '업데이트',

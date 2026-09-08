@@ -81,6 +81,27 @@ export const messages = {
         done: '完了',
         idle: '学習待ち',
       },
+      engine: {
+        title: '公開補完エンジン',
+        status: 'エンジン状態',
+        statusReady: '準備完了',
+        statusWarming: 'ウォームアップ中',
+        statusIdle: 'アイドル',
+        statusDegraded: '縮退運転',
+        statusDisabledEngine: '無効',
+        statusDisposed: '破棄済み',
+        statusDisabled: '未有効',
+        requests: '生成リクエスト数',
+        candidates: '生成された候補数',
+        p90: '推論レイテンシ P90',
+        p90Unavailable: 'データなし',
+        lastError: '直近のエラー：{error}',
+        helpEnabled:
+          'メトリクスは MarkdownPredictor の診断スナップショットを直接表示しています。右側のボタンで今すぐ再ロードできます。',
+        helpDisabled:
+          '現在利用可能な公開補完エンジンはありません。JotLuck は起動時に読み込みを試行し、失敗した場合はバックグラウンドで再試行し続けます。',
+        retry: 'エンジンの再ロード',
+      },
     },
     updates: {
       title: '更新',
