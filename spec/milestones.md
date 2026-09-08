@@ -1,6 +1,6 @@
 # Milestones
 
-版本：2026-08-05
+版本：2026-09-08
 
 ## 当前状态
 
@@ -16,8 +16,11 @@
 - M9（下一版本，禁止回灌当前 RC）：Completion Engine V2.2。先交付 CM6 增量上下文、双平面 Provider Registry、精确 TextEdit、retained 反馈/v5 迁移与 Session History；随后在 dev/E2E flag 下研究 `public-v2-free-decoder-v1`，只有 Oracle 预检、cold/workspace 双 final 和 Windows 中文 IME GUI 闭环全部通过才切换默认。
 - Future: 远程主题市场、真实支付、账号、社区审核和沙箱隔离。
 - Future（M9 双 final 通过后才可启动）：离线语义短续写 V3 研究；固定比较 48M/64M/80M、Q4/Q8 与 256/512/1024-token 上下文，模型与实验宿主硬上限 96MiB。首期不做插件、授权、商店或支付；未达 +8pp 双 holdout 与 +15% retained characters/opportunity 即停止。详见 `plans/autocomplete-semantic-generation-v3.md`。
+- Future（已立项，ADR-023，2026-09-08）：V2.5 个性化迭代——模型线解冻，下一迭代基线包含用户个性化：让 V2.5 模型在生成阶段感知用户习惯/个人语料（仅本地/设备内学习）。技术路线与开放问题见本地 `plans/autocomplete-engine-v2.5-personalization-unlock.md`（不入库）。
 
 ## 变更记录
+
+- 2026-09-08：登记 V2.5 个性化迭代立项（ADR-023）：模型线解冻，下一迭代基线包含用户个性化，语料许可/公开权重降为涉及时适用的约束；既有里程碑与停止记录不变。
 
 - 2026-08-05：登记下一版本 M9 Completion Engine V2.2；明确当前 RC 不变、公共 decoder 仅 dev/E2E 启用，以及 V3 必须等待 V2 双 final。
 
