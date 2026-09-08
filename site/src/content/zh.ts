@@ -91,7 +91,7 @@ export const zh: SiteContent = {
     ],
     honestyTitle: '预览版先行。',
     honestyBody: '预览版安装包已上架 GitHub Releases——可下载、可校验、可回退。',
-    previewTitle: 'v0.12.3 Preview',
+    previewTitle: 'v0.14.0 Preview',
     downloadBtn: '下载 Preview（Windows x64）',
     githubBtn: 'GitHub',
     releaseBtn: 'Release 说明与校验',

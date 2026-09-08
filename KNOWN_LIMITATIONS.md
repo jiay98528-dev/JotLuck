@@ -36,8 +36,8 @@ behavior boundaries.
 ## Desktop App Limits
 
 - The current Windows preview is unsigned. Its only official public download
-  will be the `v0.14.0-preview` GitHub Release; verify the SHA-256 published
-  on that page before installation.
+  is the `v0.14.0-preview` GitHub Release; verify the SHA-256 published on
+  that page before installation.
 - Tauri shell access is limited to the scoped `shell:default` capability.
   Unscoped `shell:allow-open`, `process:*`, and `fs:*` capabilities are not
   granted in the default desktop capability file.

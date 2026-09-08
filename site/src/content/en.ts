@@ -92,7 +92,7 @@ export const en: SiteContent = {
     honestyTitle: 'Preview first.',
     honestyBody:
       'The preview installer is already on GitHub Releases — downloadable, verifiable, reversible.',
-    previewTitle: 'v0.12.3 Preview',
+    previewTitle: 'v0.14.0 Preview',
     downloadBtn: 'Download Preview (Windows x64)',
     githubBtn: 'GitHub',
     releaseBtn: 'Release notes & checksum',

@@ -23,15 +23,16 @@
 
 ## Important — Unsigned Preview
 
-The official Windows installer for `v0.14.0-preview` is not yet published.
-Installers appear only on GitHub Releases and must be verified by SHA-256.
+The official Windows installer for `v0.14.0-preview` is published on GitHub
+Releases. Verify the SHA-256 before installing:
+`d78a8a0e601154c3f9c79021ffe853c1f4925866fba2f4119cbf64adef08b8f4`.
 Code signing follows the pipeline documented in
 [`CODE_SIGNING.md`](./CODE_SIGNING.md).
 
 ## What's next
 
-- Publish the unsigned Windows x64 installer for `v0.14.0-preview` on
-  GitHub Releases, with SHA-256 and Authenticode status recorded here.
+- Collect real-world personalization feedback (visible top-1 flips in daily
+  writing) and recalibrate the fusion weight from real usage.
 
 ---
 
