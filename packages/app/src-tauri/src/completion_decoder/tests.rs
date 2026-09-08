@@ -34,6 +34,7 @@ fn request() -> DecoderGenerateRequest {
         document_session_id: None,
         document_revision: None,
         search_mode: None,
+        personal_prior: None,
         deadline_at: now_unix_ms() + 1_000,
     }
 }

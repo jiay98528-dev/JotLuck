@@ -70,6 +70,8 @@ export const messages = {
       title: '文字补全',
       enabled: '启用幽灵文本补全',
       backgroundTraining: '后台训练当前笔记本',
+      personalization: '个性化补全',
+      personalizationScope: '仅根据本机写作习惯调整，可随时关闭',
       trainedFiles: '已训练文件',
       lastTraining: '上次训练',
       localOnly: '仅处理当前笔记本中的本地 Markdown / 文本文件。',

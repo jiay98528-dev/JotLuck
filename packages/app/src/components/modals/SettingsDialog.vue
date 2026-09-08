@@ -261,6 +261,30 @@
                 </span>
               </div>
 
+              <div class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-label">
+                    {{ t('settings.autocomplete.personalization') }}
+                  </span>
+                  <span class="setting-value">
+                    {{ t('settings.autocomplete.personalizationScope') }}
+                  </span>
+                </div>
+                <span
+                  class="toggle-track"
+                  :class="{ active: personalization }"
+                  role="switch"
+                  tabindex="0"
+                  :aria-label="t('settings.autocomplete.personalization')"
+                  :aria-checked="personalization"
+                  @click="personalization = !personalization"
+                  @keydown.enter.prevent="personalization = !personalization"
+                  @keydown.space.prevent="personalization = !personalization"
+                >
+                  <span class="toggle-thumb"></span>
+                </span>
+              </div>
+
               <div class="autocomplete-meta">
                 <div class="meta-row">
                   <span>{{ t('settings.autocomplete.trainedFiles') }}</span>
@@ -470,6 +494,7 @@ const autoSaveDelay = ref(3000);
 
 const autoCompleteEnabled = ref(props.completionSettings.enabled);
 const backgroundTraining = ref(props.completionSettings.backgroundTraining);
+const personalization = ref(props.completionSettings.personalization);
 
 const AUTO_CHECK_KEY = 'jotluck:version:autoCheck';
 const AUTO_INSTALL_KEY = 'jotluck:version:autoInstall';
@@ -545,17 +570,22 @@ watch(
   (settings) => {
     autoCompleteEnabled.value = settings.enabled;
     backgroundTraining.value = settings.backgroundTraining;
+    personalization.value = settings.personalization;
   },
   { deep: true },
 );
 
-watch([autoCompleteEnabled, backgroundTraining], ([enabled, training]) => {
-  emit('update-completion-settings', {
-    ...props.completionSettings,
-    enabled,
-    backgroundTraining: training,
-  });
-});
+watch(
+  [autoCompleteEnabled, backgroundTraining, personalization],
+  ([enabled, training, personalized]) => {
+    emit('update-completion-settings', {
+      ...props.completionSettings,
+      enabled,
+      backgroundTraining: training,
+      personalization: personalized,
+    });
+  },
+);
 
 watch(autoCheckUpdates, (value) => {
   localStorage.setItem(AUTO_CHECK_KEY, String(value));
@@ -782,7 +812,7 @@ function close(): void {
   color: var(--signal-error);
   font-size: var(--text-xs);
   line-height: var(--lh-ui);
-  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .association-settings {

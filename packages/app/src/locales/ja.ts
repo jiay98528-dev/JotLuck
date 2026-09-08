@@ -69,6 +69,8 @@ export const messages = {
       title: 'テキスト補完',
       enabled: 'ゴーストテキスト補完を有効にする',
       backgroundTraining: '現在のノートブックをバックグラウンドで学習',
+      personalization: 'パーソナライズ補完',
+      personalizationScope: 'この端末の書き込み習慣のみに基づいて調整。いつでもオフにできます',
       trainedFiles: '学習済みファイル',
       lastTraining: '前回の学習',
       localOnly: '現在のノートブック内のローカル Markdown／テキストファイルのみを処理します。',

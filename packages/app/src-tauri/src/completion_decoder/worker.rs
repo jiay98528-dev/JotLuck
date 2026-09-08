@@ -27,7 +27,17 @@ struct SequenceBeam {
     decoded: Option<String>,
     log_probability: f32,
     normalized_score: f32,
+    prior: super::personal_prior::BeamPriorState,
     finished: bool,
+}
+
+impl SequenceBeam {
+    /// Ranking key for beam pruning: pure model score plus the personal
+    /// prior bonus. Bit-identical to `normalized_score` when no prior is in
+    /// play, so an empty prior keeps baseline ordering exactly.
+    fn selection_score(&self) -> f32 {
+        self.normalized_score + self.prior.bonus()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -38,7 +48,14 @@ struct BeamChoice {
     decoded: Option<String>,
     log_probability: f32,
     normalized_score: f32,
+    prior: super::personal_prior::BeamPriorState,
     finished: bool,
+}
+
+impl BeamChoice {
+    fn selection_score(&self) -> f32 {
+        self.normalized_score + self.prior.bonus()
+    }
 }
 
 #[derive(Debug)]
@@ -204,6 +221,9 @@ pub(super) fn run_decoder_inference(
     if !one_unit_runtime && request.context_capsule.max_tokens != 256 {
         return Err("bounded context override is restricted to the one-unit runtime".to_string());
     }
+    if request.personal_prior.is_some() && !one_unit_runtime {
+        return Err("personal prior is restricted to the one-unit runtime".to_string());
+    }
     let request_route = effective_model_route(runtime, request)?;
     let search_mode = parse_search_mode(request)?;
     let generated_token_limit = if one_unit_runtime {
@@ -221,6 +241,8 @@ pub(super) fn run_decoder_inference(
         final_beam_width: search_mode.default_width(),
         escalation_step: None,
         escalation_reasons: Vec::new(),
+        personal_prior_applied: None,
+        prior_flipped_top: None,
     };
     if request_is_stale(request_id, request, latest_request) {
         return Ok(None);
@@ -246,6 +268,18 @@ pub(super) fn run_decoder_inference(
     if tokens.is_empty() {
         return Err("decoder tokenizer returned an empty context".to_string());
     }
+    let prior_automaton = super::personal_prior::build_prior_automaton(
+        runtime,
+        request.personal_prior.as_ref(),
+        &capsule,
+        &tokens,
+        if runtime.is_block_decoder() {
+            BLOCK_GENERATED_TOKENS
+        } else {
+            generated_token_limit
+        },
+        request.context_capsule.max_tokens,
+    );
     if request.max_candidates == 0 {
         return Ok(Some(empty_generate_response(request, Some(diagnostics))));
     }
@@ -277,6 +311,7 @@ pub(super) fn run_decoder_inference(
             search_mode,
             search_thresholds,
             generated_token_limit,
+            &prior_automaton,
             &should_stop,
         ) {
             Ok(result) => result,
@@ -287,6 +322,19 @@ pub(super) fn run_decoder_inference(
     diagnostics.final_beam_width = search_trace.final_beam_width;
     diagnostics.escalation_step = search_trace.escalation_step;
     diagnostics.escalation_reasons = search_trace.escalation_reasons;
+    if prior_automaton.is_enabled() {
+        diagnostics.personal_prior_applied = Some(true);
+        let pure_top = beams.iter().max_by(|left, right| {
+            left.normalized_score
+                .total_cmp(&right.normalized_score)
+                .then_with(|| left.log_probability.total_cmp(&right.log_probability))
+                .then_with(|| right.token_ids.cmp(&left.token_ids))
+        });
+        diagnostics.prior_flipped_top = Some(
+            pure_top.map(|beam| beam.token_ids.as_slice())
+                != beams.first().map(|beam| beam.token_ids.as_slice()),
+        );
+    }
     if should_stop() {
         return Ok(None);
     }
@@ -551,6 +599,7 @@ fn run_model_search(
     search_mode: SearchMode,
     thresholds: (f32, f32),
     maximum_generated_tokens: usize,
+    prior: &super::personal_prior::PriorAutomaton,
     should_stop: &(impl Fn() -> bool + Sync),
 ) -> Result<(Vec<SequenceBeam>, SearchTrace), String> {
     if !runtime.is_block_decoder() {
@@ -563,6 +612,7 @@ fn run_model_search(
                 prefill,
                 thresholds,
                 maximum_generated_tokens,
+                prior,
                 should_stop,
             );
         }
@@ -574,6 +624,7 @@ fn run_model_search(
             prefill,
             search_mode.beam_width(),
             maximum_generated_tokens,
+            prior,
             should_stop,
         )
         .map(|beams| (beams, SearchTrace::fixed(search_mode.beam_width())));
@@ -598,6 +649,7 @@ fn run_model_search(
                 Some(draft.prefill),
                 thresholds,
                 maximum_generated_tokens,
+                prior,
                 should_stop,
             )?;
             trace.escalation_step = Some(position);
@@ -637,6 +689,7 @@ fn run_model_search(
             decoded: Some(decoded),
             log_probability,
             normalized_score,
+            prior: super::personal_prior::BeamPriorState::start(),
             finished: true,
         }],
         SearchTrace::fixed(search_mode.default_width()),
@@ -666,6 +719,7 @@ fn run_beam_search(
     prefill: Option<DecoderPrefill>,
     search_beam_width: usize,
     maximum_generated_tokens: usize,
+    prior: &super::personal_prior::PriorAutomaton,
     should_stop: &(impl Fn() -> bool + Sync),
 ) -> Result<Vec<SequenceBeam>, String> {
     let prefill = match prefill {
@@ -682,6 +736,7 @@ fn run_beam_search(
         decoded: None,
         log_probability: 0.0,
         normalized_score: 0.0,
+        prior: super::personal_prior::BeamPriorState::start(),
         finished: false,
     }];
 
@@ -693,6 +748,7 @@ fn run_beam_search(
         search_beam_width,
         0,
         maximum_generated_tokens,
+        prior,
         should_stop,
     )
 }
@@ -705,6 +761,7 @@ fn run_beam_search_from_beams(
     search_beam_width: usize,
     start_step: usize,
     maximum_generated_tokens: usize,
+    prior: &super::personal_prior::PriorAutomaton,
     should_stop: &(impl Fn() -> bool + Sync),
 ) -> Result<Vec<SequenceBeam>, String> {
     let search_beam_width = search_beam_width.clamp(1, BEAM_WIDTH);
@@ -725,11 +782,20 @@ fn run_beam_search_from_beams(
                         decoded: beam.decoded.clone(),
                         log_probability: beam.log_probability,
                         normalized_score: beam.normalized_score,
+                        prior: beam.prior.clone(),
                         finished: true,
                     });
                     continue;
                 }
-                for score in runtime.rank_logits(&beam.logits, BEAM_BRANCHING)? {
+                let ranked = {
+                    let inject = prior.injectable_token_ids(&beam.prior);
+                    if inject.is_empty() {
+                        runtime.rank_logits(&beam.logits, BEAM_BRANCHING)?
+                    } else {
+                        runtime.rank_logits_with_extra(&beam.logits, BEAM_BRANCHING, &inject)?
+                    }
+                };
+                for score in ranked {
                     let mut token_ids = beam.token_ids.clone();
                     token_ids.push(score.token_id);
                     let log_probability = beam.log_probability + score.log_probability;
@@ -744,6 +810,7 @@ fn run_beam_search_from_beams(
                         decoded: None,
                         log_probability,
                         normalized_score,
+                        prior: prior.advance(&beam.prior, score.token_id),
                         finished,
                     });
                 }
@@ -792,6 +859,7 @@ fn run_beam_search_from_beams(
                     decoded: choice.decoded,
                     log_probability: choice.log_probability,
                     normalized_score: choice.normalized_score,
+                    prior: choice.prior,
                     finished: choice.finished,
                 });
                 let Some(token_id) = token_id else {
@@ -852,6 +920,7 @@ fn run_adaptive_beam_search(
     prefill: Option<DecoderPrefill>,
     thresholds: (f32, f32),
     maximum_generated_tokens: usize,
+    prior: &super::personal_prior::PriorAutomaton,
     should_stop: &(impl Fn() -> bool + Sync),
 ) -> Result<(Vec<SequenceBeam>, SearchTrace), String> {
     let prefill = match prefill {
@@ -868,13 +937,21 @@ fn run_adaptive_beam_search(
         decoded: None,
         log_probability: 0.0,
         normalized_score: 0.0,
+        prior: super::personal_prior::BeamPriorState::start(),
         finished: false,
     };
     for step in 0..maximum_generated_tokens {
         if should_stop() {
             return Err("decoder inference cancelled or expired".to_string());
         }
-        let top_tokens = runtime.rank_logits(&beam.logits, BEAM_BRANCHING)?;
+        let top_tokens = {
+            let inject = prior.injectable_token_ids(&beam.prior);
+            if inject.is_empty() {
+                runtime.rank_logits(&beam.logits, BEAM_BRANCHING)?
+            } else {
+                runtime.rank_logits_with_extra(&beam.logits, BEAM_BRANCHING, &inject)?
+            }
+        };
         let reasons = adaptive_trigger_reasons(&top_tokens, thresholds);
         if !reasons.is_empty() {
             let beams = run_beam_search_from_beams(
@@ -885,6 +962,7 @@ fn run_adaptive_beam_search(
                 4,
                 step,
                 maximum_generated_tokens,
+                prior,
                 should_stop,
             )?;
             return Ok((
@@ -896,10 +974,23 @@ fn run_adaptive_beam_search(
                 },
             ));
         }
+        // Greedy pick under fusion: choose the token maximizing the model
+        // log probability plus this step's prior bonus delta; the beam's
+        // reported scores stay pure model values.
         let selected = top_tokens
-            .first()
-            .copied()
+            .into_iter()
+            .max_by(|left, right| {
+                let left_bonus =
+                    prior.advance(&beam.prior, left.token_id).bonus() - beam.prior.bonus();
+                let right_bonus =
+                    prior.advance(&beam.prior, right.token_id).bonus() - beam.prior.bonus();
+                (left.log_probability + left_bonus)
+                    .total_cmp(&(right.log_probability + right_bonus))
+                    .then_with(|| right.log_probability.total_cmp(&left.log_probability))
+                    .then_with(|| left.token_id.cmp(&right.token_id))
+            })
             .ok_or_else(|| "decoder logits produced no token".to_string())?;
+        beam.prior = prior.advance(&beam.prior, selected.token_id);
         beam.token_ids.push(selected.token_id);
         beam.log_probability += selected.log_probability;
         beam.normalized_score = length_normalized_score(beam.log_probability, beam.token_ids.len());
@@ -1012,6 +1103,7 @@ pub(super) fn beam_sequences_for_parity(
         SearchMode::Fixed32,
         (0.3, 0.2),
         MAX_GENERATED_TOKENS,
+        &super::personal_prior::PriorAutomaton::disabled(),
         &|| false,
     )
     .map(|(beams, _)| {
@@ -1027,16 +1119,16 @@ pub(super) fn beam_sequences_for_parity(
 
 fn compare_beams(left: &SequenceBeam, right: &SequenceBeam) -> std::cmp::Ordering {
     right
-        .normalized_score
-        .total_cmp(&left.normalized_score)
+        .selection_score()
+        .total_cmp(&left.selection_score())
         .then_with(|| right.log_probability.total_cmp(&left.log_probability))
         .then_with(|| left.token_ids.cmp(&right.token_ids))
 }
 
 fn compare_choices(left: &BeamChoice, right: &BeamChoice) -> std::cmp::Ordering {
     right
-        .normalized_score
-        .total_cmp(&left.normalized_score)
+        .selection_score()
+        .total_cmp(&left.selection_score())
         .then_with(|| right.log_probability.total_cmp(&left.log_probability))
         .then_with(|| left.token_ids.cmp(&right.token_ids))
 }
@@ -1195,6 +1287,26 @@ pub(super) fn validate_generate_request(request: &DecoderGenerateRequest) -> Res
         + usize::from(request.document_revision.is_some());
     if session_identity_field_count != 0 && session_identity_field_count != 3 {
         return Err("V2.4 completion request session contract is incomplete".to_string());
+    }
+    if let Some(prior) = &request.personal_prior {
+        if prior.phrases.len() > super::personal_prior::MAX_PERSONAL_PHRASES
+            || !prior.fusion_weight.is_finite()
+            || !(0.0..=1.0).contains(&prior.fusion_weight)
+            || prior.phrases.iter().any(|phrase| {
+                let code_points = phrase.text.chars().count();
+                code_points == 0
+                    || code_points > super::personal_prior::MAX_PERSONAL_PHRASE_CODE_POINTS
+                    || phrase.text.chars().any(|character| {
+                        matches!(character as u32, 0xe100..=0xe124)
+                            || matches!(character, '\r' | '\n' | '\0')
+                    })
+                    || !phrase.weight.is_finite()
+                    || phrase.weight <= 0.0
+                    || phrase.weight > 1.0
+            })
+        {
+            return Err("invalid personal prior request".to_string());
+        }
     }
     let code_context_conflicts = (!request.context_suffix.is_empty()
         && !request.context_capsule.code_suffix.is_empty()
@@ -1403,6 +1515,7 @@ mod beam_tests {
             decoded: None,
             log_probability,
             normalized_score: length_normalized_score(log_probability, tokens.len()),
+            prior: super::personal_prior::BeamPriorState::start(),
             finished: false,
         }
     }
@@ -1540,6 +1653,7 @@ mod beam_tests {
             document_session_id: None,
             document_revision: None,
             search_mode: None,
+            personal_prior: None,
             deadline_at: now_unix_ms() + 1_000,
         };
         assert_eq!(
@@ -1577,6 +1691,7 @@ mod beam_tests {
                 decoded: None,
                 log_probability: -(index as f32) / 10.0,
                 normalized_score: -((index % 17) as f32) / 10.0,
+                prior: super::personal_prior::BeamPriorState::start(),
                 finished: index % 11 == 0,
             })
             .collect::<Vec<_>>();
@@ -1608,6 +1723,7 @@ mod beam_tests {
                 decoded: None,
                 log_probability: -(index as f32),
                 normalized_score: -(index as f32),
+                prior: super::personal_prior::BeamPriorState::start(),
                 finished: true,
             })
             .collect::<Vec<_>>();
@@ -1677,5 +1793,103 @@ mod beam_tests {
                 .collect::<Vec<_>>(),
             vec![(7, 7.0), (2, 2.0), (11, 11.0)]
         );
+    }
+
+    #[test]
+    fn zero_prior_bonus_keeps_selection_score_bit_identical() {
+        // An empty prior must leave the ranking key bit-identical to the pure
+        // model score; this is the byte-level baseline-fallback guarantee.
+        for candidate in [beam(&[3, 4], -1.2), beam(&[9], -0.4), beam(&[], 0.0)] {
+            assert_eq!(candidate.prior.bonus(), 0.0);
+            assert_eq!(
+                candidate.selection_score().to_bits(),
+                candidate.normalized_score.to_bits()
+            );
+        }
+        let disabled = super::personal_prior::PriorAutomaton::disabled();
+        let advanced = disabled.advance(&super::personal_prior::BeamPriorState::start(), 42);
+        assert_eq!(advanced.bonus(), 0.0);
+    }
+
+    #[test]
+    fn validate_generate_request_rejects_malformed_personal_priors() {
+        let mut request = DecoderGenerateRequest {
+            engine_epoch: 1,
+            workspace_scope: "workspace".to_string(),
+            document_version: "revision".to_string(),
+            cursor_pos: 7,
+            context_tail: "prefix ".to_string(),
+            context_tail_utf8_bytes: 7,
+            context_suffix: String::new(),
+            code_language: String::new(),
+            context_capsule: DecoderContextCapsule {
+                schema_version: 1,
+                max_tokens: 256,
+                language_hint: "en".to_string(),
+                heading_trail: Vec::new(),
+                current_paragraph: "prefix ".to_string(),
+                previous_paragraph_tail: String::new(),
+                retrieval_snippet: String::new(),
+                code_suffix: String::new(),
+                code_language: String::new(),
+            },
+            language_hint: "en".to_string(),
+            block_type: "paragraph".to_string(),
+            cursor_boundary: "other".to_string(),
+            max_candidates: 4,
+            search_beam_width: None,
+            editor_session_id: None,
+            document_session_id: None,
+            document_revision: None,
+            search_mode: None,
+            personal_prior: None,
+            deadline_at: now_unix_ms() + 1_000,
+        };
+        assert!(validate_generate_request(&request).is_ok());
+
+        let prior = |phrases: Vec<DecoderPersonalPriorPhrase>, fusion_weight: f32| {
+            Some(DecoderPersonalPrior {
+                phrases,
+                fusion_weight,
+            })
+        };
+        let phrase = |text: &str, weight: f32| DecoderPersonalPriorPhrase {
+            text: text.to_string(),
+            weight,
+        };
+
+        request.personal_prior = prior(vec![phrase("team", 0.5)], 0.2);
+        assert!(validate_generate_request(&request).is_ok());
+        request.personal_prior = prior(Vec::new(), 0.2);
+        assert!(validate_generate_request(&request).is_ok());
+
+        request.personal_prior = prior((0..9).map(|_| phrase("team", 0.5)).collect(), 0.2);
+        assert!(validate_generate_request(&request).is_err());
+        request.personal_prior = prior(vec![phrase("team", 0.5)], 1.5);
+        assert!(validate_generate_request(&request).is_err());
+        request.personal_prior = prior(vec![phrase("team", 0.0)], 0.2);
+        assert!(validate_generate_request(&request).is_err());
+        request.personal_prior = prior(vec![phrase("team", 1.2)], 0.2);
+        assert!(validate_generate_request(&request).is_err());
+        request.personal_prior = prior(vec![phrase(&"x".repeat(25), 0.5)], 0.2);
+        assert!(validate_generate_request(&request).is_err());
+        request.personal_prior = prior(vec![phrase("", 0.5)], 0.2);
+        assert!(validate_generate_request(&request).is_err());
+        request.personal_prior = prior(
+            vec![DecoderPersonalPriorPhrase {
+                text: "bad\u{e120}marker".to_string(),
+                weight: 0.5,
+            }],
+            0.2,
+        );
+        assert!(validate_generate_request(&request).is_err());
+        request.personal_prior = prior(
+            vec![DecoderPersonalPriorPhrase {
+                text: "two\nlines".to_string(),
+                weight: 0.5,
+            }],
+            0.2,
+        );
+        assert!(validate_generate_request(&request).is_err());
     }
 }

@@ -4,6 +4,59 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
 #[test]
+fn rank_logits_with_extra_always_includes_injected_ids() {
+    // logits: token 0 strongest, then 1, 2; token 40 is far below top-k.
+    let logits: Vec<f32> = (0..64)
+        .map(|index| if index < 3 { 3.0 - index as f32 } else { -3.0 })
+        .collect();
+    let baseline = rank_logits(&logits, 2).unwrap();
+    assert_eq!(
+        baseline
+            .iter()
+            .map(|score| score.token_id)
+            .collect::<Vec<_>>(),
+        vec![0, 1]
+    );
+
+    let fused = rank_logits_with_extra(&logits, 2, &[40]).unwrap();
+    let ids: Vec<usize> = fused.iter().map(|score| score.token_id).collect();
+    assert!(ids.contains(&0) && ids.contains(&1) && ids.contains(&40));
+    // Returned order is still by model log probability, descending.
+    let mut ordered = ids.clone();
+    ordered.sort_unstable_by(|left, right| logits[*right].total_cmp(&logits[*left]));
+    assert_eq!(ids, ordered);
+    // Scores are the same softmax values the baseline ranking produces.
+    let baseline_score = baseline
+        .iter()
+        .find(|score| score.token_id == 0)
+        .unwrap()
+        .log_probability;
+    let fused_score = fused
+        .iter()
+        .find(|score| score.token_id == 0)
+        .unwrap()
+        .log_probability;
+    assert_eq!(baseline_score.to_bits(), fused_score.to_bits());
+
+    // Duplicate extras collapse, unknown ids fail closed, and an empty extra
+    // set delegates to the baseline ranking untouched.
+    let deduped = rank_logits_with_extra(&logits, 2, &[40, 40, 1]).unwrap();
+    assert_eq!(deduped.len(), 3);
+    assert!(rank_logits_with_extra(&logits, 2, &[logits.len()]).is_err());
+    let delegated = rank_logits_with_extra(&logits, 2, &[]).unwrap();
+    assert_eq!(
+        delegated
+            .iter()
+            .map(|score| score.log_probability.to_bits())
+            .collect::<Vec<_>>(),
+        baseline
+            .iter()
+            .map(|score| score.log_probability.to_bits())
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn half_conversion_covers_normal_subnormal_and_infinity() {
     assert_eq!(half_to_f32(0x3c00), 1.0);
     assert!(half_to_f32(0x0001) > 0.0);

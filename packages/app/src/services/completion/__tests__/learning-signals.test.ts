@@ -65,6 +65,7 @@ function context(overrides: Partial<CompletionContext> = {}): CompletionContext 
       enabled: true,
       aggressiveness: 'balanced',
       backgroundTraining: true,
+      personalization: true,
       minConfidence: 0.15,
       maxSuggestionLength: 20,
       showDebugStats: false,

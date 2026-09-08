@@ -41,6 +41,19 @@ export interface PublicEngineContextCapsule {
   retrievalSnippet: string;
 }
 
+export interface PublicEnginePersonalPriorPhrase {
+  /** One-unit continuation text (zh 1–4 code points or one complete word). */
+  text: string;
+  /** Normalized personal confidence, clamped to (0, 1]. */
+  weight: number;
+}
+
+export interface PublicEnginePersonalPrior {
+  phrases: readonly PublicEnginePersonalPriorPhrase[];
+  /** Per-matched-token bonus scale in normalized-score space, clamped to [0, 1]. */
+  fusionWeight: number;
+}
+
 export interface PublicEngineGenerateRequest {
   engineEpoch: number;
   workspaceScope: string;
@@ -65,6 +78,11 @@ export interface PublicEngineGenerateRequest {
   documentSessionId?: string;
   documentRevision?: number;
   searchMode?: PublicEngineSearchMode;
+  /**
+   * Optional host-built personal prior (V2.5 one-unit writing runtime only).
+   * Absent or empty keeps the worker search bit-identical to baseline.
+   */
+  personalPrior?: PublicEnginePersonalPrior;
   /** Absolute Unix time in milliseconds. */
   deadlineAt: number;
 }
@@ -102,6 +120,10 @@ export interface PublicEngineRuntimeDiagnostics {
   finalBeamWidth: 1 | 4 | 32;
   escalationStep?: number;
   escalationReasons: readonly string[];
+  /** Present only when the request carried a usable personal prior. */
+  personalPriorApplied?: boolean;
+  /** Present only when a prior was applied; true when the fused winner differs from the pure-model winner. */
+  priorFlippedTop?: boolean;
 }
 
 export interface PublicEngineVisibilityCalibrationInput {

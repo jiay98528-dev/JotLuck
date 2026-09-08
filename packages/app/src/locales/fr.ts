@@ -73,6 +73,9 @@ export const messages = {
       title: 'Complétion de texte',
       enabled: 'Activer la suggestion fantôme',
       backgroundTraining: 'Analyser ce carnet en arrière-plan',
+      personalization: 'Complétion personnalisée',
+      personalizationScope:
+        'Ajusté uniquement à vos habitudes d’écriture locales ; désactivable à tout moment',
       trainedFiles: 'Fichiers analysés',
       lastTraining: 'Dernière analyse',
       localOnly: 'Seuls les fichiers Markdown et texte locaux de ce carnet sont traités.',

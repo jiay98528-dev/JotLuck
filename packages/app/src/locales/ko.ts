@@ -68,6 +68,8 @@ export const messages = {
       title: '텍스트 완성',
       enabled: '고스트 텍스트 완성 사용',
       backgroundTraining: '현재 노트북을 백그라운드에서 학습',
+      personalization: '개인화 자동 완성',
+      personalizationScope: '이 기기의 작성 습관에만 맞춰 조정되며 언제든 끌 수 있습니다',
       trainedFiles: '학습한 파일',
       lastTraining: '최근 학습',
       localOnly: '현재 노트북의 로컬 Markdown 및 텍스트 파일만 처리합니다.',

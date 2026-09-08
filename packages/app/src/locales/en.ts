@@ -72,6 +72,8 @@ export const messages = {
       title: 'Text completion',
       enabled: 'Enable ghost text completion',
       backgroundTraining: 'Train the current notebook in the background',
+      personalization: 'Personalized completion',
+      personalizationScope: 'Adapts only to your local writing habits; can be turned off anytime',
       trainedFiles: 'Files trained',
       lastTraining: 'Last training',
       localOnly: 'Only local Markdown and text files in this notebook are processed.',
