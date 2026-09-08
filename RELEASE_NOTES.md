@@ -1,3 +1,40 @@
+# JotLuck v0.14.0-preview — Preview Release Notes
+
+> Date: 2026-09-08
+> Minor version advance from `v0.13.1-preview`. Source-level release notes;
+> the Windows x64 installer for this version is not yet published.
+
+## What's new in 0.14.0
+
+- **Personalized completion for the V2.5 engine.** When you write, the
+  engine now blends your own retained phrasing into decoding: completions
+  you kept before (and your personal n-gram history) bias the model's beam
+  search toward your habitual wording. This runs entirely on your machine —
+  the prior never leaves the process, never touches the network, and
+  sensitive content (passwords, keys, tokens) is filtered before use.
+- **A settings toggle for personalization** (Settings → Text completion),
+  on by default, localized in five languages. Turning it off — or clearing
+  local learning data — restores byte-identical baseline decoding.
+- **Quality stays gated.** Personalization only reorders candidates;
+  reported model scores remain pure, so suggestions the model does not
+  actually support stay hidden behind the existing visibility gates.
+- **Version bumped to `0.14.0-preview`.** Minor advance over
+  `0.13.1-preview`.
+
+## Important — Unsigned Preview
+
+The official Windows installer for `v0.14.0-preview` is not yet published.
+Installers appear only on GitHub Releases and must be verified by SHA-256.
+Code signing follows the pipeline documented in
+[`CODE_SIGNING.md`](./CODE_SIGNING.md).
+
+## What's next
+
+- Publish the unsigned Windows x64 installer for `v0.14.0-preview` on
+  GitHub Releases, with SHA-256 and Authenticode status recorded here.
+
+---
+
 # JotLuck v0.13.1-preview — Preview Release Notes
 
 > Date: 2026-09-08

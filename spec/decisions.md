@@ -1,6 +1,6 @@
 # Decisions
 
-版本：v1.4（2026-09-08）
+版本：v1.5（2026-09-08）
 
 ## 已确认决策
 
@@ -9,6 +9,16 @@
 3. 声明式主题通过 DSL 渲染；官方代码主题和本地可信代码主题可通过 `ThemeHostContext` 替换 Shell/主页/弹窗级 UX slot。
 4. P0 阶段不做权限审批、沙箱隔离、社区市场审核或远程购买接入。本地主题能力声明不作为安装/启用阻断条件。
 5. 商业化通过 `ThemeCommerceProvider` 适配，默认本地 mock。未来接入 Gumroad、Polar 或自建后端时只替换 provider 实现，不改变主题中心和 manifest 结构。
+
+## ADR-024：V2.5 个性化采用解码期浅融合（首 token 双倍 + 纯分门控）
+
+- **状态**：已接受（2026-09-08）；ADR-023 个性化迭代的第一实现路线。
+- **决策**：个性化以推理期浅融合（shallow fusion）进入 V2.5 one-unit writing 的生成阶段：宿主从个人语料（Personal L2 n-gram、短表、会话历史、保留短语库）构建有界先验（≤8 条 one-unit 短语 + weight + fusionWeight），随 generate 请求传给 Rust worker；worker 把活跃匹配的续写 token 注入 beam 扩展集（`rank_logits_with_extra`），并在选择分上加先验偏置——**首匹配 token 双倍、后续 token 单倍、完整匹配再加一倍**（one-unit 的单位选择发生在首 token）。λ（fusionWeight）契约上限 1.0，默认 1.0（2026-09-08 worker probe 定标：低 λ 无法越过 one-unit 的 logprob 陡峭差距）。
+- **分数纪律**：`log_probability`/`normalized_score`/上报的 `modelScore`/`gateScore` 保持纯模型值；偏置只影响 beam 排序与剪枝。宿主可见性门（triggerPolicy 地板 + visibilityCalibration）因此成为安全网——模型不看好的用户词可在 worker 层登顶，但低 modelScore 在宿主被拦，不会降低 ghost 质量。实证（probe 证据，本地不入库）：带内词（modelScore ≥ 地板、基线 rank-2）融合后登顶且分数不变（端到端可见翻转）；`banana` 类错误先验在 worker 产生 `bananaly` 垃圾 top-1 但 modelScore 0.0034 被门拦截。
+- **回退合同**：空先验/关闭开关（`settings.personalization`，默认开启）/清空学习数据 → 请求不含先验字段 → worker 搜索与基线**字节级一致**（probe 5/5 用例逐候选断言）。协议新增可选字段 `personalPrior`（serde default，PROTOCOL_VERSION 不变），仅 one-unit runtime 接受；非法先验（超 8 条、超 24 code points、PUA/换行、weight 或 λ 越界）在 worker 校验拒绝。
+- **边界**：先验仅进程内传递（host→worker IPC），零持久化零网络；外发短语复用敏感内容过滤；端侧适配层（路线 C）与重训（路线 D）延后至后续迭代（骨架 §4.1 裁决：仓内无训练设施 + 语料许可未过）。
+- **后果**：one-unit 引擎候选从单一路径变为「模型分布 × 个人先验」的融合排序；宿主三粒度加权继续作用于候选之后；`priorFlippedTop`/`personalPriorApplied` 进入 worker 诊断供评测观测。
+- **替代方案**：capsule 注入个人语料（writing 路线序列化无 `<retrieval>` 段且训练未见，128-token cap 下挤占真实上下文——弃）；仅宿主侧重排（无法改变生成本身——现状，不够）。
 
 ## ADR-023：V2.5 补全模型下一迭代基线包含用户个性化（模型线解冻）
 
@@ -143,6 +153,8 @@
 - **后果**：测试机并行负载不会单独阻断 preview，但也不能用“环境抖动”豁免缺安装旅程、缺样本、缺 provenance、缺证据提交或产品功能失败。
 
 ## 变更记录
+
+- 2026-09-08（v1.5）：新增 ADR-024，V2.5 个性化第一迭代采用解码期浅融合（首 token 双倍偏置 + 纯模型分门控 + 空先验字节级回退）；设置新增个性化开关（默认开启）。
 
 - 2026-09-08（v1.4）：新增 ADR-023，模型线解冻并立项用户个性化为下一迭代基线；旧「等真实用户 → 四步解冻」口径废止为涉及时适用的约束（语料许可审计未通过期间公开权重仍被阻断）。
 

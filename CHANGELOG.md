@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.14.0-preview] - 2026-09-08
+
+### Added
+
+- Personalized completion (ADR-024): the V2.5 one-unit writing engine now
+  fuses a host-built personal prior into decoding. Phrases from personal
+  n-gram history, session accepts, and retained phrases are injected into
+  beam expansion with a first-token-doubled bonus, so the user's habitual
+  wording can win the visible top-1 while reported model scores stay pure
+  and visibility gates keep quality. On by default with a settings toggle
+  (five languages); an empty prior or a disabled toggle keeps decoding
+  byte-identical to the previous baseline.
+
+### Changed
+
+- Version bumped from `0.13.1-preview` to `0.14.0-preview` (minor version:
+  new model-side personalization capability).
+
 ## [0.13.1-preview] - 2026-09-08
 
 ### Fixed
