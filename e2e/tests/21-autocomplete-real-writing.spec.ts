@@ -1,6 +1,6 @@
 ﻿import { expect, test, type Page } from '@playwright/test';
 
-import { ensureEditorReady, waitForAppReady } from '../helpers/test-utils';
+import { ensureEditorReady, waitForAppReady, MOD_KEY } from '../helpers/test-utils';
 
 interface WritingCheckpoint {
   marker: string;
@@ -374,7 +374,7 @@ async function openAppWithoutInternalBridge(page: Page): Promise<void> {
 async function replaceEditorTextByKeyboard(page: Page, text: string): Promise<void> {
   const editor = page.locator('.split-left .cm-content');
   await editor.click();
-  await page.keyboard.press('Control+a');
+  await page.keyboard.press(`${MOD_KEY}+a`);
   await page.keyboard.press('Backspace');
   if (text) await page.keyboard.type(text, { delay: 1 });
 }

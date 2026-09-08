@@ -18,6 +18,8 @@ import {
   typeInEditor,
   appendInEditor,
   waitForAutoSave,
+  DOC_START_KEY,
+  MOD_KEY,
 } from '../helpers/test-utils';
 
 // ============================================================
@@ -228,7 +230,7 @@ test.describe('编辑器核心', () => {
     await editor.click();
 
     // 将光标定位到编辑器开头
-    await page.keyboard.press('Control+Home');
+    await page.keyboard.press(DOC_START_KEY);
     // 向右移动跳过 "这是测试文本用于验证" (11个字符)
     for (let i = 0; i < 11; i++) {
       await page.keyboard.press('ArrowRight');
@@ -303,8 +305,8 @@ test.describe('编辑器核心', () => {
     expect(contentAfterSecondType).toContain('第一行内容');
     expect(contentAfterSecondType).toContain('第二行内容');
 
-    // Step 3: 撤销 (Ctrl+Z) — 应回到只有第一段的状态
-    await page.keyboard.press('Control+z');
+    // Step 3: 撤销 (Ctrl+Z / Cmd+Z) — 应回到只有第一段的状态
+    await page.keyboard.press(`${MOD_KEY}+z`);
     // Wait for CM6 to process the undo transaction
     await page.waitForTimeout(500);
 
@@ -313,8 +315,8 @@ test.describe('编辑器核心', () => {
     // 第二行内容应该已被撤销
     expect(contentAfterUndo).not.toContain('第二行内容');
 
-    // Step 4: 重做 — 使用 Ctrl+Y (Windows 标准重做快捷键，CM6 同样绑定)
-    await page.keyboard.press('Control+y');
+    // Step 4: 重做 — Ctrl+Y / Cmd+Y（CM6 绑定 Mod-Y，两平台一致生效）
+    await page.keyboard.press(`${MOD_KEY}+y`);
     await page.waitForTimeout(500);
 
     const contentAfterRedo = await getEditorContent(page);

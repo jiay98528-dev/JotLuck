@@ -8,6 +8,7 @@ import {
   typeInEditor,
   waitForAppReady,
   waitForAutoSave,
+  MOD_KEY,
 } from '../helpers/test-utils';
 
 const HALO_THEME_ID = 'jotluck.halo-canvas';
@@ -370,8 +371,8 @@ test.describe('Halo Canvas official theme', () => {
     const editor = page.locator('.cm-content').first();
     await editor.click();
     await editor.evaluate((element) => (element as HTMLElement).focus());
-    await page.keyboard.press('Control+A');
-    await page.keyboard.press('Control+C');
+    await page.keyboard.press(`${MOD_KEY}+a`);
+    await page.keyboard.press(`${MOD_KEY}+c`);
     await expect
       .poll(() => page.evaluate(() => navigator.clipboard.readText()))
       .toBe(initialContent);

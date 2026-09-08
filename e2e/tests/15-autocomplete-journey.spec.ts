@@ -5,6 +5,7 @@ import {
   getEditorContentFromBridge,
   waitForAppReady,
   waitForAutoSave,
+  MOD_KEY,
 } from '../helpers/test-utils';
 
 async function replaceEditorText(
@@ -14,7 +15,7 @@ async function replaceEditorText(
   await ensureEditorReady(page);
   const editor = page.locator('.cm-content');
   await editor.click();
-  await page.keyboard.press('Control+a');
+  await page.keyboard.press(`${MOD_KEY}+a`);
   await page.keyboard.press('Backspace');
   await page.keyboard.insertText(text);
 }
@@ -240,7 +241,7 @@ test.describe('offline autocomplete user journeys', () => {
     await expect(page.locator('.cm-ghost-text')).toBeVisible({ timeout: 3000 });
 
     await page.keyboard.press('Tab');
-    await page.keyboard.press('Control+z');
+    await page.keyboard.press(`${MOD_KEY}+z`);
 
     await expect.poll(() => getEditorContentFromBridge(page)).toBe('测试文本');
     await expect.poll(() => readPersonalV5Storage(page)).toEqual(before);
