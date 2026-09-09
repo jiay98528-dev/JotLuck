@@ -14,6 +14,7 @@ export const fr: SiteContent = {
       themes: 'Thèmes · JotLuck — Notes Markdown gratuites et open source',
       studio: 'Studio · JotLuck — Notes Markdown gratuites et open source',
       privacy: 'Confidentialité · JotLuck — Notes Markdown gratuites et open source',
+      changelog: 'Journal des modifications · JotLuck — chaque progrès noté',
     },
     pageDescriptions: {
       download:
@@ -24,6 +25,8 @@ export const fr: SiteContent = {
         'LeankomStudio aide les idées à traverser les genres. JotLuck, notre application de notes Markdown open source, est la première page que nous déplions.',
       privacy:
         'Vie privée : JotLuck, notes Markdown open source, 100 % hors ligne. Notes en fichiers texte, dans votre dossier — sans compte, sans télémétrie, ni cookies.',
+      changelog:
+        "Le journal de JotLuck : chaque version d'aperçu Windows y est consignée — complétion locale, export, recherche et thèmes évoluent à chaque version.",
     },
   },
   localeName: 'Français',
@@ -78,6 +81,12 @@ export const fr: SiteContent = {
       "Vous pouvez l'activer ou le désactiver à tout moment dans les réglages.",
     ],
   },
+  changelog: {
+    eyebrow: 'Journal des modifications',
+    title: 'Chaque version, notée.',
+    lead: "Le contenu est synchronisé depuis les GitHub Releases, dans leur formulation d'origine (anglais).",
+    githubLink: 'Voir toutes les versions sur GitHub',
+  },
   film: {
     title: 'Film de présentation',
     ariaLabel: 'Film de présentation de JotLuck, 60 secondes',
@@ -117,6 +126,7 @@ export const fr: SiteContent = {
       "Quatre extensions s'enregistrent comme gestionnaires « Ouvrir avec » facultatifs ; les paramètres par défaut du système restent intacts",
       "Sous licence MIT ; l'édition et la recherche essentielles fonctionnent entièrement hors ligne",
     ],
+    changelogLink: 'Voir le journal des modifications',
   },
   themes: {
     eyebrow: 'Thèmes',
@@ -248,6 +258,7 @@ export const fr: SiteContent = {
       privacy: 'Confidentialité',
       signing: 'Politique de signature de code',
       github: 'GitHub',
+      changelog: 'Journal des modifications',
     },
   },
 };

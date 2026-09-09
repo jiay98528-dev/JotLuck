@@ -14,6 +14,7 @@ export const en: SiteContent = {
       themes: 'Themes · JotLuck — Free, open-source Markdown notes',
       studio: 'Studio · JotLuck — Free, open-source Markdown notes',
       privacy: 'Privacy · JotLuck — Free, open-source Markdown notes',
+      changelog: 'Changelog · JotLuck — every improvement on the record',
     },
     pageDescriptions: {
       download:
@@ -24,6 +25,8 @@ export const en: SiteContent = {
         'LeankomStudio helps ideas cross genres and find the shape that fits them. JotLuck, our open-source Markdown notes app, is the first page we unfold outward.',
       privacy:
         'Privacy: JotLuck, an open-source Markdown notes app, runs fully offline — notes stay plain-text in your folder. No account, no telemetry, no cookies.',
+      changelog:
+        'The JotLuck changelog: every Windows preview release on the record — local completion, export, search, and themes improving release by release.',
     },
   },
   localeName: 'English',
@@ -75,6 +78,12 @@ export const en: SiteContent = {
       'You can turn it on or off in Settings at any time.',
     ],
   },
+  changelog: {
+    eyebrow: 'Changelog',
+    title: 'Every release, on the record.',
+    lead: 'Entries are synced from GitHub Releases, in their original wording.',
+    githubLink: 'View all releases on GitHub',
+  },
   film: {
     title: 'Promo film',
     ariaLabel: 'JotLuck promo film, 60 seconds',
@@ -114,6 +123,7 @@ export const en: SiteContent = {
       "Four extensions register as optional 'Open with' handlers; system defaults stay untouched",
       'MIT licensed; core editing and search run fully offline',
     ],
+    changelogLink: 'View the changelog',
   },
   themes: {
     eyebrow: 'Themes',
@@ -234,6 +244,7 @@ export const en: SiteContent = {
       privacy: 'Privacy',
       signing: 'Code signing policy',
       github: 'GitHub',
+      changelog: 'Changelog',
     },
   },
 };

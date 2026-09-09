@@ -3,7 +3,7 @@ import HomePage from './pages/HomePage.vue';
 import LocaleGate from './pages/LocaleGate.vue';
 import { LOCALES, type Locale } from './content';
 
-export type SitePage = 'home' | 'download' | 'themes' | 'studio' | 'privacy';
+export type SitePage = 'home' | 'download' | 'themes' | 'studio' | 'privacy' | 'changelog';
 
 const pages = [
   { segment: '', name: 'home', component: HomePage },
@@ -11,6 +11,7 @@ const pages = [
   { segment: 'themes', name: 'themes', component: () => import('./pages/ThemesPage.vue') },
   { segment: 'studio', name: 'studio', component: () => import('./pages/StudioPage.vue') },
   { segment: 'privacy', name: 'privacy', component: () => import('./pages/PrivacyPage.vue') },
+  { segment: 'changelog', name: 'changelog', component: () => import('./pages/ChangelogPage.vue') },
 ] as const;
 
 /** 语言感知的站内路径。 */

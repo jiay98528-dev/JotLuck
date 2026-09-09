@@ -2,8 +2,9 @@
 import { useLocale } from '../composables/useLocale';
 import { usePageHead } from '../composables/usePageHead';
 import { EXTERNAL, RELEASE } from '../release';
+import { pagePath } from '../router';
 
-const { content } = useLocale();
+const { locale, content } = useLocale();
 usePageHead('download');
 const d = () => content.value.download;
 </script>
@@ -97,6 +98,10 @@ const d = () => content.value.download;
         </li>
       </ul>
     </section>
+
+    <p class="quip">
+      <RouterLink :to="pagePath(locale, 'changelog')">{{ d().changelogLink }} →</RouterLink>
+    </p>
   </article>
 </template>
 

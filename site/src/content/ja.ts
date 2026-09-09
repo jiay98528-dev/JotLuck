@@ -14,6 +14,7 @@ export const ja: SiteContent = {
       themes: 'テーマ · JotLuck — 無料・オープンソースの Markdown ノートアプリ',
       studio: 'スタジオ · JotLuck — 無料・オープンソースの Markdown ノートアプリ',
       privacy: 'プライバシー · JotLuck — 無料・オープンソースの Markdown ノートアプリ',
+      changelog: '更新履歴 · JotLuck — すべての改善を記録して',
     },
     pageDescriptions: {
       download:
@@ -24,6 +25,8 @@ export const ja: SiteContent = {
         'LeankomStudio は鸰湖科技のプロダクトスタジオです。無料・オープンソースの Markdown ノートアプリ JotLuck は、私たちが外に向かって開いた最初のページ——アイデアがカテゴリを越え、いちばん合う形に出会えるように。',
       privacy:
         'JotLuck のプライバシーについて：このオープンソースの Markdown ノートアプリは完全にオフラインで動作し、ノートはプレーンテキストとしてあなたのフォルダーに保存されます。アカウント不要、テレメトリなし。このサイトは静的サイトで、Cookie も使いません。',
+      changelog:
+        'JotLuck の更新履歴：Windows デスクトップ プレビューの各リリース記録。ローカル補完、エクスポート、検索、テーマがリリースごとに進化します。無料のオープンソース Markdown ノートアプリです。',
     },
   },
   localeName: '日本語',
@@ -74,6 +77,12 @@ export const ja: SiteContent = {
       'オン / オフは設定ページからいつでも切り替えられます。',
     ],
   },
+  changelog: {
+    eyebrow: '更新履歴',
+    title: 'すべてのリリースを記録して。',
+    lead: '内容は GitHub Releases の原文（英語）をそのまま同期しています。',
+    githubLink: 'GitHub ですべてのリリースを見る',
+  },
   film: {
     title: 'プロモーションフィルム',
     ariaLabel: 'JotLuck プロモーションフィルム、60秒',
@@ -113,6 +122,7 @@ export const ja: SiteContent = {
       '4 種類の拡張子が任意の「アプリで開く」ハンドラとして登録されるだけ。システムの既定は変更されません',
       'MIT ライセンスで公開。編集と検索の核となる機能は、完全にオフラインで動作します',
     ],
+    changelogLink: '更新履歴を見る',
   },
   themes: {
     eyebrow: 'テーマ',
@@ -240,6 +250,7 @@ export const ja: SiteContent = {
       privacy: 'プライバシー',
       signing: 'コード署名ポリシー',
       github: 'GitHub',
+      changelog: '更新履歴',
     },
   },
 };

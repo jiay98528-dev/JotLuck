@@ -57,6 +57,7 @@ const htmlFiles = [
     `${locale}/themes.html`,
     `${locale}/studio.html`,
     `${locale}/privacy.html`,
+    `${locale}/changelog.html`,
   ]),
 ];
 let inlineCount = 0;

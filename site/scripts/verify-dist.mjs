@@ -44,7 +44,7 @@ const SITE_URL = 'https://jotluck.com';
 const CARD_URL = `${SITE_URL}/assets/brand/social-preview.png`;
 const LOCALES = ['zh', 'en', 'ja', 'ko', 'fr'];
 const TAGS = { zh: 'zh-CN', en: 'en', ja: 'ja', ko: 'ko', fr: 'fr' };
-const PAGES = ['download', 'themes', 'studio', 'privacy'];
+const PAGES = ['download', 'themes', 'studio', 'privacy', 'changelog'];
 
 /** (h) 五语首页 H1 预期完整句（品牌主句，稳定文案；content 改动时需同步——这正是护栏意义） */
 const EXPECTED_H1 = {
@@ -121,7 +121,7 @@ function expectationFor(path) {
   if (path === 'index.html') {
     return { pageKind: 'gate', lang: 'en', canonical: `${SITE_URL}/` };
   }
-  const m = /^([a-z]{2})\/(index\.html|(download|themes|studio|privacy)\.html)$/.exec(path);
+  const m = /^([a-z]{2})\/(index\.html|(download|themes|studio|privacy|changelog)\.html)$/.exec(path);
   if (!m) return null;
   const locale = m[1];
   const pageKind = m[2] === 'index.html' ? 'home' : m[3];
@@ -147,7 +147,7 @@ function locToRel(loc) {
   if (pathname === '/') return 'index.html';
   const home = /^\/([a-z]{2})\/$/.exec(pathname);
   if (home) return `${home[1]}/index.html`;
-  const page = /^\/([a-z]{2})\/(download|themes|studio|privacy)$/.exec(pathname);
+  const page = /^\/([a-z]{2})\/(download|themes|studio|privacy|changelog)$/.exec(pathname);
   if (page) return `${page[1]}/${page[2]}.html`;
   throw new Error('无法映射到 dist 文件');
 }
@@ -255,8 +255,8 @@ function checkJsonLd(html, rel) {
 const expectedFiles = ['index.html'];
 for (const l of LOCALES) expectedFiles.push(`${l}/index.html`);
 for (const l of LOCALES) for (const p of PAGES) expectedFiles.push(`${l}/${p}.html`);
-if (expectedFiles.length !== 26) {
-  console.error(`[FATAL] 期望文件数 != 26（实际 ${expectedFiles.length}）`);
+if (expectedFiles.length !== 31) {
+  console.error(`[FATAL] 期望文件数 != 31（实际 ${expectedFiles.length}）`);
   process.exit(2);
 }
 
@@ -460,7 +460,7 @@ if (!existsSync(sitemapPath)) {
   const expectedLocs = [`${SITE_URL}/`];
   for (const l of LOCALES) expectedLocs.push(`${SITE_URL}/${l}/`);
   for (const l of LOCALES) for (const p of PAGES) expectedLocs.push(`${SITE_URL}/${l}/${p}`);
-  check(locs.length === 26, `loc 数量 = 26`, `实际 ${locs.length} 条`);
+  check(locs.length === 31, `loc 数量 = 31`, `实际 ${locs.length} 条`);
   const dupLocs = locs.filter((loc, i) => locs.indexOf(loc) !== i);
   check(
     dupLocs.length === 0,

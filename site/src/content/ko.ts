@@ -14,6 +14,7 @@ export const ko: SiteContent = {
       themes: '테마 · JotLuck — 무료 오픈 소스 Markdown 노트 앱',
       studio: '스튜디오 · JotLuck — 무료 오픈 소스 Markdown 노트 앱',
       privacy: '개인정보 · JotLuck — 무료 오픈 소스 Markdown 노트 앱',
+      changelog: '체인지 로그 · JotLuck — 모든 개선을 기록합니다',
     },
     pageDescriptions: {
       download:
@@ -24,6 +25,8 @@ export const ko: SiteContent = {
         'LeankomStudio는 鸰湖科技의 제품 스튜디오입니다. 무료 오픈 소스 Markdown 노트 앱 JotLuck은 우리가 바깥으로 펼쳐 낸 첫 번째 페이지——아이디어가 범주를 넘어, 가장 잘 어울리는 형태를 만나게 하세요.',
       privacy:
         'JotLuck 개인정보 안내: 이 오픈 소스 Markdown 노트 앱은 완전히 오프라인으로 동작하며, 노트는 순수 텍스트 파일로 당신의 폴더에 저장됩니다. 계정 불필요, 원격 측정 없음. 이 사이트는 정적 사이트로 Cookie를 사용하지 않습니다.',
+      changelog:
+        'JotLuck 체인지 로그: Windows 데스크톱 미리 보기의 모든 릴리스 기록. 로컬 완성, 내보내기, 검색, 테마가 릴리스마다 발전합니다. 무료 오픈소스 Markdown 노트 앱.',
     },
   },
   localeName: '한국어',
@@ -75,6 +78,12 @@ export const ko: SiteContent = {
       '설정 페이지에서 언제든지 켜고 끌 수 있습니다.',
     ],
   },
+  changelog: {
+    eyebrow: '체인지 로그',
+    title: '모든 릴리스를 기록합니다.',
+    lead: '내용은 GitHub Releases 원문(영어)과 동기화됩니다.',
+    githubLink: 'GitHub에서 모든 릴리스 보기',
+  },
   film: {
     title: '홍보 필름',
     ariaLabel: 'JotLuck 홍보 필름, 60초',
@@ -114,6 +123,7 @@ export const ko: SiteContent = {
       "네 가지 확장자가 선택적인 '연결 프로그램' 처리기로만 등록됩니다. 시스템 기본값은 건드리지 않습니다",
       'MIT 라이선스로 공개되며, 핵심 편집과 검색은 완전히 오프라인에서 동작합니다',
     ],
+    changelogLink: '체인지 로그 보기',
   },
   themes: {
     eyebrow: '테마',
@@ -230,6 +240,12 @@ export const ko: SiteContent = {
     studio: 'LeankomStudio',
     tagline: '로컬 우선 · 오픈소스 · 클라우드 종속 없음',
     copyright: '© 2026 Linghu Technology (Shenzhen) Co., Ltd.',
-    links: { support: '지원', privacy: '개인정보', signing: '코드 서명 정책', github: 'GitHub' },
+    links: {
+      support: '지원',
+      privacy: '개인정보',
+      signing: '코드 서명 정책',
+      github: 'GitHub',
+      changelog: '체인지 로그',
+    },
   },
 };
