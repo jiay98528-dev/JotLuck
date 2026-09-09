@@ -196,6 +196,65 @@ fn focus_window(window: &WebviewWindow) {
     let _ = window.set_focus();
 }
 
+/// macOS：窗口几何是否落在任一已连接显示器的可见区域内。
+/// 熄屏/锁屏状态下启动时 WindowServer 可能给出失效的 display 配置
+/// （SkyLight 报 "invalid display identifier"），tao 对 maximized 窗口
+/// 直接取 screen frame，screen 无效时窗口会停留在 0×0 或离屏 frame，
+/// 且显示器唤醒后 AppKit 不会自动纠正——2026-09-09 安装版 P0 实锤。
+#[cfg(target_os = "macos")]
+fn macos_window_geometry_is_sane(window: &WebviewWindow) -> bool {
+    let Ok(size) = window.outer_size() else {
+        return false;
+    };
+    if size.width == 0 || size.height == 0 {
+        return false;
+    }
+    let Ok(position) = window.outer_position() else {
+        return false;
+    };
+    window
+        .available_monitors()
+        .map(|monitors| {
+            monitors.iter().any(|monitor| {
+                let origin = monitor.position();
+                let bounds = monitor.size();
+                position.x < origin.x + bounds.width as i32
+                    && position.x + size.width as i32 > origin.x
+                    && position.y < origin.y + bounds.height as i32
+                    && position.y + size.height as i32 > origin.y
+            })
+        })
+        .unwrap_or(false)
+}
+
+/// macOS：启动后轮询主窗口几何，发现 0×0/离屏时重置为默认尺寸并居中。
+/// 覆盖「熄屏启动 → 用户稍后唤醒显示器」的时序：几何自愈会在显示器
+/// 恢复后的下一轮轮询生效。窗口销毁、几何恢复正常或 5 分钟超时即退出。
+/// 正常启动时首轮（1s 延迟后）检测即通过，此后零开销。
+#[cfg(target_os = "macos")]
+fn spawn_macos_window_geometry_guard(app: tauri::AppHandle, label: &'static str) {
+    std::thread::spawn(move || {
+        // 首轮延迟 1s：tao 的 maximized zoom 异步派发到主队列，留出余量，
+        // 避免窗口尚在初始正常 frame 时过早判定 sane 退出。
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+        for _ in 0..600 {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            let Some(window) = app.get_webview_window(label) else {
+                return;
+            };
+            if macos_window_geometry_is_sane(&window) {
+                return;
+            }
+            log::warn!("window {label} has invalid geometry; resetting to default size");
+            let _ = window.unminimize();
+            let _ = window.set_size(tauri::LogicalSize::new(1280.0, 800.0));
+            let _ = window.center();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    });
+}
+
 fn open_external_file_in_window(
     app: &tauri::AppHandle,
     path: &Path,
@@ -323,7 +382,15 @@ pub fn run() {
                 app.state::<window_session::WindowSessionRegistry>()
                     .ensure_workspace("main");
                 attach_window_cleanup(&main);
+                // 对齐 create_workspace_window / open_external_file_in_window：
+                // setup 建主窗口后同样显式 show + set_focus（Windows 上对已
+                // 可见的前台窗口为幂等 no-op，行为不变）。
+                focus_window(&main);
             }
+            // macOS 熄屏/锁屏启动时窗口 frame 可能损坏且不会自愈（见上），
+            // 挂几何 guard 兜底；其他平台无此故障路径，零影响。
+            #[cfg(target_os = "macos")]
+            spawn_macos_window_geometry_guard(app.handle().clone(), "main");
             for path in startup_files.iter().skip(1) {
                 if let Err(error) = open_external_file_in_window(app.handle(), path, None) {
                     report_window_error(app.handle(), &error);
