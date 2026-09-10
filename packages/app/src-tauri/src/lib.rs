@@ -33,6 +33,14 @@ fn destroy_current_window(window: tauri::WebviewWindow) -> CommandResult<()> {
     Ok(())
 }
 
+/// 当前构建的目标操作系统（std::env::consts::OS：macos/windows/linux）。
+/// 前端用于分流 Windows 专属 UI（文件关联设置、引导步骤、专业编辑器入口）；
+/// Web 预览不走此命令，由前端回落为 windows 语义以保持既有行为。
+#[tauri::command]
+fn get_platform() -> &'static str {
+    std::env::consts::OS
+}
+
 fn is_supported_opened_file_extension(ext: &str) -> bool {
     matches!(
         ext,
@@ -151,6 +159,11 @@ fn desktop_window_config(label: String) -> tauri::utils::config::WindowConfig {
         resizable: true,
         maximized: true,
         center: true,
+        // macOS 上 wry 的原生 drag-drop 会接管 WKWebView 的拖放并改发
+        // Tauri 事件（前端只监听 HTML5 drop，无人消费），导致从 Finder
+        // 拖图片进编辑器静默失效。关闭原生拦截让 HTML5 dnd 直达页面；
+        // Windows WebView2 下 HTML5 dnd 本就工作，行为不变。
+        drag_drop_enabled: false,
         ..Default::default()
     }
 }
@@ -328,6 +341,63 @@ fn open_secondary_invocation(app: tauri::AppHandle, files: Vec<PathBuf>) {
     }
 }
 
+/// macOS：GUI 进程通常没有 LANG 环境变量，用户语言以 AppleLocale 为准
+/// （形如 zh_CN）；两者都无时回落英文。
+#[cfg(target_os = "macos")]
+fn system_prefers_chinese() -> bool {
+    if std::env::var("LANG")
+        .map(|value| value.starts_with("zh"))
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    std::process::Command::new("defaults")
+        .args(["read", "-g", "AppleLocale"])
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().starts_with("zh"))
+        .unwrap_or(false)
+}
+
+/// macOS：安装应用菜单栏。Tauri v2 默认菜单是硬编码英文且缺少
+/// 撤销/剪切/复制/粘贴等编辑服务项；这里按系统语言构建中文/英文
+/// 标准菜单（应用/编辑/窗口）。Windows/Linux 无菜单栏，不调用。
+#[cfg(target_os = "macos")]
+fn install_macos_menu(app: &tauri::AppHandle) -> Result<(), tauri::Error> {
+    use tauri::menu::{MenuBuilder, SubmenuBuilder};
+    let zh = system_prefers_chinese();
+    let app_menu = SubmenuBuilder::new(app, "JotLuck")
+        .about(None)
+        .separator()
+        .services()
+        .separator()
+        .hide()
+        .hide_others()
+        .show_all()
+        .separator()
+        .quit()
+        .build()?;
+    let edit_menu = SubmenuBuilder::new(app, if zh { "编辑" } else { "Edit" })
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
+        .build()?;
+    let window_menu = SubmenuBuilder::new(app, if zh { "窗口" } else { "Window" })
+        .minimize()
+        .maximize()
+        .separator()
+        .close_window()
+        .build()?;
+    let menu = MenuBuilder::new(app)
+        .items(&[&app_menu, &edit_menu, &window_menu])
+        .build()?;
+    app.set_menu(menu)?;
+    Ok(())
+}
+
 /// Initialize all IPC commands and plugins.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -337,7 +407,9 @@ pub fn run() {
     let startup_args: Vec<String> = std::env::args().collect();
     let startup_files = capture_opened_files_from_args(&startup_args, &cwd);
 
-    if let Err(error) = tauri::Builder::default()
+    // build + 事件循环（替代 Builder::run）：macOS 需要 Reopen（Dock 图标
+    // 点击）与末窗关闭的驻留语义；Windows/Linux 走默认行为，完全不变。
+    let app = match tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
             let cwd = PathBuf::from(cwd);
             let files = capture_opened_files_from_args(&argv, &cwd);
@@ -358,6 +430,10 @@ pub fn run() {
                     .level(log::LevelFilter::Info)
                     .build(),
             )?;
+
+            // macOS 菜单栏须在主窗口创建前安装（首个窗口出现时生效）。
+            #[cfg(target_os = "macos")]
+            install_macos_menu(app.handle())?;
 
             // 主窗口在 setup 内经 build_window 创建（tauri.conf.json 不再自动创建），
             // 使 additional_browser_args 重注入覆盖主窗口——config 自动创建路径
@@ -392,6 +468,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             destroy_current_window,
+            get_platform,
             window_session::get_window_bootstrap,
             window_session::enable_external_edit,
             window_session::promote_external_file_to_notebook,
@@ -445,10 +522,36 @@ pub fn run() {
             file_watcher::start_file_watcher,
             file_watcher::stop_file_watcher,
         ])
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
     {
-        write_startup_error(&format!("error while running jotluck: {error:?}"));
-    }
+        Ok(app) => app,
+        Err(error) => {
+            write_startup_error(&format!("error while building jotluck: {error:?}"));
+            return;
+        }
+    };
+
+    app.run(|app, event| {
+        #[cfg(target_os = "macos")]
+        match event {
+            tauri::RunEvent::ExitRequested { api, .. } => {
+                // macOS 惯例：关闭所有窗口后应用驻留（Dock 可重开）。
+                // 真退出（Cmd+Q / 菜单退出 / app.exit）发生时窗口仍在，
+                // 不进入此分支，正常退出。
+                if app.webview_windows().is_empty() {
+                    api.prevent_exit();
+                }
+            }
+            tauri::RunEvent::Reopen { .. } => {
+                if app.webview_windows().is_empty() {
+                    if let Err(error) = create_workspace_window(app, "main") {
+                        report_window_error(app, &error);
+                    }
+                }
+            }
+            _ => {}
+        }
+    });
 }
 
 #[cfg(test)]
