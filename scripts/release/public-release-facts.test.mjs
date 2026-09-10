@@ -120,10 +120,7 @@ describe('public release facts', () => {
 
   it('keeps Linux preview packaging in-tree and records the public .deb checksum', () => {
     const desktopTemplate = readFileSync(
-      path.join(
-        projectRoot,
-        'packages/app/src-tauri/installer-assets/linux/jotluck.desktop',
-      ),
+      path.join(projectRoot, 'packages/app/src-tauri/installer-assets/linux/jotluck.desktop'),
       'utf8',
     );
     const packScript = readFileSync(
