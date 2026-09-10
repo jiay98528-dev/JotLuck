@@ -1,4 +1,5 @@
 import { onBeforeUnmount } from 'vue';
+import { isDesktopRuntime } from '@/utils/runtime';
 import type { MarkdownPredictor } from '@/services/MarkdownPredictor';
 import type { PublicFreeDecoderEngine } from '@/services/completion/public-free-decoder-engine';
 
@@ -66,15 +67,22 @@ export function usePublicDecoderSetup(
     try {
       engine = await factory();
     } catch (error) {
-      // eslint-disable-next-line no-console -- 工单 B / B1: 故障信号是修复目标本身
-      console.warn(`[public-decoder-setup] factory(${channel}) rejected; will allow retry.`, error);
+      // 工单 B / B1: 故障信号是修复目标本身；仅桌面运行时输出（E2E 控制台纯净断言）。
+      if (isDesktopRuntime())
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[public-decoder-setup] factory(${channel}) rejected; will allow retry.`,
+          error,
+        );
       return false;
     }
     if (!engine) {
-      // eslint-disable-next-line no-console -- 工单 B / B1: 故障信号是修复目标本身
-      console.warn(
-        `[public-decoder-setup] factory(${channel}) returned null; treating as failure.`,
-      );
+      // 工单 B / B1: 故障信号是修复目标本身；仅桌面运行时输出（E2E 控制台纯净断言）。
+      if (isDesktopRuntime())
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[public-decoder-setup] factory(${channel}) returned null; treating as failure.`,
+        );
       return false;
     }
     if (isUnmounted()) {
@@ -88,18 +96,22 @@ export function usePublicDecoderSetup(
     try {
       const ok = await predictor.installPublicEngineForEvaluation(engine);
       if (!ok) {
-        // eslint-disable-next-line no-console -- 工单 B / B1: 故障信号是修复目标本身
-        console.warn(
-          `[public-decoder-setup] installPublicEngineForEvaluation(${channel}) returned false.`,
-        );
+        // 工单 B / B1: 故障信号是修复目标本身；仅桌面运行时输出（E2E 控制台纯净断言）。
+        if (isDesktopRuntime())
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[public-decoder-setup] installPublicEngineForEvaluation(${channel}) returned false.`,
+          );
       }
       return ok;
     } catch (error) {
-      // eslint-disable-next-line no-console -- 工单 B / B1: 故障信号是修复目标本身
-      console.warn(
-        `[public-decoder-setup] installPublicEngineForEvaluation(${channel}) rejected; will allow retry.`,
-        error,
-      );
+      // 工单 B / B1: 故障信号是修复目标本身；仅桌面运行时输出（E2E 控制台纯净断言）。
+      if (isDesktopRuntime())
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[public-decoder-setup] installPublicEngineForEvaluation(${channel}) rejected; will allow retry.`,
+          error,
+        );
       return false;
     }
   }
@@ -116,10 +128,12 @@ export function usePublicDecoderSetup(
   function scheduleAutoRetry(): void {
     if (cancelled || isUnmounted()) return;
     if (attempts >= maxAttempts) {
-      // eslint-disable-next-line no-console -- 工单 B / B1: 故障信号是修复目标本身
-      console.warn(
-        `[public-decoder-setup] giving up auto-retry; ${attempts}/${maxAttempts} attempts failed.`,
-      );
+      // 工单 B / B1: 故障信号是修复目标本身；仅桌面运行时输出（E2E 控制台纯净断言）。
+      if (isDesktopRuntime())
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[public-decoder-setup] giving up auto-retry; ${attempts}/${maxAttempts} attempts failed.`,
+        );
       return;
     }
     const delayIndex = Math.min(attempts - 1, retryDelaysMs.length - 1);
