@@ -75,8 +75,12 @@ export async function createCanonicalPublicFreeDecoderEngine(
   const fetcher = options.fetcher ?? globalThis.fetch;
   if (typeof fetcher !== 'function') return null;
   const fail = (stage: string, detail: string): null => {
-    // eslint-disable-next-line no-console -- 工单 B / B1: 故障信号是修复目标本身
-    console.warn(`[public-decoder-factory] canonical engine unavailable (${stage}): ${detail}`);
+    // 工单 B / B1: 故障信号是修复目标本身。仅桌面运行时输出——浏览器/E2E
+    // 环境没有资产属预期，warn 会污染黑盒测试的 console 纯净断言。
+    if (isDesktopRuntime()) {
+      // eslint-disable-next-line no-console
+      console.warn(`[public-decoder-factory] canonical engine unavailable (${stage}): ${detail}`);
+    }
     return null;
   };
   try {
