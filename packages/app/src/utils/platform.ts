@@ -16,6 +16,13 @@ export async function getPlatformOS(): Promise<PlatformOS> {
   if (cachedPlatform) return cachedPlatform;
   initPromise ??= (async () => {
     let next: PlatformOS;
+    // E2E（vite preview + mock 桥）始终模拟 Windows 桌面——与全仓
+    // Control+ 断言的既有语义一致；欢迎引导的关联勾选框等 Windows
+    // 分支 UI 需要它在测试里可见。
+    if (Boolean((globalThis as { __jotluck_e2e?: boolean }).__jotluck_e2e)) {
+      cachedPlatform = 'windows';
+      return 'windows';
+    }
     if (isTauri()) {
       try {
         const value = await invoke<string>('platform_os');
