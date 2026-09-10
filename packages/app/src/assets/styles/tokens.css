@@ -205,9 +205,10 @@
 
 :root:lang(en),
 :root:lang(fr) {
-  --ff-body:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Cantarell', 'Ubuntu', 'DejaVu Sans', system-ui,
-    sans-serif;
+  /* 拉丁栈不插 Linux 发行版字体：Ubuntu/DejaVu 的度量差异会让官方主题
+     滚动契约用例在临界溢出状态下随机翻转（24-spec 实测），Linux 上由
+     system-ui 兜底到发行版默认无衬线即可。 */
+  --ff-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 }
 
 :root:lang(ja) {
