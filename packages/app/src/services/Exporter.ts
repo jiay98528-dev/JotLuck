@@ -8,6 +8,7 @@
  * @see doc/PRD.md §F-09
  */
 import type { ExportOptions, ExportResult } from '@/types';
+import { isLinux } from '@/utils/platform';
 import { ExportFormat } from '@/types';
 import { renderMarkdown } from '@jotluck/renderer';
 import {
@@ -236,6 +237,11 @@ function exportPDF(
         return;
       }
 
+      if (isLinux()) {
+        // WebKitGTK 未实现 window.print() 且不抛异常——静默 no-op 会假成功。
+        fail(translate('export.pdfUnavailable'));
+        return;
+      }
       try {
         // print() blocks while the native dialog is open. Guard preparation,
         // not the time the user spends interacting with that dialog.

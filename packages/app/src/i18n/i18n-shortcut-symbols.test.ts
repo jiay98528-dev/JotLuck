@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { translate } from '@/i18n';
-import { currentPlatform, type OsPlatform } from '@/utils/platform';
+import {
+  currentPlatformOS as currentPlatform,
+  type PlatformOS as OsPlatform,
+} from '@/utils/platform-signal';
 
 describe('macOS shortcut modifier symbolization (i18n postTranslation)', () => {
   const original = currentPlatform.value;
@@ -18,7 +21,7 @@ describe('macOS shortcut modifier symbolization (i18n postTranslation)', () => {
     withPlatform('macos', () => {
       expect(translate('notebook.actions.searchWithShortcut')).toContain('⌘K');
       expect(translate('notebook.actions.searchWithShortcut')).not.toContain('Ctrl');
-      expect(translate('editor.toolbar.boldTitle')).toContain('⌘B');
+      expect(translate('editor.toolbar.inlineCodeTitle')).toContain('⌘`');
     });
   });
 
@@ -36,7 +39,7 @@ describe('macOS shortcut modifier symbolization (i18n postTranslation)', () => {
       expect(translate('notebook.actions.searchWithShortcut')).toContain('Ctrl+K');
     });
     withPlatform('linux', () => {
-      expect(translate('editor.toolbar.boldTitle')).toContain('Ctrl+B');
+      expect(translate('editor.toolbar.inlineCodeTitle')).toContain('Ctrl+`');
     });
   });
 

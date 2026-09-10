@@ -1,15 +1,15 @@
 # Known Limitations
 
-This document describes limitations for JotLuck `v0.13.0-preview`. These are not
+This document describes limitations for JotLuck `v0.14.0-preview`. These are not
 marketing claims; they are the remaining release constraints and expected
 behavior boundaries.
 
 ## Preview Status
 
-- `v0.13.0-preview` is the current public, unsigned preview of both the
-  source and the Windows installer, and is not a stable release. The installer
-  is available on GitHub Releases and may trigger a Windows SmartScreen
-  warning. Windows code signing is in progress.
+- `v0.14.0-preview` is the current public, unsigned preview of the source,
+  and is not a stable release. The Windows installer for this version is not
+  yet published; once published on GitHub Releases it may trigger a Windows
+  SmartScreen warning. Windows code signing is in progress.
 - This preview does not claim complete installed-app release evidence, final
   Rust audit evidence, signing, notarization, or host-specific validation for
   every supported platform.
@@ -35,15 +35,24 @@ behavior boundaries.
 
 ## Desktop App Limits
 
-- The current Windows preview is unsigned. Its only official public download is
-  the `v0.13.0-preview` GitHub Release; verify the SHA-256 published on that page
-  before installation.
+- The current Windows preview is unsigned. Its only official public download
+  is the `v0.14.0-preview` GitHub Release; verify the SHA-256 published on
+  that page before installation.
 - Tauri shell access is limited to the scoped `shell:default` capability.
   Unscoped `shell:allow-open`, `process:*`, and `fs:*` capabilities are not
   granted in the default desktop capability file.
 - Notebook root, native watcher, search index, and completion retrieval state
   are isolated by window. Closing one window removes only that window's state.
-- macOS and Linux packages still need host-specific packaging, signing, and
+- Linux x86_64 unsigned `.deb` is on the `v0.14.0-preview` GitHub Release
+  (`JotLuck_0.14.0_amd64.deb`, SHA-256
+  `3d5f7b709c0eaf9fea2877593696c30cbc15f0a640733d208a040d8fc3a3ed77`). Rebuild
+  with `scripts/release/linux-preview-pack.sh`. Host-checked on Linux Mint 22.1.
+  The `.desktop` file registers optional MIME types and does not run
+  `xdg-mime default`. Some desktops may still select a newly registered
+  handler on install; that is host behavior, not a claimed default-app
+  override. Some WebKitGTK sessions need
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1` (the Linux binary sets this when unset).
+- macOS packages still need host-specific packaging, signing, and
   release validation.
 
 ## Rust Dependency Audit Warnings

@@ -64,7 +64,7 @@
                 <p class="setting-help">{{ t('settings.general.languageHelp') }}</p>
               </div>
 
-              <div v-if="isWindowsPlatform" class="setting-row association-settings">
+              <div v-if="isWindows()" class="setting-row association-settings">
                 <div class="setting-info">
                   <span class="setting-label">{{ t('settings.general.fileOpeningTitle') }}</span>
                 </div>
@@ -73,9 +73,7 @@
                 <p v-if="associationLoading" class="association-loading" role="status">
                   {{ t('settings.general.associationLoading') }}
                 </p>
-                <!-- v-else-if：平台解析/首次加载完成前不渲染行，避免
-                     unsupported 兜底数据闪现被误读为最终状态。 -->
-                <div v-else-if="associationStatus" class="association-list" aria-live="polite">
+                <div v-else class="association-list" aria-live="polite">
                   <div v-for="group in associationGroups" :key="group.id" class="association-row">
                     <div class="association-copy">
                       <strong>{{ t(`settings.general.associationGroups.${group.id}`) }}</strong>
@@ -108,6 +106,12 @@
                     {{ t('settings.general.associationRefresh') }}
                   </button>
                 </div>
+              </div>
+              <div v-else class="setting-row association-settings">
+                <div class="setting-info">
+                  <span class="setting-label">{{ t('settings.general.fileOpeningTitle') }}</span>
+                </div>
+                <p class="setting-help">{{ t('settings.general.fileOpeningBodyNonWindows') }}</p>
               </div>
             </section>
 
@@ -263,6 +267,30 @@
                 </span>
               </div>
 
+              <div class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-label">
+                    {{ t('settings.autocomplete.personalization') }}
+                  </span>
+                  <span class="setting-value">
+                    {{ t('settings.autocomplete.personalizationScope') }}
+                  </span>
+                </div>
+                <span
+                  class="toggle-track"
+                  :class="{ active: personalization }"
+                  role="switch"
+                  tabindex="0"
+                  :aria-label="t('settings.autocomplete.personalization')"
+                  :aria-checked="personalization"
+                  @click="personalization = !personalization"
+                  @keydown.enter.prevent="personalization = !personalization"
+                  @keydown.space.prevent="personalization = !personalization"
+                >
+                  <span class="toggle-thumb"></span>
+                </span>
+              </div>
+
               <div class="autocomplete-meta">
                 <div class="meta-row">
                   <span>{{ t('settings.autocomplete.trainedFiles') }}</span>
@@ -275,9 +303,36 @@
                 <p class="local-note">{{ t('settings.autocomplete.localOnly') }}</p>
               </div>
 
+              <div class="autocomplete-meta engine-meta">
+                <h4 class="engine-meta-title">{{ t('settings.autocomplete.engine.title') }}</h4>
+                <div class="meta-row">
+                  <span>{{ t('settings.autocomplete.engine.status') }}</span>
+                  <strong>{{ engineStatusLabel }}</strong>
+                </div>
+                <div class="meta-row">
+                  <span>{{ t('settings.autocomplete.engine.requests') }}</span>
+                  <strong>{{ engineRequests }}</strong>
+                </div>
+                <div class="meta-row">
+                  <span>{{ t('settings.autocomplete.engine.candidates') }}</span>
+                  <strong>{{ engineCandidates }}</strong>
+                </div>
+                <div class="meta-row">
+                  <span>{{ t('settings.autocomplete.engine.p90') }}</span>
+                  <strong>{{ engineP90Label }}</strong>
+                </div>
+                <p v-if="engineLastError" class="engine-error" role="alert">
+                  {{ t('settings.autocomplete.engine.lastError', { error: engineLastError }) }}
+                </p>
+                <p class="local-note">{{ engineHelpText }}</p>
+              </div>
+
               <div class="settings-actions settings-actions--left">
                 <button class="segment-btn" type="button" @click="$emit('clear-completion-data')">
                   {{ t('settings.autocomplete.clearData') }}
+                </button>
+                <button class="segment-btn" type="button" @click="$emit('retry-completion-engine')">
+                  {{ t('settings.autocomplete.engine.retry') }}
                 </button>
               </div>
             </section>
@@ -368,7 +423,9 @@ import { formatDate } from '@/i18n';
 import { useLocale } from '@/composables/useLocale';
 import type { AssociationGroupStatus, WindowsAssociationStatus } from '@/types';
 import type { SupportedLocale } from '@/types/i18n';
-import { getOsPlatform, isDesktopRuntime } from '@/utils/runtime';
+import { isDesktopRuntime } from '@/utils/runtime';
+import { isWindows } from '@/utils/platform';
+import type { PublicEngineDiagnostics } from '@/services/completion/public-engine-types';
 
 const { t } = useI18n();
 const { locale, localeDefinitions, setLocale } = useLocale();
@@ -378,10 +435,12 @@ const props = withDefaults(
     visible: boolean;
     completionSettings?: CompletionSettings;
     completionTrainingMeta?: CompletionTrainingMeta;
+    completionEngineHealth?: PublicEngineDiagnostics | null;
   }>(),
   {
     completionSettings: () => ({ ...DEFAULT_COMPLETION_SETTINGS }),
     completionTrainingMeta: undefined,
+    completionEngineHealth: null,
   },
 );
 
@@ -389,6 +448,7 @@ const emit = defineEmits<{
   'update:visible': [boolean];
   'update-completion-settings': [CompletionSettings];
   'clear-completion-data': [];
+  'retry-completion-engine': [];
 }>();
 
 interface TabDef {
@@ -413,12 +473,6 @@ useDialogFocus({
 });
 const activeTab = ref<TabDef['id']>('general');
 const desktopRuntime = isDesktopRuntime();
-// Windows 专属区块（文件打开方式）仅在 Windows 桌面显示；Web 预览回落
-// windows 语义（getOsPlatform 契约），macOS/Linux 整块隐藏且不触发关联命令。
-const isWindowsPlatform = ref(true);
-void getOsPlatform().then((platform) => {
-  isWindowsPlatform.value = platform === 'windows';
-});
 const associationStatus = ref<WindowsAssociationStatus | null>(null);
 const associationLoading = ref(false);
 const associationError = ref(false);
@@ -447,6 +501,7 @@ const autoSaveDelay = ref(3000);
 
 const autoCompleteEnabled = ref(props.completionSettings.enabled);
 const backgroundTraining = ref(props.completionSettings.backgroundTraining);
+const personalization = ref(props.completionSettings.personalization);
 
 const AUTO_CHECK_KEY = 'jotluck:version:autoCheck';
 const AUTO_INSTALL_KEY = 'jotluck:version:autoInstall';
@@ -473,22 +528,71 @@ const trainingStatusLabel = computed(() => {
   return t('settings.autocomplete.status.idle');
 });
 
+const engineSnapshot = computed<PublicEngineDiagnostics | null>(
+  () => props.completionEngineHealth ?? null,
+);
+
+const engineStatusLabel = computed(() => {
+  const snap = engineSnapshot.value;
+  if (!snap) return t('settings.autocomplete.engine.statusDisabled');
+  switch (snap.status) {
+    case 'ready':
+      return t('settings.autocomplete.engine.statusReady');
+    case 'warming':
+      return t('settings.autocomplete.engine.statusWarming');
+    case 'degraded':
+      return t('settings.autocomplete.engine.statusDegraded');
+    case 'disabled':
+      return t('settings.autocomplete.engine.statusDisabledEngine');
+    case 'disposed':
+      return t('settings.autocomplete.engine.statusDisposed');
+    case 'idle':
+    default:
+      return t('settings.autocomplete.engine.statusIdle');
+  }
+});
+
+const engineRequests = computed(() => engineSnapshot.value?.generateRequests ?? 0);
+const engineCandidates = computed(() => engineSnapshot.value?.generatedCandidates ?? 0);
+
+const engineP90Label = computed(() => {
+  const snap = engineSnapshot.value;
+  if (!snap) return t('settings.autocomplete.engine.p90Unavailable');
+  const p90 = snap.visibleInferenceP90Ms;
+  if (!Number.isFinite(p90) || p90 <= 0) return t('settings.autocomplete.engine.p90Unavailable');
+  if (p90 < 1000) return `${Math.round(p90)}ms`;
+  return `${(p90 / 1000).toFixed(2)}s`;
+});
+
+const engineLastError = computed(() => engineSnapshot.value?.lastError ?? null);
+
+const engineHelpText = computed(() =>
+  engineSnapshot.value
+    ? t('settings.autocomplete.engine.helpEnabled')
+    : t('settings.autocomplete.engine.helpDisabled'),
+);
+
 watch(
   () => props.completionSettings,
   (settings) => {
     autoCompleteEnabled.value = settings.enabled;
     backgroundTraining.value = settings.backgroundTraining;
+    personalization.value = settings.personalization;
   },
   { deep: true },
 );
 
-watch([autoCompleteEnabled, backgroundTraining], ([enabled, training]) => {
-  emit('update-completion-settings', {
-    ...props.completionSettings,
-    enabled,
-    backgroundTraining: training,
-  });
-});
+watch(
+  [autoCompleteEnabled, backgroundTraining, personalization],
+  ([enabled, training, personalized]) => {
+    emit('update-completion-settings', {
+      ...props.completionSettings,
+      enabled,
+      backgroundTraining: training,
+      personalization: personalized,
+    });
+  },
+);
 
 watch(autoCheckUpdates, (value) => {
   localStorage.setItem(AUTO_CHECK_KEY, String(value));
@@ -524,12 +628,8 @@ function onLocaleSelect(event: Event): void {
 }
 
 async function refreshAssociationStatus(): Promise<void> {
+  if (!isWindows()) return;
   if (!props.visible || activeTab.value !== 'general') return;
-  // 等平台解析完成再判断（初始 ref 为 true，避免竞态下的误 invoke）。
-  if ((await getOsPlatform()) !== 'windows') {
-    associationStatus.value = null;
-    return;
-  }
   associationError.value = false;
 
   if (!desktopRuntime) {
@@ -704,6 +804,23 @@ function close(): void {
   border: var(--border-thin) solid var(--rule);
   border-radius: var(--radius);
   background: var(--paper-surface);
+}
+
+.engine-meta-title {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+}
+
+.engine-error {
+  margin: 0;
+  color: var(--signal-error);
+  font-size: var(--text-xs);
+  line-height: var(--lh-ui);
+  overflow-wrap: break-word;
 }
 
 .association-settings {

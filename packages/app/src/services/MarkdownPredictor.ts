@@ -120,6 +120,7 @@ import {
 import { isV25HostCandidate, stampV25HostPrediction } from './completion/v25-host-proof';
 import { createPublicFreeContextCapsule } from './completion/public-free-context-capsule';
 import { PUBLIC_V25_ONE_UNIT_WRITING_ENGINE_ID } from './completion/public-free-decoder-contract';
+import { buildPersonalPrior } from './completion/personal-prior';
 import { CodeSyntaxProvider } from './completion/code-syntax-provider';
 import { createV24LocalCascade } from './completion/v24-local-cascade';
 import {
@@ -830,6 +831,35 @@ export class MarkdownPredictor {
       publicLanguageHint === context.languageHint
         ? context
         : { ...context, languageHint: publicLanguageHint };
+    // ADR-024 personal-prior fusion: only the one-unit writing engine accepts
+    // a prior, and an undefined result keeps the request byte-identical to
+    // the pre-personalization baseline.
+    const personalPrior =
+      publicEngineAttempted &&
+      this.engineRouter.getActivePublicEngineId() === PUBLIC_V25_ONE_UNIT_WRITING_ENGINE_ID &&
+      this.settings.personalization
+        ? buildPersonalPrior({
+            personalLongTable: this.getPersonalLongTable(),
+            personalShortTable: this.shortL2,
+            sessionMatches: this.sessionHistory
+              .match(requestScope, context.doc.slice(0, context.localCursorPos), 5)
+              .map((entry) => entry.insertText),
+            retainedPhrases:
+              publicLanguageHint === 'zh' || publicLanguageHint === 'en'
+                ? this.v24AcceptedPhraseStore
+                    .match(
+                      requestScope,
+                      context.doc.slice(0, context.localCursorPos),
+                      publicLanguageHint,
+                    )
+                    .map((record) => record.phrase)
+                : null,
+            context,
+            language: publicLanguageHint === 'mixed' ? 'unknown' : publicLanguageHint,
+            n: this.n,
+            maxSuggestionLength: this.settings.maxSuggestionLength,
+          })
+        : undefined;
     const publicGeneration = publicEngineAttempted
       ? await this.engineRouter.generatePublic(
           {
@@ -857,6 +887,7 @@ export class MarkdownPredictor {
             codeLexicalContext: context.codeLexicalContext,
             cursorBoundary: detectPublicCursorBoundary(context.doc, context.localCursorPos),
             maxCandidates: PUBLIC_ENGINE_MAX_CANDIDATES,
+            ...(personalPrior ? { personalPrior } : {}),
             ...(options.editorSessionId && options.documentSessionId && options.searchMode
               ? {
                   editorSessionId: options.editorSessionId,

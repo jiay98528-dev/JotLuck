@@ -20,7 +20,9 @@ export default defineConfig({
   expect: { timeout: 10000 },
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: 0,
+  // CI runner 资源抖动会让时序敏感用例（性能门/质量探针）以 1-2% 概率
+  // 轮替失败；CI 上开 2 次重试吸收抖动，本地保持 0 不掩盖问题。
+  retries: process.env.CI ? 2 : 0,
   workers: 1,
   ...(autocompleteRcEnabled
     ? {}

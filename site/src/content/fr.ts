@@ -14,6 +14,7 @@ export const fr: SiteContent = {
       themes: 'Thèmes · JotLuck — Notes Markdown gratuites et open source',
       studio: 'Studio · JotLuck — Notes Markdown gratuites et open source',
       privacy: 'Confidentialité · JotLuck — Notes Markdown gratuites et open source',
+      changelog: 'Journal des modifications · JotLuck — chaque progrès noté',
     },
     pageDescriptions: {
       download:
@@ -24,6 +25,8 @@ export const fr: SiteContent = {
         'LeankomStudio aide les idées à traverser les genres. JotLuck, notre application de notes Markdown open source, est la première page que nous déplions.',
       privacy:
         'Vie privée : JotLuck, notes Markdown open source, 100 % hors ligne. Notes en fichiers texte, dans votre dossier — sans compte, sans télémétrie, ni cookies.',
+      changelog:
+        "Le journal de JotLuck : chaque version d'aperçu Windows y est consignée — complétion locale, export, recherche et thèmes évoluent à chaque version.",
     },
   },
   localeName: 'Français',
@@ -69,6 +72,21 @@ export const fr: SiteContent = {
       rail: ['Exporter', 'PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'HTML'],
     },
   ],
+  completion: {
+    title: 'Complétion de texte',
+    lines: [
+      "JotLuck embarque un petit modèle de complétion que nous avons entraîné nous-mêmes : chinois et anglais sont pris en charge, tout est prêt dès l'installation, et tout s'exécute localement.",
+      "Quand vous terminez une phrase, un mot peut apparaître discrètement après le curseur. S'il convient, appuyez sur Tab pour l'accepter ; sinon, continuez d'écrire — il s'efface de lui-même. Aucune interruption en cours de route.",
+      'Il apprend aussi dynamiquement : plus vous écrivez avec lui, plus la complétion épouse vos habitudes.',
+      "Vous pouvez l'activer ou le désactiver à tout moment dans les réglages.",
+    ],
+  },
+  changelog: {
+    eyebrow: 'Journal des modifications',
+    title: 'Chaque version, notée.',
+    lead: "Le contenu est synchronisé depuis les GitHub Releases, dans leur formulation d'origine (anglais).",
+    githubLink: 'Voir toutes les versions sur GitHub',
+  },
   film: {
     title: 'Film de présentation',
     ariaLabel: 'Film de présentation de JotLuck, 60 secondes',
@@ -83,24 +101,25 @@ export const fr: SiteContent = {
   download: {
     eyebrow: 'Téléchargement',
     title: 'La Preview est en ligne.',
-    lead: 'La Preview Windows x64 est prête à télécharger dès maintenant. macOS et Linux suivront — le texte brut ne choisit jamais sa plateforme, et vos notes restent des fichiers locaux sur tous les systèmes.',
+    lead: 'Les Previews Windows x64 et Linux x86_64 sont prêtes à télécharger dès maintenant. macOS suivra — le texte brut ne choisit jamais sa plateforme, et vos notes restent des fichiers locaux sur tous les systèmes.',
     statusLabel: 'Première plateforme',
     statusValue: 'Windows x64',
     platformTitle: 'Plateformes',
     platforms: [
       { name: 'Windows x64', state: 'Preview en ligne' },
       { name: 'macOS', state: 'Suivra' },
-      { name: 'Linux', state: 'Suivra' },
+      { name: 'Linux x86_64', state: 'Preview en ligne' },
     ],
     honestyTitle: "La Preview d'abord.",
     honestyBody:
       "L'installateur Preview est déjà sur GitHub Releases — téléchargeable, vérifiable, réversible.",
-    previewTitle: 'v0.12.3 Preview',
+    previewTitle: 'v0.14.0 Preview',
     downloadBtn: 'Télécharger la Preview (Windows x64)',
+    downloadBtnLinux: 'Télécharger la Preview (Linux .deb)',
     githubBtn: 'GitHub',
     releaseBtn: 'Notes de version et checksum',
     signNote:
-      "Cette Preview n'est pas signée : Windows SmartScreen peut afficher un avertissement. Vérifiez que le SHA-256 correspond à la page Release avant d'installer.",
+      "Cette Preview n'est pas signée. Windows SmartScreen peut avertir ; sous Linux, installez avec dpkg et vérifiez le SHA-256 sur la page Release.",
     signPolicyLink: 'Politique de signature de code',
     notesTitle: 'À savoir',
     notes: [
@@ -108,6 +127,7 @@ export const fr: SiteContent = {
       "Quatre extensions s'enregistrent comme gestionnaires « Ouvrir avec » facultatifs ; les paramètres par défaut du système restent intacts",
       "Sous licence MIT ; l'édition et la recherche essentielles fonctionnent entièrement hors ligne",
     ],
+    changelogLink: 'Voir le journal des modifications',
   },
   themes: {
     eyebrow: 'Thèmes',
@@ -239,6 +259,7 @@ export const fr: SiteContent = {
       privacy: 'Confidentialité',
       signing: 'Politique de signature de code',
       github: 'GitHub',
+      changelog: 'Journal des modifications',
     },
   },
 };

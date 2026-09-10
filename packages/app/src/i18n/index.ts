@@ -1,7 +1,7 @@
 import { readonly, shallowRef, type App, type DeepReadonly, type Plugin, type Ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN, { type MessageSchema } from '@/locales/zh-CN';
-import { currentPlatform } from '@/utils/platform';
+import { currentPlatformOS as currentPlatform } from '@/utils/platform-signal';
 import {
   SUPPORTED_LOCALES,
   type LocaleDefinition,

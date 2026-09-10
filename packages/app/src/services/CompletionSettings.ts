@@ -4,6 +4,8 @@ export interface CompletionSettings {
   enabled: boolean;
   aggressiveness: CompletionAggressiveness;
   backgroundTraining: boolean;
+  /** Personal-prior decode fusion for the V2.5 one-unit engine (ADR-024). */
+  personalization: boolean;
   maxSuggestionLength: number;
   minConfidence: number;
   showDebugStats: boolean;
@@ -17,6 +19,7 @@ export const DEFAULT_COMPLETION_SETTINGS: CompletionSettings = {
   enabled: true,
   aggressiveness: 'balanced',
   backgroundTraining: true,
+  personalization: true,
   maxSuggestionLength: 12,
   minConfidence: 0.18,
   showDebugStats: false,
@@ -81,6 +84,7 @@ function normalizeSettings(settings: CompletionSettings): CompletionSettings {
     enabled: settings.enabled !== false,
     aggressiveness: 'balanced',
     backgroundTraining: settings.backgroundTraining !== false,
+    personalization: settings.personalization !== false,
     maxSuggestionLength: clamp(settings.maxSuggestionLength, 4, 24, 12, true),
     minConfidence: clamp(settings.minConfidence, 0.05, 0.8, 0.18),
     showDebugStats: import.meta.env.DEV && settings.showDebugStats === true,

@@ -74,17 +74,42 @@ export async function createCanonicalPublicFreeDecoderEngine(
 ): Promise<PublicFreeDecoderEngine | null> {
   const fetcher = options.fetcher ?? globalThis.fetch;
   if (typeof fetcher !== 'function') return null;
+  const fail = (stage: string, detail: string): null => {
+    // 工单 B / B1: 故障信号是修复目标本身。仅桌面运行时输出——浏览器/E2E
+    // 环境没有资产属预期，warn 会污染黑盒测试的 console 纯净断言。
+    if (isDesktopRuntime()) {
+      // eslint-disable-next-line no-console
+      console.warn(`[public-decoder-factory] canonical engine unavailable (${stage}): ${detail}`);
+    }
+    return null;
+  };
   try {
     const response = await fetcher(PUBLIC_FREE_DECODER_CANONICAL_MANIFEST_URL, {
       cache: 'no-cache',
       credentials: 'same-origin',
     });
-    if (!response.ok) return null;
+    if (!response.ok)
+      return fail(
+        'manifest-fetch',
+        `HTTP ${response.status} for ${PUBLIC_FREE_DECODER_CANONICAL_MANIFEST_URL}`,
+      );
     const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength < 2 || bytes.byteLength > MAX_MANIFEST_BYTES) return null;
-    const value: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
-    const manifest = parsePublicFreeDecoderManifest(value, bytes.byteLength);
-    if (manifest.evaluationOnly || !manifest.releaseEligible) return null;
+    if (bytes.byteLength < 2 || bytes.byteLength > MAX_MANIFEST_BYTES)
+      return fail('manifest-size', `${bytes.byteLength} bytes`);
+    let value: unknown;
+    try {
+      value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    } catch (error) {
+      return fail('manifest-json', String(error));
+    }
+    let manifest;
+    try {
+      manifest = parsePublicFreeDecoderManifest(value, bytes.byteLength);
+    } catch (error) {
+      return fail('manifest-contract', String(error));
+    }
+    if (manifest.evaluationOnly || !manifest.releaseEligible)
+      return fail('manifest-lifecycle', 'evaluationOnly or not releaseEligible');
     return new PublicFreeDecoderEngine({
       manifest,
       manifestPath: options.manifestPath ?? '@canonical',
@@ -92,8 +117,8 @@ export async function createCanonicalPublicFreeDecoderEngine(
       profile: 'release',
       adapter: options.adapter,
     });
-  } catch {
-    return null;
+  } catch (error) {
+    return fail('unexpected', String(error));
   }
 }
 

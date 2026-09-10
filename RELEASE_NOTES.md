@@ -1,3 +1,95 @@
+# JotLuck v0.14.0-preview — Preview Release Notes
+
+> Date: 2026-09-08
+> Minor version advance from `v0.13.1-preview`. Source-level release notes;
+> the Windows x64 installer for this version is not yet published.
+
+## What's new in 0.14.0
+
+- **Personalized completion for the V2.5 engine.** When you write, the
+  engine now blends your own retained phrasing into decoding: completions
+  you kept before (and your personal n-gram history) bias the model's beam
+  search toward your habitual wording. This runs entirely on your machine —
+  the prior never leaves the process, never touches the network, and
+  sensitive content (passwords, keys, tokens) is filtered before use.
+- **A settings toggle for personalization** (Settings → Text completion),
+  on by default, localized in five languages. Turning it off — or clearing
+  local learning data — restores byte-identical baseline decoding.
+- **Quality stays gated.** Personalization only reorders candidates;
+  reported model scores remain pure, so suggestions the model does not
+  actually support stay hidden behind the existing visibility gates.
+- **Version bumped to `0.14.0-preview`.** Minor advance over
+  `0.13.1-preview`.
+
+## Important — Unsigned Preview
+
+The official Windows installer for `v0.14.0-preview` is published on GitHub
+Releases. Verify the SHA-256 before installing:
+`d78a8a0e601154c3f9c79021ffe853c1f4925866fba2f4119cbf64adef08b8f4`.
+Code signing follows the pipeline documented in
+[`CODE_SIGNING.md`](./CODE_SIGNING.md).
+
+## Linux x86_64 preview pack
+
+The same `v0.14.0-preview` source is packaged as an unsigned `.deb` on the
+GitHub Release. Rebuild with
+[`scripts/release/linux-preview-pack.sh`](./scripts/release/README-linux-preview.md).
+AppImage is not included.
+
+Linux-only adapters kept in tree:
+
+- WebKitGTK DMABUF workaround (`WEBKIT_DISABLE_DMABUF_RENDERER=1` when unset)
+- custom `.desktop` with Office/TextEditor categories and optional MIME types
+  for `.md`, `.markdown`, `.mdx`, `.txt`, `.docx`, `.pdf`, `.xlsx`, and `.xls`.
+  Installation does not replace the user's default application.
+
+Host check: Linux Mint 22.1, Surface Go, window mapped after pack smoke.
+Public `.deb`: `JotLuck_0.14.0_amd64.deb`, 23 307 002 bytes, SHA-256
+`3d5f7b709c0eaf9fea2877593696c30cbc15f0a640733d208a040d8fc3a3ed77`.
+AppImage was not produced (`linuxdeploy` failed).
+
+## What's next
+
+- Collect real-world personalization feedback (visible top-1 flips in daily
+  writing) and recalibrate the fusion weight from real usage.
+
+---
+
+# JotLuck v0.13.1-preview — Preview Release Notes
+
+> Date: 2026-09-08
+> Patch advance from `v0.13.0-preview`. Source-level release notes; the
+> Windows x64 installer for this version is not yet published.
+
+## What's new in 0.13.1
+
+- **The completion engine loader no longer fails silently or permanently.**
+  The first load failure of the public completion engine (manifest fetch
+  failure, warmup rejection, or a declined install) used to be cached for the
+  lifetime of the workspace page, disabling the V2.5 engine for the whole
+  session with no visible signal. Loading now leaves no failure cache,
+  retries automatically with bounded backoff (up to 3 attempts, 2s/5s), and
+  logs a console warning on every failure path.
+- **Settings shows live completion-engine health.** Settings → Autocomplete
+  now surfaces the public engine's status, last error, generated
+  requests/candidates, and visible inference p90, with a manual retry action
+  — in Simplified Chinese, English, French, Japanese, and Korean.
+- **Version bumped to `0.13.1-preview`.** Patch advance over `0.13.0-preview`.
+
+## Important — Unsigned Preview
+
+The official Windows installer for `v0.13.1-preview` is not yet published.
+Installers appear only on GitHub Releases and must be verified by SHA-256.
+Code signing follows the pipeline documented in
+[`CODE_SIGNING.md`](./CODE_SIGNING.md).
+
+## What's next
+
+- Publish the unsigned Windows x64 installer for `v0.13.1-preview` on GitHub
+  Releases, with SHA-256 and Authenticode status recorded here.
+
+---
+
 # JotLuck v0.13.0-preview — Preview Release Notes
 
 > Date: 2026-09-06

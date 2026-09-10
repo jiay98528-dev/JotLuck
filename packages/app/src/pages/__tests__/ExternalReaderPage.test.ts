@@ -24,6 +24,16 @@ const { invoke, replace, isTauri, shellOpen, Channel, channels } = vi.hoisted(()
 vi.mock('@tauri-apps/api/core', () => ({ Channel, invoke, isTauri }));
 vi.mock('@tauri-apps/plugin-shell', () => ({ open: shellOpen }));
 vi.mock('vue-router', () => ({ useRouter: () => ({ replace }) }));
+vi.mock('@/utils/platform', () => ({
+  isWindows: () => true,
+  isMac: () => false,
+  isLinux: () => false,
+  getPlatformOS: async () => 'windows',
+  initializePlatform: async () => 'windows',
+  getPlatformOSSync: () => 'windows',
+  formatShortcut: (label: string) => label,
+  resetPlatformForTesting: () => {},
+}));
 
 function mountReader() {
   return mount(ExternalReaderPage, {

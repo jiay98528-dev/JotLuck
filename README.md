@@ -38,9 +38,9 @@ It opens and renders Markdown in seconds, beautifully. Read-only preview or full
 
 For everyone who works with text, and everyone who works with AI.
 
-Current source version: `v0.13.0-preview`, a public Windows preview. Tested and usable. Windows code signing is in progress.
+Current source version: `v0.14.0-preview`, a public Windows preview. Tested and usable. Windows code signing is in progress.
 
-> **Download notice:** Official installers appear only on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases). The `v0.13.0-preview` installer is available there now — unsigned, so verify its SHA-256 before installing. Please don't download JotLuck from anywhere else.
+> **Download notice:** Official installers appear only on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases). The `v0.14.0-preview` installer is published and unsigned — verify the SHA-256 (`d78a8a0e601154c3f9c79021ffe853c1f4925866fba2f4119cbf64adef08b8f4`) before installing. Please don't download JotLuck from anywhere else.
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck workspace with recent notes, a Markdown editor, outline, and backlinks">
@@ -97,16 +97,16 @@ See the full [Privacy Policy](./PRIVACY.md) and the identity and integrity proce
 
 | Item                     | Current scope                                                                                                                 |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| Current source version   | `v0.13.0-preview`                                                                                                             |
+| Current source version   | `v0.14.0-preview`                                                                                                             |
 | Release stage            | Public preview, unsigned; not a stable release                                                                                |
-| Candidate platform       | Windows x64                                                                                                                   |
-| Desktop runtime          | Tauri 2 and Microsoft Edge WebView2                                                                                           |
+| Candidate platform       | Windows x64 and Linux x86_64 unsigned previews on GitHub Releases; macOS not yet packaged                                     |
+| Desktop runtime          | Tauri 2; WebView2 on Windows, WebKitGTK 4.1 on Linux                                                                          |
 | Editable note formats    | `.md`, `.markdown`, `.mdx`, `.txt`                                                                                            |
 | Read-only import formats | `.docx`, `.pdf`, `.xlsx`, `.xls`; semantic Markdown preview, not pixel-perfect Office/PDF layout                              |
 | File associations        | All eight extensions are optional Open With choices; installation and upgrade never replace the user's Windows default choice |
 | License                  | MIT                                                                                                                           |
 
-macOS and Linux packages have not completed host-specific packaging, signing, and release validation. Read [Known Limitations](./KNOWN_LIMITATIONS.md) and the notes attached to each release before installing.
+Linux x86_64 unsigned `.deb` is published on the `v0.14.0-preview` GitHub Release (`JotLuck_0.14.0_amd64.deb`, SHA-256 `3d5f7b709c0eaf9fea2877593696c30cbc15f0a640733d208a040d8fc3a3ed77`). Rebuild on a Debian/Ubuntu 24.04-family host with [`scripts/release/linux-preview-pack.sh`](./scripts/release/README-linux-preview.md). macOS packages have not completed host-specific packaging, signing, or release validation. Read [Known Limitations](./KNOWN_LIMITATIONS.md) and the notes attached to each release before installing.
 
 ## Frequently asked questions
 
@@ -155,6 +155,7 @@ Point JotLuck at it and start reading. Keep a backup first.
 - pnpm 9+; the repository currently pins pnpm 11.x
 - Rust 1.88+ for desktop development and packaging
 - Tauri and WebView2 build dependencies on Windows
+- WebKitGTK 4.1 / GTK 3 build dependencies on Linux; see [Linux preview pack](./scripts/release/README-linux-preview.md)
 
 ### Start the web development build
 
@@ -178,7 +179,7 @@ pnpm.cmd --filter @jotluck/app build
 pnpm.cmd audit --prod --audit-level high
 ```
 
-A public release also requires installed-app validation, a Rust dependency audit, and manual GUI journeys. See the [release gate](./doc/release-rc-gate.md).
+A public Windows release also requires installed-app validation, a Rust dependency audit, and manual GUI journeys. See the [release gate](./doc/release-rc-gate.md). Linux preview `.deb` artifacts are produced with `./scripts/release/linux-preview-pack.sh`; they are a public unsigned preview, not a stable release.
 
 Project documentation:
 

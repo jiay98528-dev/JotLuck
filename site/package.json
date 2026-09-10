@@ -9,7 +9,8 @@
     "build": "vite-ssg build && node scripts/postbuild.mjs",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
-    "verify:hydrated": "node scripts/verify-hydrated-home.mjs"
+    "verify:hydrated": "node scripts/verify-hydrated-home.mjs",
+    "sync:changelog": "node scripts/sync-changelog.mjs"
   },
   "dependencies": {
     "@jotluck/renderer": "file:../packages/renderer",

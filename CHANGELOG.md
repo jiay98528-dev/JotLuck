@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.14.0-preview] - 2026-09-08
+
+### Added
+
+- Personalized completion (ADR-024): the V2.5 one-unit writing engine now
+  fuses a host-built personal prior into decoding. Phrases from personal
+  n-gram history, session accepts, and retained phrases are injected into
+  beam expansion with a first-token-doubled bonus, so the user's habitual
+  wording can win the visible top-1 while reported model scores stay pure
+  and visibility gates keep quality. On by default with a settings toggle
+  (five languages); an empty prior or a disabled toggle keeps decoding
+  byte-identical to the previous baseline.
+
+### Changed
+
+- Version bumped from `0.13.1-preview` to `0.14.0-preview` (minor version:
+  new model-side personalization capability).
+
+## [0.13.1-preview] - 2026-09-08
+
+### Fixed
+
+- The public completion engine loader cached its first failure for the
+  lifetime of the workspace page: a failed manifest fetch, a rejected warmup,
+  or a declined install permanently disabled the V2.5 engine for the session
+  with no signal. Loading now leaves no failure cache, retries automatically
+  with bounded backoff (up to 3 attempts, 2s/5s), and logs a console warning
+  on each failure path.
+
+### Added
+
+- Settings → Autocomplete now shows the public completion engine's health
+  snapshot (status, last error, generated requests/candidates, visible
+  inference p90) plus a manual retry action, localized in Simplified Chinese,
+  English, French, Japanese, and Korean.
+
+### Changed
+
+- Version bumped from `0.13.0-preview` to `0.13.1-preview` (patch version
+  advance).
+
 ## [0.13.0-preview] - 2026-09-06
 
 ### Added

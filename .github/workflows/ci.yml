@@ -202,6 +202,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Restore local-only autocomplete assets
+        shell: bash
+        run: |
+          curl -fsSL -o v25-assets.zip https://github.com/jiay98528-dev/JotLuck/releases/download/v0.14.0-preview/autocomplete-v25-assets.zip
+          mkdir -p packages/app/src-tauri/resources/autocomplete-v25
+          python -c "import zipfile; zipfile.ZipFile('v25-assets.zip').extractall('packages/app/src-tauri/resources/autocomplete-v25')"
+          rm -f v25-assets.zip
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -241,6 +248,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Restore local-only autocomplete assets
+        shell: bash
+        run: |
+          curl -fsSL -o v25-assets.zip https://github.com/jiay98528-dev/JotLuck/releases/download/v0.14.0-preview/autocomplete-v25-assets.zip
+          mkdir -p packages/app/src-tauri/resources/autocomplete-v25
+          python -c "import zipfile; zipfile.ZipFile('v25-assets.zip').extractall('packages/app/src-tauri/resources/autocomplete-v25')"
+          rm -f v25-assets.zip
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
@@ -380,6 +394,73 @@ jobs:
             packages/app/dist/**
             packages/app/src-tauri/target/release/jotluck.exe
             packages/app/src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+
+  tauri-build-linux:
+    name: Linux Tauri Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [lint-and-typecheck, test, rust]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore local-only autocomplete assets
+        shell: bash
+        run: |
+          curl -fsSL -o v25-assets.zip https://github.com/jiay98528-dev/JotLuck/releases/download/v0.14.0-preview/autocomplete-v25-assets.zip
+          mkdir -p packages/app/src-tauri/resources/autocomplete-v25
+          python -c "import zipfile; zipfile.ZipFile('v25-assets.zip').extractall('packages/app/src-tauri/resources/autocomplete-v25')"
+          rm -f v25-assets.zip
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux Tauri dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            file \
+            libfuse2
+
+      - name: Install pinned Tauri CLI
+        run: cargo install tauri-cli --version 2.11.2 --locked
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Linux .deb
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: pnpm --filter @jotluck/app exec -- cargo tauri build --bundles deb
+
+      - name: Build Linux AppImage (optional)
+        continue-on-error: true
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: pnpm --filter @jotluck/app exec -- cargo tauri build --bundles appimage
+
+      - name: Upload Linux candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: jotluck-linux-candidate
+          path: |
+            packages/app/src-tauri/target/release/bundle/deb/*.deb
+            packages/app/src-tauri/target/release/bundle/appimage/*.AppImage
           if-no-files-found: error
 
   installed-app-evidence-capture:

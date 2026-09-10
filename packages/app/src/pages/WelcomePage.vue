@@ -17,18 +17,18 @@
           </div>
 
           <div class="welcome-steps" role="tablist" :aria-label="t('welcome.progress')">
-            <template v-for="i in totalSteps" :key="i">
+            <template v-for="i in TOTAL_STEPS" :key="i">
               <span
                 class="welcome-step-dot"
-                :class="{ active: displayStep >= i }"
+                :class="{ active: currentStep >= i }"
                 role="tab"
-                :aria-selected="displayStep === i"
+                :aria-selected="currentStep === i"
                 :aria-label="t('welcome.stepAria', { step: i })"
               />
               <span
-                v-if="i < totalSteps"
+                v-if="i < TOTAL_STEPS"
                 class="welcome-step-line"
-                :class="{ active: displayStep > i }"
+                :class="{ active: currentStep > i }"
               />
             </template>
           </div>
@@ -52,10 +52,14 @@
 
               <div v-else-if="currentStep === 4" class="welcome-step-body">
                 <h2 class="welcome-step-title">{{ t('welcome.defaultEditorTitle') }}</h2>
-                <p class="welcome-step-text">{{ t('welcome.defaultEditorBody') }}</p>
+                <p class="welcome-step-text">{{ defaultEditorBodyText }}</p>
                 <fieldset class="welcome-association-summary">
                   <legend class="welcome-association-legend">
-                    {{ t('welcome.associationSelectionLegend') }}
+                    {{
+                      isWindows()
+                        ? t('welcome.associationSelectionLegend')
+                        : t('welcome.associationLegendNonWindows')
+                    }}
                   </legend>
                   <div
                     class="welcome-association-list"
@@ -71,6 +75,7 @@
                       }"
                     >
                       <input
+                        v-if="isWindows()"
                         v-model="selectedAssociationGroups[group.id]"
                         class="welcome-association-checkbox"
                         type="checkbox"
@@ -145,7 +150,7 @@
           </div>
 
           <div class="welcome-footer">
-            <button v-if="currentStep < MAX_LOGICAL_STEP" class="welcome-skip-link" @click="skip">
+            <button v-if="currentStep < TOTAL_STEPS" class="welcome-skip-link" @click="skip">
               {{ t('welcome.skip') }}
             </button>
             <span v-else class="welcome-footer-spacer" />
@@ -157,7 +162,7 @@
               data-dialog-initial-focus
               @click="nextStep"
             >
-              {{ currentStep < MAX_LOGICAL_STEP ? t('common.next') : t('welcome.finish') }}
+              {{ currentStep < TOTAL_STEPS ? t('common.next') : t('welcome.finish') }}
             </Button>
           </div>
         </div>
@@ -171,10 +176,15 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import Button from '@/components/common/Button.vue';
 import { useDialogFocus } from '@/composables/useDialogFocus';
-import { getOsPlatform, isDesktopRuntime } from '@/utils/runtime';
+import { isDesktopRuntime } from '@/utils/runtime';
+import { isWindows } from '@/utils/platform';
 import { hasCompletedWelcome, markWelcomeCompleted } from '@/utils/welcome';
 import { useI18n } from 'vue-i18n';
-import type { AssociationGroupStatus, WindowsAssociationStatus } from '@/types';
+import type {
+  AssociationApplicationState,
+  AssociationGroupStatus,
+  WindowsAssociationStatus,
+} from '@/types';
 
 const props = defineProps<{ visible: boolean }>();
 const emit = defineEmits<{ 'update:visible': [boolean]; complete: [] }>();
@@ -183,20 +193,8 @@ const { t } = useI18n();
 const AUTO_CHECK_KEY = 'jotluck:version:autoCheck';
 const AUTO_INSTALL_KEY = 'jotluck:version:autoInstall';
 const DEFAULT_EDITOR_PROMPT_KEY = 'jotluck:welcome:defaultEditorPrompted';
-// 逻辑步骤恒为 1..6（模板 v-else-if 硬编码）；第 4 步（Windows 默认编辑器/
-// 文件关联）为 Windows 专属——非 Windows 平台 nextStep 从 3 直接跳到 5，
-// 进度点与 aria 按 totalSteps/displayStep 重映射（6→5）。
-// Web 预览回落 windows 语义（getOsPlatform 契约），e2e 断言零变化。
-const MAX_LOGICAL_STEP = 6;
-const isWindowsPlatform = ref(true);
-void getOsPlatform().then((platform) => {
-  isWindowsPlatform.value = platform === 'windows';
-});
-const totalSteps = computed(() => (isWindowsPlatform.value ? 6 : 5));
-/** 显示用步骤序号：非 Windows 下逻辑步 5/6 映射为 4/5。 */
-const displayStep = computed(() =>
-  isWindowsPlatform.value || currentStep.value < 5 ? currentStep.value : currentStep.value - 1,
-);
+const TOTAL_STEPS = 6;
+
 const currentStep = ref(1);
 const autoCheckEnabled = ref(localStorage.getItem(AUTO_CHECK_KEY) === 'true');
 type DefaultEditorNotice = '' | 'webPreview' | 'settingsOpened' | 'settingsFailed';
@@ -228,12 +226,13 @@ const selectedAssociationGroups = ref<Record<AssociationGroupId, boolean>>(
   defaultAssociationSelections(),
 );
 const associationGroups = computed<AssociationGroupStatus[]>(() => {
+  const fallbackState: AssociationApplicationState = isWindows() ? 'unsupported' : 'registered';
   const realGroups = new Map(associationStatus.value?.groups.map((group) => [group.id, group]));
   return associationGroupDefinitions.map(
     (definition) =>
       realGroups.get(definition.id) ?? {
         ...definition,
-        state: 'unsupported',
+        state: fallbackState,
         activeProgIds: [],
       },
   );
@@ -244,6 +243,7 @@ const hasIncompleteSelectedAssociations = computed(() => {
   );
 });
 const associationActionLabel = computed(() => {
+  if (!isWindows()) return t('welcome.associationNonWindowsAction');
   if (
     defaultEditorNoticeKind.value === 'settingsOpened' &&
     hasIncompleteSelectedAssociations.value
@@ -252,6 +252,9 @@ const associationActionLabel = computed(() => {
   }
   return t('welcome.openSystemSettings');
 });
+const defaultEditorBodyText = computed(() =>
+  t(isWindows() ? 'welcome.defaultEditorBody' : 'welcome.defaultEditorBodyNonWindows'),
+);
 const defaultEditorNotice = computed(() => {
   switch (defaultEditorNoticeKind.value) {
     case 'webPreview':
@@ -299,14 +302,8 @@ watch(currentStep, (step) => {
 });
 
 function nextStep(): void {
-  const next = currentStep.value + 1;
-  const target = !isWindowsPlatform.value && next === 4 ? 5 : next;
-  if (target < MAX_LOGICAL_STEP) {
-    currentStep.value = target;
-    return;
-  }
-  if (target === MAX_LOGICAL_STEP) {
-    currentStep.value = target;
+  if (currentStep.value < TOTAL_STEPS) {
+    currentStep.value += 1;
     return;
   }
   complete();
@@ -336,6 +333,11 @@ async function onSetDefaultEditor(): Promise<void> {
     return;
   }
 
+  if (!isWindows()) {
+    nextStep();
+    return;
+  }
+
   try {
     associationPending.value = true;
     await invoke('open_jotluck_default_apps_settings');
@@ -349,8 +351,7 @@ async function onSetDefaultEditor(): Promise<void> {
 
 async function refreshAssociationStatus(): Promise<void> {
   if (!props.visible || currentStep.value !== 4) return;
-  // Windows 专属步骤：等平台解析完成再判断，非 Windows 不触发关联命令。
-  if ((await getOsPlatform()) !== 'windows') {
+  if (!isWindows()) {
     associationStatus.value = null;
     return;
   }

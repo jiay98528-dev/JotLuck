@@ -1,6 +1,6 @@
 [package]
 name = "jotluck"
-version = "0.13.0"
+version = "0.14.0"
 description = "JotLuck — local-first Markdown note-taking tool"
 authors = ["Linghu Technology (Shenzhen) Co., Ltd."]
 license = "MIT"
@@ -50,6 +50,9 @@ docx-rs = { version = "0.4.22", default-features = false }
 calamine = { version = "0.36.1", default-features = false, features = ["dates"] }
 lopdf = { version = "0.44", default-features = false }
 zip = { version = "4.3", default-features = false, features = ["deflate"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

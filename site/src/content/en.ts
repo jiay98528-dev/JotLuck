@@ -14,6 +14,7 @@ export const en: SiteContent = {
       themes: 'Themes · JotLuck — Free, open-source Markdown notes',
       studio: 'Studio · JotLuck — Free, open-source Markdown notes',
       privacy: 'Privacy · JotLuck — Free, open-source Markdown notes',
+      changelog: 'Changelog · JotLuck — every improvement on the record',
     },
     pageDescriptions: {
       download:
@@ -24,6 +25,8 @@ export const en: SiteContent = {
         'LeankomStudio helps ideas cross genres and find the shape that fits them. JotLuck, our open-source Markdown notes app, is the first page we unfold outward.',
       privacy:
         'Privacy: JotLuck, an open-source Markdown notes app, runs fully offline — notes stay plain-text in your folder. No account, no telemetry, no cookies.',
+      changelog:
+        'The JotLuck changelog: every Windows preview release on the record — local completion, export, search, and themes improving release by release.',
     },
   },
   localeName: 'English',
@@ -66,6 +69,21 @@ export const en: SiteContent = {
       rail: ['Export', 'PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'HTML'],
     },
   ],
+  completion: {
+    title: 'Text completion',
+    lines: [
+      'JotLuck ships with a small completion model we trained ourselves: Chinese and English are supported, it works out of the box, and it runs entirely on your machine.',
+      'Finish a sentence, and a word may appear quietly after the cursor. If it fits, press Tab to keep it; if not, keep writing — it stays out of your way.',
+      'It also learns dynamically — as you work together, completion adapts to your habitual wording.',
+      'You can turn it on or off in Settings at any time.',
+    ],
+  },
+  changelog: {
+    eyebrow: 'Changelog',
+    title: 'Every release, on the record.',
+    lead: 'Entries are synced from GitHub Releases, in their original wording.',
+    githubLink: 'View all releases on GitHub',
+  },
   film: {
     title: 'Promo film',
     ariaLabel: 'JotLuck promo film, 60 seconds',
@@ -80,24 +98,25 @@ export const en: SiteContent = {
   download: {
     eyebrow: 'Download',
     title: 'Preview is live.',
-    lead: 'The Windows x64 preview is ready to download now. macOS and Linux follow. Plain text never picks platforms, and your notes stay local files on every system.',
+    lead: 'Windows x64 and Linux x86_64 previews are ready to download now. macOS follows. Plain text never picks platforms, and your notes stay local files on every system.',
     statusLabel: 'First platform',
     statusValue: 'Windows x64',
     platformTitle: 'Platforms',
     platforms: [
       { name: 'Windows x64', state: 'Preview live' },
       { name: 'macOS', state: 'Follows' },
-      { name: 'Linux', state: 'Follows' },
+      { name: 'Linux x86_64', state: 'Preview live' },
     ],
     honestyTitle: 'Preview first.',
     honestyBody:
       'The preview installer is already on GitHub Releases — downloadable, verifiable, reversible.',
-    previewTitle: 'v0.12.3 Preview',
+    previewTitle: 'v0.14.0 Preview',
     downloadBtn: 'Download Preview (Windows x64)',
+    downloadBtnLinux: 'Download Preview (Linux .deb)',
     githubBtn: 'GitHub',
     releaseBtn: 'Release notes & checksum',
     signNote:
-      'This preview is unsigned: Windows SmartScreen may warn. Verify the SHA-256 against the Release page before installing.',
+      'This preview is unsigned: Windows SmartScreen may warn; on Linux use dpkg and verify SHA-256. Check the Release page before installing.',
     signPolicyLink: 'Code signing policy',
     notesTitle: 'Worth knowing',
     notes: [
@@ -105,6 +124,7 @@ export const en: SiteContent = {
       "Four extensions register as optional 'Open with' handlers; system defaults stay untouched",
       'MIT licensed; core editing and search run fully offline',
     ],
+    changelogLink: 'View the changelog',
   },
   themes: {
     eyebrow: 'Themes',
@@ -225,6 +245,7 @@ export const en: SiteContent = {
       privacy: 'Privacy',
       signing: 'Code signing policy',
       github: 'GitHub',
+      changelog: 'Changelog',
     },
   },
 };

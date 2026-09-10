@@ -486,9 +486,11 @@
       :visible="showSettings"
       :completion-settings="completionSettings"
       :completion-training-meta="completionTrainingMeta"
-      @update:visible="showSettings = $event"
+      :completion-engine-health="completionEngineHealth"
+      @update:visible="onSettingsVisibilityChange"
       @update-completion-settings="onUpdateCompletionSettings"
       @clear-completion-data="onClearCompletionData"
+      @retry-completion-engine="onRetryCompletionEngine"
     />
   </ThemeSlotBoundary>
 
@@ -893,6 +895,8 @@ import {
   createCanonicalPublicFreeDecoderEngine,
   createFlaggedPublicFreeDecoderEngine,
 } from '@/services/completion/public-free-decoder-factory';
+import type { PublicEngineDiagnostics } from '@/services/completion/public-engine-types';
+import { usePublicDecoderSetup } from '@/composables/usePublicDecoderSetup';
 import {
   applyParagraphPreset,
   clearMarkdownFormatting,
@@ -1080,13 +1084,25 @@ const activeNotebookRoot = ref('');
 const completionSettings = ref<CompletionSettings>(getCompletionSettings());
 const completionTrainingMeta = ref<CompletionTrainingMeta>(loadTrainingMeta());
 const completionPredictor = new MarkdownPredictor(4);
+// Engine health snapshot surfaced via the Settings dialog (工单 B / B2).
+// The composable manages canonical→flagged fallback retries; we mirror the
+// predictor's diagnostics into a ref so the dialog can refresh on demand.
+const completionEngineHealth = ref<PublicEngineDiagnostics | null>(null);
+const publicDecoderSetup = usePublicDecoderSetup({
+  predictor: completionPredictor,
+  isUnmounted: () => componentUnmounted,
+  createCanonicalEngine: () => createCanonicalPublicFreeDecoderEngine(),
+  createFlaggedEngine: () => createFlaggedPublicFreeDecoderEngine(),
+});
+
+function refreshCompletionEngineHealth(): void {
+  completionEngineHealth.value = completionPredictor.getPublicEngineDiagnostics();
+}
 let unsubscribeCompletionSettings: (() => void) | null = null;
 let unsubscribeTrainingMeta: (() => void) | null = null;
 let completionTrainer: CompletionTrainingService | null = null;
 let unlistenWindowClose: (() => void) | null = null;
 let componentUnmounted = false;
-let flaggedPublicDecoderSetup: Promise<void> | null = null;
-let canonicalPublicDecoderSetup: Promise<void> | null = null;
 let externalSessionGeneration = 0;
 let allowWindowClose = false;
 let unwatchNotebook: UnwatchFn | null = null;
@@ -4884,16 +4900,17 @@ async function onCreateBlank(): Promise<void> {
 
 // --- Keyboard ---
 function onGlobalKeydown(e: KeyboardEvent): void {
-  const key = e.key.toLowerCase();
+  // e.code 与键盘布局无关：非拉丁布局（俄文等）下 e.key 不是拉丁字母。
+  const key = e.code;
   if (
     isInteractionLocked.value &&
     (e.ctrlKey || e.metaKey) &&
-    (key === 's' || key === 'o' || key === 'k' || (e.shiftKey && key === 'p'))
+    (key === 'KeyS' || key === 'KeyO' || key === 'KeyK' || (e.shiftKey && key === 'KeyP'))
   ) {
     e.preventDefault();
     return;
   }
-  if ((e.ctrlKey || e.metaKey) && key === 's') {
+  if ((e.ctrlKey || e.metaKey) && key === 'KeyS') {
     e.preventDefault();
     e.stopPropagation();
     if (isGuidedSampleSession.value) {
@@ -4908,19 +4925,19 @@ function onGlobalKeydown(e: KeyboardEvent): void {
     return;
   }
   if (isExternalSession.value) return;
-  if ((e.ctrlKey || e.metaKey) && key === 'o') {
+  if ((e.ctrlKey || e.metaKey) && key === 'KeyO') {
     e.preventDefault();
     e.stopPropagation();
     void requestOpenNotebook();
     return;
   }
   if (isWorkspaceUnbound.value || isInteractionLocked.value) return;
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'p') {
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'KeyP') {
     e.preventDefault();
     e.stopPropagation();
     searchVisible.value = true;
   }
-  if ((e.ctrlKey || e.metaKey) && key === 'k') {
+  if ((e.ctrlKey || e.metaKey) && key === 'KeyK') {
     e.preventDefault();
     e.stopPropagation();
     searchVisible.value = true;
@@ -4975,31 +4992,10 @@ function connectPredictor(): void {
   scheduleBackgroundTraining();
 }
 
-function setupFlaggedPublicDecoderOnce(): Promise<void> {
-  flaggedPublicDecoderSetup ??= createFlaggedPublicFreeDecoderEngine().then(async (engine) => {
-    if (!engine) return;
-    if (componentUnmounted) {
-      await engine.dispose();
-      return;
-    }
-    await completionPredictor.installPublicEngineForEvaluation(engine);
-  });
-  return flaggedPublicDecoderSetup;
-}
-
 function setupCanonicalPublicDecoderOnce(): Promise<void> {
-  canonicalPublicDecoderSetup ??= createCanonicalPublicFreeDecoderEngine().then(async (engine) => {
-    if (engine) {
-      if (componentUnmounted) {
-        await engine.dispose();
-        return;
-      }
-      await completionPredictor.installPublicEngineForEvaluation(engine);
-      return;
-    }
-    await setupFlaggedPublicDecoderOnce();
-  });
-  return canonicalPublicDecoderSetup;
+  // 旧实现使用 ??= 永久缓存首个 Promise；改由 usePublicDecoderSetup 统一驱动
+  // canonical→flagged 链并提供有界重试。详见工单 B / B1。
+  return publicDecoderSetup.setupNow();
 }
 
 function scheduleBackgroundTraining(): void {
@@ -5057,6 +5053,17 @@ function onClearCompletionData(): void {
   completionTrainingMeta.value = nextMeta;
   saveTrainingMeta(nextMeta, completionStorageScope.value);
   toast.show(t('notebook.toast.completionCleared'), 'success', 2500);
+}
+
+function onSettingsVisibilityChange(visible: boolean): void {
+  showSettings.value = visible;
+  // 工单 B / B2：打开设置弹窗时刷新一次引擎健康数据，保证展示的就是当前快照。
+  if (visible) refreshCompletionEngineHealth();
+}
+
+async function onRetryCompletionEngine(): Promise<void> {
+  await publicDecoderSetup.retryNow();
+  refreshCompletionEngineHealth();
 }
 
 function hasUnsavedScratch(): boolean {

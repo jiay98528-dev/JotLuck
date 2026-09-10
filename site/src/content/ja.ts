@@ -14,6 +14,7 @@ export const ja: SiteContent = {
       themes: 'テーマ · JotLuck — 無料・オープンソースの Markdown ノートアプリ',
       studio: 'スタジオ · JotLuck — 無料・オープンソースの Markdown ノートアプリ',
       privacy: 'プライバシー · JotLuck — 無料・オープンソースの Markdown ノートアプリ',
+      changelog: '更新履歴 · JotLuck — すべての改善を記録して',
     },
     pageDescriptions: {
       download:
@@ -24,6 +25,8 @@ export const ja: SiteContent = {
         'LeankomStudio は鸰湖科技のプロダクトスタジオです。無料・オープンソースの Markdown ノートアプリ JotLuck は、私たちが外に向かって開いた最初のページ——アイデアがカテゴリを越え、いちばん合う形に出会えるように。',
       privacy:
         'JotLuck のプライバシーについて：このオープンソースの Markdown ノートアプリは完全にオフラインで動作し、ノートはプレーンテキストとしてあなたのフォルダーに保存されます。アカウント不要、テレメトリなし。このサイトは静的サイトで、Cookie も使いません。',
+      changelog:
+        'JotLuck の更新履歴：Windows デスクトップ プレビューの各リリース記録。ローカル補完、エクスポート、検索、テーマがリリースごとに進化します。無料のオープンソース Markdown ノートアプリです。',
     },
   },
   localeName: '日本語',
@@ -65,6 +68,21 @@ export const ja: SiteContent = {
       rail: ['書き出し', 'PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'HTML'],
     },
   ],
+  completion: {
+    title: 'テキスト補完',
+    lines: [
+      'JotLuck には、私たちが自社で学習させた補完用の小さなモデルを搭載しています。中国語と英語に対応し、インストールするだけで使え、すべてローカルで動作します。',
+      '一文書き終えると、カーソルの後に次の単語がそっと現れることがあります。気に入れば Tab で採用、そうでなければそのまま書き進めるだけ。書く流れを妨げません。',
+      'さらに動的な学習機構を備え、使い込むほど補完があなたの言い回しに寄り添います。',
+      'オン / オフは設定ページからいつでも切り替えられます。',
+    ],
+  },
+  changelog: {
+    eyebrow: '更新履歴',
+    title: 'すべてのリリースを記録して。',
+    lead: '内容は GitHub Releases の原文（英語）をそのまま同期しています。',
+    githubLink: 'GitHub ですべてのリリースを見る',
+  },
   film: {
     title: 'プロモーションフィルム',
     ariaLabel: 'JotLuck プロモーションフィルム、60秒',
@@ -79,24 +97,25 @@ export const ja: SiteContent = {
   download: {
     eyebrow: 'ダウンロード',
     title: 'Preview は公開中です。',
-    lead: 'Windows x64 プレビュー版は今すぐダウンロードできます。macOS と Linux も続きます——プレーンテキストはプラットフォームを選びません。どのシステムでも、ノートはローカルファイルのままです。',
+    lead: 'Windows x64 と Linux x86_64 のプレビュー版は今すぐダウンロードできます。macOS は続きます——プレーンテキストはプラットフォームを選びません。どのシステムでも、ノートはローカルファイルのままです。',
     statusLabel: '最初のプラットフォーム',
     statusValue: 'Windows x64',
     platformTitle: 'プラットフォーム',
     platforms: [
       { name: 'Windows x64', state: 'Preview 公開中' },
       { name: 'macOS', state: '続いて公開予定' },
-      { name: 'Linux', state: '続いて公開予定' },
+      { name: 'Linux x86_64', state: 'Preview 公開中' },
     ],
     honestyTitle: 'Preview 先行。',
     honestyBody:
       'Preview インストーラーはすでに GitHub Releases に公開されています——ダウンロード可能、検証可能、巻き戻し可能。',
-    previewTitle: 'v0.12.3 Preview',
+    previewTitle: 'v0.14.0 Preview',
     downloadBtn: 'Preview をダウンロード（Windows x64）',
+    downloadBtnLinux: 'Preview をダウンロード（Linux .deb）',
     githubBtn: 'GitHub',
     releaseBtn: 'Release ノートとチェックサム',
     signNote:
-      'この Preview は未署名です：Windows SmartScreen が警告を表示する場合があります。インストール前に SHA-256 が Release ページと一致することを確認してください。',
+      'この Preview は未署名です。Windows SmartScreen が警告する場合があります。Linux は dpkg で入れ、SHA-256 を Release ページと照合してください。',
     signPolicyLink: 'コード署名ポリシー',
     notesTitle: '知っておきたいこと',
     notes: [
@@ -104,6 +123,7 @@ export const ja: SiteContent = {
       '4 種類の拡張子が任意の「アプリで開く」ハンドラとして登録されるだけ。システムの既定は変更されません',
       'MIT ライセンスで公開。編集と検索の核となる機能は、完全にオフラインで動作します',
     ],
+    changelogLink: '更新履歴を見る',
   },
   themes: {
     eyebrow: 'テーマ',
@@ -231,6 +251,7 @@ export const ja: SiteContent = {
       privacy: 'プライバシー',
       signing: 'コード署名ポリシー',
       github: 'GitHub',
+      changelog: '更新履歴',
     },
   },
 };

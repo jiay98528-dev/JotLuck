@@ -37,6 +37,28 @@ export interface NarrativeAct {
   rail: string[];
 }
 
+/**
+ * 文本补全区块：自研本地补全的事实性说明（0.13.0+ 随应用内置，默认开启、可关闭）。
+ * 每个元素一段，按行渲染。
+ */
+/**
+ * 文本补全区块（首页）与更新日志页的可译框架。
+ * 发行数据（版本/日期/说明正文）不在此：它们由 sync-changelog.mjs 同步进 changelog.data.json，不参与翻译。
+ */
+export interface CompletionContent {
+  title: string;
+  lines: string[];
+}
+
+export interface ChangelogContent {
+  eyebrow: string;
+  title: string;
+  /** 导语：说明内容来自 GitHub Releases 原文 */
+  lead: string;
+  /** 页尾指向 GitHub Releases 列表的链接文案 */
+  githubLink: string;
+}
+
 /** 首页宣传片区块：zh 用中文版影片，其余语言回退英文版（资源按 locale 在组件内路由） */
 export interface FilmContent {
   title: string;
@@ -65,6 +87,7 @@ export interface DownloadContent {
   /** Preview 下载区文案（裁决 33；版本/SHA-256/链接等事实值在 release.ts RELEASE.preview） */
   previewTitle: string;
   downloadBtn: string;
+  downloadBtnLinux: string;
   /** GitHub 下载页分流按钮（品牌名不译；URL 在 release.ts EXTERNAL.githubReleases） */
   githubBtn: string;
   releaseBtn: string;
@@ -73,6 +96,8 @@ export interface DownloadContent {
   signPolicyLink: string;
   notesTitle: string;
   notes: string[];
+  /** 下载页尾部指向更新日志页的入口文案 */
+  changelogLink: string;
 }
 
 export interface ThemesContent {
@@ -163,9 +188,9 @@ export interface SiteContent {
     title: string;
     description: string;
     /** 子页 <title>：栏目词 · JotLuck — 类别短句（≤60 字符，SEO 差异化，2026-08-05 裁决 23） */
-    pageTitles: Record<'download' | 'themes' | 'studio' | 'privacy', string>;
+    pageTitles: Record<'download' | 'themes' | 'studio' | 'privacy' | 'changelog', string>;
     /** 子页搜索摘要（70–160 字符，不复用视觉 lead——lead 过短/过长失衡，裁决 24） */
-    pageDescriptions: Record<'download' | 'themes' | 'studio' | 'privacy', string>;
+    pageDescriptions: Record<'download' | 'themes' | 'studio' | 'privacy' | 'changelog', string>;
   };
   localeName: string;
   header: {
@@ -174,6 +199,8 @@ export interface SiteContent {
   };
   hero: HeroContent;
   narrative: NarrativeAct[];
+  completion: CompletionContent;
+  changelog: ChangelogContent;
   multilingual: MultilingualContent;
   film: FilmContent;
   download: DownloadContent;
@@ -185,6 +212,6 @@ export interface SiteContent {
     studio: string;
     tagline: string;
     copyright: string;
-    links: { support: string; privacy: string; signing: string; github: string };
+    links: { support: string; privacy: string; signing: string; github: string; changelog: string };
   };
 }

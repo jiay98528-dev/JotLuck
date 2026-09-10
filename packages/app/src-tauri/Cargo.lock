@@ -2337,12 +2337,13 @@ dependencies = [
 
 [[package]]
 name = "jotluck"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "base64 0.22.1",
  "calamine",
  "chrono",
  "docx-rs",
+ "libc",
  "log",
  "lopdf",
  "notify",

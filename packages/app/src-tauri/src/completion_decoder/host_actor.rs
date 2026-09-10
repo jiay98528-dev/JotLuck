@@ -14,10 +14,9 @@ pub(super) fn warmup_runtime(
     let loaded = load_candidate(&manifest_path)?;
     let v25_joint_runtime = is_v25_joint_runtime(&loaded.manifest);
     let v25_one_unit_runtime = is_v25_one_unit_runtime(&loaded.manifest);
-    let evaluation_branch =
-        loaded.manifest.evaluation_only
-            || v25_joint_runtime
-            || (v25_one_unit_runtime && !loaded.manifest.release_eligible);
+    let evaluation_branch = loaded.manifest.evaluation_only
+        || v25_joint_runtime
+        || (v25_one_unit_runtime && !loaded.manifest.release_eligible);
     if evaluation_branch {
         if !evaluation_runtime_allowed() {
             return Err("completion decoder is restricted to dev/E2E evaluation".to_string());
@@ -26,9 +25,7 @@ pub(super) fn warmup_runtime(
     } else {
         validate_canonical_manifest_path(&manifest_path)?;
         if loaded.manifest.evaluation_only || !loaded.manifest.release_eligible {
-            return Err(
-                "canonical decoder manifest must declare release eligibility".to_string(),
-            );
+            return Err("canonical decoder manifest must declare release eligibility".to_string());
         }
     }
     if !is_v25_joint_runtime(&loaded.manifest)
@@ -49,6 +46,11 @@ pub(super) fn warmup_runtime(
     guard.take();
     let next = spawn_runtime(loaded)?;
     let ready = next.ready.clone();
+    log::info!(
+        "completion decoder ready: candidate {} from {}",
+        ready.candidate_id,
+        manifest_path.display()
+    );
     *guard = Some(next);
     Ok(ready)
 }

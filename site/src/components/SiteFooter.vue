@@ -17,6 +17,9 @@ const { locale, content } = useLocale();
       <RouterLink :to="pagePath(locale, 'privacy')">{{ content.footer.links.privacy }}</RouterLink>
       <a :href="EXTERNAL.codeSigning" rel="noopener">{{ content.footer.links.signing }}</a>
       <a :href="EXTERNAL.githubRepo" rel="noopener">{{ content.footer.links.github }}</a>
+      <RouterLink :to="pagePath(locale, 'changelog')">{{
+        content.footer.links.changelog
+      }}</RouterLink>
     </nav>
     <p class="footer-copyright">{{ content.footer.copyright }}</p>
   </footer>

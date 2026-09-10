@@ -11,7 +11,16 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 vi.mock('@/utils/runtime', () => ({
   isDesktopRuntime: () => true,
-  getOsPlatform: () => Promise.resolve(platformRef.value),
+}));
+vi.mock('@/utils/platform', () => ({
+  isWindows: () => platformRef.value === 'windows',
+  isMac: () => platformRef.value === 'macos',
+  isLinux: () => platformRef.value === 'linux',
+  getPlatformOS: async () => platformRef.value,
+  initializePlatform: async () => platformRef.value,
+  getPlatformOSSync: () => platformRef.value,
+  formatShortcut: (label: string) => label,
+  resetPlatformForTesting: () => {},
 }));
 
 describe('SettingsDialog Windows file associations', () => {
@@ -19,6 +28,7 @@ describe('SettingsDialog Windows file associations', () => {
     invoke.mockReset();
     document.body.replaceChildren();
     invoke.mockImplementation(async (command: string) => {
+      if (command === 'platform_os') return 'windows';
       if (command === 'get_windows_association_status') {
         return {
           supported: true,
@@ -66,7 +76,7 @@ describe('SettingsDialog Windows file associations', () => {
     platformRef.value = 'windows';
   });
 
-  it('hides the file-opening section on macOS and skips association commands', async () => {
+  it('shows the non-Windows variant and skips association commands on macOS', async () => {
     platformRef.value = 'macos';
     mount(SettingsDialog, {
       props: { visible: true },
@@ -74,8 +84,9 @@ describe('SettingsDialog Windows file associations', () => {
     });
     await flushPromises();
 
-    expect(document.querySelector('.association-settings')).toBeNull();
+    // 非 Windows 变体区块存在，但 Windows 管理入口与关联命令完全不出现
     expect(document.body.textContent).not.toContain('在 Windows 中更改');
+    expect(document.querySelectorAll('.association-row')).toHaveLength(0);
     expect(invoke).not.toHaveBeenCalledWith('get_windows_association_status');
   });
 

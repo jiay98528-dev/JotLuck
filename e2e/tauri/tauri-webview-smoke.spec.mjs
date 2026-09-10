@@ -28,8 +28,7 @@ const isAutocompleteRc = process.env.JOTLUCK_AUTOCOMPLETE_RC === '1';
 const isV2RAutocompleteRc = process.env.JOTLUCK_AUTOCOMPLETE_V2R_RC === '1';
 const isV25AutocompleteE2E = process.env.JOTLUCK_AUTOCOMPLETE_V25_E2E === '1';
 const isV25FocuslessE2E = process.env.JOTLUCK_AUTOCOMPLETE_V25_FOCUSLESS === '1';
-const isV25ManualFocusAssisted =
-  process.env.JOTLUCK_AUTOCOMPLETE_V25_MANUAL_FOCUS === '1';
+const isV25ManualFocusAssisted = process.env.JOTLUCK_AUTOCOMPLETE_V25_MANUAL_FOCUS === '1';
 const isV25OsFocusHelper = process.env.JOTLUCK_AUTOCOMPLETE_V25_OS_FOCUS_HELPER === '1';
 const v25CasesPath = process.env.JOTLUCK_AUTOCOMPLETE_V25_E2E_CASES
   ? resolve(process.env.JOTLUCK_AUTOCOMPLETE_V25_E2E_CASES)
@@ -60,8 +59,15 @@ function recordWebDriverEvent(event) {
 }
 
 async function main() {
+  if (process.platform === 'linux') {
+    throw new Error(
+      'Linux WebView smoke runs via scripts/release/linux-preview-pack.sh (window mapping + backend init); webdriver-based smoke here requires tauri-driver setup that is not wired yet',
+    );
+  }
   if (process.platform !== 'win32') {
-    throw new Error('Tauri WebView release smoke must run on Windows/WebView2');
+    throw new Error(
+      'Tauri WebView release smoke must run on Windows/WebView2 (or Linux via linux-preview-pack.sh)',
+    );
   }
   if (!isV25AutocompleteE2E) await assertFreshEvidenceTargets();
 
@@ -650,14 +656,12 @@ async function runV25WebviewJourney() {
       : null;
     const resolverProbe = {
       trace: diagnostics.resolverTrace ?? null,
-      ranked: (diagnostics.rankedCandidates ?? [])
-        .slice(0, 4)
-        .map((candidate) => ({
-          text: candidate.text,
-          provider: candidate.providerId,
-          layer: candidate.sourceLayer,
-          score: Number((candidate.calibratedScore ?? candidate.confidence ?? 0).toFixed(3)),
-        })),
+      ranked: (diagnostics.rankedCandidates ?? []).slice(0, 4).map((candidate) => ({
+        text: candidate.text,
+        provider: candidate.providerId,
+        layer: candidate.sourceLayer,
+        score: Number((candidate.calibratedScore ?? candidate.confidence ?? 0).toFixed(3)),
+      })),
       result: diagnostics.result
         ? { text: diagnostics.result.text, provider: diagnostics.result.providerId }
         : null,
@@ -987,13 +991,14 @@ async function runV25FocuslessJourney(cases, record, warmup) {
     'V2.5 focusless runtime did not report inference P90',
   );
   for (const [profile, rate] of Object.entries(profileHostValidatedDisplayRates)) {
-    assert.ok(
-      rate > 0,
-      `V2.5 focusless smoke observed no host-validated result for ${profile}`,
-    );
+    assert.ok(rate > 0, `V2.5 focusless smoke observed no host-validated result for ${profile}`);
   }
   for (const item of [...positiveResults, ...silenceResults]) {
-    assert.equal(item.publicEngine?.attempted, true, `V2.5 engine was not attempted for ${item.id}`);
+    assert.equal(
+      item.publicEngine?.attempted,
+      true,
+      `V2.5 engine was not attempted for ${item.id}`,
+    );
     assert.equal(item.publicEngine?.timedOut, false, `V2.5 engine timed out for ${item.id}`);
     assert.equal(item.publicEngine?.fellBack, false, `V2.5 engine fell back for ${item.id}`);
   }
@@ -1327,7 +1332,9 @@ async function v25EngineIdle() {
   return browser.execute(() => {
     const host = document.querySelector('.cm-editor');
     const state = host?.__jotluckGetGhostDebugState?.() ?? null;
-    return state === null || (state.activeRequestKey === null && state.predictionScheduled !== true);
+    return (
+      state === null || (state.activeRequestKey === null && state.predictionScheduled !== true)
+    );
   });
 }
 

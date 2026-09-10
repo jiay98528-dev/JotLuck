@@ -1,6 +1,6 @@
 {
   "name": "@jotluck/app",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -43,7 +43,7 @@
     "@tauri-apps/plugin-fs": "^2.5.1",
     "@tauri-apps/plugin-shell": "^2.3.5",
     "docx": "^9.7.1",
-    "dompurify": "^3.4.12",
+    "dompurify": "^3.4.13",
     "jszip": "3.10.1",
     "marked": "^18.0.4",
     "pinia": "^2.2.0",

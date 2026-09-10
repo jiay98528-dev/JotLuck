@@ -56,6 +56,11 @@ onMounted(() => {
       </ol>
     </section>
 
+    <section class="completion page-flow" aria-labelledby="completion-title">
+      <h2 id="completion-title">{{ content.completion.title }}</h2>
+      <p v-for="(line, i) in content.completion.lines" :key="i" class="cm-body">{{ line }}</p>
+    </section>
+
     <section class="film page-flow" aria-labelledby="film-title">
       <h2 id="film-title">{{ content.film.title }}</h2>
       <video
@@ -152,6 +157,26 @@ onMounted(() => {
     margin-top: 8px;
     max-width: 200px;
   }
+}
+
+/* ---------- 文本补全：与叙事段同纸页节奏的三段说明 ---------- */
+.completion {
+  padding: 72px 0 96px;
+  border-top: 1px solid var(--ink-14);
+}
+.completion h2 {
+  font-size: clamp(1.5rem, 2.5vw, 2.25rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+.cm-body {
+  margin-top: 16px;
+  max-width: 36em;
+  color: var(--ink-70);
+}
+.cm-body + .cm-body {
+  margin-top: 10px;
 }
 
 /* ---------- 宣传片：极简声明 + 影片本体，不设解释文案 ---------- */

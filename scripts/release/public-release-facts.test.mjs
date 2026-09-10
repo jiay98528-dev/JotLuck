@@ -117,6 +117,46 @@ describe('public release facts', () => {
     expect(notes).toContain('Open Notebook gate');
     expect(notes).toContain('Welcome screen');
   });
+
+  it('keeps Linux preview packaging in-tree and records the public .deb checksum', () => {
+    const desktopTemplate = readFileSync(
+      path.join(projectRoot, 'packages/app/src-tauri/installer-assets/linux/jotluck.desktop'),
+      'utf8',
+    );
+    const packScript = readFileSync(
+      path.join(projectRoot, 'scripts/release/linux-preview-pack.sh'),
+      'utf8',
+    );
+    const packReadme = readFileSync(
+      path.join(projectRoot, 'scripts/release/README-linux-preview.md'),
+      'utf8',
+    );
+    const readme = readDocument('README.md');
+    const chineseReadme = readDocument('README.zh.md');
+    const notes = readDocument('RELEASE_NOTES.md');
+    const limitations = readDocument('KNOWN_LIMITATIONS.md');
+
+    expect(tauriConfig.bundle.linux.deb.desktopTemplate).toBe(
+      'installer-assets/linux/jotluck.desktop',
+    );
+    expect(tauriConfig.bundle.fileAssociations).toBeUndefined();
+    expect(desktopTemplate).toContain('Categories=Office;TextEditor;Utility;');
+    expect(desktopTemplate).toContain('MimeType=text/markdown');
+    expect(packScript).toContain('WEBKIT_DISABLE_DMABUF_RENDERER');
+    expect(packScript).toContain('published: no');
+    expect(packReadme).toContain('linux-preview-pack.sh');
+
+    for (const document of [readme, chineseReadme, notes, limitations]) {
+      expect(document).toContain('linux-preview-pack.sh');
+      expect(document).toContain('JotLuck_0.14.0_amd64.deb');
+      expect(document).toContain(
+        '3d5f7b709c0eaf9fea2877593696c30cbc15f0a640733d208a040d8fc3a3ed77',
+      );
+      expect(document).not.toMatch(
+        /macOS and Linux packages have not completed host-specific packaging/u,
+      );
+    }
+  });
 });
 
 function readDocument(file) {

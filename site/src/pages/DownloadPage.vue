@@ -2,8 +2,9 @@
 import { useLocale } from '../composables/useLocale';
 import { usePageHead } from '../composables/usePageHead';
 import { EXTERNAL, RELEASE } from '../release';
+import { pagePath } from '../router';
 
-const { content } = useLocale();
+const { locale, content } = useLocale();
 usePageHead('download');
 const d = () => content.value.download;
 </script>
@@ -38,9 +39,17 @@ const d = () => content.value.download;
         <span class="pv-sha-label">SHA-256</span>
         <code>{{ RELEASE.preview.sha256 }}</code>
       </p>
+      <p class="pv-facts tech-rail">v{{ RELEASE.preview.version }} · Linux x86_64 (.deb)</p>
+      <p class="pv-sha">
+        <span class="pv-sha-label">SHA-256</span>
+        <code>{{ RELEASE.preview.linuxDeb.sha256 }}</code>
+      </p>
       <div class="pv-actions">
         <a class="btn btn-primary" :href="RELEASE.preview.downloadUrl" rel="noopener">{{
           d().downloadBtn
+        }}</a>
+        <a class="btn btn-secondary" :href="RELEASE.preview.linuxDeb.downloadUrl" rel="noopener">{{
+          d().downloadBtnLinux
         }}</a>
         <a class="btn btn-secondary" :href="EXTERNAL.githubReleases" rel="noopener">
           <svg
@@ -97,6 +106,10 @@ const d = () => content.value.download;
         </li>
       </ul>
     </section>
+
+    <p class="quip">
+      <RouterLink :to="pagePath(locale, 'changelog')">{{ d().changelogLink }} →</RouterLink>
+    </p>
   </article>
 </template>
 

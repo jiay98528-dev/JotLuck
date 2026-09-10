@@ -14,6 +14,7 @@ export const zh: SiteContent = {
       themes: '主题 · JotLuck — 免费开源的 Markdown 笔记软件',
       studio: '工作室 · JotLuck — 免费开源的 Markdown 笔记软件',
       privacy: '隐私 · JotLuck — 免费开源的 Markdown 笔记软件',
+      changelog: '更新日志 · JotLuck — 每一次改进都记录在案',
     },
     pageDescriptions: {
       download:
@@ -24,6 +25,8 @@ export const zh: SiteContent = {
         'LeankomStudio 是鸰湖科技的产品工作室，免费开源的 Markdown 笔记软件 JotLuck 是我们向外展开的第一页——让想法越过类型，找到最适合它的形状。',
       privacy:
         'JotLuck 隐私说明：这款开源 Markdown 笔记软件完全离线运行，笔记以纯文本文件保存在你自己的文件夹中——写作无需账号、无遥测。本站为静态网站，不使用 Cookie 与分析追踪。',
+      changelog:
+        'JotLuck 更新日志：Windows 桌面预览版的每一次发布记录——本地补全、导出、搜索与主题持续改进，全部公开可查，免费开源，无需注册。',
     },
   },
   localeName: '中文',
@@ -66,6 +69,21 @@ export const zh: SiteContent = {
       rail: ['导出', 'PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'HTML'],
     },
   ],
+  completion: {
+    title: '文本补全',
+    lines: [
+      'JotLuck 搭载了我们自己训练的补全小模型：支持中英双语，装好即用，完全在本地运行。',
+      '当你写完一句话，光标后面就有机会蹦出下一个词。合适就按 Tab 采纳，不合适继续写即可，全程低打扰。',
+      '它还具备动态学习机制——随着协作加深，补全会越来越贴合你的用词习惯。',
+      '设置页可随时开关。',
+    ],
+  },
+  changelog: {
+    eyebrow: '更新日志',
+    title: '每一版，都记录在案。',
+    lead: '以下内容同步自 GitHub Releases 发布原文（英文）。',
+    githubLink: '在 GitHub 查看全部发行',
+  },
   film: {
     title: '宣传视频',
     ariaLabel: 'JotLuck 宣传视频，时长 60 秒',
@@ -80,30 +98,32 @@ export const zh: SiteContent = {
   download: {
     eyebrow: '下载',
     title: 'Preview 已上架。',
-    lead: 'Windows x64 预览版现在即可下载。macOS 与 Linux 随后跟进——纯文本从不挑平台，你的笔记在任何系统上都是本地文件。',
+    lead: 'Windows x64 与 Linux x86_64 预览版现在即可下载。macOS 随后跟进——纯文本从不挑平台，你的笔记在任何系统上都是本地文件。',
     statusLabel: '首发平台',
     statusValue: 'Windows x64',
     platformTitle: '平台',
     platforms: [
       { name: 'Windows x64', state: 'Preview 已上架' },
       { name: 'macOS', state: '随后跟进' },
-      { name: 'Linux', state: '随后跟进' },
+      { name: 'Linux x86_64', state: 'Preview 已上架' },
     ],
     honestyTitle: '预览版先行。',
     honestyBody: '预览版安装包已上架 GitHub Releases——可下载、可校验、可回退。',
-    previewTitle: 'v0.12.3 Preview',
+    previewTitle: 'v0.14.0 Preview',
     downloadBtn: '下载 Preview（Windows x64）',
+    downloadBtnLinux: '下载 Preview（Linux .deb）',
     githubBtn: 'GitHub',
     releaseBtn: 'Release 说明与校验',
     signNote:
-      '预览版未签名。Windows SmartScreen 可能提示风险，安装前请核对 SHA-256 与 Release 页一致。',
+      '预览版未签名。Windows SmartScreen 可能提示风险；Linux 请用 dpkg 安装并核对 SHA-256。安装前请与 Release 页一致。',
     signPolicyLink: '代码签名政策',
     notesTitle: '值得知道',
     notes: [
       '笔记保存在你选择的文件夹中，无需注册账号',
-      '四种扩展名注册为可选「打开方式」，不改写系统默认应用',
+      '笔记扩展名注册为可选「打开方式」，不改写系统默认应用',
       'MIT 协议开源，核心编辑与搜索完全离线运行',
     ],
+    changelogLink: '查看更新日志',
   },
   themes: {
     eyebrow: '主题',
@@ -200,6 +220,12 @@ export const zh: SiteContent = {
     studio: 'LeankomStudio',
     tagline: '本地优先 · 开源 · 不被云端锁定',
     copyright: '© 2026 鸰湖科技（深圳）有限公司',
-    links: { support: '支持', privacy: '隐私', signing: '代码签名政策', github: 'GitHub' },
+    links: {
+      support: '支持',
+      privacy: '隐私',
+      signing: '代码签名政策',
+      github: 'GitHub',
+      changelog: '更新日志',
+    },
   },
 };

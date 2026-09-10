@@ -268,4 +268,55 @@
     <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/privacy"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/"/>
   </url>
+  <!-- 更新日志 (changelog) -->
+  <url>
+    <loc>https://jotluck.com/zh/changelog</loc>
+    <lastmod>2026-09-08</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/en/changelog/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/en/changelog</loc>
+    <lastmod>2026-09-08</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/en/changelog/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/ja/changelog</loc>
+    <lastmod>2026-09-08</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/en/changelog/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/ko/changelog</loc>
+    <lastmod>2026-09-08</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/en/changelog/"/>
+  </url>
+  <url>
+    <loc>https://jotluck.com/fr/changelog</loc>
+    <lastmod>2026-09-08</lastmod>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://jotluck.com/zh/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jotluck.com/en/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://jotluck.com/ja/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://jotluck.com/ko/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://jotluck.com/fr/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jotluck.com/en/changelog/"/>
+  </url>
 </urlset>

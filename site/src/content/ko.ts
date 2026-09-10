@@ -14,6 +14,7 @@ export const ko: SiteContent = {
       themes: '테마 · JotLuck — 무료 오픈 소스 Markdown 노트 앱',
       studio: '스튜디오 · JotLuck — 무료 오픈 소스 Markdown 노트 앱',
       privacy: '개인정보 · JotLuck — 무료 오픈 소스 Markdown 노트 앱',
+      changelog: '체인지 로그 · JotLuck — 모든 개선을 기록합니다',
     },
     pageDescriptions: {
       download:
@@ -24,6 +25,8 @@ export const ko: SiteContent = {
         'LeankomStudio는 鸰湖科技의 제품 스튜디오입니다. 무료 오픈 소스 Markdown 노트 앱 JotLuck은 우리가 바깥으로 펼쳐 낸 첫 번째 페이지——아이디어가 범주를 넘어, 가장 잘 어울리는 형태를 만나게 하세요.',
       privacy:
         'JotLuck 개인정보 안내: 이 오픈 소스 Markdown 노트 앱은 완전히 오프라인으로 동작하며, 노트는 순수 텍스트 파일로 당신의 폴더에 저장됩니다. 계정 불필요, 원격 측정 없음. 이 사이트는 정적 사이트로 Cookie를 사용하지 않습니다.',
+      changelog:
+        'JotLuck 체인지 로그: Windows 데스크톱 미리 보기의 모든 릴리스 기록. 로컬 완성, 내보내기, 검색, 테마가 릴리스마다 발전합니다. 무료 오픈소스 Markdown 노트 앱.',
     },
   },
   localeName: '한국어',
@@ -66,6 +69,21 @@ export const ko: SiteContent = {
       rail: ['내보내기', 'PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'HTML'],
     },
   ],
+  completion: {
+    title: '텍스트 자동 완성',
+    lines: [
+      'JotLuck에는 우리가 직접 학습시킨 보완용 소형 모델이 탑재되어 있습니다. 중국어와 영어를 지원하며, 설치하면 바로 사용할 수 있고 모든 처리는 로컬에서 이루어집니다.',
+      '한 문장을 마치면 커서 뒤에 다음 단어가 조용히 나타날 수 있습니다. 마음에 들면 Tab으로 받아들이고, 아니라면 그대로 쓰면 됩니다. 쓰는 흐름을 방해하지 않습니다.',
+      '또한 동적 학습 메커니즘을 갖추고 있어, 함께 쓸수록 완성이 사용자의 어휘 습관에 맞춰집니다.',
+      '설정 페이지에서 언제든지 켜고 끌 수 있습니다.',
+    ],
+  },
+  changelog: {
+    eyebrow: '체인지 로그',
+    title: '모든 릴리스를 기록합니다.',
+    lead: '내용은 GitHub Releases 원문(영어)과 동기화됩니다.',
+    githubLink: 'GitHub에서 모든 릴리스 보기',
+  },
   film: {
     title: '홍보 필름',
     ariaLabel: 'JotLuck 홍보 필름, 60초',
@@ -80,24 +98,25 @@ export const ko: SiteContent = {
   download: {
     eyebrow: '다운로드',
     title: 'Preview가 공개되었습니다.',
-    lead: 'Windows x64 미리보기 버전은 지금 바로 다운로드할 수 있습니다. macOS와 Linux도 뒤따릅니다——순수 텍스트는 플랫폼을 가리지 않으며, 당신의 노트는 어떤 시스템에서도 로컬 파일로 남습니다.',
+    lead: 'Windows x64와 Linux x86_64 미리보기 버전은 지금 바로 다운로드할 수 있습니다. macOS는 뒤따릅니다——순수 텍스트는 플랫폼을 가리지 않으며, 당신의 노트는 어떤 시스템에서도 로컬 파일로 남습니다.',
     statusLabel: '첫 번째 플랫폼',
     statusValue: 'Windows x64',
     platformTitle: '플랫폼',
     platforms: [
       { name: 'Windows x64', state: 'Preview 공개 중' },
       { name: 'macOS', state: '이어서 출시' },
-      { name: 'Linux', state: '이어서 출시' },
+      { name: 'Linux x86_64', state: 'Preview 공개 중' },
     ],
     honestyTitle: 'Preview가 먼저입니다.',
     honestyBody:
       'Preview 설치 파일은 이미 GitHub Releases에 공개되었습니다——다운로드 가능하고, 검증 가능하며, 되돌릴 수 있습니다.',
-    previewTitle: 'v0.12.3 Preview',
+    previewTitle: 'v0.14.0 Preview',
     downloadBtn: 'Preview 다운로드（Windows x64）',
+    downloadBtnLinux: 'Preview 다운로드（Linux .deb）',
     githubBtn: 'GitHub',
     releaseBtn: 'Release 노트와 체크섬',
     signNote:
-      '이 Preview는 서명되지 않았습니다: Windows SmartScreen이 경고를 표시할 수 있습니다. 설치 전에 SHA-256이 Release 페이지와 일치하는지 확인하세요.',
+      '이 Preview는 서명되지 않았습니다. Windows SmartScreen이 경고할 수 있습니다. Linux는 dpkg로 설치하고 SHA-256을 Release 페이지와 맞추세요.',
     signPolicyLink: '코드 서명 정책',
     notesTitle: '알아 두면 좋은 것',
     notes: [
@@ -105,6 +124,7 @@ export const ko: SiteContent = {
       "네 가지 확장자가 선택적인 '연결 프로그램' 처리기로만 등록됩니다. 시스템 기본값은 건드리지 않습니다",
       'MIT 라이선스로 공개되며, 핵심 편집과 검색은 완전히 오프라인에서 동작합니다',
     ],
+    changelogLink: '체인지 로그 보기',
   },
   themes: {
     eyebrow: '테마',
@@ -221,6 +241,12 @@ export const ko: SiteContent = {
     studio: 'LeankomStudio',
     tagline: '로컬 우선 · 오픈소스 · 클라우드 종속 없음',
     copyright: '© 2026 Linghu Technology (Shenzhen) Co., Ltd.',
-    links: { support: '지원', privacy: '개인정보', signing: '코드 서명 정책', github: 'GitHub' },
+    links: {
+      support: '지원',
+      privacy: '개인정보',
+      signing: '코드 서명 정책',
+      github: 'GitHub',
+      changelog: '체인지 로그',
+    },
   },
 };

@@ -65,6 +65,9 @@ export function isLikelySystemNotebookScope(path: string): boolean {
   if (/^[a-z]:\/users\/[^/]+\/(desktop|downloads)$/.test(normalized)) return true;
   if (/^\/users\/[^/]+$/.test(normalized)) return true;
   if (/^\/users\/[^/]+\/(desktop|downloads)$/.test(normalized)) return true;
+  if (/^\/home\/[^/]+$/.test(normalized)) return true;
+  if (/^\/home\/[^/]+\/(desktop|downloads)$/.test(normalized)) return true;
+  if (normalized === '/root') return true;
   return false;
 }
 

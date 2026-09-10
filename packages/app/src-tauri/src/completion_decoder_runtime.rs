@@ -432,6 +432,18 @@ impl DecoderRuntime {
         rank_logits(logits, maximum)
     }
 
+    /// Same softmax ranking as `rank_logits`, but the returned set always
+    /// includes the extra token ids (e.g. personal-prior continuations) even
+    /// when the model ranks them below the top-k.
+    pub(crate) fn rank_logits_with_extra(
+        &self,
+        logits: &[f32],
+        maximum: usize,
+        extra_token_ids: &[usize],
+    ) -> Result<Vec<TokenScore>, String> {
+        rank_logits_with_extra(logits, maximum, extra_token_ids)
+    }
+
     pub(crate) fn greedy_trace(
         &self,
         tokens: &[usize],
@@ -469,9 +481,9 @@ impl DecoderRuntime {
     }
 }
 
-fn rank_logits(logits: &[f32], maximum: usize) -> Result<Vec<TokenScore>, String> {
-    if logits.is_empty() || maximum == 0 {
-        return Ok(Vec::new());
+fn softmax_log_denominator(logits: &[f32]) -> Result<f32, String> {
+    if logits.is_empty() {
+        return Err("decoder logits are empty".to_string());
     }
     if logits.iter().any(|value| !value.is_finite()) {
         return Err("decoder logits are not finite".to_string());
@@ -484,7 +496,14 @@ fn rank_logits(logits: &[f32], maximum: usize) -> Result<Vec<TokenScore>, String
     if !denominator.is_finite() || denominator <= 0.0 {
         return Err("decoder logits are not finite".to_string());
     }
-    let log_denominator = maximum_logit + denominator.ln();
+    Ok(maximum_logit + denominator.ln())
+}
+
+fn rank_logits(logits: &[f32], maximum: usize) -> Result<Vec<TokenScore>, String> {
+    if logits.is_empty() || maximum == 0 {
+        return Ok(Vec::new());
+    }
+    let log_denominator = softmax_log_denominator(logits)?;
     let mut indices: Vec<usize> = (0..logits.len()).collect();
     indices.sort_unstable_by(|left, right| {
         logits[*right]
@@ -495,6 +514,56 @@ fn rank_logits(logits: &[f32], maximum: usize) -> Result<Vec<TokenScore>, String
     Ok(indices
         .into_iter()
         .take(maximum)
+        .map(|token_id| {
+            let log_probability = logits[token_id] - log_denominator;
+            TokenScore {
+                token_id,
+                logit: logits[token_id],
+                log_probability,
+            }
+        })
+        .collect())
+}
+
+fn rank_logits_with_extra(
+    logits: &[f32],
+    maximum: usize,
+    extra_token_ids: &[usize],
+) -> Result<Vec<TokenScore>, String> {
+    if extra_token_ids.is_empty() {
+        return rank_logits(logits, maximum);
+    }
+    if logits.is_empty() || maximum == 0 {
+        return Ok(Vec::new());
+    }
+    if extra_token_ids
+        .iter()
+        .any(|token_id| *token_id >= logits.len())
+    {
+        return Err("decoder extra token id is out of range".to_string());
+    }
+    let log_denominator = softmax_log_denominator(logits)?;
+    let mut indices: Vec<usize> = (0..logits.len()).collect();
+    indices.sort_unstable_by(|left, right| {
+        logits[*right]
+            .partial_cmp(&logits[*left])
+            .unwrap_or(Ordering::Equal)
+            .then_with(|| left.cmp(right))
+    });
+    let mut selected: Vec<usize> = indices.into_iter().take(maximum).collect();
+    for token_id in extra_token_ids {
+        if !selected.contains(token_id) {
+            selected.push(*token_id);
+        }
+    }
+    selected.sort_unstable_by(|left, right| {
+        logits[*right]
+            .partial_cmp(&logits[*left])
+            .unwrap_or(Ordering::Equal)
+            .then_with(|| left.cmp(right))
+    });
+    Ok(selected
+        .into_iter()
         .map(|token_id| {
             let log_probability = logits[token_id] - log_denominator;
             TokenScore {

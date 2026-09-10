@@ -110,7 +110,27 @@ pub struct DecoderGenerateRequest {
     document_revision: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     search_mode: Option<String>,
+    /// Host-built, context-conditioned personal phrases (one-unit runtime
+    /// only). Empty/absent keeps the search bit-identical to baseline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    personal_prior: Option<DecoderPersonalPrior>,
     deadline_at: u64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DecoderPersonalPrior {
+    #[serde(default)]
+    phrases: Vec<DecoderPersonalPriorPhrase>,
+    #[serde(default)]
+    fusion_weight: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DecoderPersonalPriorPhrase {
+    text: String,
+    weight: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -166,6 +186,13 @@ pub struct DecoderRuntimeDiagnostics {
     #[serde(skip_serializing_if = "Option::is_none")]
     escalation_step: Option<usize>,
     escalation_reasons: Vec<String>,
+    /// Present only when the request carried a usable personal prior.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    personal_prior_applied: Option<bool>,
+    /// Present only when a prior was applied; true when the fused winner
+    /// differs from the pure-model winner.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    prior_flipped_top: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -489,6 +516,7 @@ pub fn completion_decoder_dispose(state: State<'_, CompletionDecoderState>) -> R
 mod candidate;
 mod host_actor;
 mod parity;
+mod personal_prior;
 mod protocol;
 mod tensor_layout;
 mod v24_cache;

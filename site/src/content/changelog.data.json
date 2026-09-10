@@ -1,0 +1,62 @@
+{
+  "syncedAt": "2026-09-09T00:43:03.322Z",
+  "source": "https://github.com/jiay98528-dev/JotLuck/releases",
+  "releases": [
+    {
+      "tag": "v0.14.0-preview",
+      "name": "JotLuck v0.14.0-preview",
+      "dateISO": "2026-09-08T14:00:11Z",
+      "url": "https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.14.0-preview",
+      "prerelease": true,
+      "bodyMD": "Windows x64 preview installer (unsigned). Verify SHA-256 before installing: d78a8a0e601154c3f9c79021ffe853c1f4925866fba2f4119cbf64adef08b8f4\n\nThis release jumps from v0.12.3-preview and covers everything shipped in 0.13.0 → 0.14.0.\n\n## What's new in 0.14.0\n\n- **Personalized completion.** The local V2.5 completion engine now blends your own retained phrasing into decoding: completions you kept before (and your personal n-gram history) bias the model's beam search toward your habitual wording. It runs entirely on your machine — nothing leaves the process, sensitive content is filtered before use, and a settings toggle (on by default, five languages) turns it off. Quality stays gated: suggestions the model does not actually support remain hidden behind the existing visibility gates.\n\n## What's new in 0.13.1\n\n- **The completion engine loader no longer fails silently or permanently.** A failed first load used to disable the V2.5 engine for the whole session with no signal. Loading now retries automatically with bounded backoff and logs every failure path.\n- **Settings shows live completion-engine health** — status, last error, generated requests/candidates, and visible inference p90, with a manual retry action.\n\n## What's new in 0.13.0\n\n- **V2.5 completion engine integrated.** A bilingual (Chinese/English) one-unit writing model runs locally from the installer's bundled assets and silently falls back to the built-in completion when assets are missing.\n\nCode signing is still in progress; this preview is unsigned. Full notes: RELEASE_NOTES.md."
+    },
+    {
+      "tag": "v0.12.3-preview",
+      "name": "JotLuck v0.12.3-preview",
+      "dateISO": "2026-09-02T07:53:37Z",
+      "url": "https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.12.3-preview",
+      "prerelease": true,
+      "bodyMD": "Windows x64 preview installer (unsigned). Verify SHA-256 before installing: 17681727cdefb993a8c5604907cff25cbaba50b72363ebbec247328d50873a37\n\n## What's new in 0.12.3\n\n- **Failed link opens are no longer silent.** When the system browser cannot be opened from a note, JotLuck logs the failure and shows a localized notice instead of doing nothing. The update-notification link and share-via-email use the same system opener; the shell-open allowlist is narrowed to mailto:/tel:/https?: only.\n- **No more dead right-click menu.** The WebView default context menu is suppressed outside editable surfaces; right-click copy/paste in inputs and the editor keeps working; custom menus such as the file-tree context menu are unchanged.\n- **Cold start is several times faster.** Workspace module graph preloading, a single shared startup IPC, and off-first-frame search indexing bring the production build from 1–2s down to roughly 0.2s to the editable shell on the reference machine.\n\nCode signing is still in progress; this preview is unsigned. Full notes: RELEASE_NOTES.md."
+    },
+    {
+      "tag": "v0.12.2-preview",
+      "name": "JotLuck v0.12.2-preview",
+      "dateISO": "2026-08-24T16:43:32Z",
+      "url": "https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.12.2-preview",
+      "prerelease": true,
+      "bodyMD": "本次更新修复了桌面端 Markdown 网页链接无法打开系统浏览器的问题。\n\n## 网页链接恢复系统浏览器跳转\n\n- 只读模式、阅读模式和分栏预览中的网页链接会在 Windows 默认浏览器中打开。\n- Live Preview 中的网页链接使用相同的系统跳转通道。\n- 外部 Markdown 文件和 Office/PDF 语义预览窗口已获得同样的链接打开能力。\n- Web 版保留新标签页行为，Wiki-link、标签和页内锚点行为不变。\n\n## 安装信息\n\n- 版本：`v0.12.2-preview`\n- 平台：Windows x64\n- 文件：`JotLuck_0.12.2_x64-setup.exe`\n- 大小：6,170,645 bytes（约 5.88 MB）\n- 源码 Commit：`efb550cf90f0bf3d3a1c8ad771a64aeaf6795150`\n- SHA-256：`efeba410d5747358a286468720f9c4fc448ac0c9286fdff1dcc0fa63a77c9494`\n\n代码签名正在处理中。本安装包尚未签名，Windows 可能显示 SmartScreen 提示；请先核对 SHA-256，再选择“更多信息 → 仍要运行”。\n\n这是公开预览版，不是稳定版。重要笔记请继续使用你自己的备份或同步工具。"
+    },
+    {
+      "tag": "v0.12.1-preview",
+      "name": "JotLuck v0.12.1-preview",
+      "dateISO": "2026-08-16T03:16:12Z",
+      "url": "https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.12.1-preview",
+      "prerelease": true,
+      "bodyMD": "本次更新重点完善 Markdown 图片的隐私与安全边界：本地图片照常自动显示，远程图片则由你决定何时连接。\n\n## 远程图片由你决定是否加载\n\n- HTTPS 图片默认不会发起网络请求，而是在原位置显示加载控件。\n- 点击后一次加载当前笔记中的远程图片；授权只保存在当前窗口内存，并按笔记隔离，刷新后自动清除。\n- Live Preview、分栏、阅读模式和外部文件阅读均采用相同规则。\n\n## 更严格的图片安全边界\n\n- HTTP、包含用户名或密码的地址以及非法协议永久阻止。\n- Markdown 图片与原始 HTML img 标签执行相同策略，并再次经过 DOMPurify 清洗。\n- 伪造的远程图片控件不能触发请求。\n- 单张图片加载失败或重试时只替换该图片，不会重新请求已加载的其他图片。\n\n## 本地图片保持原有体验\n\n笔记本内的本地图片仍会自动渲染，不需要额外确认。图片粘贴、拖放和 assets 相对路径工作流保持不变。\n\n## 安装信息\n\n- 版本：v0.12.1-preview\n- 平台：Windows x64\n- 文件：JotLuck_0.12.1_x64-setup.exe\n- 大小：6,225,244 bytes（约 5.94 MB）\n- 候选 Commit：5f397173c8fb7851c923efdc992f08c5a3bfaed6\n- SHA-256：1cebc263801c22d40d7f8c4f9c2a5303d57a17ae8e9b754e8dd25f0dc6cddd28\n\n代码签名正在处理中。Windows 可能显示 SmartScreen 提示，请先核对 SHA-256，再选择“更多信息 → 仍要运行”。\n\n这是公开预览版本。建议重要笔记继续使用你自己的备份或同步工具。"
+    },
+    {
+      "tag": "v0.12.0-preview",
+      "name": "JotLuck v0.12.0-preview",
+      "dateISO": "2026-08-14T15:50:39Z",
+      "url": "https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.12.0-preview",
+      "prerelease": true,
+      "bodyMD": "这次更新解决了两个很直接的问题：第一次打开 JotLuck 时可以立即开始写，笔记变多后也能在左侧找到每一条书签。\n\n## 空启动也能先写起来\n\n以前安装后直接打开、尚未选择工作区时，界面只会提示选择笔记本文件夹。现在，JotLuck 会先打开一组内置引导笔记，包括「快速入门」等内容，你可以直接阅读、编辑和熟悉操作。\n\n这些引导笔记只存在于内存，不会自动写入磁盘。首次保存或按 `Ctrl+S` 时，JotLuck 会请你选择一个笔记本文件夹。\n\n选好文件夹后，引导笔记会从左侧列表和编辑器中退出，只显示你自己的文件。如果修改过当前引导笔记，可以选择丢弃修改，或只把这一篇带入新文件夹保存。下次再次空启动时，仍会得到一套干净的引导笔记。\n\n如果本机已经打开过真实笔记本，启动时仍会优先恢复原工作区，不会显示引导笔记。\n\n## 左侧书签不再被截断\n\n当笔记数量较多时，Paper、Halo Canvas 和 Lumen Field 的左侧书签列表过去可能被窗口裁掉，无法继续滚动查看后面的内容。\n\n现在书签列表拥有独立滚动区域和细滚动条，长列表也能完整访问。在默认羽翼布局中，将鼠标移到彩色圆点上，或使用键盘将焦点移到圆点时，旁边会立即显示对应的笔记名称。\n\n## 安装信息\n\n- 版本：`v0.12.0-preview`\n- 平台：Windows x64\n- 文件：`V12-preview_x64-setup.exe`\n- 大小：`6,166,624 bytes`（约 5.9 MB）\n- 候选 Commit：`094d99071d8a2daa74e75045644ef438ab18729a`\n- SHA-256：`a13ee468e77c17f238d57fd17f9951cd51b95f0a1060ec020f4d3cb513a873be`\n\n当前安装包尚未签名，代码签名正在处理中。Windows 可能显示 SmartScreen 提示；请先核对 SHA-256，再选择「更多信息 → 仍要运行」。\n\n这是公开预览版，不是稳定版本。建议重要笔记继续保留独立备份。"
+    },
+    {
+      "tag": "v0.11.2-preview",
+      "name": "JotLuck v0.11.2 Preview",
+      "dateISO": "2026-08-11T16:54:17Z",
+      "url": "https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.11.2-preview",
+      "prerelease": true,
+      "bodyMD": "JotLuck v0.11.2 Preview is an unsigned public preview for Windows x64.\n\n## Fixes\n\n- Keeps “Return to edit” visible in the sticky reading toolbar across all bundled themes and restores keyboard focus to the editor.\n- Keeps the Lumen command deck inside the viewport when editing an external single Markdown file.\n- Fixes Halo Canvas scrolling so its sticky reading controls are not clipped.\n\n## Download verification\n\n- Candidate commit: `8f8c1150ac6db6c38230544acd7dfbaa054a44cb`\n- Installer: `JotLuck_0.11.2-preview_x64-setup.exe`\n- SHA-256: `1df93e6426aa0b14d1dec3ddacc2c236880d26598d0d7a1c8968c378a75702c5`\n- Signature status: `NotSigned`\n\nWindows SmartScreen may warn because this preview is not code-signed yet. Verify the SHA-256 before installation. The SignPath application is pending; see the [code-signing policy](https://github.com/jiay98528-dev/JotLuck/blob/main/CODE_SIGNING.md) and [privacy policy](https://github.com/jiay98528-dev/JotLuck/blob/main/PRIVACY.md)."
+    },
+    {
+      "tag": "v0.11.0-preview",
+      "name": "JotLuck v0.11.0 Preview",
+      "dateISO": "2026-08-08T15:57:39Z",
+      "url": "https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.11.0-preview",
+      "prerelease": true,
+      "bodyMD": "## JotLuck v0.11.0 Preview\n\n> **预览版 / Preview release:** 此 Windows x64 安装包尚未进行 Authenticode 代码签名，Windows SmartScreen 可能显示警告。它不是正式稳定版，请仅在了解风险后安装。\n>\n> This Windows x64 installer is **unsigned** and may trigger a Windows SmartScreen warning. It is a preview build, not a production-stable release.\n\n### 本版重点 / Highlights\n\n- 只读导入并渐进预览 .docx、.pdf、.xlsx 和 .xls 文档。\n- 可在检测到的专业软件中编辑原文件，或另存 Markdown 副本后在 JotLuck 中编辑。\n- Windows 文件关联保持用户选择；安装程序不会强制替换现有默认应用。\n- 文档预览采用 Markdown 语义映射，不承诺 Office/PDF 像素级版式复刻；PDF 不包含 OCR。\n\n### 安装包 / Artifact\n\n- Platform: Windows x64 (NSIS)\n- Source commit: 56791be360568122b7e53e85389ed7467a669867\n- SHA-256: f3655ed116839c8230b5191419cc40cdcd5a69a1a6cebe03425bd2b16efccdd5\n- Signature: **Unsigned / 未签名**\n\n安装前请核对 SHA-256。Please verify the SHA-256 before installing.\n\n### 代码签名政策 / Code Signing Policy\n\n- [CODE_SIGNING.md](https://github.com/jiay98528-dev/JotLuck/blob/main/CODE_SIGNING.md)\n- 代码签名正在处理中，本安装包未签名。 / Code signing is in progress — this installer is unsigned."
+    }
+  ]
+}
