@@ -196,13 +196,14 @@ fn focus_window(window: &WebviewWindow) {
     let _ = window.set_focus();
 }
 
-/// macOS：窗口几何是否落在任一已连接显示器的可见区域内。
+/// 窗口几何是否落在任一已连接显示器的可见区域内（macOS/Linux 共用）。
+/// Linux 覆盖 suspend/resume 后 Wayland/X11 下 maximized 窗口未恢复的场景。
 /// 熄屏/锁屏状态下启动时 WindowServer 可能给出失效的 display 配置
 /// （SkyLight 报 "invalid display identifier"），tao 对 maximized 窗口
 /// 直接取 screen frame，screen 无效时窗口会停留在 0×0 或离屏 frame，
 /// 且显示器唤醒后 AppKit 不会自动纠正——2026-09-09 安装版 P0 实锤。
-#[cfg(target_os = "macos")]
-fn macos_window_geometry_is_sane(window: &WebviewWindow) -> bool {
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn window_geometry_is_sane(window: &WebviewWindow) -> bool {
     let Ok(size) = window.outer_size() else {
         return false;
     };
@@ -231,8 +232,8 @@ fn macos_window_geometry_is_sane(window: &WebviewWindow) -> bool {
 /// 覆盖「熄屏启动 → 用户稍后唤醒显示器」的时序：几何自愈会在显示器
 /// 恢复后的下一轮轮询生效。窗口销毁、几何恢复正常或 5 分钟超时即退出。
 /// 正常启动时首轮（1s 延迟后）检测即通过，此后零开销。
-#[cfg(target_os = "macos")]
-fn spawn_macos_window_geometry_guard(app: tauri::AppHandle, label: &'static str) {
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn spawn_window_geometry_guard(app: tauri::AppHandle, label: &'static str) {
     std::thread::spawn(move || {
         // 首轮延迟 1s：tao 的 maximized zoom 异步派发到主队列，留出余量，
         // 避免窗口尚在初始正常 frame 时过早判定 sane 退出。
@@ -242,7 +243,7 @@ fn spawn_macos_window_geometry_guard(app: tauri::AppHandle, label: &'static str)
             let Some(window) = app.get_webview_window(label) else {
                 return;
             };
-            if macos_window_geometry_is_sane(&window) {
+            if window_geometry_is_sane(&window) {
                 return;
             }
             log::warn!("window {label} has invalid geometry; resetting to default size");
@@ -389,8 +390,8 @@ pub fn run() {
             }
             // macOS 熄屏/锁屏启动时窗口 frame 可能损坏且不会自愈（见上），
             // 挂几何 guard 兜底；其他平台无此故障路径，零影响。
-            #[cfg(target_os = "macos")]
-            spawn_macos_window_geometry_guard(app.handle().clone(), "main");
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            spawn_window_geometry_guard(app.handle().clone(), "main");
             for path in startup_files.iter().skip(1) {
                 if let Err(error) = open_external_file_in_window(app.handle(), path, None) {
                     report_window_error(app.handle(), &error);

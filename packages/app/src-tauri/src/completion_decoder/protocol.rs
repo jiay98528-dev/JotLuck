@@ -57,7 +57,27 @@ pub(super) fn configure_worker_command(command: &mut Command) {
     command.creation_flags(CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS);
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+pub(super) fn configure_worker_command(command: &mut Command) {
+    use std::os::unix::process::CommandExt;
+    // 对齐 Windows Job Object 三项语义：kill-on-close（PDEATHSIG）、
+    // 192MiB 内存上限（RLIMIT_AS）、低 CPU 优先级（nice 10）。
+    // pre_exec 只允许 async-signal-safe 调用；失败时降级运行，不阻断 worker。
+    unsafe {
+        command.pre_exec(|| {
+            libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL, 0, 0, 0);
+            let limit = libc::rlimit {
+                rlim_cur: PEAK_MEMORY_LIMIT_BYTES as libc::rlim_t,
+                rlim_max: PEAK_MEMORY_LIMIT_BYTES as libc::rlim_t,
+            };
+            libc::setrlimit(libc::RLIMIT_AS, &limit);
+            libc::setpriority(libc::PRIO_PROCESS, 0, 10);
+            Ok(())
+        });
+    }
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
 pub(super) fn configure_worker_command(_command: &mut Command) {}
 
 #[cfg(windows)]
