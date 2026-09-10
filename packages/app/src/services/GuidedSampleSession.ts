@@ -1,5 +1,6 @@
 import type { DirEntry, SupportedLocale } from '@/types';
 import { getCurrentLocale } from '@/i18n';
+import { normalizeNoteTitle } from '@/utils/contentUtils';
 import { stripSupportedNoteExtension } from '@/utils/note-files';
 import { createSampleNotebookSeed } from './SampleSeed';
 
@@ -63,12 +64,14 @@ export function findGuidedSampleNoteByTitle(
   session: GuidedSampleSession,
   title: string,
 ): GuidedSampleNote | undefined {
-  const target = title.trim();
+  const target = normalizeNoteTitle(title.trim());
   if (!target) return undefined;
   return (
-    session.notes.find((note) => note.title === target) ??
+    session.notes.find((note) => normalizeNoteTitle(note.title) === target) ??
     session.notes.find(
-      (note) => stripSupportedNoteExtension(note.path.split('/').pop() ?? '') === target,
+      (note) =>
+        normalizeNoteTitle(stripSupportedNoteExtension(note.path.split('/').pop() ?? '')) ===
+        target,
     )
   );
 }

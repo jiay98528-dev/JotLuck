@@ -819,6 +819,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import AppShell from '@/components/layout/AppShell.vue';
+import { normalizeNoteTitle } from '@/utils/contentUtils';
 import ShellActionButton from '@/components/layout/ShellActionButton.vue';
 import FormatBubble from '@/components/editor/FormatBubble.vue';
 import EditorControlStrip from '@/components/editor/EditorControlStrip.vue';
@@ -4016,7 +4017,7 @@ function cancelNewFile(): void {
 let previewRenderTimer: ReturnType<typeof setTimeout> | null = null;
 
 function wikiLinkExists(noteTitle: string): boolean {
-  const target = noteTitle.trim();
+  const target = normalizeNoteTitle(noteTitle.trim());
   if (!target) return false;
   if (guidedSampleSession.value && guidedSampleWikiLinkExists(guidedSampleSession.value, target)) {
     return true;
@@ -4024,14 +4025,16 @@ function wikiLinkExists(noteTitle: string): boolean {
   const tree = isExternalEditing.value ? externalFiles.value : files.value;
   const existsInTree = tree.some((entry) => {
     if (!entry.isFile) return false;
-    const filename = stripSupportedNoteExtension(entry.name);
+    const filename = normalizeNoteTitle(stripSupportedNoteExtension(entry.name));
     return filename === target;
   });
   if (existsInTree) return true;
   const docs = Object.values(indexStore.getIndexService()?.getAllDocuments() ?? {});
   return docs.some((doc) => {
-    const filename = stripSupportedNoteExtension(doc.path.split('/').pop() ?? '');
-    return doc.title === target || filename === target;
+    const filename = normalizeNoteTitle(
+      stripSupportedNoteExtension(doc.path.split('/').pop() ?? ''),
+    );
+    return normalizeNoteTitle(doc.title) === target || filename === target;
   });
 }
 
@@ -4747,9 +4750,14 @@ async function onLivePreviewWikiLinkClick(noteTitle: string, anchor: null | stri
     return;
   }
   const docs = Object.values(indexStore.getIndexService()?.getAllDocuments() ?? {});
+  const normalizedTitle = normalizeNoteTitle(noteTitle);
   const exact =
-    docs.find((doc) => doc.title === noteTitle) ??
-    docs.find((doc) => stripSupportedNoteExtension(doc.path.split('/').pop() ?? '') === noteTitle);
+    docs.find((doc) => normalizeNoteTitle(doc.title) === normalizedTitle) ??
+    docs.find(
+      (doc) =>
+        normalizeNoteTitle(stripSupportedNoteExtension(doc.path.split('/').pop() ?? '')) ===
+        normalizedTitle,
+    );
 
   if (!exact) {
     toast.show(t('notebook.error.noteNotFound', { title: noteTitle }), 'warning', 3000);

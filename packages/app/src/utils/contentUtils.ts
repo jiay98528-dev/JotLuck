@@ -39,3 +39,13 @@ export function hasRTLContent(content: string): boolean {
 export function humanizeError(error: unknown): string {
   return normalizeCommandError(error).message;
 }
+
+/**
+ * 笔记标题/文件名的 Unicode NFC 归一：macOS 文件系统以 NFD 存储
+ * 韩文 Hangul、带音符拉丁文等文件名，而 IME 输入与 wiki 链接正文是
+ * NFC——精确等值比较会把这些链接误判为死链。汉字无 canonical
+ * decomposition 不受影响。比较前对两侧统一归一。
+ */
+export function normalizeNoteTitle(value: string): string {
+  return value.normalize('NFC');
+}
