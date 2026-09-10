@@ -104,7 +104,12 @@ export interface DocumentEditorLaunchResult {
   usedOpenWith: boolean;
 }
 
-export type AssociationApplicationState = 'applied' | 'partial' | 'not-applied' | 'unsupported';
+export type AssociationApplicationState =
+  | 'applied'
+  | 'partial'
+  | 'not-applied'
+  | 'unsupported'
+  | 'registered';
 
 export interface AssociationGroupStatus {
   id: 'markdown' | 'text' | 'word' | 'pdf' | 'excel';

@@ -38,6 +38,8 @@ export const messages = {
       fileOpeningTitle: 'ファイルを開く方法',
       fileOpeningBody:
         'Windows が実際に使用している選択を表示します。拡張子ごとの変更はシステム画面で行い、JotLuck は保護された既定アプリ設定を書き換えません。',
+      fileOpeningBodyNonWindows:
+        'これらの形式では、JotLuck が任意の「プログラムから開く」アプリとして登録されています。ファイルマネージャーから選択でき、既定のアプリは置き換えられません。',
       associationLoading: 'Windows のファイル関連付けを確認中…',
       associationFailed:
         'Windows のファイル関連付けを読み取れませんでした。もう一度お試しください。',
@@ -48,6 +50,7 @@ export const messages = {
         partial: '一部適用',
         'not-applied': '未適用',
         unsupported: 'この環境では利用不可',
+        registered: '登録済み（任意）',
       },
       associationGroups: {
         markdown: 'Markdown',
@@ -336,6 +339,10 @@ export const messages = {
     associationSelectionLegend: 'Windows で設定する形式を選択',
     openSystemSettings: 'Windows で確認して適用',
     continueSystemSettings: 'Windows で設定を続ける',
+    defaultEditorBodyNonWindows:
+      'インストーラーは、対応形式の任意のアプリとして JotLuck を登録しました。',
+    associationLegendNonWindows: '任意のプログラムから開く登録済みの形式',
+    associationNonWindowsAction: '完了',
     notNow: '今はしない',
     updatesTitle: '新しいバージョンを自動確認しますか？',
     autoCheck: '更新を自動的に確認',

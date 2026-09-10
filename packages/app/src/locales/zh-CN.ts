@@ -36,6 +36,8 @@ export const messages = {
       fileOpeningTitle: '文件打开方式',
       fileOpeningBody:
         '这里显示 Windows 当前的真实选择。更改会在系统界面中逐项完成，JotLuck 不会写入受保护的默认应用设置。',
+      fileOpeningBodyNonWindows:
+        'JotLuck 已注册为这些格式的可选打开方式。可在文件管理器的「打开方式」中选择，不会替换系统默认应用。',
       associationLoading: '正在读取 Windows 文件关联…',
       associationFailed: '无法读取 Windows 文件关联，请重试。',
       associationChange: '在 Windows 中更改',
@@ -45,6 +47,7 @@ export const messages = {
         partial: '部分应用',
         'not-applied': '未应用',
         unsupported: '当前平台不支持',
+        registered: '已注册（可选）',
       },
       associationGroups: {
         markdown: 'Markdown',
@@ -336,6 +339,9 @@ export const messages = {
     associationSelectionLegend: '选择希望在 Windows 中设置的格式',
     openSystemSettings: '在 Windows 中确认并应用',
     continueSystemSettings: '继续在 Windows 中设置',
+    defaultEditorBodyNonWindows: '安装包已将 JotLuck 注册为支持格式的可选打开方式。',
+    associationLegendNonWindows: '已注册可选打开方式的格式',
+    associationNonWindowsAction: '完成',
     notNow: '暂不设置',
     updatesTitle: '需要自动检查新版本吗？',
     autoCheck: '自动检查可用更新',

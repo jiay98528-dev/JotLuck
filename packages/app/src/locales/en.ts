@@ -38,6 +38,8 @@ export const messages = {
       fileOpeningTitle: 'File opening',
       fileOpeningBody:
         'These are the choices Windows is actually using. Change each extension in the system UI; JotLuck never writes protected default-app settings.',
+      fileOpeningBodyNonWindows:
+        'JotLuck is registered as an optional "Open with" app for these formats. Pick it from your file manager; system defaults stay untouched.',
       associationLoading: 'Reading Windows file associations…',
       associationFailed: 'Could not read Windows file associations. Try again.',
       associationChange: 'Change in Windows',
@@ -47,6 +49,7 @@ export const messages = {
         partial: 'Partially applied',
         'not-applied': 'Not applied',
         unsupported: 'Not supported on this platform',
+        registered: 'Registered (optional)',
       },
       associationGroups: {
         markdown: 'Markdown',
@@ -339,6 +342,10 @@ export const messages = {
     associationSelectionLegend: 'Choose the formats to set up in Windows',
     openSystemSettings: 'Confirm and apply in Windows',
     continueSystemSettings: 'Continue setup in Windows',
+    defaultEditorBodyNonWindows:
+      'The installer registered JotLuck as an optional app for opening supported formats.',
+    associationLegendNonWindows: 'Formats registered for optional open-with',
+    associationNonWindowsAction: 'Done',
     notNow: 'Not now',
     updatesTitle: 'Check automatically for new versions?',
     autoCheck: 'Automatically check for updates',

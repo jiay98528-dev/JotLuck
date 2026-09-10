@@ -39,6 +39,8 @@ export const messages = {
       fileOpeningTitle: 'Ouverture des fichiers',
       fileOpeningBody:
         'Ces états reflètent les choix réellement utilisés par Windows. Modifiez chaque extension dans l’interface système ; JotLuck n’écrit jamais les réglages protégés des applications par défaut.',
+      fileOpeningBodyNonWindows:
+        'JotLuck est enregistré comme application « Ouvrir avec » optionnelle pour ces formats. Choisissez-le depuis votre gestionnaire de fichiers ; les applications par défaut ne sont pas modifiées.',
       associationLoading: 'Lecture des associations de fichiers Windows…',
       associationFailed: 'Impossible de lire les associations de fichiers Windows. Réessayez.',
       associationChange: 'Modifier dans Windows',
@@ -48,6 +50,7 @@ export const messages = {
         partial: 'Partiellement appliqué',
         'not-applied': 'Non appliqué',
         unsupported: 'Non pris en charge sur cette plateforme',
+        registered: 'Enregistré (optionnel)',
       },
       associationGroups: {
         markdown: 'Markdown',
@@ -342,6 +345,10 @@ export const messages = {
     associationSelectionLegend: 'Choisir les formats à configurer dans Windows',
     openSystemSettings: 'Confirmer et appliquer dans Windows',
     continueSystemSettings: 'Continuer dans Windows',
+    defaultEditorBodyNonWindows:
+      "L'installateur a enregistré JotLuck comme application optionnelle pour les formats pris en charge.",
+    associationLegendNonWindows: "Formats enregistrés pour l'ouverture optionnelle",
+    associationNonWindowsAction: 'Terminer',
     notNow: 'Plus tard',
     updatesTitle: 'Rechercher automatiquement les nouvelles versions ?',
     autoCheck: 'Rechercher automatiquement les mises à jour',

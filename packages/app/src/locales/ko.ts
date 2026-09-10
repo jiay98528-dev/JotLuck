@@ -38,6 +38,8 @@ export const messages = {
       fileOpeningTitle: '파일 열기 방식',
       fileOpeningBody:
         'Windows가 실제로 사용하는 선택을 표시합니다. 확장자별 변경은 시스템 화면에서 하며 JotLuck은 보호된 기본 앱 설정을 쓰지 않습니다.',
+      fileOpeningBodyNonWindows:
+        '이 형식들은 JotLuck이 선택적 "연결 프로그램" 앱으로 등록되어 있습니다. 파일 관리자에서 선택할 수 있으며 기본 앱은 바뀌지 않습니다.',
       associationLoading: 'Windows 파일 연결을 확인하는 중…',
       associationFailed: 'Windows 파일 연결을 읽지 못했습니다. 다시 시도하세요.',
       associationChange: 'Windows에서 변경',
@@ -47,6 +49,7 @@ export const messages = {
         partial: '일부 적용됨',
         'not-applied': '적용되지 않음',
         unsupported: '이 플랫폼에서 지원되지 않음',
+        registered: '등록됨(선택)',
       },
       associationGroups: {
         markdown: 'Markdown',
@@ -335,6 +338,10 @@ export const messages = {
     associationSelectionLegend: 'Windows에서 설정할 형식 선택',
     openSystemSettings: 'Windows에서 확인 및 적용',
     continueSystemSettings: 'Windows에서 설정 계속',
+    defaultEditorBodyNonWindows:
+      '설치 프로그램이 지원 형식의 선택적 앱으로 JotLuck을 등록했습니다.',
+    associationLegendNonWindows: '선택적 연결 프로그램으로 등록된 형식',
+    associationNonWindowsAction: '완료',
     notNow: '나중에',
     updatesTitle: '새 버전을 자동으로 확인할까요?',
     autoCheck: '업데이트 자동 확인',

@@ -11,12 +11,22 @@ vi.mock('@tauri-apps/api/core', () => ({
 vi.mock('@/utils/runtime', () => ({
   isDesktopRuntime: () => true,
 }));
+vi.mock('@/utils/platform', () => ({
+  isWindows: () => true,
+  isMac: () => false,
+  isLinux: () => false,
+  getPlatformOS: async () => 'windows',
+  initializePlatform: async () => 'windows',
+  getPlatformOSSync: () => 'windows',
+  formatShortcut: (label: string) => label,
+}));
 
 describe('SettingsDialog Windows file associations', () => {
   beforeEach(() => {
     invoke.mockReset();
     document.body.replaceChildren();
     invoke.mockImplementation(async (command: string) => {
+      if (command === 'platform_os') return 'windows';
       if (command === 'get_windows_association_status') {
         return {
           supported: true,
