@@ -90,14 +90,33 @@ fn capture_opened_files_from_args(args: &[String], cwd: &Path) -> Vec<PathBuf> {
 }
 
 fn startup_log_path() -> Option<PathBuf> {
-    let base = std::env::var_os("LOCALAPPDATA")
-        .or_else(|| std::env::var_os("TMP"))
-        .map(PathBuf::from)?;
-    let dir = base.join("JotLuck").join("logs");
-    if fs::create_dir_all(&dir).is_err() {
-        return None;
+    // macOS GUI 进程无 LOCALAPPDATA/TMP（只有 TMPDIR），原链条恒返回
+    // None——启动错误与 panic 只剩 eprintln（.app 的 stderr 被丢弃）。
+    // 落到 ~/Library/Logs/<bundle id>/ 与 tauri_plugin_log 同目录，运维
+    // 单一入口；Windows 保持 LOCALAPPDATA 语义不变。
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var_os("HOME").map(PathBuf::from)?;
+        let dir = home
+            .join("Library")
+            .join("Logs")
+            .join("com.jotluck.desktop");
+        if fs::create_dir_all(&dir).is_err() {
+            return None;
+        }
+        return Some(dir.join("startup-error.log"));
     }
-    Some(dir.join("startup-error.log"))
+    #[cfg(not(target_os = "macos"))]
+    {
+        let base = std::env::var_os("LOCALAPPDATA")
+            .or_else(|| std::env::var_os("TMP"))
+            .map(PathBuf::from)?;
+        let dir = base.join("JotLuck").join("logs");
+        if fs::create_dir_all(&dir).is_err() {
+            return None;
+        }
+        Some(dir.join("startup-error.log"))
+    }
 }
 
 fn write_startup_error(message: &str) {
