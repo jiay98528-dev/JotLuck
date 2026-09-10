@@ -44,12 +44,20 @@ const d = () => content.value.download;
         <span class="pv-sha-label">SHA-256</span>
         <code>{{ RELEASE.preview.linuxDeb.sha256 }}</code>
       </p>
+      <p class="pv-facts tech-rail">v{{ RELEASE.preview.version }} · macOS Apple Silicon (.dmg)</p>
+      <p class="pv-sha">
+        <span class="pv-sha-label">SHA-256</span>
+        <code>{{ RELEASE.preview.macosDmg.sha256 }}</code>
+      </p>
       <div class="pv-actions">
         <a class="btn btn-primary" :href="RELEASE.preview.downloadUrl" rel="noopener">{{
           d().downloadBtn
         }}</a>
         <a class="btn btn-secondary" :href="RELEASE.preview.linuxDeb.downloadUrl" rel="noopener">{{
           d().downloadBtnLinux
+        }}</a>
+        <a class="btn btn-secondary" :href="RELEASE.preview.macosDmg.downloadUrl" rel="noopener">{{
+          d().downloadBtnMac
         }}</a>
         <a class="btn btn-secondary" :href="EXTERNAL.githubReleases" rel="noopener">
           <svg

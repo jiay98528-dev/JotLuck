@@ -88,6 +88,7 @@ export interface DownloadContent {
   previewTitle: string;
   downloadBtn: string;
   downloadBtnLinux: string;
+  downloadBtnMac: string;
   /** GitHub 下载页分流按钮（品牌名不译；URL 在 release.ts EXTERNAL.githubReleases） */
   githubBtn: string;
   releaseBtn: string;

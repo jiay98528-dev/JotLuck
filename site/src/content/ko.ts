@@ -98,13 +98,13 @@ export const ko: SiteContent = {
   download: {
     eyebrow: '다운로드',
     title: 'Preview가 공개되었습니다.',
-    lead: 'Windows x64와 Linux x86_64 미리보기 버전은 지금 바로 다운로드할 수 있습니다. macOS는 뒤따릅니다——순수 텍스트는 플랫폼을 가리지 않으며, 당신의 노트는 어떤 시스템에서도 로컬 파일로 남습니다.',
+    lead: 'Windows x64·macOS Apple Silicon·Linux x86_64 미리보기 버전을 지금 바로 다운로드할 수 있습니다. 순수 텍스트는 플랫폼을 가리지 않으며, 당신의 노트는 어떤 시스템에서도 로컬 파일로 남습니다.',
     statusLabel: '첫 번째 플랫폼',
     statusValue: 'Windows x64',
     platformTitle: '플랫폼',
     platforms: [
       { name: 'Windows x64', state: 'Preview 공개 중' },
-      { name: 'macOS', state: '이어서 출시' },
+      { name: 'macOS Apple Silicon', state: 'Preview 공개 중' },
       { name: 'Linux x86_64', state: 'Preview 공개 중' },
     ],
     honestyTitle: 'Preview가 먼저입니다.',
@@ -113,6 +113,7 @@ export const ko: SiteContent = {
     previewTitle: 'v0.14.0 Preview',
     downloadBtn: 'Preview 다운로드（Windows x64）',
     downloadBtnLinux: 'Preview 다운로드（Linux .deb）',
+    downloadBtnMac: 'Preview 다운로드（macOS .dmg）',
     githubBtn: 'GitHub',
     releaseBtn: 'Release 노트와 체크섬',
     signNote:

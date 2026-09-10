@@ -101,13 +101,13 @@ export const fr: SiteContent = {
   download: {
     eyebrow: 'Téléchargement',
     title: 'La Preview est en ligne.',
-    lead: 'Les Previews Windows x64 et Linux x86_64 sont prêtes à télécharger dès maintenant. macOS suivra — le texte brut ne choisit jamais sa plateforme, et vos notes restent des fichiers locaux sur tous les systèmes.',
+    lead: 'Les Previews Windows x64, macOS Apple Silicon et Linux x86_64 sont prêtes à télécharger dès maintenant. Le texte brut ne choisit jamais sa plateforme, et vos notes restent des fichiers locaux sur tous les systèmes.',
     statusLabel: 'Première plateforme',
     statusValue: 'Windows x64',
     platformTitle: 'Plateformes',
     platforms: [
       { name: 'Windows x64', state: 'Preview en ligne' },
-      { name: 'macOS', state: 'Suivra' },
+      { name: 'macOS Apple Silicon', state: 'Preview en ligne' },
       { name: 'Linux x86_64', state: 'Preview en ligne' },
     ],
     honestyTitle: "La Preview d'abord.",
@@ -116,6 +116,7 @@ export const fr: SiteContent = {
     previewTitle: 'v0.14.0 Preview',
     downloadBtn: 'Télécharger la Preview (Windows x64)',
     downloadBtnLinux: 'Télécharger la Preview (Linux .deb)',
+    downloadBtnMac: 'Télécharger la Preview (macOS .dmg)',
     githubBtn: 'GitHub',
     releaseBtn: 'Notes de version et checksum',
     signNote:

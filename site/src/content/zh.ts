@@ -98,13 +98,13 @@ export const zh: SiteContent = {
   download: {
     eyebrow: '下载',
     title: 'Preview 已上架。',
-    lead: 'Windows x64 与 Linux x86_64 预览版现在即可下载。macOS 随后跟进——纯文本从不挑平台，你的笔记在任何系统上都是本地文件。',
+    lead: 'Windows x64、macOS Apple Silicon 与 Linux x86_64 预览版现在均可下载。纯文本从不挑平台，你的笔记在任何系统上都是本地文件。',
     statusLabel: '首发平台',
     statusValue: 'Windows x64',
     platformTitle: '平台',
     platforms: [
       { name: 'Windows x64', state: 'Preview 已上架' },
-      { name: 'macOS', state: '随后跟进' },
+      { name: 'macOS Apple Silicon', state: '预览版已上架' },
       { name: 'Linux x86_64', state: 'Preview 已上架' },
     ],
     honestyTitle: '预览版先行。',
@@ -112,6 +112,7 @@ export const zh: SiteContent = {
     previewTitle: 'v0.14.0 Preview',
     downloadBtn: '下载 Preview（Windows x64）',
     downloadBtnLinux: '下载 Preview（Linux .deb）',
+    downloadBtnMac: '下载 Preview（macOS .dmg）',
     githubBtn: 'GitHub',
     releaseBtn: 'Release 说明与校验',
     signNote:

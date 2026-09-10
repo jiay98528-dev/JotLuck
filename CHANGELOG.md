@@ -2,6 +2,18 @@
 
 ## [0.14.0-preview] - 2026-09-08
 
+### Added (macOS port — 2026-09-11)
+
+- macOS aarch64 preview build `JotLuck_0.14.0_aarch64.dmg` (41,242,396
+  bytes). SHA-256:
+  `fb10381d0c0e199921ba691a32db7e52910060cb59a2aab8a0735ad5fd10e1c6`.
+- Double-click file opening via `CFBundleDocumentTypes`
+  (md/markdown/mdx/txt + docx/pdf/xlsx/xls, `RunEvent::Opened` handling);
+  Chinese menu bar with standard edit services; window-dwell on last
+  close (Dock reopen); HTML5 drag-drop restored for image upload;
+  macOS user-log startup-error capture; NFC-normalized wiki links;
+  ⌘ shortcut labels and platform-gated Windows-only UI.
+
 ### Added
 
 - Personalized completion (ADR-024): the V2.5 one-unit writing engine now

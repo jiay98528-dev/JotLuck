@@ -97,13 +97,13 @@ export const ja: SiteContent = {
   download: {
     eyebrow: 'ダウンロード',
     title: 'Preview は公開中です。',
-    lead: 'Windows x64 と Linux x86_64 のプレビュー版は今すぐダウンロードできます。macOS は続きます——プレーンテキストはプラットフォームを選びません。どのシステムでも、ノートはローカルファイルのままです。',
+    lead: 'Windows x64・macOS Apple Silicon・Linux x86_64 のプレビュー版は今すぐダウンロードできます。プレーンテキストはプラットフォームを選びません。どのシステムでも、ノートはローカルファイルのままです。',
     statusLabel: '最初のプラットフォーム',
     statusValue: 'Windows x64',
     platformTitle: 'プラットフォーム',
     platforms: [
       { name: 'Windows x64', state: 'Preview 公開中' },
-      { name: 'macOS', state: '続いて公開予定' },
+      { name: 'macOS Apple Silicon', state: 'Preview 公開中' },
       { name: 'Linux x86_64', state: 'Preview 公開中' },
     ],
     honestyTitle: 'Preview 先行。',
@@ -112,6 +112,7 @@ export const ja: SiteContent = {
     previewTitle: 'v0.14.0 Preview',
     downloadBtn: 'Preview をダウンロード（Windows x64）',
     downloadBtnLinux: 'Preview をダウンロード（Linux .deb）',
+    downloadBtnMac: 'Preview をダウンロード（macOS .dmg）',
     githubBtn: 'GitHub',
     releaseBtn: 'Release ノートとチェックサム',
     signNote:
