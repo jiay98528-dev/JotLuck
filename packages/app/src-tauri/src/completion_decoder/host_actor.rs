@@ -46,6 +46,11 @@ pub(super) fn warmup_runtime(
     guard.take();
     let next = spawn_runtime(loaded)?;
     let ready = next.ready.clone();
+    log::info!(
+        "completion decoder ready: candidate {} from {}",
+        ready.candidate_id,
+        manifest_path.display()
+    );
     *guard = Some(next);
     Ok(ready)
 }

@@ -90,6 +90,26 @@ if ! grep -q 'installer-assets/linux/jotluck.desktop' "$tauri_conf"; then
   exit 1
 fi
 
+# V2.5 completion assets must exist in BOTH copies with identical SHA.
+# 0.14.0 shipped a deb whose frontend dist had no /autocomplete-v25/ and the
+# engine silently never loaded (factory fetch 404 -> null -> n-gram only).
+v25_public_dir="packages/app/public/autocomplete-v25"
+v25_resource_dir="packages/app/src-tauri/resources/autocomplete-v25"
+for f in autocomplete-public.manifest.json model.q4.decoder.bin tokenizer.runtime.json; do
+  for d in "$v25_public_dir" "$v25_resource_dir"; do
+    if [[ ! -f "$d/$f" ]]; then
+      echo "missing V2.5 asset: $d/$f" >&2
+      exit 1
+    fi
+  done
+  pub_sha="$(sha256sum "$v25_public_dir/$f" | cut -d' ' -f1)"
+  res_sha="$(sha256sum "$v25_resource_dir/$f" | cut -d' ' -f1)"
+  if [[ "$pub_sha" != "$res_sha" ]]; then
+    echo "V2.5 asset SHA mismatch for $f: public=$pub_sha resources=$res_sha" >&2
+    exit 1
+  fi
+done
+
 version="$(python3 - <<'PY'
 import json
 from pathlib import Path
