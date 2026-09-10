@@ -205,10 +205,10 @@ jobs:
       - name: Restore local-only autocomplete assets
         shell: bash
         run: |
-          curl -fsSL -o /tmp/v25-assets.zip https://github.com/jiay98528-dev/JotLuck/releases/download/v0.14.0-preview/autocomplete-v25-assets.zip
+          curl -fsSL -o v25-assets.zip https://github.com/jiay98528-dev/JotLuck/releases/download/v0.14.0-preview/autocomplete-v25-assets.zip
           mkdir -p packages/app/src-tauri/resources/autocomplete-v25
-          python -c "import zipfile; zipfile.ZipFile('/tmp/v25-assets.zip').extractall('packages/app/src-tauri/resources/autocomplete-v25')"
-          rm -f /tmp/v25-assets.zip
+          python -c "import zipfile; zipfile.ZipFile('v25-assets.zip').extractall('packages/app/src-tauri/resources/autocomplete-v25')"
+          rm -f v25-assets.zip
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -251,10 +251,10 @@ jobs:
       - name: Restore local-only autocomplete assets
         shell: bash
         run: |
-          curl -fsSL -o /tmp/v25-assets.zip https://github.com/jiay98528-dev/JotLuck/releases/download/v0.14.0-preview/autocomplete-v25-assets.zip
+          curl -fsSL -o v25-assets.zip https://github.com/jiay98528-dev/JotLuck/releases/download/v0.14.0-preview/autocomplete-v25-assets.zip
           mkdir -p packages/app/src-tauri/resources/autocomplete-v25
-          python -c "import zipfile; zipfile.ZipFile('/tmp/v25-assets.zip').extractall('packages/app/src-tauri/resources/autocomplete-v25')"
-          rm -f /tmp/v25-assets.zip
+          python -c "import zipfile; zipfile.ZipFile('v25-assets.zip').extractall('packages/app/src-tauri/resources/autocomplete-v25')"
+          rm -f v25-assets.zip
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
@@ -409,10 +409,10 @@ jobs:
       - name: Restore local-only autocomplete assets
         shell: bash
         run: |
-          curl -fsSL -o /tmp/v25-assets.zip https://github.com/jiay98528-dev/JotLuck/releases/download/v0.14.0-preview/autocomplete-v25-assets.zip
+          curl -fsSL -o v25-assets.zip https://github.com/jiay98528-dev/JotLuck/releases/download/v0.14.0-preview/autocomplete-v25-assets.zip
           mkdir -p packages/app/src-tauri/resources/autocomplete-v25
-          python -c "import zipfile; zipfile.ZipFile('/tmp/v25-assets.zip').extractall('packages/app/src-tauri/resources/autocomplete-v25')"
-          rm -f /tmp/v25-assets.zip
+          python -c "import zipfile; zipfile.ZipFile('v25-assets.zip').extractall('packages/app/src-tauri/resources/autocomplete-v25')"
+          rm -f v25-assets.zip
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
