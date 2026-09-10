@@ -549,6 +549,24 @@ pub fn run() {
                     }
                 }
             }
+            // macOS 双击关联文件 / Finder「打开方式」：LaunchServices 经
+            // openURLs: Apple Event 投递（冷启动与已运行实例均走此事件，
+            // argv 捕获在 macOS 不生效）。file URL 转路径后复用单实例
+            // 二次调度的同一入口（去重/建窗/聚焦）。
+            tauri::RunEvent::Opened { urls } => {
+                let files: Vec<PathBuf> = urls
+                    .iter()
+                    .filter(|url| url.scheme() == "file")
+                    .filter_map(|url| url.to_file_path().ok())
+                    .filter(|path| {
+                        path.extension()
+                            .and_then(|ext| ext.to_str())
+                            .map(|ext| is_supported_opened_file_extension(&ext.to_ascii_lowercase()))
+                            .unwrap_or(false)
+                    })
+                    .collect();
+                open_secondary_invocation(app.clone(), files);
+            }
             _ => {}
         }
     });

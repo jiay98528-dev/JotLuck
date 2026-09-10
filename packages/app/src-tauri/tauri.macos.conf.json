@@ -1,0 +1,27 @@
+{
+  "bundle": {
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown", "mdx", "txt"],
+        "name": "JotLuck.Note",
+        "description": "JotLuck 笔记",
+        "role": "Editor",
+        "rank": "Default",
+        "contentTypes": ["net.daringfireball.markdown", "public.plain-text"]
+      },
+      {
+        "ext": ["docx", "pdf", "xlsx", "xls"],
+        "name": "JotLuck.DocumentImport",
+        "description": "JotLuck 文档导入",
+        "role": "Editor",
+        "rank": "Default",
+        "contentTypes": [
+          "org.openxmlformats.wordprocessingml.document",
+          "com.adobe.pdf",
+          "org.openxmlformats.spreadsheetml.sheet",
+          "com.microsoft.excel.xls"
+        ]
+      }
+    ]
+  }
+}
