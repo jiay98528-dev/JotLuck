@@ -1,6 +1,7 @@
 import { readonly, shallowRef, type App, type DeepReadonly, type Plugin, type Ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN, { type MessageSchema } from '@/locales/zh-CN';
+import { currentPlatform } from '@/utils/platform';
 import {
   SUPPORTED_LOCALES,
   type LocaleDefinition,
@@ -27,6 +28,22 @@ const localeLoaders: Record<SupportedLocale, () => Promise<{ default: MessageSch
   fr: () => import('@/locales/fr'),
 };
 
+/**
+ * macOS 修饰键符号化：快捷键文案（Ctrl+B / Ctrl+Shift+X / Ctrl+点击 /
+ * Ctrl/Cmd+O 双写）在 macOS 桌面上按系统惯例显示 ⌘ / ⇧⌘。Windows/Web
+ * （含 e2e，平台回落 windows）原样输出，断言零变化。功能键处理本身
+ * 双接受 ctrlKey||metaKey，此处仅文案。
+ */
+function adaptShortcutModifiers<T>(text: T): T {
+  if (typeof text !== 'string' || currentPlatform.value !== 'macos' || !text.includes('Ctrl')) {
+    return text;
+  }
+  return text
+    .replace(/Ctrl\/Cmd\s*\+\s*/gu, '⌘')
+    .replace(/Ctrl\+Shift\+/gu, '⇧⌘')
+    .replace(/Ctrl\+/gu, '⌘') as T;
+}
+
 const i18n = createI18n<MessageSchema, SupportedLocale, false>({
   legacy: false,
   locale: DEFAULT_LOCALE,
@@ -34,6 +51,7 @@ const i18n = createI18n<MessageSchema, SupportedLocale, false>({
   messages: { [DEFAULT_LOCALE]: zhCN } as unknown as Record<SupportedLocale, MessageSchema>,
   missingWarn: import.meta.env.DEV,
   fallbackWarn: import.meta.env.DEV,
+  postTranslation: adaptShortcutModifiers,
   missing: (_locale, key) => {
     if (import.meta.env.DEV || import.meta.env.MODE === 'test') {
       throw new Error(`[i18n] Missing message: ${key}`);

@@ -3,11 +3,15 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import { router } from './router';
 import { initializeLocale, installI18n } from './i18n';
+import { initOsPlatform } from './utils/runtime';
 import { installDesktopContextMenuGuard } from './utils/contextMenuGuard';
 import './assets/styles/main.css';
 
 performance.mark('jotluck:bootstrap-start');
 await initializeLocale();
+// 平台解析先于挂载：i18n postTranslation 依赖 currentPlatform（macOS
+// 快捷键 ⌘ 符号化），避免首批渲染闪烁。
+await initOsPlatform();
 installDesktopContextMenuGuard();
 const app = createApp(App);
 app.use(createPinia());

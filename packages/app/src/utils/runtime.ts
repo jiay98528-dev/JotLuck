@@ -1,7 +1,8 @@
 import { isTauri } from '@tauri-apps/api/core';
-import { invoke } from '@tauri-apps/api/core';
+import { currentPlatform, type OsPlatform } from './platform';
 
-export type OsPlatform = 'macos' | 'windows' | 'linux';
+export type { OsPlatform };
+export { currentPlatform };
 
 export function isDesktopRuntime(): boolean {
   return isTauri();
@@ -21,9 +22,14 @@ export function getOsPlatform(): Promise<OsPlatform> {
   platformPromise = (async () => {
     if (!isDesktopRuntime()) return 'windows';
     try {
+      // 动态导入：模块顶层仅依赖 isTauri，避免旧测试对
+      // @tauri-apps/api/core 的最小 mock（只有 isTauri）被 invoke 具名
+      // 导入打破；运行时行为不变。
+      const { invoke } = await import('@tauri-apps/api/core');
       const platform = await invoke<string>('get_platform');
-      const value = platform === 'macos' || platform === 'linux' ? platform : 'windows';
+      const value: OsPlatform = platform === 'macos' || platform === 'linux' ? platform : 'windows';
       cachedPlatform = value;
+      currentPlatform.value = value;
       return value;
     } catch {
       return 'windows';
@@ -34,9 +40,15 @@ export function getOsPlatform(): Promise<OsPlatform> {
   return platformPromise;
 }
 
-/** 测试注入用：重置平台缓存。 */
+/** 应用挂载前调用一次（幂等）：解析平台并更新 currentPlatform。 */
+export function initOsPlatform(): Promise<OsPlatform> {
+  return getOsPlatform();
+}
+
+/** 测试注入用：重置平台缓存与响应式镜像。 */
 export function resetOsPlatformCacheForTesting(): void {
   cachedPlatform = null;
+  currentPlatform.value = 'windows';
 }
 
 export function shouldPersistMockFs(): boolean {
