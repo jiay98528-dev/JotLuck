@@ -242,6 +242,7 @@
               <p class="document-edit-dialog__intro">{{ t('documentImport.editDialogBody') }}</p>
               <div class="document-edit-dialog__choices">
                 <button
+                  v-if="isWindowsPlatform"
                   class="document-edit-dialog__choice"
                   :disabled="actionPending"
                   @click="editOriginalInProfessionalApp"
@@ -304,6 +305,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { useRouter } from 'vue-router';
+import { getOsPlatform } from '@/utils/runtime';
 import Button from '@/components/common/Button.vue';
 import ToastContainer from '@/components/common/Toast.vue';
 import RightWing from '@/components/layout/RightWing.vue';
@@ -474,6 +476,12 @@ const progressLabel = computed(() => {
     total: progressTotal.value,
     unit,
   });
+});
+// 「编辑源文件（专业软件）」依赖 Windows AssocHandler API（后端非 Windows
+// 返回不可用错误）；非 Windows 隐藏该选项，保留跨平台的 Markdown 副本编辑。
+const isWindowsPlatform = ref(true);
+void getOsPlatform().then((platform) => {
+  isWindowsPlatform.value = platform === 'windows';
 });
 const canStartDocumentEdit = computed(
   () =>

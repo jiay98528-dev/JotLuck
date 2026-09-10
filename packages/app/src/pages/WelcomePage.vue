@@ -17,18 +17,18 @@
           </div>
 
           <div class="welcome-steps" role="tablist" :aria-label="t('welcome.progress')">
-            <template v-for="i in TOTAL_STEPS" :key="i">
+            <template v-for="i in totalSteps" :key="i">
               <span
                 class="welcome-step-dot"
-                :class="{ active: currentStep >= i }"
+                :class="{ active: displayStep >= i }"
                 role="tab"
-                :aria-selected="currentStep === i"
+                :aria-selected="displayStep === i"
                 :aria-label="t('welcome.stepAria', { step: i })"
               />
               <span
-                v-if="i < TOTAL_STEPS"
+                v-if="i < totalSteps"
                 class="welcome-step-line"
-                :class="{ active: currentStep > i }"
+                :class="{ active: displayStep > i }"
               />
             </template>
           </div>
@@ -145,7 +145,7 @@
           </div>
 
           <div class="welcome-footer">
-            <button v-if="currentStep < TOTAL_STEPS" class="welcome-skip-link" @click="skip">
+            <button v-if="currentStep < MAX_LOGICAL_STEP" class="welcome-skip-link" @click="skip">
               {{ t('welcome.skip') }}
             </button>
             <span v-else class="welcome-footer-spacer" />
@@ -157,7 +157,7 @@
               data-dialog-initial-focus
               @click="nextStep"
             >
-              {{ currentStep < TOTAL_STEPS ? t('common.next') : t('welcome.finish') }}
+              {{ currentStep < MAX_LOGICAL_STEP ? t('common.next') : t('welcome.finish') }}
             </Button>
           </div>
         </div>
@@ -171,7 +171,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import Button from '@/components/common/Button.vue';
 import { useDialogFocus } from '@/composables/useDialogFocus';
-import { isDesktopRuntime } from '@/utils/runtime';
+import { getOsPlatform, isDesktopRuntime } from '@/utils/runtime';
 import { hasCompletedWelcome, markWelcomeCompleted } from '@/utils/welcome';
 import { useI18n } from 'vue-i18n';
 import type { AssociationGroupStatus, WindowsAssociationStatus } from '@/types';
@@ -183,8 +183,20 @@ const { t } = useI18n();
 const AUTO_CHECK_KEY = 'jotluck:version:autoCheck';
 const AUTO_INSTALL_KEY = 'jotluck:version:autoInstall';
 const DEFAULT_EDITOR_PROMPT_KEY = 'jotluck:welcome:defaultEditorPrompted';
-const TOTAL_STEPS = 6;
-
+// 逻辑步骤恒为 1..6（模板 v-else-if 硬编码）；第 4 步（Windows 默认编辑器/
+// 文件关联）为 Windows 专属——非 Windows 平台 nextStep 从 3 直接跳到 5，
+// 进度点与 aria 按 totalSteps/displayStep 重映射（6→5）。
+// Web 预览回落 windows 语义（getOsPlatform 契约），e2e 断言零变化。
+const MAX_LOGICAL_STEP = 6;
+const isWindowsPlatform = ref(true);
+void getOsPlatform().then((platform) => {
+  isWindowsPlatform.value = platform === 'windows';
+});
+const totalSteps = computed(() => (isWindowsPlatform.value ? 6 : 5));
+/** 显示用步骤序号：非 Windows 下逻辑步 5/6 映射为 4/5。 */
+const displayStep = computed(() =>
+  isWindowsPlatform.value || currentStep.value < 5 ? currentStep.value : currentStep.value - 1,
+);
 const currentStep = ref(1);
 const autoCheckEnabled = ref(localStorage.getItem(AUTO_CHECK_KEY) === 'true');
 type DefaultEditorNotice = '' | 'webPreview' | 'settingsOpened' | 'settingsFailed';
@@ -287,8 +299,14 @@ watch(currentStep, (step) => {
 });
 
 function nextStep(): void {
-  if (currentStep.value < TOTAL_STEPS) {
-    currentStep.value += 1;
+  const next = currentStep.value + 1;
+  const target = !isWindowsPlatform.value && next === 4 ? 5 : next;
+  if (target < MAX_LOGICAL_STEP) {
+    currentStep.value = target;
+    return;
+  }
+  if (target === MAX_LOGICAL_STEP) {
+    currentStep.value = target;
     return;
   }
   complete();
@@ -331,6 +349,11 @@ async function onSetDefaultEditor(): Promise<void> {
 
 async function refreshAssociationStatus(): Promise<void> {
   if (!props.visible || currentStep.value !== 4) return;
+  // Windows 专属步骤：等平台解析完成再判断，非 Windows 不触发关联命令。
+  if ((await getOsPlatform()) !== 'windows') {
+    associationStatus.value = null;
+    return;
+  }
   associationStatusError.value = false;
 
   if (!isDesktopRuntime()) {

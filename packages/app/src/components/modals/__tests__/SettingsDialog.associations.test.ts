@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SettingsDialog from '../SettingsDialog.vue';
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
+const { platformRef } = vi.hoisted(() => ({ platformRef: { value: 'windows' as string } }));
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke,
@@ -10,6 +11,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 vi.mock('@/utils/runtime', () => ({
   isDesktopRuntime: () => true,
+  getOsPlatform: () => Promise.resolve(platformRef.value),
 }));
 
 describe('SettingsDialog Windows file associations', () => {
@@ -59,7 +61,23 @@ describe('SettingsDialog Windows file associations', () => {
     });
   });
 
-  afterEach(() => document.body.replaceChildren());
+  afterEach(() => {
+    document.body.replaceChildren();
+    platformRef.value = 'windows';
+  });
+
+  it('hides the file-opening section on macOS and skips association commands', async () => {
+    platformRef.value = 'macos';
+    mount(SettingsDialog, {
+      props: { visible: true },
+      attachTo: document.body,
+    });
+    await flushPromises();
+
+    expect(document.querySelector('.association-settings')).toBeNull();
+    expect(document.body.textContent).not.toContain('在 Windows 中更改');
+    expect(invoke).not.toHaveBeenCalledWith('get_windows_association_status');
+  });
 
   it('shows effective per-group states and opens the JotLuck-specific Windows page', async () => {
     const wrapper = mount(SettingsDialog, {
