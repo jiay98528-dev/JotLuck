@@ -4892,16 +4892,17 @@ async function onCreateBlank(): Promise<void> {
 
 // --- Keyboard ---
 function onGlobalKeydown(e: KeyboardEvent): void {
-  const key = e.key.toLowerCase();
+  // e.code 与键盘布局无关：非拉丁布局（俄文等）下 e.key 不是拉丁字母。
+  const key = e.code;
   if (
     isInteractionLocked.value &&
     (e.ctrlKey || e.metaKey) &&
-    (key === 's' || key === 'o' || key === 'k' || (e.shiftKey && key === 'p'))
+    (key === 'KeyS' || key === 'KeyO' || key === 'KeyK' || (e.shiftKey && key === 'KeyP'))
   ) {
     e.preventDefault();
     return;
   }
-  if ((e.ctrlKey || e.metaKey) && key === 's') {
+  if ((e.ctrlKey || e.metaKey) && key === 'KeyS') {
     e.preventDefault();
     e.stopPropagation();
     if (isGuidedSampleSession.value) {
@@ -4916,19 +4917,19 @@ function onGlobalKeydown(e: KeyboardEvent): void {
     return;
   }
   if (isExternalSession.value) return;
-  if ((e.ctrlKey || e.metaKey) && key === 'o') {
+  if ((e.ctrlKey || e.metaKey) && key === 'KeyO') {
     e.preventDefault();
     e.stopPropagation();
     void requestOpenNotebook();
     return;
   }
   if (isWorkspaceUnbound.value || isInteractionLocked.value) return;
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'p') {
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'KeyP') {
     e.preventDefault();
     e.stopPropagation();
     searchVisible.value = true;
   }
-  if ((e.ctrlKey || e.metaKey) && key === 'k') {
+  if ((e.ctrlKey || e.metaKey) && key === 'KeyK') {
     e.preventDefault();
     e.stopPropagation();
     searchVisible.value = true;

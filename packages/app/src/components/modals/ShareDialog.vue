@@ -377,12 +377,17 @@ function shareViaEmail(title: string, content: string): void {
 async function shareViaClipboard(content: string): Promise<void> {
   if (selectedFormat.value === ExportFormat.HTML) {
     const blob = new Blob([content], { type: 'text/html' });
-    await navigator.clipboard.write([
-      new ClipboardItem({
-        'text/html': blob,
-        'text/plain': new Blob([content], { type: 'text/plain' }),
-      }),
-    ]);
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': blob,
+          'text/plain': new Blob([content], { type: 'text/plain' }),
+        }),
+      ]);
+    } catch {
+      // WebKitGTK 对 ClipboardItem 的 text/html 写入支持不完整——降级纯文本。
+      await navigator.clipboard.writeText(content);
+    }
   } else {
     await navigator.clipboard.writeText(content);
   }

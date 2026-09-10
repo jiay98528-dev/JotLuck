@@ -60,8 +60,13 @@ function recordWebDriverEvent(event) {
 }
 
 async function main() {
+  if (process.platform === 'linux') {
+    throw new Error(
+      'Linux WebView smoke runs via scripts/release/linux-preview-pack.sh (window mapping + backend init); webdriver-based smoke here requires tauri-driver setup that is not wired yet',
+    );
+  }
   if (process.platform !== 'win32') {
-    throw new Error('Tauri WebView release smoke must run on Windows/WebView2');
+    throw new Error('Tauri WebView release smoke must run on Windows/WebView2 (or Linux via linux-preview-pack.sh)');
   }
   if (!isV25AutocompleteE2E) await assertFreshEvidenceTargets();
 

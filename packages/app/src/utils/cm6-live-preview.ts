@@ -1020,6 +1020,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
       editorView: EditorView | null = null;
       // Stored listener refs for cleanup
       onClick: ((e: MouseEvent) => void) | null = null;
+      onContextMenu: ((e: MouseEvent) => void) | null = null;
       onRemoteImageLoad: ((e: Event) => void) | null = null;
       onRemoteImageError: ((e: Event) => void) | null = null;
       onPointerDownCapture: ((e: PointerEvent) => void) | null = null;
@@ -1125,6 +1126,19 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         };
         this.onClick = onClick;
         view.dom.addEventListener('click', onClick);
+        // WebKit 家族（macOS 及部分 WebKitGTK 配置）把 Ctrl+click 合成为
+        // contextmenu 且不派发 click——固定区块的入口在 contextmenu 上兜底，
+        // 仅处理带 ctrlKey 的合成事件，真实右键仍走默认菜单/编辑器菜单。
+        const onContextMenu = (event: MouseEvent): void => {
+          if (!event.ctrlKey) return;
+          const target = event.target as HTMLElement | null;
+          if (!target?.closest('.cm-live-block')) return;
+          event.preventDefault();
+          event.stopPropagation();
+          onClick(event);
+        };
+        this.onContextMenu = onContextMenu;
+        view.dom.addEventListener('contextmenu', onContextMenu);
         const onRemoteImageLoad = (event: Event) => {
           options.onRemoteImageLoad?.(event);
         };
@@ -1477,6 +1491,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           // Remove click/pointerdown listeners from dom
           const dom = this.editorView.dom;
           if (this.onClick) dom.removeEventListener('click', this.onClick);
+          if (this.onContextMenu) dom.removeEventListener('contextmenu', this.onContextMenu);
           if (this.onRemoteImageLoad) dom.removeEventListener('load', this.onRemoteImageLoad, true);
           if (this.onRemoteImageError)
             dom.removeEventListener('error', this.onRemoteImageError, true);

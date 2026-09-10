@@ -420,7 +420,7 @@ async function verifyChecksum(path: string, bytes: Uint8Array, expected: string)
     throw createUserMessageError('theme.validation.invalidChecksum', { path });
   const payload = new Uint8Array(bytes.byteLength);
   payload.set(bytes);
-  const digest = await crypto.subtle.digest('SHA-256', payload.buffer);
+  const digest = await crypto.subtle.digest('SHA-256', payload);
   const actual = `sha256-${Array.from(new Uint8Array(digest))
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('')}`;
