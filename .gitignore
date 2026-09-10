@@ -135,3 +135,5 @@ local-archive/
 /packages/app/public/autocomplete-v25/
 /packages/app/src-tauri/resources/autocomplete-v25/*
 !/packages/app/src-tauri/resources/autocomplete-v25/README.txt
+
+scripts/release/linux-preview-last-receipt.json

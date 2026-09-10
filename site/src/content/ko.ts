@@ -98,24 +98,25 @@ export const ko: SiteContent = {
   download: {
     eyebrow: '다운로드',
     title: 'Preview가 공개되었습니다.',
-    lead: 'Windows x64 미리보기 버전은 지금 바로 다운로드할 수 있습니다. macOS와 Linux도 뒤따릅니다——순수 텍스트는 플랫폼을 가리지 않으며, 당신의 노트는 어떤 시스템에서도 로컬 파일로 남습니다.',
+    lead: 'Windows x64와 Linux x86_64 미리보기 버전은 지금 바로 다운로드할 수 있습니다. macOS는 뒤따릅니다——순수 텍스트는 플랫폼을 가리지 않으며, 당신의 노트는 어떤 시스템에서도 로컬 파일로 남습니다.',
     statusLabel: '첫 번째 플랫폼',
     statusValue: 'Windows x64',
     platformTitle: '플랫폼',
     platforms: [
       { name: 'Windows x64', state: 'Preview 공개 중' },
       { name: 'macOS', state: '이어서 출시' },
-      { name: 'Linux', state: '이어서 출시' },
+      { name: 'Linux x86_64', state: 'Preview 공개 중' },
     ],
     honestyTitle: 'Preview가 먼저입니다.',
     honestyBody:
       'Preview 설치 파일은 이미 GitHub Releases에 공개되었습니다——다운로드 가능하고, 검증 가능하며, 되돌릴 수 있습니다.',
     previewTitle: 'v0.14.0 Preview',
     downloadBtn: 'Preview 다운로드（Windows x64）',
+    downloadBtnLinux: 'Preview 다운로드（Linux .deb）',
     githubBtn: 'GitHub',
     releaseBtn: 'Release 노트와 체크섬',
     signNote:
-      '이 Preview는 서명되지 않았습니다: Windows SmartScreen이 경고를 표시할 수 있습니다. 설치 전에 SHA-256이 Release 페이지와 일치하는지 확인하세요.',
+      '이 Preview는 서명되지 않았습니다. Windows SmartScreen이 경고할 수 있습니다. Linux는 dpkg로 설치하고 SHA-256을 Release 페이지와 맞추세요.',
     signPolicyLink: '코드 서명 정책',
     notesTitle: '알아 두면 좋은 것',
     notes: [

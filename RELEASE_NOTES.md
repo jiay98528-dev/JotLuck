@@ -29,6 +29,25 @@ Releases. Verify the SHA-256 before installing:
 Code signing follows the pipeline documented in
 [`CODE_SIGNING.md`](./CODE_SIGNING.md).
 
+## Linux x86_64 preview pack
+
+The same `v0.14.0-preview` source is packaged as an unsigned `.deb` on the
+GitHub Release. Rebuild with
+[`scripts/release/linux-preview-pack.sh`](./scripts/release/README-linux-preview.md).
+AppImage is not included.
+
+Linux-only adapters kept in tree:
+
+- WebKitGTK DMABUF workaround (`WEBKIT_DISABLE_DMABUF_RENDERER=1` when unset)
+- custom `.desktop` with Office/TextEditor categories and optional MIME types
+  for `.md`, `.markdown`, `.mdx`, `.txt`, `.docx`, `.pdf`, `.xlsx`, and `.xls`.
+  Installation does not replace the user's default application.
+
+Host check: Linux Mint 22.1, Surface Go, window mapped after pack smoke.
+Public `.deb`: `JotLuck_0.14.0_amd64.deb`, 23 307 002 bytes, SHA-256
+`6ae3a07027b1376956ad69ecb89cfa9a2c31d1298823fb591e28e2cad8730fce`.
+AppImage was not produced (`linuxdeploy` failed).
+
 ## What's next
 
 - Collect real-world personalization feedback (visible top-1 flips in daily

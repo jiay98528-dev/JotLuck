@@ -43,7 +43,16 @@ behavior boundaries.
   granted in the default desktop capability file.
 - Notebook root, native watcher, search index, and completion retrieval state
   are isolated by window. Closing one window removes only that window's state.
-- macOS and Linux packages still need host-specific packaging, signing, and
+- Linux x86_64 unsigned `.deb` is on the `v0.14.0-preview` GitHub Release
+  (`JotLuck_0.14.0_amd64.deb`, SHA-256
+  `6ae3a07027b1376956ad69ecb89cfa9a2c31d1298823fb591e28e2cad8730fce`). Rebuild
+  with `scripts/release/linux-preview-pack.sh`. Host-checked on Linux Mint 22.1.
+  The `.desktop` file registers optional MIME types and does not run
+  `xdg-mime default`. Some desktops may still select a newly registered
+  handler on install; that is host behavior, not a claimed default-app
+  override. Some WebKitGTK sessions need
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1` (the Linux binary sets this when unset).
+- macOS packages still need host-specific packaging, signing, and
   release validation.
 
 ## Rust Dependency Audit Warnings

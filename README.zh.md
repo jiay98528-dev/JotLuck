@@ -99,14 +99,14 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 | ------------ | ------------------------------------------------------------------------------------------ |
 | 当前源码版本 | `v0.14.0-preview`                                                                          |
 | 发行阶段     | 公开预览版，未签名；不是稳定版                                                             |
-| 候选平台     | Windows x64                                                                                |
-| 桌面运行时   | Tauri 2 与 Microsoft Edge WebView2                                                         |
+| 候选平台     | Windows x64 与 Linux x86_64 未签名预览已上架 GitHub Releases；macOS 尚未打包               |
+| 桌面运行时   | Tauri 2；Windows 为 WebView2，Linux 为 WebKitGTK 4.1                                       |
 | 可编辑格式   | `.md`、`.markdown`、`.mdx`、`.txt`                                                         |
 | 只读导入格式 | `.docx`、`.pdf`、`.xlsx`、`.xls`；提供 Markdown 语义预览，不承诺 Office/PDF 像素级版式复刻 |
 | 文件关联     | 八种扩展名均为可选“打开方式”；安装和升级都不替换用户在 Windows 中的默认选择                |
 | 许可证       | MIT                                                                                        |
 
-macOS 和 Linux 版本尚未完成对应主机的打包、签名与发行验证。完整边界请阅读 [已知限制](./KNOWN_LIMITATIONS.md) 和每次发布附带的说明。
+Linux x86_64 未签名 `.deb` 已随 `v0.14.0-preview` 发布到 GitHub Releases（`JotLuck_0.14.0_amd64.deb`，SHA-256 `6ae3a07027b1376956ad69ecb89cfa9a2c31d1298823fb591e28e2cad8730fce`）。本机构建请用 [`scripts/release/linux-preview-pack.sh`](./scripts/release/README-linux-preview.md)。macOS 版本尚未完成对应主机的打包、签名与发行验证。完整边界请阅读 [已知限制](./KNOWN_LIMITATIONS.md) 和每次发布附带的说明。
 
 ## 常见问题
 
@@ -155,6 +155,7 @@ macOS 和 Linux 版本尚未完成对应主机的打包、签名与发行验证�
 - pnpm 9+，仓库当前锁定 pnpm 11.x
 - Rust 1.88+，仅桌面开发与打包需要
 - Windows 上的 Tauri 与 WebView2 构建依赖
+- Linux 上的 WebKitGTK 4.1 / GTK 3 构建依赖，见 [Linux 预览出包](./scripts/release/README-linux-preview.md)
 
 ### 启动 Web 开发环境
 
@@ -178,7 +179,7 @@ pnpm.cmd --filter @jotluck/app build
 pnpm.cmd audit --prod --audit-level high
 ```
 
-正式发行还需要通过安装包级验证、Rust 依赖审计和人工 GUI 旅程，具体规则见 [发行闸门](./doc/release-rc-gate.md)。
+正式 Windows 发行还需要通过安装包级验证、Rust 依赖审计和人工 GUI 旅程，具体规则见 [发行闸门](./doc/release-rc-gate.md)。Linux 预览 `.deb` 用 `./scripts/release/linux-preview-pack.sh` 生成，已作为未签名预览上架，不是稳定版。
 
 项目资料：
 

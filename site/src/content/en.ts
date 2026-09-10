@@ -98,24 +98,25 @@ export const en: SiteContent = {
   download: {
     eyebrow: 'Download',
     title: 'Preview is live.',
-    lead: 'The Windows x64 preview is ready to download now. macOS and Linux follow. Plain text never picks platforms, and your notes stay local files on every system.',
+    lead: 'Windows x64 and Linux x86_64 previews are ready to download now. macOS follows. Plain text never picks platforms, and your notes stay local files on every system.',
     statusLabel: 'First platform',
     statusValue: 'Windows x64',
     platformTitle: 'Platforms',
     platforms: [
       { name: 'Windows x64', state: 'Preview live' },
       { name: 'macOS', state: 'Follows' },
-      { name: 'Linux', state: 'Follows' },
+      { name: 'Linux x86_64', state: 'Preview live' },
     ],
     honestyTitle: 'Preview first.',
     honestyBody:
       'The preview installer is already on GitHub Releases — downloadable, verifiable, reversible.',
     previewTitle: 'v0.14.0 Preview',
     downloadBtn: 'Download Preview (Windows x64)',
+    downloadBtnLinux: 'Download Preview (Linux .deb)',
     githubBtn: 'GitHub',
     releaseBtn: 'Release notes & checksum',
     signNote:
-      'This preview is unsigned: Windows SmartScreen may warn. Verify the SHA-256 against the Release page before installing.',
+      'This preview is unsigned: Windows SmartScreen may warn; on Linux use dpkg and verify SHA-256. Check the Release page before installing.',
     signPolicyLink: 'Code signing policy',
     notesTitle: 'Worth knowing',
     notes: [
