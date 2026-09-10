@@ -79,6 +79,10 @@ describe('TauriIPCService recent notebook sanitizer', () => {
     expect(isLikelySystemNotebookScope('C:/Users/alice/Downloads/')).toBe(true);
     expect(isLikelySystemNotebookScope('D:/')).toBe(true);
     expect(isLikelySystemNotebookScope('D:/VibeCoding/MarkLuck')).toBe(false);
+    expect(isLikelySystemNotebookScope('/home/alice')).toBe(true);
+    expect(isLikelySystemNotebookScope('/home/alice/Desktop')).toBe(true);
+    expect(isLikelySystemNotebookScope('/root')).toBe(true);
+    expect(isLikelySystemNotebookScope('/home/alice/notes')).toBe(false);
   });
 
   it('deduplicates and preserves normal notebook paths', () => {

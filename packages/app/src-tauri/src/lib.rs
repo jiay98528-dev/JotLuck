@@ -96,8 +96,8 @@ fn capture_opened_files_from_args(args: &[String], cwd: &Path) -> Vec<PathBuf> {
 
 fn startup_log_path() -> Option<PathBuf> {
     let base = std::env::var_os("LOCALAPPDATA")
-        .or_else(|| std::env::var_os("TMP"))
-        .map(PathBuf::from)?;
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
     let dir = base.join("JotLuck").join("logs");
     if fs::create_dir_all(&dir).is_err() {
         return None;
