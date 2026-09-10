@@ -213,19 +213,22 @@ fn window_geometry_is_sane(window: &WebviewWindow) -> bool {
     let Ok(position) = window.outer_position() else {
         return false;
     };
-    window
-        .available_monitors()
-        .map(|monitors| {
-            monitors.iter().any(|monitor| {
-                let origin = monitor.position();
-                let bounds = monitor.size();
-                position.x < origin.x + bounds.width as i32
-                    && position.x + size.width as i32 > origin.x
-                    && position.y < origin.y + bounds.height as i32
-                    && position.y + size.height as i32 > origin.y
-            })
-        })
-        .unwrap_or(false)
+    let Ok(monitors) = window.available_monitors() else {
+        return true;
+    };
+    // 无头/远程会话可能拿不到显示器列表——无法判定时不干预，
+    // 避免 guard 在 5 分钟窗口内反复重置窗口（SSH DISPLAY 冒烟实测教训）。
+    if monitors.is_empty() {
+        return true;
+    }
+    monitors.iter().any(|monitor| {
+        let origin = monitor.position();
+        let bounds = monitor.size();
+        position.x < origin.x + bounds.width as i32
+            && position.x + size.width as i32 > origin.x
+            && position.y < origin.y + bounds.height as i32
+            && position.y + size.height as i32 > origin.y
+    })
 }
 
 /// macOS：启动后轮询主窗口几何，发现 0×0/离屏时重置为默认尺寸并居中。
