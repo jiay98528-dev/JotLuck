@@ -106,7 +106,7 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 | 文件关联     | 八种扩展名均为可选“打开方式”；安装和升级都不替换用户在 Windows 中的默认选择                |
 | 许可证       | MIT                                                                                        |
 
-Linux x86_64 未签名 `.deb` 已随 `v0.14.0-preview` 发布到 GitHub Releases（`JotLuck_0.14.0_amd64.deb`，SHA-256 `6ae3a07027b1376956ad69ecb89cfa9a2c31d1298823fb591e28e2cad8730fce`）。本机构建请用 [`scripts/release/linux-preview-pack.sh`](./scripts/release/README-linux-preview.md)。macOS 版本尚未完成对应主机的打包、签名与发行验证。完整边界请阅读 [已知限制](./KNOWN_LIMITATIONS.md) 和每次发布附带的说明。
+Linux x86_64 未签名 `.deb` 已随 `v0.14.0-preview` 发布到 GitHub Releases（`JotLuck_0.14.0_amd64.deb`，SHA-256 `3d5f7b709c0eaf9fea2877593696c30cbc15f0a640733d208a040d8fc3a3ed77`）。本机构建请用 [`scripts/release/linux-preview-pack.sh`](./scripts/release/README-linux-preview.md)。macOS 版本尚未完成对应主机的打包、签名与发行验证。完整边界请阅读 [已知限制](./KNOWN_LIMITATIONS.md) 和每次发布附带的说明。
 
 ## 常见问题
 

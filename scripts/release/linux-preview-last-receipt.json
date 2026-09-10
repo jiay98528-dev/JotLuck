@@ -1,8 +1,8 @@
 {
   "schema": "jotluck.linux-preview-receipt.v1",
   "version": "0.14.0",
-  "gitRev": "b7f849efb40120eab040bc513688635ce5c6a48a",
-  "builtAt": "2026-09-09T14:03:27+08:00",
+  "gitRev": "f24ff545a1d114f84496ec04fe8bf59924394a27",
+  "builtAt": "2026-09-10T11:57:27+08:00",
   "host": {
     "os": "Linux Mint 22.1",
     "kernel": "6.8.0-51-generic",
@@ -12,8 +12,8 @@
   "artifacts": {
     "deb": {
       "path": "packages/app/src-tauri/target/release/bundle/deb/JotLuck_0.14.0_amd64.deb",
-      "bytes": 23307002,
-      "sha256": "6ae3a07027b1376956ad69ecb89cfa9a2c31d1298823fb591e28e2cad8730fce",
+      "bytes": 39678902,
+      "sha256": "3d5f7b709c0eaf9fea2877593696c30cbc15f0a640733d208a040d8fc3a3ed77",
       "status": "ok"
     },
     "appimage": {
@@ -25,7 +25,7 @@
   },
   "smoke": {
     "status": "pass",
-    "detail": "window mapped; backend initialized"
+    "detail": "backend initialized; completion decoder ready (v25-one-unit-writing-q4-r27); window-map check unavailable in locked/headless session — verified on installed package"
   },
   "published": false
 }

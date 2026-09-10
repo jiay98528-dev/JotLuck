@@ -45,7 +45,7 @@ behavior boundaries.
   are isolated by window. Closing one window removes only that window's state.
 - Linux x86_64 unsigned `.deb` is on the `v0.14.0-preview` GitHub Release
   (`JotLuck_0.14.0_amd64.deb`, SHA-256
-  `6ae3a07027b1376956ad69ecb89cfa9a2c31d1298823fb591e28e2cad8730fce`). Rebuild
+  `3d5f7b709c0eaf9fea2877593696c30cbc15f0a640733d208a040d8fc3a3ed77`). Rebuild
   with `scripts/release/linux-preview-pack.sh`. Host-checked on Linux Mint 22.1.
   The `.desktop` file registers optional MIME types and does not run
   `xdg-mime default`. Some desktops may still select a newly registered

@@ -45,7 +45,7 @@ Linux-only adapters kept in tree:
 
 Host check: Linux Mint 22.1, Surface Go, window mapped after pack smoke.
 Public `.deb`: `JotLuck_0.14.0_amd64.deb`, 23 307 002 bytes, SHA-256
-`6ae3a07027b1376956ad69ecb89cfa9a2c31d1298823fb591e28e2cad8730fce`.
+`3d5f7b709c0eaf9fea2877593696c30cbc15f0a640733d208a040d8fc3a3ed77`.
 AppImage was not produced (`linuxdeploy` failed).
 
 ## What's next

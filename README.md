@@ -106,7 +106,7 @@ See the full [Privacy Policy](./PRIVACY.md) and the identity and integrity proce
 | File associations        | All eight extensions are optional Open With choices; installation and upgrade never replace the user's Windows default choice |
 | License                  | MIT                                                                                                                           |
 
-Linux x86_64 unsigned `.deb` is published on the `v0.14.0-preview` GitHub Release (`JotLuck_0.14.0_amd64.deb`, SHA-256 `6ae3a07027b1376956ad69ecb89cfa9a2c31d1298823fb591e28e2cad8730fce`). Rebuild on a Debian/Ubuntu 24.04-family host with [`scripts/release/linux-preview-pack.sh`](./scripts/release/README-linux-preview.md). macOS packages have not completed host-specific packaging, signing, or release validation. Read [Known Limitations](./KNOWN_LIMITATIONS.md) and the notes attached to each release before installing.
+Linux x86_64 unsigned `.deb` is published on the `v0.14.0-preview` GitHub Release (`JotLuck_0.14.0_amd64.deb`, SHA-256 `3d5f7b709c0eaf9fea2877593696c30cbc15f0a640733d208a040d8fc3a3ed77`). Rebuild on a Debian/Ubuntu 24.04-family host with [`scripts/release/linux-preview-pack.sh`](./scripts/release/README-linux-preview.md). macOS packages have not completed host-specific packaging, signing, or release validation. Read [Known Limitations](./KNOWN_LIMITATIONS.md) and the notes attached to each release before installing.
 
 ## Frequently asked questions
 

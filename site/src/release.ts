@@ -16,7 +16,7 @@ export const RELEASE = {
     linuxDeb: {
       downloadUrl:
         'https://github.com/jiay98528-dev/JotLuck/releases/download/v0.14.0-preview/JotLuck_0.14.0_amd64.deb',
-      sha256: '6ae3a07027b1376956ad69ecb89cfa9a2c31d1298823fb591e28e2cad8730fce',
+      sha256: '3d5f7b709c0eaf9fea2877593696c30cbc15f0a640733d208a040d8fc3a3ed77',
     },
   },
 };
