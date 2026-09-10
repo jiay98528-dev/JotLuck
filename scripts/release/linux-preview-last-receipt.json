@@ -1,0 +1,31 @@
+{
+  "schema": "jotluck.linux-preview-receipt.v1",
+  "version": "0.14.0",
+  "gitRev": "b7f849efb40120eab040bc513688635ce5c6a48a",
+  "builtAt": "2026-09-09T14:03:27+08:00",
+  "host": {
+    "os": "Linux Mint 22.1",
+    "kernel": "6.8.0-51-generic",
+    "arch": "x86_64",
+    "webkit2gtk": "2.52.6-0ubuntu0.24.04.1"
+  },
+  "artifacts": {
+    "deb": {
+      "path": "packages/app/src-tauri/target/release/bundle/deb/JotLuck_0.14.0_amd64.deb",
+      "bytes": 23307002,
+      "sha256": "6ae3a07027b1376956ad69ecb89cfa9a2c31d1298823fb591e28e2cad8730fce",
+      "status": "ok"
+    },
+    "appimage": {
+      "path": null,
+      "bytes": null,
+      "sha256": null,
+      "status": "failed"
+    }
+  },
+  "smoke": {
+    "status": "pass",
+    "detail": "window mapped; backend initialized"
+  },
+  "published": false
+}
