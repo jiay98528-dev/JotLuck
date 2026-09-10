@@ -25,6 +25,19 @@ use std::{
 use tauri::{Emitter, Manager, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 use uuid::Uuid;
 
+/// Best-effort OS identity for the frontend: 'windows' | 'macos' | 'linux'.
+/// The frontend has no other reliable OS signal inside the WebView.
+#[tauri::command]
+fn platform_os() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "windows"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else {
+        "linux"
+    }
+}
+
 /// Force-close the calling window after the frontend has completed its save guard.
 /// `close()` would emit another CloseRequested event and re-enter the guard.
 #[tauri::command]
@@ -325,6 +338,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             destroy_current_window,
+            platform_os,
             window_session::get_window_bootstrap,
             window_session::enable_external_edit,
             window_session::promote_external_file_to_notebook,
