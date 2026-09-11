@@ -9,3 +9,11 @@
 - 回滚目标：`releases/20260910-c228c44`(ln -sfn 指回 + mv -T 即可)
 - 上线核验：五语首页 ✅ ×5；zh/en 下载页 200 ✅；下载页 macOS 入口（按钮/SHA fb10381d…/平台状态）✅；www 301 ✅；zh changelog 200(/zh/changelog) ✅
 - Release 同步：v0.14.0-preview 新增资产 `JotLuck_0.14.0_aarch64.dmg`(41,242,396 字节，SHA-256 `fb10381d0c0e199921ba691a32db7e52910060cb59a2aab8a0735ad5fd10e1c6`)，body 增补 macOS Apple Silicon preview 段（下载往返哈希核验一致）；分支 mac-port(12 提交)已推送 origin
+
+## 同日第二次部署：官网文案与现状同步（deec3de）
+
+- 触发 commit：`deec3de` fix(config): 官网文案与 0.14.0 三平台现状同步
+- 版本目录：`/var/www/jotluck/releases/20260911-deec3de`（current 已切换；回滚指回 `releases/20260911-741138d`）
+- 内容：五语下载/更新日志页 meta 去 Windows 限定；signNote 五语补 macOS ad-hoc 右键打开；扩展名计数 4→8；JSON-LD operatingSystem/keywords 三平台；changelog 数据重同步（0.14.0 含 macOS/Linux 段+dmg SHA）；sitemap lastmod → 2026-09-11
+- 上线核验：五语下载页三处检查全过；changelog macOS 段 ✅；JSON-LD "Windows, macOS, Linux" ✅；sitemap download lastmod 2026-09-11 ✅
+- 分支：deec3de 已推送（--force-with-lease 覆盖被 amend 重写的 7d9800c，内容为 7d9800c+文案修复的合并）
