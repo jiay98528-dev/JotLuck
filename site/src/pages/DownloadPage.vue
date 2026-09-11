@@ -64,7 +64,7 @@ const d = () => content.value.download;
           </svg>
           {{ d().downloadBtn }}
         </a>
-        <a class="btn btn-secondary" :href="RELEASE.preview.linuxDeb.downloadUrl" rel="noopener">
+        <a class="btn btn-primary" :href="RELEASE.preview.linuxDeb.downloadUrl" rel="noopener">
           <svg
             class="pf-icon"
             viewBox="0 0 24 24"
@@ -78,7 +78,7 @@ const d = () => content.value.download;
           </svg>
           {{ d().downloadBtnLinux }}
         </a>
-        <a class="btn btn-secondary" :href="RELEASE.preview.macosDmg.downloadUrl" rel="noopener">
+        <a class="btn btn-primary" :href="RELEASE.preview.macosDmg.downloadUrl" rel="noopener">
           <svg
             class="pf-icon"
             viewBox="0 0 24 24"
@@ -224,6 +224,24 @@ const d = () => content.value.download;
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
+}
+/* 三平台平权：下载组统一 btn-primary 深青（GitHub/Release 保持 btn-secondary 辅助层级）。
+   hover/focus-visible 变色高亮：背景以 color-mix 向炭墨压深 15%（同族深青，不引入新硬编码色），
+   再叠套准橙 inset 印记呼应印刷语言——hover=底部套印色条，focus=全内框（与全局橙 outline 环同族加强）。
+   变色/阴影均走 .btn 既有 130ms transition（background-color、box-shadow 已在过渡列表），无需重声明。 */
+.pv-actions .btn-primary:hover,
+.pv-actions .btn-primary:focus-visible {
+  background-color: color-mix(in oklch, var(--teal) 85%, var(--ink));
+}
+.pv-actions .btn-primary:hover {
+  box-shadow:
+    var(--shadow-stack),
+    inset 0 -3px 0 var(--orange);
+}
+.pv-actions .btn-primary:focus-visible {
+  box-shadow:
+    var(--shadow-stack),
+    inset 0 0 0 2px var(--orange);
 }
 /* GitHub 分流按钮图标（裁决 39）：品牌 mark 随控件基线，fill=currentColor */
 .gh-icon {
