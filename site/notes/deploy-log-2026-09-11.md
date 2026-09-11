@@ -24,3 +24,10 @@
 - 版本目录：`/var/www/jotluck/releases/20260911-6a528f4`（回滚指回 `releases/20260911-deec3de`）
 - 内容：Windows 四格窗/macOS Apple/Linux Tux 内联 SVG（simple-icons，currentColor，15px 与 gh-icon 同规则）；排版复用 .pv-actions flex 语义零新增规则
 - 上线核验：zh/en/fr 下载页 pf-icon 各 4 处（3 按钮 SVG + 1 样式类）✅；本地视觉终审截图通过（三图标齐全/对齐协调/整组整齐）
+
+## 同日第四次部署：三平台按钮平权+聚焦高亮（57df358）
+
+- 触发 commit：`57df358` fix(ui): 下载页三平台按钮平权统一主按钮色，悬停/聚焦变色高亮
+- 版本目录：`/var/www/jotluck/releases/20260911-57df358`（回滚指回 `releases/20260911-6a528f4`）
+- 内容：三平台下载按钮统一 btn-primary 深青（消除仅 Windows 深底的平台偏好暗示）；hover=背景 color-mix 同族压深 15%+套准橙 inset 底条；focus-visible=同色加深+2px 橙内框与全局橙 outline 双重定位帧；零新硬编码色，.btn 契约不动
+- 上线核验：五语下载页 btn-primary 按钮各恰 3 个 ✅；三态（默认/悬停/聚焦）真实交互截图视觉终审通过；法语长文案布局无破裂
