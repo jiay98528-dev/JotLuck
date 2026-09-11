@@ -226,8 +226,8 @@ export const en: SiteContent = {
         body: 'Every note is a plain-text Markdown file in a local folder you choose. Backup, sync and deletion are entirely yours to decide — JotLuck holds no copies.',
       },
       {
-        title: "We don't track your visit",
-        body: 'This site is static: no cookies, no analytics or tracking scripts, and all fonts and assets are self-hosted. Visiting it means reading a few files — nothing more.',
+        title: 'Your visit stays anonymous',
+        body: 'This site is static: no cookies, no third-party scripts, and all fonts and assets are self-hosted. Visits are counted anonymously on our own server — no personal identifiers, no cross-site tracking, and nothing shared with third parties. Beyond that, visiting means reading a few files — nothing more.',
       },
       {
         title: 'Downloads and GitHub',

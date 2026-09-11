@@ -239,8 +239,8 @@ export const fr: SiteContent = {
         body: 'Chaque note est un fichier Markdown en texte brut, dans un dossier local que vous choisissez. Sauvegarde, synchronisation et suppression vous appartiennent entièrement — JotLuck ne conserve aucune copie.',
       },
       {
-        title: 'Nous ne suivons pas votre visite',
-        body: "Ce site est statique : pas de cookies, pas de scripts d'analyse ni de suivi, et toutes les polices et ressources sont hébergées localement. Le visiter, c'est lire quelques fichiers — rien de plus.",
+        title: 'Votre visite reste anonyme',
+        body: "Ce site est statique : pas de cookies, pas de scripts tiers, et toutes les polices et ressources sont hébergées localement. Les visites sont comptées de façon anonyme sur notre propre serveur — aucune identification, aucun suivi inter-sites, rien de partagé avec des tiers. À part cela, le visiter, c'est lire quelques fichiers — rien de plus.",
       },
       {
         title: 'Téléchargements et GitHub',
