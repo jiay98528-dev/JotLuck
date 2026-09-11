@@ -10,7 +10,7 @@ export const en: SiteContent = {
     description:
       'JotLuck is a free, open-source Markdown notes app that works offline — every note a plain-text file, with wiki links and full-text search. No account; your knowledge base stays in your own folder.',
     pageTitles: {
-      download: 'Download · JotLuck — Free, open-source Markdown notes for Windows',
+      download: 'Download · JotLuck — Free, open-source Markdown notes',
       themes: 'Themes · JotLuck — Free, open-source Markdown notes',
       studio: 'Studio · JotLuck — Free, open-source Markdown notes',
       privacy: 'Privacy · JotLuck — Free, open-source Markdown notes',
@@ -18,7 +18,7 @@ export const en: SiteContent = {
     },
     pageDescriptions: {
       download:
-        'Download JotLuck for Windows x64 — a free, open-source Markdown notes app, offline, Preview live now. Every note is a plain-text file in your own folder.',
+        'Download the JotLuck preview for Windows x64, macOS Apple Silicon, and Linux x86_64 — a free, open-source, offline Markdown notes app. Every note is a plain-text file in your own folder.',
       themes:
         'Themes for JotLuck, a free open-source Markdown notes app: Paper, Halo Canvas, Lumen Field — each reshapes the workspace, from paper and ink to window layout.',
       studio:
@@ -26,7 +26,7 @@ export const en: SiteContent = {
       privacy:
         'Privacy: JotLuck, an open-source Markdown notes app, runs fully offline — notes stay plain-text in your folder. No account, no telemetry, no cookies.',
       changelog:
-        'The JotLuck changelog: every Windows preview release on the record — local completion, export, search, and themes improving release by release.',
+        'The JotLuck changelog: every desktop preview release on the record — local completion, export, search, and themes improving release by release.',
     },
   },
   localeName: 'English',
@@ -117,12 +117,12 @@ export const en: SiteContent = {
     githubBtn: 'GitHub',
     releaseBtn: 'Release notes & checksum',
     signNote:
-      'This preview is unsigned: Windows SmartScreen may warn; on Linux use dpkg and verify SHA-256. Check the Release page before installing.',
+      'This preview is unsigned: Windows SmartScreen may warn; the macOS build is ad-hoc signed — on first launch right-click the app and choose Open; on Linux use dpkg and verify SHA-256. Check the Release page before installing.',
     signPolicyLink: 'Code signing policy',
     notesTitle: 'Worth knowing',
     notes: [
       'Notes live in the folder you choose — no account required',
-      "Four extensions register as optional 'Open with' handlers; system defaults stay untouched",
+      "Eight extensions (md/markdown/mdx/txt plus docx/pdf/xlsx/xls) register as optional 'Open with' handlers; system defaults stay untouched",
       'MIT licensed; core editing and search run fully offline',
     ],
     changelogLink: 'View the changelog',

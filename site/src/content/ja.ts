@@ -10,7 +10,7 @@ export const ja: SiteContent = {
     description:
       'JotLuck は、無料でオープンソースの Markdown ノートアプリです。オフラインで動作し、ノートはすべてプレーンテキスト——Wikiリンクと全文検索に対応し、アカウント登録も不要。ナレッジベースは、あなた自身のフォルダの中に。',
     pageTitles: {
-      download: 'ダウンロード · JotLuck — 無料・オープンソースの Markdown ノートアプリ（Windows）',
+      download: 'ダウンロード · JotLuck — 無料・オープンソースの Markdown ノートアプリ',
       themes: 'テーマ · JotLuck — 無料・オープンソースの Markdown ノートアプリ',
       studio: 'スタジオ · JotLuck — 無料・オープンソースの Markdown ノートアプリ',
       privacy: 'プライバシー · JotLuck — 無料・オープンソースの Markdown ノートアプリ',
@@ -18,7 +18,7 @@ export const ja: SiteContent = {
     },
     pageDescriptions: {
       download:
-        'JotLuck Windows x64 版をダウンロード：無料・オープンソースでオフラインでも使える Markdown ノートアプリ、Preview 公開中。ノートはすべてプレーンテキストで、あなたのフォルダの中に保存されます。',
+        'JotLuck プレビュー版のダウンロード：Windows x64・macOS Apple Silicon・Linux x86_64 に対応。無料・オープンソースでオフラインでも使える Markdown ノートアプリ。ノートはすべてプレーンテキストで、あなたのフォルダの中に保存されます。',
       themes:
         '無料・オープンソースの Markdown ノートアプリ JotLuck のテーマ——Paper・Halo Canvas・Lumen Field の 3 種類。テーマはワークスペースそのものを再形成します——紙と墨の色から、ウィンドウのレイアウトまで。',
       studio:
@@ -26,7 +26,7 @@ export const ja: SiteContent = {
       privacy:
         'JotLuck のプライバシーについて：このオープンソースの Markdown ノートアプリは完全にオフラインで動作し、ノートはプレーンテキストとしてあなたのフォルダーに保存されます。アカウント不要、テレメトリなし。このサイトは静的サイトで、Cookie も使いません。',
       changelog:
-        'JotLuck の更新履歴：Windows デスクトップ プレビューの各リリース記録。ローカル補完、エクスポート、検索、テーマがリリースごとに進化します。無料のオープンソース Markdown ノートアプリです。',
+        'JotLuck の更新履歴：デスクトップ プレビューの各リリース記録。ローカル補完、エクスポート、検索、テーマがリリースごとに進化します。無料のオープンソース Markdown ノートアプリです。',
     },
   },
   localeName: '日本語',
@@ -116,12 +116,12 @@ export const ja: SiteContent = {
     githubBtn: 'GitHub',
     releaseBtn: 'Release ノートとチェックサム',
     signNote:
-      'この Preview は未署名です。Windows SmartScreen が警告する場合があります。Linux は dpkg で入れ、SHA-256 を Release ページと照合してください。',
+      'この Preview は未署名です。Windows SmartScreen が警告する場合があります。macOS 版は ad-hoc 署名のため、初回起動はアプリを右クリックして「開く」を選んでください。Linux は dpkg で入れ、SHA-256 を Release ページと照合してください。',
     signPolicyLink: 'コード署名ポリシー',
     notesTitle: '知っておきたいこと',
     notes: [
       'ノートは自分で選んだフォルダに保存されます——アカウントは不要です',
-      '4 種類の拡張子が任意の「アプリで開く」ハンドラとして登録されるだけ。システムの既定は変更されません',
+      '8 種類の拡張子（md/markdown/mdx/txt と docx/pdf/xlsx/xls）が任意の「アプリで開く」ハンドラとして登録されるだけ。システムの既定は変更されません',
       'MIT ライセンスで公開。編集と検索の核となる機能は、完全にオフラインで動作します',
     ],
     changelogLink: '更新履歴を見る',

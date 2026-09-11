@@ -47,7 +47,7 @@ export const JSON_LD = JSON.stringify({
       '@id': `${SITE_URL}/#software`,
       name: 'JotLuck',
       applicationCategory: 'BusinessApplication',
-      operatingSystem: 'Windows',
+      operatingSystem: 'Windows, macOS, Linux',
       softwareVersion: RELEASE.preview.version,
       url: SITE_URL,
       description:
@@ -60,7 +60,7 @@ export const JSON_LD = JSON.stringify({
       },
       license: 'https://opensource.org/licenses/MIT',
       keywords:
-        'Markdown notes, open source, local-first, offline notes, plain text, wiki links, backlinks, knowledge base, Windows',
+        'Markdown notes, open source, local-first, offline notes, plain text, wiki links, backlinks, knowledge base, Windows, macOS, Linux',
       publisher: { '@id': `${SITE_URL}/#organization` },
     },
   ],

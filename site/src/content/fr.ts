@@ -10,7 +10,7 @@ export const fr: SiteContent = {
     description:
       'JotLuck, application de notes Markdown gratuite et open source, hors ligne. Notes en texte brut, liens Wiki, recherche plein texte — sans compte, votre base de connaissances reste dans votre dossier.',
     pageTitles: {
-      download: 'Téléchargement · JotLuck — Notes Markdown gratuites et open source (Windows)',
+      download: 'Téléchargement · JotLuck — Notes Markdown gratuites et open source',
       themes: 'Thèmes · JotLuck — Notes Markdown gratuites et open source',
       studio: 'Studio · JotLuck — Notes Markdown gratuites et open source',
       privacy: 'Confidentialité · JotLuck — Notes Markdown gratuites et open source',
@@ -18,7 +18,7 @@ export const fr: SiteContent = {
     },
     pageDescriptions: {
       download:
-        'Téléchargez JotLuck Windows x64 : notes Markdown gratuites et open source, hors ligne, Preview publiée. Chaque note reste un fichier texte dans votre dossier.',
+        'Téléchargez la Preview de JotLuck pour Windows x64, macOS Apple Silicon et Linux x86_64 : notes Markdown gratuites et open source, hors ligne. Chaque note reste un fichier texte dans votre dossier.',
       themes:
         "Thèmes de JotLuck, notes Markdown gratuites et open source : Paper, Halo Canvas, Lumen Field — chacun remodèle l'espace de travail, du papier aux fenêtres.",
       studio:
@@ -26,7 +26,7 @@ export const fr: SiteContent = {
       privacy:
         'Vie privée : JotLuck, notes Markdown open source, 100 % hors ligne. Notes en fichiers texte, dans votre dossier — sans compte, sans télémétrie, ni cookies.',
       changelog:
-        "Le journal de JotLuck : chaque version d'aperçu Windows y est consignée — complétion locale, export, recherche et thèmes évoluent à chaque version.",
+        "Le journal de JotLuck : chaque version d'aperçu y est consignée — complétion locale, export, recherche et thèmes évoluent à chaque version.",
     },
   },
   localeName: 'Français',
@@ -120,12 +120,12 @@ export const fr: SiteContent = {
     githubBtn: 'GitHub',
     releaseBtn: 'Notes de version et checksum',
     signNote:
-      "Cette Preview n'est pas signée. Windows SmartScreen peut avertir ; sous Linux, installez avec dpkg et vérifiez le SHA-256 sur la page Release.",
+      "Cette Preview n'est pas signée. Windows SmartScreen peut avertir ; la build macOS est signée ad-hoc — au premier lancement, clic droit sur l'app puis Ouvrir ; sous Linux, installez avec dpkg et vérifiez le SHA-256 sur la page Release.",
     signPolicyLink: 'Politique de signature de code',
     notesTitle: 'À savoir',
     notes: [
       'Les notes vivent dans le dossier que vous choisissez — aucun compte requis',
-      "Quatre extensions s'enregistrent comme gestionnaires « Ouvrir avec » facultatifs ; les paramètres par défaut du système restent intacts",
+      "Huit extensions (md/markdown/mdx/txt et docx/pdf/xlsx/xls) s'enregistrent comme gestionnaires « Ouvrir avec » facultatifs ; les paramètres par défaut du système restent intacts",
       "Sous licence MIT ; l'édition et la recherche essentielles fonctionnent entièrement hors ligne",
     ],
     changelogLink: 'Voir le journal des modifications',

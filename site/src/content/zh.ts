@@ -10,7 +10,7 @@ export const zh: SiteContent = {
     description:
       'JotLuck 是一款免费开源的 Markdown 笔记软件：离线可用，每条笔记都是纯文本文件，支持双向链接与全文搜索——无需账号，知识库就在你自己的文件夹里。',
     pageTitles: {
-      download: '下载 · JotLuck — 免费开源的 Markdown 笔记软件（Windows）',
+      download: '下载 · JotLuck — 免费开源的 Markdown 笔记软件',
       themes: '主题 · JotLuck — 免费开源的 Markdown 笔记软件',
       studio: '工作室 · JotLuck — 免费开源的 Markdown 笔记软件',
       privacy: '隐私 · JotLuck — 免费开源的 Markdown 笔记软件',
@@ -18,7 +18,7 @@ export const zh: SiteContent = {
     },
     pageDescriptions: {
       download:
-        '下载 JotLuck Windows x64 版：免费开源、离线可用的 Markdown 笔记软件，Preview 已上架。每条笔记都是纯文本文件，保存在你自己的文件夹里。',
+        '下载 JotLuck 预览版：Windows x64、macOS Apple Silicon 与 Linux x86_64 均已上架。免费开源、离线可用，每条笔记都是纯文本文件，保存在你自己的文件夹里。',
       themes:
         'JotLuck 免费开源的 Markdown 笔记软件提供三套工作区主题：Paper 纸、Halo Canvas、Lumen Field——主题重新塑造工作区本身，从纸墨颜色到窗口布局。',
       studio:
@@ -26,7 +26,7 @@ export const zh: SiteContent = {
       privacy:
         'JotLuck 隐私说明：这款开源 Markdown 笔记软件完全离线运行，笔记以纯文本文件保存在你自己的文件夹中——写作无需账号、无遥测。本站为静态网站，不使用 Cookie 与分析追踪。',
       changelog:
-        'JotLuck 更新日志：Windows 桌面预览版的每一次发布记录——本地补全、导出、搜索与主题持续改进，全部公开可查，免费开源，无需注册。',
+        'JotLuck 更新日志：桌面预览版的每一次发布记录——本地补全、导出、搜索与主题持续改进，全部公开可查，免费开源，无需注册。',
     },
   },
   localeName: '中文',
@@ -104,7 +104,7 @@ export const zh: SiteContent = {
     platformTitle: '平台',
     platforms: [
       { name: 'Windows x64', state: 'Preview 已上架' },
-      { name: 'macOS Apple Silicon', state: '预览版已上架' },
+      { name: 'macOS Apple Silicon', state: 'Preview 已上架' },
       { name: 'Linux x86_64', state: 'Preview 已上架' },
     ],
     honestyTitle: '预览版先行。',
@@ -116,12 +116,12 @@ export const zh: SiteContent = {
     githubBtn: 'GitHub',
     releaseBtn: 'Release 说明与校验',
     signNote:
-      '预览版未签名。Windows SmartScreen 可能提示风险；Linux 请用 dpkg 安装并核对 SHA-256。安装前请与 Release 页一致。',
+      '预览版未正式签名。Windows SmartScreen 可能提示风险；macOS 为 ad-hoc 签名，首次打开请右键应用→打开；Linux 请用 dpkg 安装并核对 SHA-256。安装前请与 Release 页一致。',
     signPolicyLink: '代码签名政策',
     notesTitle: '值得知道',
     notes: [
       '笔记保存在你选择的文件夹中，无需注册账号',
-      '笔记扩展名注册为可选「打开方式」，不改写系统默认应用',
+      '8 种扩展名（md/markdown/mdx/txt 与 docx/pdf/xlsx/xls）注册为可选「打开方式」，不改写系统默认应用',
       'MIT 协议开源，核心编辑与搜索完全离线运行',
     ],
     changelogLink: '查看更新日志',

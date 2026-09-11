@@ -10,7 +10,7 @@ export const ko: SiteContent = {
     description:
       'JotLuck은 무료 오픈 소스 Markdown 노트 앱입니다. 오프라인에서 동작하며, 모든 노트는 순수 텍스트——Wiki 링크와 전체 텍스트 검색을 지원하고, 계정도 필요 없습니다. 지식 베이스는 당신의 폴더 안에 있습니다.',
     pageTitles: {
-      download: '다운로드 · JotLuck — 무료 오픈 소스 Markdown 노트 앱（Windows）',
+      download: '다운로드 · JotLuck — 무료 오픈 소스 Markdown 노트 앱',
       themes: '테마 · JotLuck — 무료 오픈 소스 Markdown 노트 앱',
       studio: '스튜디오 · JotLuck — 무료 오픈 소스 Markdown 노트 앱',
       privacy: '개인정보 · JotLuck — 무료 오픈 소스 Markdown 노트 앱',
@@ -18,7 +18,7 @@ export const ko: SiteContent = {
     },
     pageDescriptions: {
       download:
-        'Windows x64용 JotLuck을 다운로드하세요: 무료 오픈 소스로 오프라인에서도 쓸 수 있는 Markdown 노트 앱, Preview 공개 중. 모든 노트는 순수 텍스트 파일로 당신의 폴더에 저장됩니다.',
+        'JotLuck 미리보기 버전 다운로드: Windows x64·macOS Apple Silicon·Linux x86_64 지원. 무료 오픈 소스로 오프라인에서도 쓸 수 있는 Markdown 노트 앱입니다. 모든 노트는 순수 텍스트 파일로 당신의 폴더에 저장됩니다.',
       themes:
         '무료 오픈 소스 Markdown 노트 앱 JotLuck의 테마——Paper, Halo Canvas, Lumen Field 세 가지. 테마는 작업 공간 자체를 다시 만듭니다——종이와 먹의 색부터 창 레이아웃까지.',
       studio:
@@ -26,7 +26,7 @@ export const ko: SiteContent = {
       privacy:
         'JotLuck 개인정보 안내: 이 오픈 소스 Markdown 노트 앱은 완전히 오프라인으로 동작하며, 노트는 순수 텍스트 파일로 당신의 폴더에 저장됩니다. 계정 불필요, 원격 측정 없음. 이 사이트는 정적 사이트로 Cookie를 사용하지 않습니다.',
       changelog:
-        'JotLuck 체인지 로그: Windows 데스크톱 미리 보기의 모든 릴리스 기록. 로컬 완성, 내보내기, 검색, 테마가 릴리스마다 발전합니다. 무료 오픈소스 Markdown 노트 앱.',
+        'JotLuck 체인지 로그: 데스크톱 미리 보기의 모든 릴리스 기록. 로컬 완성, 내보내기, 검색, 테마가 릴리스마다 발전합니다. 무료 오픈소스 Markdown 노트 앱.',
     },
   },
   localeName: '한국어',
@@ -117,12 +117,12 @@ export const ko: SiteContent = {
     githubBtn: 'GitHub',
     releaseBtn: 'Release 노트와 체크섬',
     signNote:
-      '이 Preview는 서명되지 않았습니다. Windows SmartScreen이 경고할 수 있습니다. Linux는 dpkg로 설치하고 SHA-256을 Release 페이지와 맞추세요.',
+      '이 Preview는 정식 서명이 없습니다. Windows SmartScreen이 경고할 수 있습니다. macOS 빌드는 ad-hoc 서명이므로 첫 실행 시 앱을 우클릭해 열기를 선택하세요. Linux는 dpkg로 설치하고 SHA-256을 Release 페이지와 맞추세요.',
     signPolicyLink: '코드 서명 정책',
     notesTitle: '알아 두면 좋은 것',
     notes: [
       '노트는 당신이 고른 폴더에 저장됩니다——계정이 필요 없습니다',
-      "네 가지 확장자가 선택적인 '연결 프로그램' 처리기로만 등록됩니다. 시스템 기본값은 건드리지 않습니다",
+      "여덟 가지 확장자(md/markdown/mdx/txt와 docx/pdf/xlsx/xls)가 선택적인 '연결 프로그램' 처리기로만 등록됩니다. 시스템 기본값은 건드리지 않습니다",
       'MIT 라이선스로 공개되며, 핵심 편집과 검색은 완전히 오프라인에서 동작합니다',
     ],
     changelogLink: '체인지 로그 보기',
