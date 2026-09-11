@@ -17,3 +17,10 @@
 - 内容：五语下载/更新日志页 meta 去 Windows 限定；signNote 五语补 macOS ad-hoc 右键打开；扩展名计数 4→8；JSON-LD operatingSystem/keywords 三平台；changelog 数据重同步（0.14.0 含 macOS/Linux 段+dmg SHA）；sitemap lastmod → 2026-09-11
 - 上线核验：五语下载页三处检查全过；changelog macOS 段 ✅；JSON-LD "Windows, macOS, Linux" ✅；sitemap download lastmod 2026-09-11 ✅
 - 分支：deec3de 已推送（--force-with-lease 覆盖被 amend 重写的 7d9800c，内容为 7d9800c+文案修复的合并）
+
+## 同日第三次部署：下载页三平台官方图标（6a528f4）
+
+- 触发 commit：`6a528f4` feat(ui): 下载页三平台按钮增加官方图标
+- 版本目录：`/var/www/jotluck/releases/20260911-6a528f4`（回滚指回 `releases/20260911-deec3de`）
+- 内容：Windows 四格窗/macOS Apple/Linux Tux 内联 SVG（simple-icons，currentColor，15px 与 gh-icon 同规则）；排版复用 .pv-actions flex 语义零新增规则
+- 上线核验：zh/en/fr 下载页 pf-icon 各 4 处（3 按钮 SVG + 1 样式类）✅；本地视觉终审截图通过（三图标齐全/对齐协调/整组整齐）
