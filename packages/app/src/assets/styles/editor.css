@@ -483,3 +483,153 @@
 .cm-ghost-text {
   color: oklch(from var(--ink-muted) l c h / 0.35);
 }
+
+/* ===== Find / Replace Panel (CM6 search) =====
+ *
+ * 用 CM6 默认 search() 面板 + phrases 五语文案，仅主题化样式，不重写 DOM 结构。
+ * 关键类名（来自 node_modules/@codemirror/search/dist/index.js）：
+ *   .cm-panels       — 顶部/底部面板容器（search top:true 时挂顶部）
+ *   .cm-panel        — 单个面板
+ *   .cm-search       — search 面板根
+ *   .cm-textfield    — 输入框
+ *   .cm-button       — 按钮（next/prev/replace/replaceAll 等）
+ *   .cm-searchMatch  — 命中标记（in-document decoration）
+ *   .cm-searchMatch-selected — 当前激活命中
+ */
+
+.cm-panels {
+  font-family: var(--ff-body);
+  font-size: var(--text-sm);
+  color: var(--ink-primary);
+  background: var(--paper-surface);
+  border-bottom: var(--border-thin) solid var(--rule);
+}
+
+.cm-panel {
+  padding: var(--space-8) var(--space-12);
+  background: var(--paper-surface);
+  color: var(--ink-primary);
+}
+
+.cm-panel.cm-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.cm-panel.cm-search label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--ink-secondary);
+  font-size: var(--text-xs);
+  user-select: none;
+}
+
+.cm-panel.cm-search input[type='checkbox'] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.cm-panel.cm-search .cm-textfield {
+  flex: 1 1 12ch;
+  min-width: 12ch;
+  max-width: 32ch;
+  padding: var(--space-4) var(--space-8);
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--ink-primary);
+  background: var(--paper-bg);
+  border: var(--border-thin) solid var(--rule-strong);
+  border-radius: var(--radius);
+  outline: none;
+  transition:
+    border-color var(--dur-micro) var(--ease-fade),
+    box-shadow var(--dur-micro) var(--ease-fade);
+}
+
+.cm-panel.cm-search .cm-textfield:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 var(--focus-ring-width) var(--accent-ring);
+}
+
+.cm-panel.cm-search .cm-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--touch-target-min, 28px);
+  padding: 0 var(--space-12);
+  font-family: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-primary);
+  background: var(--paper-raised);
+  border: var(--border-thin) solid var(--rule-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition:
+    background var(--dur-micro) var(--ease-fade),
+    border-color var(--dur-micro) var(--ease-fade);
+}
+
+.cm-panel.cm-search .cm-button:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.cm-panel.cm-search .cm-button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: var(--focus-ring-offset, 2px);
+}
+
+.cm-panel.cm-search button[name='close'] {
+  margin-left: auto;
+  color: var(--ink-muted);
+}
+
+/* ---- Search hit highlights (in-document decorations) ---- */
+.cm-editor .cm-searchMatch {
+  background: var(--accent-soft);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px oklch(from var(--accent) l c h / 0.35);
+}
+
+.cm-editor .cm-searchMatch-selected {
+  background: var(--accent);
+  color: var(--paper-bg);
+  box-shadow: 0 0 0 1px oklch(from var(--accent) l c h / 0.6);
+}
+
+.cm-editor .cm-searchMatch-selected ::selection {
+  background: transparent;
+}
+
+@media (prefers-contrast: more) {
+  .cm-panels {
+    border-bottom-width: var(--border-medium, 2px);
+  }
+
+  .cm-panel.cm-search .cm-textfield,
+  .cm-panel.cm-search .cm-button {
+    border-width: var(--border-medium, 2px);
+  }
+
+  .cm-editor .cm-searchMatch {
+    background: var(--signal-warning-soft);
+    box-shadow: 0 0 0 2px var(--signal-warning);
+  }
+
+  .cm-editor .cm-searchMatch-selected {
+    background: var(--signal-warning);
+    color: var(--ink-primary);
+    box-shadow: 0 0 0 2px var(--signal-warning);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cm-panel.cm-search .cm-textfield,
+  .cm-panel.cm-search .cm-button {
+    transition: none;
+  }
+}

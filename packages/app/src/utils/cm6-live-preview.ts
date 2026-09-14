@@ -21,6 +21,7 @@ import {
 } from '@codemirror/view';
 import { StateField, StateEffect, type Range, type Text } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
+import { getSearchQuery, searchPanelOpen, setSearchQuery } from '@codemirror/search';
 // 表格行工具统一从 @jotluck/renderer 单点导入（本地副本已删除，唯一权威）。
 // 说明：tableAlignments / isTableRowCandidate 不再需要——对齐取自 AST 节点、
 // 表格结构由 parseDocument 负责（noUnusedLocals 不允许导入未用符号）。
@@ -235,6 +236,44 @@ function rangesOverlap(
   ranges: Array<{ from: number; to: number }>,
 ): boolean {
   return ranges.some((r) => from < r.to && to > r.from);
+}
+
+/**
+ * 查找激活时的按块揭示匹配器：返回 null（无查询/面板未开/无 search 扩展）或
+ * 「块文本是否命中查询」谓词。字面量走 includes（按大小写开关），正则用同一
+ * 查询串构造 RegExp——不是第二套解析，语义与面板一致。已知偏差（有意）：
+ * 不处理 wholeWord 与 CM6 的 NFKD 折叠——只影响「哪些块揭示」的粒度，
+ * 不影响命中/替换本身的正确性。
+ * searchPanelOpen 门：CM6 关面板不清查询（closeSearchPanel 只 toggle panel），
+ * 不加此门则命中块会在关面板后永久停留源码态（互审 R1-E MAJOR-1）；
+ * 关面板路径 closeSearchPanel → view.focus() → focusChanged 重建时
+ * searchPanelOpen 已为 false → matcher 归 null → 恢复纯渲染。
+ */
+function buildSearchRevealMatcher(
+  state: EditorView['state'],
+): ((blockText: string) => boolean) | null {
+  if (!searchPanelOpen(state)) return null;
+  let query: ReturnType<typeof getSearchQuery>;
+  try {
+    query = getSearchQuery(state);
+  } catch {
+    return null; // 未装配 search 扩展（如单测挂载）
+  }
+  if (!query.search) return null;
+  if (query.regexp) {
+    try {
+      const re = new RegExp(query.search, query.caseSensitive ? '' : 'i');
+      return (blockText) => re.test(blockText);
+    } catch {
+      return () => true; // 非法正则：全揭示，交面板自身报错
+    }
+  }
+  if (query.caseSensitive) {
+    const needle = query.search;
+    return (blockText) => blockText.includes(needle);
+  }
+  const lower = query.search.toLowerCase();
+  return (blockText) => blockText.toLowerCase().includes(lower);
 }
 
 /** 生成稳定 block ID：行号 + 内容 hash，编辑上方内容不会改变 key */
@@ -1230,6 +1269,10 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
             if (effect.is(revealSourceAtPositionEffect)) revealedPosition = effect.value;
           }
         }
+        // 查询变化（面板输入/清除/关闭）也要重建：按块揭示随查询实时增减
+        const searchQueryChanged = update.transactions.some((tr) =>
+          tr.effects.some((e) => e.is(setSearchQuery)),
+        );
         const hasComposeTransaction = update.transactions.some((tr) =>
           tr.isUserEvent('input.type.compose'),
         );
@@ -1278,6 +1321,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           update.focusChanged ||
           update.viewportChanged ||
           revealedPosition !== null ||
+          searchQueryChanged ||
           !this.decorationsBuilt
         ) {
           this.decorations = this.build(update.view, revealedPosition);
@@ -1339,6 +1383,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         const cursor = view.state.selection.main.head;
         const cursorLine = view.state.doc.lineAt(cursor);
         const pinned = view.state.field(pinnedSourceField, false) ?? new Set<string>();
+        const searchMatcher = buildSearchRevealMatcher(view.state);
         const decos: Range<Decoration>[] = [];
         const unclosedWarnings = new Map<string, { end: number; type: BlockType }>();
 
@@ -1367,6 +1412,13 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
             revealedPosition >= block.from &&
             revealedPosition <= block.to;
           const isFocused = (view.hasFocus && containsCursor) || isProgrammaticallyRevealed;
+          // 查找激活时的按块揭示：搜索面板聚焦会夺走编辑器焦点（所有块回退渲染
+          // widget、源文本被替换隐藏，.cm-searchMatch 无处附着）——命中查询的块
+          // 临时转源码显形，匹配高亮与替换才可见。查询清空或面板关闭
+          // （searchPanelOpen 门，见 buildSearchRevealMatcher）即恢复纯渲染。
+          const isSearchRevealed =
+            searchMatcher !== null &&
+            searchMatcher(view.state.doc.sliceString(block.from, block.to));
           const isPinned = pinned.has(block.key);
           // Keep the block immediately above a new empty cursor line as source.
           // Replacing that line before Windows IME establishes composition on
@@ -1378,7 +1430,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
 
           if (isPinned) continue; // pinned source stays full-contrast by explicit intent
 
-          if (isFocused) {
+          if (isFocused || isSearchRevealed) {
             decos.push(...this.buildFocusedGhostDecorations(view, block));
             continue;
           }

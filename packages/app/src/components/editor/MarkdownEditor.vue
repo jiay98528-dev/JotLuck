@@ -17,6 +17,7 @@ import { EditorState, Compartment } from '@codemirror/state';
 import { isolateHistory } from '@codemirror/commands';
 import { jotluckExtensions, jotluckPlaceholder } from '@/utils/cm6-extensions';
 import { exitLivePreviewOnEscape, livePreviewExtension } from '@/utils/cm6-live-preview';
+import { findReplaceExtension } from '@/utils/cm6-find-replace';
 import { ghostTextPlugin } from '@/utils/cm6-ghost-text';
 import {
   smartCancelOnBackspace,
@@ -296,6 +297,9 @@ function createState(doc: string) {
         },
       ]),
       ...jotluckExtensions(props.sourceOnly),
+      // 查找替换：静态扩展（不支持 Compartment 动态切换）；search() 默认面板
+      // + phrases 五语文案 + readOnly 门控详见 utils/cm6-find-replace.ts。
+      ...findReplaceExtension(),
       placeholderCompartment.of(
         jotluckPlaceholder(props.placeholder ?? translate('editor.placeholder')),
       ),
