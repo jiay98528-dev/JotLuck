@@ -1,0 +1,997 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`exporter characterization baseline (slice D) > csv: exportCsv prefixes formula cells and keeps plain cells 1`] = `
+"公式,普通
+'=SUM(A1),普通单元格"
+`;
+
+exports[`exporter characterization baseline (slice D) > docx: buildDocxChildren structural summary over fixture blocks 1`] = `
+[
+  {
+    "kind": "paragraph",
+    "runs": [
+      {
+        "bold": true,
+        "color": "000000",
+        "font": "Microsoft YaHei",
+        "size": 36,
+        "text": "一级标题",
+      },
+    ],
+    "spacing": {
+      "w:after": 120,
+      "w:before": 240,
+    },
+    "style": "Heading1",
+  },
+  {
+    "kind": "paragraph",
+    "runs": [
+      {
+        "bold": true,
+        "color": "000000",
+        "font": "Microsoft YaHei",
+        "size": 32,
+        "text": "二级标题",
+      },
+    ],
+    "spacing": {
+      "w:after": 120,
+      "w:before": 240,
+    },
+    "style": "Heading2",
+  },
+  {
+    "kind": "paragraph",
+    "runs": [
+      {
+        "bold": true,
+        "color": "000000",
+        "font": "Microsoft YaHei",
+        "size": 28,
+        "text": "三级标题",
+      },
+    ],
+    "spacing": {
+      "w:after": 120,
+      "w:before": 240,
+    },
+    "style": "Heading3",
+  },
+  {
+    "kind": "paragraph",
+    "runs": [
+      {
+        "bold": true,
+        "color": "000000",
+        "font": "Microsoft YaHei",
+        "size": 32,
+        "text": "Setext 二级标题",
+      },
+    ],
+    "spacing": {
+      "w:after": 120,
+      "w:before": 240,
+    },
+    "style": "Heading2",
+  },
+  {
+    "kind": "paragraph",
+    "runs": [
+      {
+        "text": "这是一个 ",
+      },
+      {
+        "bold": true,
+        "text": "粗体",
+      },
+      {
+        "text": "、",
+      },
+      {
+        "italics": true,
+        "text": "斜体",
+      },
+      {
+        "text": "、",
+      },
+      {
+        "font": "Consolas",
+        "size": 20,
+        "text": "行内代码",
+      },
+      {
+        "text": "、",
+      },
+      {
+        "text": "链接文字",
+        "underline": "single",
+      },
+      {
+        "text": " 与 ",
+      },
+      {
+        "color": "999999",
+        "italics": true,
+        "text": "[Image]",
+      },
+      {
+        "text": " 的段落，包含 ",
+      },
+      {
+        "text": "别名",
+        "underline": "single",
+      },
+      {
+        "text": " 和 ",
+      },
+      {
+        "text": "目标笔记",
+        "underline": "single",
+      },
+      {
+        "text": " 以及 ",
+      },
+      {
+        "text": "标签",
+      },
+      {
+        "text": " 结尾。",
+      },
+    ],
+    "spacing": {
+      "w:after": 120,
+    },
+  },
+  {
+    "border": [
+      {
+        "side": "w:left",
+        "w:color": "999999",
+        "w:sz": 6,
+        "w:val": "single",
+      },
+    ],
+    "indent": {
+      "w:left": 480,
+    },
+    "kind": "paragraph",
+    "runs": [
+      {
+        "text": "",
+      },
+    ],
+    "spacing": {
+      "w:after": 120,
+    },
+  },
+  {
+    "border": [
+      {
+        "side": "w:left",
+        "w:color": "999999",
+        "w:sz": 6,
+        "w:val": "single",
+      },
+    ],
+    "indent": {
+      "w:left": 480,
+    },
+    "kind": "paragraph",
+    "runs": [
+      {
+        "text": "",
+      },
+    ],
+    "spacing": {
+      "w:after": 120,
+    },
+  },
+  {
+    "bulletLevel": 0,
+    "indent": {
+      "w:hanging": 240,
+      "w:left": 480,
+    },
+    "kind": "paragraph",
+    "runs": [
+      {
+        "text": "一级无序",
+      },
+    ],
+    "spacing": {
+      "w:after": 40,
+      "w:before": 40,
+    },
+    "style": "ListParagraph",
+  },
+  {
+    "bulletLevel": 0,
+    "indent": {
+      "w:hanging": 240,
+      "w:left": 480,
+    },
+    "kind": "paragraph",
+    "runs": [
+      {
+        "text": "另一个一级",
+      },
+    ],
+    "spacing": {
+      "w:after": 40,
+      "w:before": 40,
+    },
+    "style": "ListParagraph",
+  },
+  {
+    "indent": {
+      "w:hanging": 240,
+      "w:left": 480,
+    },
+    "kind": "paragraph",
+    "runs": [
+      {
+        "text": "1. ",
+      },
+      {
+        "text": "有序第一项",
+      },
+    ],
+    "spacing": {
+      "w:after": 40,
+      "w:before": 40,
+    },
+  },
+  {
+    "indent": {
+      "w:hanging": 240,
+      "w:left": 480,
+    },
+    "kind": "paragraph",
+    "runs": [
+      {
+        "text": "2. ",
+      },
+      {
+        "text": "有序第二项",
+      },
+    ],
+    "spacing": {
+      "w:after": 40,
+      "w:before": 40,
+    },
+  },
+  {
+    "indent": {
+      "w:left": 240,
+    },
+    "kind": "paragraph",
+    "runs": [
+      {
+        "font": "Consolas",
+        "size": 20,
+        "text": "const a = 1;",
+      },
+    ],
+    "shadingFill": "F0F0F0",
+    "spacing": {
+      "w:after": 0,
+      "w:before": 0,
+    },
+  },
+  {
+    "indent": {
+      "w:left": 240,
+    },
+    "kind": "paragraph",
+    "runs": [
+      {
+        "font": "Consolas",
+        "size": 20,
+        "text": "console.log(a);",
+      },
+    ],
+    "shadingFill": "F0F0F0",
+    "spacing": {
+      "w:after": 0,
+      "w:before": 0,
+    },
+  },
+  {
+    "kind": "table",
+    "rows": [
+      [
+        "列一",
+        "列二",
+        "列三",
+      ],
+      [
+        "甲",
+        "乙",
+        "丙",
+      ],
+      [
+        "丁",
+        "戊",
+        "己",
+      ],
+    ],
+  },
+  {
+    "kind": "paragraph",
+    "runs": [],
+    "spacing": {
+      "w:after": 120,
+    },
+  },
+  {
+    "border": [
+      {
+        "side": "w:bottom",
+        "w:color": "CCCCCC",
+        "w:sz": 2,
+        "w:val": "single",
+      },
+    ],
+    "kind": "paragraph",
+    "runs": [],
+    "spacing": {
+      "w:after": 240,
+      "w:before": 240,
+    },
+  },
+  {
+    "kind": "paragraph",
+    "runs": [
+      {
+        "text": "文末段落。",
+      },
+    ],
+    "spacing": {
+      "w:after": 120,
+    },
+  },
+]
+`;
+
+exports[`exporter characterization baseline (slice D) > docx: buildTextRuns summaries for representative inline blocks 1`] = `
+{
+  "heading": [
+    {
+      "text": "一级标题",
+    },
+  ],
+  "richParagraph": [
+    {
+      "text": "这是一个 ",
+    },
+    {
+      "bold": true,
+      "text": "粗体",
+    },
+    {
+      "text": "、",
+    },
+    {
+      "italics": true,
+      "text": "斜体",
+    },
+    {
+      "text": "、",
+    },
+    {
+      "font": "Consolas",
+      "size": 20,
+      "text": "行内代码",
+    },
+    {
+      "text": "、",
+    },
+    {
+      "text": "链接文字",
+      "underline": "single",
+    },
+    {
+      "text": " 与 ",
+    },
+    {
+      "color": "999999",
+      "italics": true,
+      "text": "[Image]",
+    },
+    {
+      "text": " 的段落，包含 ",
+    },
+    {
+      "text": "别名",
+      "underline": "single",
+    },
+    {
+      "text": " 和 ",
+    },
+    {
+      "text": "目标笔记",
+      "underline": "single",
+    },
+    {
+      "text": " 以及 ",
+    },
+    {
+      "text": "标签",
+    },
+    {
+      "text": " 结尾。",
+    },
+  ],
+  "taskItem": [
+    {
+      "text": "",
+    },
+  ],
+}
+`;
+
+exports[`exporter characterization baseline (slice D) > html: exportHtml self-contained output 1`] = `
+"<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>baseline-html</title>
+  <style>
+/* ── Paper Token (self-contained, synced with paper.css light) ── */
+:root {
+  --ink-primary: oklch(0.15 0.003 85);
+  --ink-secondary: oklch(0.42 0.003 85);
+  --ink-muted: oklch(0.6 0.002 85);
+  --paper-bg: oklch(0.975 0.003 85);
+  --paper-surface: oklch(0.985 0.002 85);
+  --paper-raised: oklch(1 0 0);
+  --accent: oklch(0.52 0.12 250);
+  --accent-soft: oklch(0.92 0.03 250 / 0.55);
+  --rule: oklch(0.88 0.003 85);
+  --code-bg: oklch(0.96 0.002 85);
+  --code-block-bg: oklch(0.97 0.002 85);
+  --code-text: oklch(0.18 0.005 85);
+  --table-stripe: oklch(0.97 0.002 85);
+}
+
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 40px 24px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  font-size: 16px;
+  line-height: 1.8;
+  color: var(--ink-primary);
+  background: var(--paper-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.markdown-body {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* ── Headings ── */
+.markdown-body h1 { font-size: 1.8em; font-weight: 700; margin: 1.2em 0 0.4em; line-height: 1.3; color: var(--ink-primary); border-bottom: 2px solid var(--rule); padding-bottom: 0.3em; }
+.markdown-body h2 { font-size: 1.45em; font-weight: 700; margin: 1em 0 0.3em; line-height: 1.3; color: var(--ink-primary); }
+.markdown-body h3 { font-size: 1.2em; font-weight: 600; margin: 0.8em 0 0.2em; line-height: 1.35; color: var(--ink-primary); }
+.markdown-body h4 { font-size: 1.05em; font-weight: 600; margin: 0.7em 0 0.2em; line-height: 1.35; color: var(--ink-primary); }
+.markdown-body h5 { font-size: 0.95em; font-weight: 600; margin: 0.6em 0 0.2em; color: var(--ink-secondary); }
+.markdown-body h6 { font-size: 0.85em; font-weight: 600; margin: 0.5em 0 0.2em; color: var(--ink-muted); }
+
+/* ── Paragraph ── */
+.markdown-body p { margin: 0 0 0.8em; }
+
+/* ── Links ── */
+.markdown-body a { color: var(--accent); text-decoration: none; }
+.markdown-body a:hover { text-decoration: underline; }
+.markdown-body a.wikilink { text-decoration: underline dotted; }
+.markdown-body a.wikilink--dead { color: var(--ink-muted); text-decoration: underline wavy; }
+.markdown-body a.md-tag { color: var(--accent); background: var(--accent-soft); padding: 0 0.35em; border-radius: 3px; font-size: 0.9em; text-decoration: none; }
+
+/* ── Code ── */
+.markdown-body code {
+  font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  font-size: 0.88em;
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--code-text);
+}
+.markdown-body pre {
+  background: var(--code-block-bg);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 16px;
+  overflow-x: auto;
+  margin: 1em 0;
+  line-height: 1.55;
+}
+.markdown-body pre code {
+  background: none;
+  padding: 0;
+  color: var(--ink-primary);
+  font-size: 0.88em;
+}
+
+/* ── Blockquote ── */
+.markdown-body blockquote {
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  margin: 1em 0;
+  padding: 0.5em 1em;
+  color: var(--ink-muted);
+  background: var(--paper-surface);
+}
+.markdown-body blockquote p { margin: 0.4em 0; }
+
+/* ── Lists ── */
+.markdown-body ul, .markdown-body ol { margin: 0.6em 0; padding-left: 1.8em; }
+.markdown-body li { margin: 0.2em 0; }
+.markdown-body input[type="checkbox"] { margin-right: 0.4em; accent-color: var(--accent); pointer-events: none; }
+
+/* ── Tables ── */
+.markdown-body table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+.markdown-body th, .markdown-body td { border: 1px solid var(--rule); padding: 8px 12px; text-align: left; }
+.markdown-body th { background: var(--table-stripe); font-weight: 600; }
+.markdown-body tr:nth-child(even) { background: var(--paper-bg); }
+
+/* ── Horizontal Rule ── */
+.markdown-body hr { border: none; border-top: 2px solid var(--rule); margin: 2em 0; }
+
+/* ── Images ── */
+.markdown-body img { max-width: 100%; height: auto; border-radius: 4px; }
+
+/* ── Strong / Emphasis ── */
+.markdown-body strong { font-weight: 700; }
+.markdown-body em { font-style: italic; }
+.markdown-body del { text-decoration: line-through; color: var(--ink-muted); }
+
+/* ── Print Overrides ── */
+@media print {
+  body { background: var(--paper-raised); padding: 0; }
+  .markdown-body { max-width: none; }
+  .markdown-body pre { background: var(--code-block-bg); border: 1px solid var(--rule); }
+  .markdown-body blockquote { background: none; }
+}
+</style>
+</head>
+<body>
+  <article class="markdown-body">
+    <hr>
+<h2 id="heading-title-示例笔记-tags-工作-重点">title: 示例笔记
+tags: [工作, 重点]</h2>
+<h1 id="heading-一级标题">一级标题</h1>
+<h2 id="heading-二级标题">二级标题</h2>
+<h3 id="heading-三级标题">三级标题</h3>
+<h2 id="heading-setext-二级标题">Setext 二级标题</h2>
+<p>这是一个 <strong>粗体</strong>、<em>斜体</em>、<code>行内代码</code>、<a href="https://example.com/a">链接文字</a> 与 <span class="remote-image-placeholder remote-image-placeholder--blocked" role="group"><span class="remote-image-placeholder__title">替代文本</span><span class="remote-image-placeholder__detail">Remote image blocked · Source: example.com</span><button type="button" class="remote-image-placeholder__action" data-remote-image-control="v1" data-remote-image-action="load-all" data-remote-image-source="https://example.com/i.png">Load remote images in this note</button></span> 的段落，包含 <a href="%E7%9B%AE%E6%A0%87%E7%AC%94%E8%AE%B0">别名</a> 和 <a href="%E7%9B%AE%E6%A0%87%E7%AC%94%E8%AE%B0">目标笔记</a> 以及 <a class="md-tag" data-tag="标签">#标签</a> 结尾。</p>
+<blockquote>
+<p>单行引用内容</p>
+</blockquote>
+<blockquote>
+<p>第一行引用
+第二行引用</p>
+</blockquote>
+<ul>
+<li>一级无序<ul>
+<li>二级无序</li>
+</ul>
+</li>
+<li>另一个一级</li>
+</ul>
+<ol>
+<li>有序第一项</li>
+<li>有序第二项</li>
+</ol>
+<ul>
+<li><input checked="" type="checkbox"> 已完成任务</li>
+<li><input type="checkbox"> 未完成任务</li>
+</ul>
+<pre><code class="language-ts">const a = 1;
+console.log(a);
+</code></pre>
+<table>
+<thead>
+<tr>
+<th align="left">列一</th>
+<th align="center">列二</th>
+<th align="right">列三</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">甲</td>
+<td align="center">乙</td>
+<td align="right">丙</td>
+</tr>
+<tr>
+<td align="left">丁</td>
+<td align="center">戊</td>
+<td align="right">己</td>
+</tr>
+</tbody></table>
+<hr>
+<p>文末段落。</p>
+
+  </article>
+</body>
+</html>"
+`;
+
+exports[`exporter characterization baseline (slice D) > preprocess: convertWikiLinks converts alias and plain wiki-links to markdown links 1`] = `
+"---
+title: 示例笔记
+tags: [工作, 重点]
+---
+# 一级标题
+
+## 二级标题
+
+### 三级标题
+
+Setext 二级标题
+---
+
+这是一个 **粗体**、*斜体*、\`行内代码\`、[链接文字](https://example.com/a) 与 ![替代文本](https://example.com/i.png) 的段落，包含 [别名](目标笔记) 和 [目标笔记](目标笔记) 以及 #标签 结尾。
+
+> 单行引用内容
+
+> 第一行引用
+> 第二行引用
+
+- 一级无序
+  - 二级无序
+- 另一个一级
+
+1. 有序第一项
+2. 有序第二项
+
+- [x] 已完成任务
+- [ ] 未完成任务
+
+\`\`\`ts
+const a = 1;
+console.log(a);
+\`\`\`
+
+| 列一 | 列二 | 列三 |
+|:---|:---:|---:|
+| 甲 | 乙 | 丙 |
+| 丁 | 戊 | 己 |
+
+---
+
+文末段落。
+"
+`;
+
+exports[`exporter characterization baseline (slice D) > preprocess: convertWikiLinks strips wiki-link syntax keeping display text 1`] = `
+"---
+title: 示例笔记
+tags: [工作, 重点]
+---
+# 一级标题
+
+## 二级标题
+
+### 三级标题
+
+Setext 二级标题
+---
+
+这是一个 **粗体**、*斜体*、\`行内代码\`、[链接文字](https://example.com/a) 与 ![替代文本](https://example.com/i.png) 的段落，包含 别名 和 目标笔记 以及 #标签 结尾。
+
+> 单行引用内容
+
+> 第一行引用
+> 第二行引用
+
+- 一级无序
+  - 二级无序
+- 另一个一级
+
+1. 有序第一项
+2. 有序第二项
+
+- [x] 已完成任务
+- [ ] 未完成任务
+
+\`\`\`ts
+const a = 1;
+console.log(a);
+\`\`\`
+
+| 列一 | 列二 | 列三 |
+|:---|:---:|---:|
+| 甲 | 乙 | 丙 |
+| 丁 | 戊 | 己 |
+
+---
+
+文末段落。
+"
+`;
+
+exports[`exporter characterization baseline (slice D) > preprocess: preprocessMarkdown keeps frontmatter and converts wiki-links (includeWikiLinks: true) 1`] = `
+"---
+title: 示例笔记
+tags: [工作, 重点]
+---
+# 一级标题
+
+## 二级标题
+
+### 三级标题
+
+Setext 二级标题
+---
+
+这是一个 **粗体**、*斜体*、\`行内代码\`、[链接文字](https://example.com/a) 与 ![替代文本](https://example.com/i.png) 的段落，包含 [别名](目标笔记) 和 [目标笔记](目标笔记) 以及 #标签 结尾。
+
+> 单行引用内容
+
+> 第一行引用
+> 第二行引用
+
+- 一级无序
+  - 二级无序
+- 另一个一级
+
+1. 有序第一项
+2. 有序第二项
+
+- [x] 已完成任务
+- [ ] 未完成任务
+
+\`\`\`ts
+const a = 1;
+console.log(a);
+\`\`\`
+
+| 列一 | 列二 | 列三 |
+|:---|:---:|---:|
+| 甲 | 乙 | 丙 |
+| 丁 | 戊 | 己 |
+
+---
+
+文末段落。
+"
+`;
+
+exports[`exporter characterization baseline (slice D) > preprocess: preprocessMarkdown keeps frontmatter and strips wiki-links (includeWikiLinks: false) 1`] = `
+"---
+title: 示例笔记
+tags: [工作, 重点]
+---
+# 一级标题
+
+## 二级标题
+
+### 三级标题
+
+Setext 二级标题
+---
+
+这是一个 **粗体**、*斜体*、\`行内代码\`、[链接文字](https://example.com/a) 与 ![替代文本](https://example.com/i.png) 的段落，包含 别名 和 目标笔记 以及 #标签 结尾。
+
+> 单行引用内容
+
+> 第一行引用
+> 第二行引用
+
+- 一级无序
+  - 二级无序
+- 另一个一级
+
+1. 有序第一项
+2. 有序第二项
+
+- [x] 已完成任务
+- [ ] 未完成任务
+
+\`\`\`ts
+const a = 1;
+console.log(a);
+\`\`\`
+
+| 列一 | 列二 | 列三 |
+|:---|:---:|---:|
+| 甲 | 乙 | 丙 |
+| 丁 | 戊 | 己 |
+
+---
+
+文末段落。
+"
+`;
+
+exports[`exporter characterization baseline (slice D) > preprocess: stripFrontmatter removes the leading frontmatter block 1`] = `
+"# 一级标题
+
+## 二级标题
+
+### 三级标题
+
+Setext 二级标题
+---
+
+这是一个 **粗体**、*斜体*、\`行内代码\`、[链接文字](https://example.com/a) 与 ![替代文本](https://example.com/i.png) 的段落，包含 [[目标笔记|别名]] 和 [[目标笔记]] 以及 #标签 结尾。
+
+> 单行引用内容
+
+> 第一行引用
+> 第二行引用
+
+- 一级无序
+  - 二级无序
+- 另一个一级
+
+1. 有序第一项
+2. 有序第二项
+
+- [x] 已完成任务
+- [ ] 未完成任务
+
+\`\`\`ts
+const a = 1;
+console.log(a);
+\`\`\`
+
+| 列一 | 列二 | 列三 |
+|:---|:---:|---:|
+| 甲 | 乙 | 丙 |
+| 丁 | 戊 | 己 |
+
+---
+
+文末段落。
+"
+`;
+
+exports[`exporter characterization baseline (slice D) > txt: exportTxt output (includeWikiLinks: false) 1`] = `
+"title: 示例笔记
+tags: [工作, 重点]
+
+一级标题
+
+二级标题
+
+三级标题
+
+Setext 二级标题
+
+这是一个 粗体、斜体、行内代码、链接文字 与 !替代文本 的段落，包含 别名 和 目标笔记 以及 #标签 结尾。
+
+单行引用内容
+
+第一行引用
+第二行引用
+
+一级无序
+  - 二级无序
+另一个一级
+
+有序第一项
+有序第二项
+
+已完成任务
+未完成任务
+
+\`ts
+const a = 1;
+console.log(a);
+\`
+
+| 列一 | 列二 | 列三 |
+|:---|:---:|---:|
+| 甲 | 乙 | 丙 |
+| 丁 | 戊 | 己 |
+
+文末段落。"
+`;
+
+exports[`exporter characterization baseline (slice D) > txt: exportTxt output (includeWikiLinks: true) 1`] = `
+"title: 示例笔记
+tags: [工作, 重点]
+
+一级标题
+
+二级标题
+
+三级标题
+
+Setext 二级标题
+
+这是一个 粗体、斜体、行内代码、链接文字 与 !替代文本 的段落，包含 别名 和 目标笔记 以及 #标签 结尾。
+
+单行引用内容
+
+第一行引用
+第二行引用
+
+一级无序
+  - 二级无序
+另一个一级
+
+有序第一项
+有序第二项
+
+已完成任务
+未完成任务
+
+\`ts
+const a = 1;
+console.log(a);
+\`
+
+| 列一 | 列二 | 列三 |
+|:---|:---:|---:|
+| 甲 | 乙 | 丙 |
+| 丁 | 戊 | 己 |
+
+文末段落。"
+`;
+
+exports[`exporter characterization baseline (slice D) > xlsx: extractMarkdownTables parses the fixture table 1`] = `
+[
+  {
+    "headers": [
+      "列一",
+      "列二",
+      "列三",
+    ],
+    "rows": [
+      [
+        "甲",
+        "乙",
+        "丙",
+      ],
+      [
+        "丁",
+        "戊",
+        "己",
+      ],
+    ],
+  },
+]
+`;
+
+exports[`exporter characterization baseline (slice D) > xlsx: tableToSheetData and buildXlsxColumns per parsed table 1`] = `
+[
+  {
+    "columns": [
+      {
+        "width": 10,
+      },
+      {
+        "width": 10,
+      },
+      {
+        "width": 10,
+      },
+    ],
+    "sheetData": [
+      [
+        "列一",
+        "列二",
+        "列三",
+      ],
+      [
+        "甲",
+        "乙",
+        "丙",
+      ],
+      [
+        "丁",
+        "戊",
+        "己",
+      ],
+    ],
+  },
+]
+`;

@@ -99,10 +99,9 @@
 import { ref, computed, watch } from 'vue';
 import { ExportFormat, ShareChannel } from '@/types';
 import Button from '@/components/common/Button.vue';
-import { exportNote } from '@/services/Exporter';
+import { buildHtmlDocument, exportNote, markdownToTxt } from '@/services/Exporter';
 import { openExternalUrl } from '@/utils/urlUtils';
 import { useDialogFocus } from '@/composables/useDialogFocus';
-import { getCurrentLocale, getLocaleFontStack } from '@/i18n';
 import { useI18n } from 'vue-i18n';
 
 // ============================================================
@@ -261,65 +260,19 @@ function getFormattedContent(): string {
     case ExportFormat.MD:
       return md;
     case ExportFormat.TXT:
-      return stripMarkdown(md);
+      // 与 exportTxt 同一适配器（markdownToTxt）；差异点保留：图片占位走
+      // 既有 dialogs.share.imagePlaceholder i18n。
+      return markdownToTxt(md, {
+        imagePlaceholder: (alt: string) => t('dialogs.share.imagePlaceholder', { alt }),
+      });
     case ExportFormat.HTML:
-      return wrapHtml(md, props.noteTitle || t('common.untitledNote'));
+      // 与 exportHtml 同源（renderToStyledHtml + EMBEDDED_CSS 自包含文档）
+      return buildHtmlDocument(md, props.noteTitle || t('common.untitledNote'));
     case ExportFormat.PDF:
       return md;
     default:
       return md;
   }
-}
-
-function stripMarkdown(md: string): string {
-  return md
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/`(.+?)`/g, '$1')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, (_match, alt: string) =>
-      t('dialogs.share.imagePlaceholder', { alt }),
-    );
-}
-
-function wrapHtml(md: string, title: string): string {
-  return `<!DOCTYPE html>
-<html lang="${getCurrentLocale()}">
-<head><meta charset="UTF-8"><title>${escapeHtml(title)}</title>
-<style>
-  :root {
-    --ink-primary: oklch(0.15 0.003 85);
-    --ink-muted: oklch(0.6 0.002 85);
-    --accent: oklch(0.52 0.12 250);
-    --link: oklch(0.5 0.11 250);
-    --rule: oklch(0.88 0.003 85);
-    --code-block-bg: oklch(0.97 0.002 85);
-    --code-bg: oklch(0.96 0.002 85);
-    --table-stripe: oklch(0.97 0.002 85);
-  }
-  body{font-family:${getLocaleFontStack()};max-width:720px;margin:48px auto;padding:0 24px;line-height:1.8;color:var(--ink-primary)}
-  h1,h2,h3{line-height:1.3;margin:1.5em 0 .5em}
-  pre{background:var(--code-block-bg);padding:16px;border-radius:2px;overflow-x:auto;font-size:14px}
-  code{font-family:'Fira Code',monospace;font-size:.9em;background:var(--code-bg);padding:2px 6px;border-radius:2px}
-  pre code{background:none;padding:0}
-  blockquote{border:1px solid var(--rule);border-radius:4px;background:var(--code-block-bg);padding:.5em 1em;color:var(--ink-muted);margin:1em 0}
-  table{border-collapse:collapse;width:100%;margin:1em 0}
-  th,td{border:1px solid var(--rule);padding:8px 12px;text-align:left}
-  th{background:var(--table-stripe)}
-  hr{border:none;border-top:2px solid var(--rule);margin:2em 0}
-  img{max-width:100%}
-  a{color:var(--link)}
-</style></head>
-<body>${escapeHtml(md)}</body></html>`;
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
 
 // -----------------------------------------------------------

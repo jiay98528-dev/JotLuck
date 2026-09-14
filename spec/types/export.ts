@@ -32,15 +32,6 @@ export interface ExportOptions {
   codeLineNumbers: boolean;
 
   /**
-   * Strategy for handling embedded images.
-   * - 'embed'   : inline as base64 data URIs
-   * - 'attach'  : bundle as separate files alongside the output
-   * - 'link'    : leave as external URL references
-   * - 'omit'    : strip images entirely
-   */
-  imageHandling: 'embed' | 'attach' | 'link' | 'omit';
-
-  /**
    * Cancels pending export preparation. Implementations must check this signal
    * immediately before opening print UI or triggering a file download.
    */

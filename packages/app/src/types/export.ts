@@ -20,9 +20,6 @@ export interface ExportOptions {
   includeFrontmatter: boolean;
   includeWikiLinks: boolean;
   codeLineNumbers: boolean;
-  imageHandling: 'embed' | 'attach' | 'link' | 'omit';
-  /** P2-1: async function to resolve image path → base64 (for embed mode) */
-  readBinary?: (path: string) => Promise<string>;
   /** Cancels pending preparation before a download or print side effect begins. */
   signal?: AbortSignal;
 }

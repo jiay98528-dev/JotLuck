@@ -105,3 +105,50 @@ describe('IndexService per-path mutation ordering', () => {
     expect(service.getEngine().search({ text: 'stalerecreatedtoken' })).toEqual([]);
   });
 });
+
+describe('IndexService unified-AST index extraction', () => {
+  it('indexes inline #tag from text but skips fenced and inline code spans', async () => {
+    const fs = new MockFSService(0, { persist: false });
+    await fs.writeFile(
+      '/tags.md',
+      [
+        '# Note',
+        '',
+        'This paragraph mentions #realtag in flowing text.',
+        '',
+        '```',
+        '#fencetag inside a fence must not be indexed',
+        '```',
+        '',
+        'And an inline span `#inlinetag` is also skipped.',
+        '',
+      ].join('\n'),
+    );
+
+    const service = new IndexService(fs);
+    const index = await service.buildFullIndex();
+
+    const entry = index.documents['/tags.md'];
+    expect(entry?.tags ?? []).toContain('realtag');
+    expect(entry?.tags ?? []).not.toContain('fencetag');
+    expect(entry?.tags ?? []).not.toContain('inlinetag');
+  });
+
+  it('builds backlinks keyed by note name, stripping #anchor from [[note#anchor]]', async () => {
+    const fs = new MockFSService(0, { persist: false });
+    await fs.writeFile(
+      '/source.md',
+      '# Source\n\nLinking to [[note#section]] and [[note|with alias]] in body.\n',
+    );
+
+    const service = new IndexService(fs);
+    await service.buildFullIndex();
+
+    // 明示收紧：wiki-link 目标按 note 名入反链图（不再带锚点）。
+    const graph = service.getWikiLinkGraph();
+    expect(graph.outgoing['/source.md']).toEqual(['note', 'note']);
+
+    const backlinks = service.getBacklinks('/note.md');
+    expect(backlinks.map((b) => b.notePath)).toEqual(['/source.md']);
+  });
+});

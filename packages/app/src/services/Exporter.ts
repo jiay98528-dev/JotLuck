@@ -4,12 +4,24 @@
  * PDF (window.print + rendered HTML) / DOCX (docx.js) / XLSX (write-excel-file) /
  * CSV / TXT / HTML (self-contained)
  *
+ * 切片 D / WO-D3：四种手写解析（marked.lexer / 逐行扫描 / 14 条正则链）全部收口到
+ * 「renderer 块级 AST（export-model.ts）+ renderer 行内词法（lexInlineTokens）」。
+ * 本文件不再 import marked。
+ *
  * @see TAD.md §7.2
  * @see doc/PRD.md §F-09
  */
 import type { ExportOptions, ExportResult } from '@/types';
 import { ExportFormat } from '@/types';
-import { renderMarkdown } from '@jotluck/renderer';
+import {
+  renderMarkdown,
+  parseDocument,
+  lexInlineTokens,
+  parseWikiLinkTarget,
+  stripToPlainText,
+  WIKI_LINK_GLOBAL_RE,
+} from '@jotluck/renderer';
+import type { InlineToken, SourceRange } from '@jotluck/renderer';
 import {
   Document,
   Packer,
@@ -22,10 +34,10 @@ import {
   BorderStyle,
   ShadingType,
 } from 'docx';
-import { marked } from 'marked';
-import type { Token, Tokens } from 'marked';
 import writeXlsxFile, { type Sheet, type SheetData } from 'write-excel-file/browser';
 import { getCurrentLocale, getLocaleDocumentFont, getLocaleFontStack, translate } from '@/i18n';
+import { buildExportModel } from './export-model';
+import type { ExportModel } from './export-model';
 
 // ============================================================================
 // Internal Options — aligned with ExportOptions type
@@ -35,7 +47,6 @@ interface InternalExportOptions {
   includeFrontmatter: boolean;
   includeWikiLinks: boolean;
   codeLineNumbers: boolean;
-  imageHandling: 'embed' | 'attach' | 'link' | 'omit';
 }
 
 function createExportAbortError(): DOMException {
@@ -51,7 +62,6 @@ function buildInternalOpts(options?: Partial<ExportOptions>): InternalExportOpti
     includeFrontmatter: options?.includeFrontmatter ?? true,
     includeWikiLinks: options?.includeWikiLinks ?? true,
     codeLineNumbers: options?.codeLineNumbers ?? false,
-    imageHandling: options?.imageHandling ?? 'link',
   };
 }
 
@@ -63,40 +73,92 @@ const DOCX_COLORS = {
 } as const;
 
 // ============================================================================
-// Markdown Preprocessing
+// Markdown Preprocessing（AST 驱动；函数名与签名保持不变）
 // ============================================================================
 
-const FRONTMATTER_RE = /^---\s*\n[\s\S]*?\n---\s*\n/;
-
-function stripFrontmatter(md: string): string {
-  return md.replace(FRONTMATTER_RE, '');
+/**
+ * 去掉文首 frontmatter 块（含其后随的一个换行）。
+ * 旧实现为正则 /^---\s*\n[\s\S]*?\n---\s*\n/；现走 parseDocument 的 frontmatter 节点。
+ * 未闭合（closed=false）或块后无换行（到 EOF）时不摘除——与旧正则「必须有收尾换行」
+ * 的口径一致。
+ */
+/** @internal 切片 D 等价基线专用导出 */
+export function stripFrontmatter(md: string): string {
+  const { frontmatter } = parseDocument(md);
+  if (!frontmatter || !frontmatter.closed) return md;
+  let to = frontmatter.range.to;
+  if (md.charAt(to) !== '\n') return md;
+  to += 1;
+  return md.slice(0, frontmatter.range.from) + md.slice(to);
 }
 
 /**
  * Convert wiki-links [[...]] to regular Markdown links or plain text.
  * Wiki-links with | alias: [[target|alias]] → [alias](target) or alias
- * Wiki-links with # anchor: [[target#section]] → [target > section](target)
+ * Wiki-links with # anchor: [[target#section]] → [target](target#section)
+ *
+ * AST 驱动：wiki 命中区间在块内容切片内定位（parseWikiLinkTarget 解析），
+ * 代码围栏/裸 JSON 块内的 [[...]] 是字面量不再转换（旧全局正则的误转修复）。
  */
-function convertWikiLinks(md: string, include: boolean): string {
-  if (include) {
-    // Convert [[target]] → [target](target) for proper link rendering in exports
-    return md.replace(/\[\[([^\]]+)\]\]/g, (_m: string, inner: string) => {
-      const parts = inner.split('|');
-      const target = parts[0]!.split('#');
-      const note = target[0]!;
-      const anchor = target[1] ? `#${target[1]}` : '';
-      const text = parts[1] || target[0];
-      return `[${text}](${note}${anchor})`;
-    });
+/** @internal 切片 D 等价基线专用导出 */
+export function convertWikiLinks(md: string, include: boolean): string {
+  const ast = parseDocument(md);
+  const { source } = ast;
+
+  // 收集源码区间上的替换（from/to 为源码偏移），倒序拼接保证偏移不失效。
+  const replacements: Array<{ from: number; to: number; text: string }> = [];
+
+  const scanSlice = (from: number, to: number): void => {
+    const slice = source.slice(from, to);
+    for (const match of slice.matchAll(WIKI_LINK_GLOBAL_RE)) {
+      const parsed = parseWikiLinkTarget(match[1] ?? '');
+      const text = include
+        ? `[${parsed.alias ?? parsed.note}](${parsed.note}${parsed.anchor !== null ? `#${parsed.anchor}` : ''})`
+        : (parsed.alias ?? parsed.note);
+      replacements.push({
+        from: from + match.index,
+        to: from + match.index + match[0].length,
+        text,
+      });
+    }
+  };
+
+  for (const block of ast.blocks) {
+    switch (block.type) {
+      case 'heading':
+        scanSlice(block.contentRange.from, block.contentRange.to);
+        break;
+      case 'paragraph':
+        scanSlice(block.range.from, block.range.to);
+        break;
+      case 'listItem':
+        scanSlice(block.contentRange.from, block.contentRange.to);
+        break;
+      case 'blockquote':
+        for (const line of block.lines) scanSlice(line.contentRange.from, line.contentRange.to);
+        break;
+      case 'table':
+        for (const row of block.rows) {
+          for (const cell of row.cells) scanSlice(cell.range.from, cell.range.to);
+        }
+        break;
+      default:
+        // frontmatter / codeFence / jsonBlock / refDefinition / blank / hr — 不转换
+        break;
+    }
   }
-  // Strip wiki-link syntax, keep text
-  return md.replace(/\[\[([^\]]+)\]\]/g, (_m: string, inner: string) => {
-    const parts = inner.split('|');
-    return parts[1] || parts[0]!.split('#')[0]!;
-  });
+
+  if (replacements.length === 0) return md;
+  let result = source;
+  for (let i = replacements.length - 1; i >= 0; i--) {
+    const r = replacements[i]!;
+    result = result.slice(0, r.from) + r.text + result.slice(r.to);
+  }
+  return result;
 }
 
-function preprocessMarkdown(md: string, opts: InternalExportOptions): string {
+/** @internal 切片 D 等价基线专用导出 */
+export function preprocessMarkdown(md: string, opts: InternalExportOptions): string {
   let result = md;
   if (!opts.includeFrontmatter) {
     result = stripFrontmatter(result);
@@ -268,7 +330,7 @@ function exportPDF(
 }
 
 // ============================================================================
-// DOCX — marked.lexer() → docx.js elements
+// DOCX — ExportModel 块模型 + lexInlineTokens 行内词法 → docx.js elements
 // ============================================================================
 
 /** Map markdown heading depth (1-6) to docx HeadingLevel */
@@ -306,8 +368,21 @@ function headingFormat(depth: number): InlineFormat {
   };
 }
 
-/** Build docx TextRun array from marked inline tokens, with cascading format context */
-function buildTextRuns(tokens: Token[] | undefined, fmt: InlineFormat = {}): TextRun[] {
+/**
+ * Build docx TextRun array from renderer InlineToken 序列，with cascading format context。
+ *
+ * 接缝变化（WO-D3）：入参由 marked Token[] 换成 renderer InlineToken[]；
+ * 各 token 分支语义与旧 buildTextRuns 对齐（快照锁定）：
+ *   - link 递归 children 加下划线；image 恒 `[Image]`（InlineToken 无 title 字段，
+ *     旧实现仅在 title 存在时输出 `[Image: title]`，语料未覆盖）；
+ *   - tag 用 token.tag（不含 `#`）；wikiLink 用 alias ?? target；
+ *   - 空/缺 token 序列保底一个空 run（沿用旧回退，DOCX 任务项空 runs 工件依赖它）。
+ */
+/** @internal 切片 D 等价基线专用导出 */
+export function buildTextRuns(
+  tokens: InlineToken[] | undefined,
+  fmt: InlineFormat = {},
+): TextRun[] {
   if (!tokens || tokens.length === 0) {
     return [new TextRun({ text: '', ...fmt })];
   }
@@ -317,35 +392,33 @@ function buildTextRuns(tokens: Token[] | undefined, fmt: InlineFormat = {}): Tex
   for (const token of tokens) {
     switch (token.type) {
       case 'text': {
-        const t = token as Tokens.Text;
-        if (t.text) runs.push(new TextRun({ text: t.text, ...fmt }));
+        if (token.text) runs.push(new TextRun({ text: token.text, ...fmt }));
         break;
       }
       case 'strong': {
-        const t = token as Tokens.Strong;
-        runs.push(...buildTextRuns(t.tokens, { ...fmt, bold: true }));
+        runs.push(...buildTextRuns(token.children, { ...fmt, bold: true }));
         break;
       }
       case 'em': {
-        const t = token as Tokens.Em;
-        runs.push(...buildTextRuns(t.tokens, { ...fmt, italics: true }));
+        runs.push(...buildTextRuns(token.children, { ...fmt, italics: true }));
         break;
       }
       case 'codespan': {
-        const t = token as Tokens.Codespan;
-        runs.push(new TextRun({ text: t.text, font: 'Consolas', size: 20, ...fmt }));
+        runs.push(new TextRun({ text: token.text, font: 'Consolas', size: 20, ...fmt }));
         break;
       }
       case 'del': {
-        const t = token as Tokens.Del;
-        runs.push(...buildTextRuns(t.tokens, { ...fmt, strike: true }));
+        runs.push(...buildTextRuns(token.children, { ...fmt, strike: true }));
         break;
       }
       case 'link': {
-        const t = token as Tokens.Link;
         // Word default style — no custom color, underline only
+        const children =
+          token.children && token.children.length > 0
+            ? token.children
+            : [{ type: 'text' as const, text: token.text }];
         runs.push(
-          ...buildTextRuns(t.tokens, {
+          ...buildTextRuns(children, {
             ...fmt,
             underline: { type: 'single' as const },
           }),
@@ -353,85 +426,63 @@ function buildTextRuns(tokens: Token[] | undefined, fmt: InlineFormat = {}): Tex
         break;
       }
       case 'image': {
-        const t = token as Tokens.Image;
+        const img = token as Extract<InlineToken, { type: 'image' }>;
         runs.push(
           new TextRun({
-            text: `[Image${t.title ? ': ' + t.title : ''}]`,
+            text: `[Image${img.title ? ': ' + img.title : ''}]`,
             italics: true,
             color: '999999',
           }),
         );
         break;
       }
-      case 'html': {
-        const t = token as Tokens.HTML;
-        const stripped = t.text.replace(/<[^>]*>/g, '');
-        if (stripped) runs.push(new TextRun({ text: stripped, ...fmt }));
+      case 'wikiLink': {
+        runs.push(new TextRun({ text: token.alias ?? token.target, ...fmt }));
+        break;
+      }
+      case 'tag': {
+        runs.push(new TextRun({ text: token.tag, ...fmt }));
+        break;
+      }
+      case 'escape': {
+        runs.push(new TextRun({ text: token.text, ...fmt }));
         break;
       }
       case 'br': {
         runs.push(new TextRun({ break: 1 }));
         break;
       }
-      case 'escape': {
-        const t = token as Tokens.Escape;
-        runs.push(new TextRun({ text: t.text, ...fmt }));
-        break;
-      }
-      // Custom JotLuck inline token types — render as plain text
-      case 'wikiLink':
-      case 'tag': {
-        const t = token as { raw?: string; text?: string };
-        runs.push(new TextRun({ text: t.text || t.raw || '', ...fmt }));
-        break;
-      }
-      default:
-        break;
     }
   }
 
   return runs.length > 0 ? runs : [new TextRun({ text: '', ...fmt })];
 }
 
-/**
- * Check if a list item's tokens are inline (tight list) or block (loose list).
- * In tight lists, tokens[0] is text/strong/em/etc.
- * In loose lists, tokens[0] is paragraph.
- */
-function isInlineToken(token: Token | undefined): boolean {
-  if (!token) return true;
-  const inlineTypes = new Set([
-    'text',
-    'strong',
-    'em',
-    'codespan',
-    'link',
-    'image',
-    'del',
-    'html',
-    'br',
-    'escape',
-    'wikiLink',
-    'tag',
-  ]);
-  return inlineTypes.has(token.type);
+/** 块内容切片 → 行内词法 → TextRun[] */
+function buildSliceRuns(slice: string, fmt: InlineFormat = {}): TextRun[] {
+  return buildTextRuns(lexInlineTokens(slice), fmt);
 }
 
-/** Build docx Paragraph / Table children from marked block tokens */
-function buildDocxChildren(blocks: Token[], _opts: InternalExportOptions): (Paragraph | Table)[] {
+/** Build docx Paragraph / Table children from 导出块模型 */
+/** @internal 切片 D 等价基线专用导出 */
+export function buildDocxChildren(
+  model: ExportModel,
+  _opts: InternalExportOptions,
+): (Paragraph | Table)[] {
   const children: (Paragraph | Table)[] = [];
+  const { source } = model;
+  const slice = (range: SourceRange): string => source.slice(range.from, range.to);
 
-  for (const token of blocks) {
-    switch (token.type) {
+  for (const block of model.blocks) {
+    switch (block.type) {
       // ── Heading ──
       case 'heading': {
-        const t = token as Tokens.Heading;
-        const fmt = headingFormat(t.depth);
+        const fmt = headingFormat(block.level);
         children.push(
           new Paragraph({
-            heading: mapHeadingLevel(t.depth),
+            heading: mapHeadingLevel(block.level),
             spacing: { before: 240, after: 120 },
-            children: buildTextRuns(t.tokens, { ...fmt }),
+            children: buildSliceRuns(slice(block.contentRange), { ...fmt }),
           }),
         );
         break;
@@ -439,20 +490,32 @@ function buildDocxChildren(blocks: Token[], _opts: InternalExportOptions): (Para
 
       // ── Paragraph ──
       case 'paragraph': {
-        const t = token as Tokens.Paragraph;
         children.push(
           new Paragraph({
             spacing: { after: 120 },
-            children: buildTextRuns(t.tokens),
+            children: buildSliceRuns(block.text),
           }),
         );
         break;
       }
 
+      // ── Frontmatter：rawContent 按行输出为纯文本段落 ──
+      case 'frontmatter': {
+        for (const line of block.rawContent.split('\n')) {
+          children.push(
+            new Paragraph({
+              spacing: { after: 120 },
+              children: buildSliceRuns(line),
+            }),
+          );
+        }
+        break;
+      }
+
       // ── Code Block ──
-      case 'code': {
-        const t = token as Tokens.Code;
-        const lines = t.text.split('\n');
+      case 'codeFence': {
+        const content = block.contentRange ? slice(block.contentRange) : '';
+        const lines = content === '' ? [] : content.split('\n');
         for (let li = 0; li < lines.length; li++) {
           const lineText = _opts.codeLineNumbers
             ? `${String(li + 1).padStart(3, ' ')} │ ${lines[li]}`
@@ -477,94 +540,64 @@ function buildDocxChildren(blocks: Token[], _opts: InternalExportOptions): (Para
 
       // ── Blockquote ──
       case 'blockquote': {
-        const t = token as Tokens.Blockquote;
-        const innerChildren = buildDocxChildren(t.tokens, _opts);
-        // Add left border indent to indicate blockquote
-        for (const child of innerChildren) {
-          if (child instanceof Paragraph) {
-            // Create a new paragraph with indent
-            const existingSpacing = (child as { spacing?: { before?: number; after?: number } })
-              .spacing;
+        // 现行行为固化（等价快照）：引用块段落 runs 恒为空 run（旧实现从 docx v9
+        // 内部取不到 children 回退 [TextRun({text:''})] 的工件）。多行按连续同
+        // depth 分组，每组一个带左边框段落。
+        const border = {
+          left: { style: BorderStyle.SINGLE, size: 6, color: '999999' },
+        };
+        let groupStart = 0;
+        for (let li = 1; li <= block.lines.length; li++) {
+          if (
+            li === block.lines.length ||
+            block.lines[li]!.depth !== block.lines[groupStart]!.depth
+          ) {
             children.push(
               new Paragraph({
-                spacing: existingSpacing || { after: 120 },
+                spacing: { after: 120 },
                 indent: { left: 480 },
-                border: { left: { style: BorderStyle.SINGLE, size: 6, color: '999999' } },
-                children: (child as { children?: TextRun[] }).children || [
-                  new TextRun({ text: '' }),
-                ],
+                border,
+                children: [new TextRun({ text: '' })],
               }),
             );
-          } else {
-            children.push(child);
+            groupStart = li;
           }
         }
         break;
       }
 
       // ── List ──
-      case 'list': {
-        const t = token as Tokens.List;
-        let itemIndex = 0;
-        for (const item of t.items) {
-          itemIndex++;
-          const useInline = item.tokens.length > 0 && isInlineToken(item.tokens[0]);
+      case 'listItem': {
+        // 现行行为固化（等价快照）：
+        //   - 任务项整体不落 DOCX（旧 marked v18 任务项 tokens 为空的等价行为）；
+        //   - 嵌套项随父项内层 list token 被忽略而丢弃（level > 0 跳过）。
+        if (block.kind === 'task' || block.level > 0) break;
 
-          if (useInline) {
-            // Tight list — single paragraph with bullet/number
-            const prefix = t.ordered ? `${itemIndex}. ` : '';
-            const itemRuns: TextRun[] = [];
-
-            if (prefix) {
-              itemRuns.push(new TextRun({ text: prefix }));
-            }
-            itemRuns.push(...buildTextRuns(item.tokens));
-
-            children.push(
-              new Paragraph({
-                spacing: { before: 40, after: 40 },
-                indent: { left: 480, hanging: 240 },
-                bullet: t.ordered ? undefined : { level: 0 },
-                children: itemRuns,
-              }),
-            );
-          } else {
-            // Loose list — item contains block tokens
-            const innerBlocks = buildDocxChildren(item.tokens, _opts);
-            for (let bi = 0; bi < innerBlocks.length; bi++) {
-              const block = innerBlocks[bi]!;
-              if (block instanceof Paragraph) {
-                const prefix = bi === 0 && t.ordered ? `${itemIndex}. ` : '';
-                const existingChildren = (block as { children?: TextRun[] }).children;
-                const runs: TextRun[] = prefix
-                  ? [new TextRun({ text: prefix }), ...(existingChildren || [])]
-                  : existingChildren || [new TextRun({ text: '' })];
-
-                children.push(
-                  new Paragraph({
-                    spacing: { before: 40, after: 40 },
-                    indent: { left: 480, hanging: 240 },
-                    bullet: t.ordered ? undefined : { level: 0 },
-                    children: runs,
-                  }),
-                );
-              } else {
-                children.push(block);
-              }
-            }
-          }
+        const itemRuns: TextRun[] = [];
+        if (block.kind === 'ordered') {
+          // 旧实现使用组内序数而非源码数字
+          itemRuns.push(new TextRun({ text: `${block.itemIndex}. ` }));
         }
+        itemRuns.push(...buildSliceRuns(slice(block.contentRange)));
+
+        children.push(
+          new Paragraph({
+            spacing: { before: 40, after: 40 },
+            indent: { left: 480, hanging: 240 },
+            bullet: block.kind === 'unordered' ? { level: 0 } : undefined,
+            children: itemRuns,
+          }),
+        );
         break;
       }
 
       // ── Table ──
       case 'table': {
-        const t = token as Tokens.Table;
         const rows: TableRow[] = [];
 
         // Header row
         const headerCells: TableCell[] = [];
-        for (const cell of t.header) {
+        for (const header of block.headers) {
           headerCells.push(
             new TableCell({
               // OKLCH equivalent: oklch(0.93 0.002 85) — ~ --table-stripe in paper.css
@@ -575,7 +608,7 @@ function buildDocxChildren(blocks: Token[], _opts: InternalExportOptions): (Para
               },
               children: [
                 new Paragraph({
-                  children: buildTextRuns(cell.tokens),
+                  children: buildSliceRuns(header),
                 }),
               ],
             }),
@@ -584,14 +617,14 @@ function buildDocxChildren(blocks: Token[], _opts: InternalExportOptions): (Para
         rows.push(new TableRow({ children: headerCells }));
 
         // Data rows
-        for (const row of t.rows) {
+        for (const row of block.rows) {
           const dataCells: TableCell[] = [];
           for (const cell of row) {
             dataCells.push(
               new TableCell({
                 children: [
                   new Paragraph({
-                    children: buildTextRuns(cell.tokens),
+                    children: buildSliceRuns(cell),
                   }),
                 ],
               }),
@@ -612,7 +645,7 @@ function buildDocxChildren(blocks: Token[], _opts: InternalExportOptions): (Para
       }
 
       // ── Horizontal Rule ──
-      case 'hr': {
+      case 'horizontalRule': {
         children.push(
           new Paragraph({
             spacing: { before: 240, after: 240 },
@@ -625,11 +658,6 @@ function buildDocxChildren(blocks: Token[], _opts: InternalExportOptions): (Para
         );
         break;
       }
-
-      // ── Space / HTML / custom — skip ──
-      case 'space':
-      default:
-        break;
     }
   }
 
@@ -644,9 +672,8 @@ async function exportDocx(
   const opts = buildInternalOpts(options);
   const processed = preprocessMarkdown(md, opts);
 
-  // Use marked.lexer() to parse into block tokens
-  const tokens = marked.lexer(processed);
-  const children = buildDocxChildren(tokens, opts);
+  const model = buildExportModel(processed);
+  const children = buildDocxChildren(model, opts);
 
   const doc = new Document({
     styles: {
@@ -691,7 +718,7 @@ async function exportDocx(
 }
 
 // ============================================================================
-// XLSX — write-excel-file table extraction
+// XLSX — write-excel-file table extraction（AST-backed）
 // ============================================================================
 
 interface ParsedTable {
@@ -699,53 +726,34 @@ interface ParsedTable {
   rows: string[][];
 }
 
-function extractMarkdownTables(md: string): ParsedTable[] {
+/**
+ * AST-backed 包装：parseDocument 的 table 节点 → ParsedTable 形状。
+ *
+ * 行为变化点（WO-D3，edge 分叉固化）：
+ *   - `\|` 转义单元格不再裸切（renderer splitTableCells 同口径，保留反斜杠切片）；
+ *   - 全角 ｜ 表格现在能被抽取（旧逐行扫描只认半角）。
+ * 语义对齐旧实现：仅接受「表头紧邻分隔行」（separatorIndex === 1）的表格；
+ * 行列按 table.columnCount 补齐空串。
+ */
+/** @internal 切片 D 等价基线专用导出 */
+export function extractMarkdownTables(md: string): ParsedTable[] {
+  const model = buildExportModel(md);
   const tables: ParsedTable[] = [];
-  const lines = md.split('\n');
-
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i]!;
-
-    // Detect table header: starts/ends with | and contains at least one |
-    if (line.includes('|') && line.trim().startsWith('|')) {
-      const headerCells = parseTableRow(line);
-      const nextLine = lines[i + 1];
-
-      // Must have separator line (|---|---|)
-      if (nextLine && /^\|[\s\-:|]+\|$/.test(nextLine.trim())) {
-        const headers = headerCells;
-        const rows: string[][] = [];
-        i += 2; // Skip header + separator
-
-        // Collect data rows
-        while (i < lines.length && lines[i]!.includes('|')) {
-          rows.push(parseTableRow(lines[i]!));
-          i++;
-        }
-
-        tables.push({ headers, rows });
-        continue;
-      }
+  for (const block of model.blocks) {
+    if (block.type === 'table') {
+      tables.push({ headers: block.headers, rows: block.rows });
     }
-    i++;
   }
-
   return tables;
 }
 
-function parseTableRow(line: string): string[] {
-  return line
-    .split('|')
-    .slice(1, -1) // Remove leading/trailing empty from pipe-split
-    .map((cell) => cell.trim());
-}
-
-function tableToSheetData(table: ParsedTable): SheetData {
+/** @internal 切片 D 等价基线专用导出 */
+export function tableToSheetData(table: ParsedTable): SheetData {
   return [table.headers, ...table.rows];
 }
 
-function buildXlsxColumns(table: ParsedTable): { width: number }[] {
+/** @internal 切片 D 等价基线专用导出 */
+export function buildXlsxColumns(table: ParsedTable): { width: number }[] {
   return table.headers.map((header, ci) => {
     let maxLen = header.length;
     for (const row of table.rows) {
@@ -816,7 +824,8 @@ function exportCsv(md: string, fileName: string, options?: Partial<ExportOptions
   return { success: true, format: ExportFormat.CSV, fileName: `${fileName}.csv` };
 }
 
-function escapeCsvCell(cell: string): string {
+/** @internal 切片 D 等价基线专用导出 */
+export function escapeCsvCell(cell: string): string {
   const safeCell = protectCsvFormula(cell);
   if (safeCell.includes(',') || safeCell.includes('"') || safeCell.includes('\n')) {
     return `"${safeCell.replace(/"/g, '""')}"`;
@@ -824,54 +833,145 @@ function escapeCsvCell(cell: string): string {
   return safeCell;
 }
 
-function protectCsvFormula(cell: string): string {
+/** @internal 切片 D 等价基线专用导出 */
+export function protectCsvFormula(cell: string): string {
   return /^[=+\-@\t\r]/.test(cell) ? `'${cell}` : cell;
 }
 
 // ============================================================================
-// TXT — strip Markdown syntax
+// TXT — 模型遍历 + renderer stripToPlainText（内容切片）
 // ============================================================================
+
+/** markdownToTxt 的图片来源回调（导出默认走旧正则链等价行为 `!` + alt） */
+export type TxtImagePlaceholder = (alt: string) => string;
+
+export interface MarkdownToTxtOptions {
+  includeFrontmatter?: boolean;
+  includeWikiLinks?: boolean;
+  /** 图片占位；缺省 `!` + alt（旧 14 条正则链「链接规则先于图片规则」的等价产物） */
+  imagePlaceholder?: TxtImagePlaceholder;
+}
+
+/**
+ * Markdown → 纯文本（exportTxt 与 ShareDialog TXT 分享共用的适配器）。
+ *
+ * 旧实现为 14 条全局正则链；现走 export-model 块遍历 + renderer stripToPlainText。
+ * 等价快照固化的行为细节全部保留：
+ *   - 图片输出 `!` + alt（旧链链接规则先于图片规则，剥掉 `[]()` 留下前导 `!`）；
+ *   - 任务项残留 `[x]`（旧链先剥 bullet 后任务正则失配）；
+ *   - 代码围栏内容保留无反引号、围栏行退化为单反引号行（旧链行内码正则先于
+ *     围栏正则的全局副作用）；
+ *   - 行首缩进的嵌套列表项标记原样保留（旧链 `^[-*+]` 不带 `^\s*` 够不到）；
+ *   - 表格按源码行原样保留；hr/空行压缩/首尾 trim 不变。
+ */
+export function markdownToTxt(md: string, options?: MarkdownToTxtOptions): string {
+  const processed = preprocessMarkdown(md, {
+    includeFrontmatter: options?.includeFrontmatter ?? true,
+    includeWikiLinks: options?.includeWikiLinks ?? true,
+    codeLineNumbers: false,
+  });
+  const model = buildExportModel(processed);
+  const { source } = model;
+  const slice = (range: SourceRange): string => source.slice(range.from, range.to);
+  const imagePlaceholder = options?.imagePlaceholder ?? ((alt: string) => `!${alt}`);
+
+  // 段：块 → 文本段；同列表组相邻项以 '\n' 并入同段（对齐旧链的原始换行）。
+  const segments: string[] = [];
+  let lastListGroup: number | null = null;
+
+  const pushSegment = (text: string): void => {
+    if (text === '') return;
+    segments.push(text);
+    lastListGroup = null;
+  };
+
+  for (const block of model.blocks) {
+    switch (block.type) {
+      case 'frontmatter':
+        pushSegment(stripToPlainTextForTxt(block.rawContent, imagePlaceholder));
+        break;
+
+      case 'heading':
+        pushSegment(stripToPlainTextForTxt(slice(block.contentRange), imagePlaceholder));
+        break;
+
+      case 'paragraph':
+        pushSegment(stripToPlainTextForTxt(block.text, imagePlaceholder));
+        break;
+
+      case 'blockquote':
+        pushSegment(
+          block.lines
+            .map((line) => stripToPlainTextForTxt(slice(line.contentRange), imagePlaceholder))
+            .join('\n'),
+        );
+        break;
+
+      case 'codeFence': {
+        // 旧链固化行为：开围栏行退化为 '`' + lang，闭围栏行退化为 '`'，
+        // 内容原样保留。
+        const openLine = block.lang ? `\`${block.lang}` : '`';
+        const content = block.contentRange ? slice(block.contentRange) : '';
+        const closeLine = '`';
+        pushSegment(
+          content === '' ? `${openLine}\n${closeLine}` : `${openLine}\n${content}\n${closeLine}`,
+        );
+        break;
+      }
+
+      case 'listItem': {
+        const text = stripToPlainTextForTxt(slice(block.contentRange), imagePlaceholder);
+        let lineText: string;
+        if (block.indent > 0) {
+          // 嵌套项：旧链行首正则表示够不到缩进行，标记与缩进原样保留
+          lineText = `${' '.repeat(block.indent)}${slice(block.markerRange)} ${text}`;
+        } else {
+          // 顶层项：bullet / 有序编号剥除；任务复选标记一并清涂（明示变化⑥，
+          // 旧链残留 [x] 为正则事故产物，Leader 裁决为改进型漂移）
+          lineText = text;
+        }
+        if (block.groupId === lastListGroup && segments.length > 0) {
+          segments[segments.length - 1] += `\n${lineText}`;
+        } else {
+          segments.push(lineText);
+        }
+        lastListGroup = block.groupId;
+        break;
+      }
+
+      case 'table':
+        // 旧链对表格行不做块级处理（行内规则全局作用）——源码切片 + 行内剥净
+        pushSegment(stripToPlainTextForTxt(slice(block.range), imagePlaceholder));
+        break;
+
+      case 'horizontalRule':
+        // 旧链删除整行 hr
+        break;
+
+      case 'refDefinition':
+        // 旧 14 条正则链对 `[label]: url` 行无命中规则 → 原样透传（R1 MAJOR-2 修复）
+        pushSegment(block.text);
+        break;
+    }
+  }
+
+  return segments
+    .join('\n\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** stripToPlainText 的本文件别名（集中 import 面，便于审计无 marked 依赖） */
+function stripToPlainTextForTxt(text: string, imagePlaceholder: TxtImagePlaceholder): string {
+  return stripToPlainText(text, { imagePlaceholder });
+}
 
 function exportTxt(md: string, fileName: string, options?: Partial<ExportOptions>): ExportResult {
   const opts = buildInternalOpts(options);
-  let processed = preprocessMarkdown(md, opts);
-
-  // Strip common Markdown syntax markers
-  processed = processed
-    // Headings: remove # markers, keep text
-    .replace(/^#{1,6}\s+/gm, '')
-    // Setext headings
-    .replace(/^[=\-]{3,}$/gm, '')
-    // Bold
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    // Italic
-    .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '$1')
-    // Inline code
-    .replace(/`(.+?)`/g, '$1')
-    // Links: [text](url) → text
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    // Images: ![alt](url) → [Image: alt]
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, (_m, alt: string) =>
-      alt ? translate('export.imageWithAlt', { alt }) : translate('export.image'),
-    )
-    // Blockquote prefix
-    .replace(/^>\s?/gm, '')
-    // Unordered list markers
-    .replace(/^[-*+]\s/gm, '')
-    // Ordered list markers
-    .replace(/^\d+\.\s/gm, '')
-    // Task list markers
-    .replace(/^- \[[ x]\] /gm, '')
-    // Code fences (strip opening/closing, keep content)
-    .replace(/^```[\s\S]*?^```/gm, (_m: string) => {
-      return _m.replace(/^```.*\n?/gm, '').replace(/^```$/gm, '');
-    })
-    // Horizontal rules
-    .replace(/^[-*_]{3,}$/gm, '')
-    // Compress excessive blank lines
-    .replace(/\n{3,}/g, '\n\n')
-    // Trim leading/trailing whitespace
-    .trim();
+  const processed = markdownToTxt(md, {
+    includeFrontmatter: opts.includeFrontmatter,
+    includeWikiLinks: opts.includeWikiLinks,
+  });
 
   triggerDownload(processed, `${fileName}.txt`, 'text/plain;charset=UTF-8', options?.signal);
   return { success: true, format: ExportFormat.TXT, fileName: `${fileName}.txt` };
@@ -881,11 +981,19 @@ function exportTxt(md: string, fileName: string, options?: Partial<ExportOptions
 // HTML — self-contained with embedded CSS
 // ============================================================================
 
-function exportHtml(md: string, fileName: string, options?: Partial<ExportOptions>): ExportResult {
+/**
+ * 与 exportHtml 同源的完整 HTML 文档产物。
+ * ShareDialog 的 HTML 分享复用本函数（WO-D3 收敛：删除其本地 CSS/escapeHtml 副本）。
+ */
+export function buildHtmlDocument(
+  md: string,
+  fileName: string,
+  options?: Partial<ExportOptions>,
+): string {
   const opts = buildInternalOpts(options);
   const bodyHtml = renderToStyledHtml(md, opts);
 
-  const html = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="${getCurrentLocale()}">
 <head>
   <meta charset="UTF-8">
@@ -899,6 +1007,10 @@ function exportHtml(md: string, fileName: string, options?: Partial<ExportOption
   </article>
 </body>
 </html>`;
+}
+
+function exportHtml(md: string, fileName: string, options?: Partial<ExportOptions>): ExportResult {
+  const html = buildHtmlDocument(md, fileName, options);
 
   triggerDownload(html, `${fileName}.html`, 'text/html;charset=UTF-8', options?.signal);
   return { success: true, format: ExportFormat.HTML, fileName: `${fileName}.html` };

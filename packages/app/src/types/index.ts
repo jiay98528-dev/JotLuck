@@ -5,9 +5,6 @@
 
 // --- editor.ts ---
 export type {
-  BlockType,
-  BlockMode,
-  MarkdownBlock,
   HeadingItem,
   TabItem,
   ToolbarItemConfig,
