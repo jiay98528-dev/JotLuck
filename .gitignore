@@ -135,3 +135,7 @@ local-archive/
 /packages/app/public/autocomplete-v25/
 /packages/app/src-tauri/resources/autocomplete-v25/*
 !/packages/app/src-tauri/resources/autocomplete-v25/README.txt
+
+# Agent 工作区与切片互审产物（本地过程材料，不入库）
+.agentteam/
+docs/wip/

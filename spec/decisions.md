@@ -1,6 +1,6 @@
 # Decisions
 
-版本：v1.5（2026-09-08）
+版本：v1.9（2026-09-14）
 
 ## 已确认决策
 
@@ -9,6 +9,42 @@
 3. 声明式主题通过 DSL 渲染；官方代码主题和本地可信代码主题可通过 `ThemeHostContext` 替换 Shell/主页/弹窗级 UX slot。
 4. P0 阶段不做权限审批、沙箱隔离、社区市场审核或远程购买接入。本地主题能力声明不作为安装/启用阻断条件。
 5. 商业化通过 `ThemeCommerceProvider` 适配，默认本地 mock。未来接入 Gumroad、Polar 或自建后端时只替换 provider 实现，不改变主题中心和 manifest 结构。
+
+## ADR-027：导出与索引收口——块级权威 AST + 行内共享 marked 词法；Rust 死索引通道删除
+
+- **状态**：已接受（2026-09-14）；PRD-v0.2 R3 切片 D 定稿。门禁实测：renderer 125/125、app vitest 964/964（含 13 份旧实现等价快照不盲刷保持绿 + 5 条硬断言新行为）、双 typecheck 零错、cargo check/test 162/0（tantivy/walkdir/regex 依赖随删）、定向 E2E 39/39（05 导出/03 搜索/09 反链/14 live preview）、全量 chromium 212 通过 + 5 失败全部为既有集（B1-B4/19-462）零新增。互审 R2 PASS-with-minor（2 major 均已裁决：ADR 措辞如实化、图片 title 经 renderer InlineToken.image.title 恢复）；R1 FAIL→三大 major 全裁决：快照忠实性经「HEAD 旧码重建执行」实证（旧 DOCX 产出 nested/task 均空，快照忠生旧输出）、TXT refDefinition 行透传回归确认并修复、TS strict 疑虑经双 tsc 执行推翻；m 级行内 HTML 剥标签口径恢复、误导注释修正，其余入 R4 备案。
+- **背景**：Exporter 实为四种解析并存（marked 渲染 / marked.lexer / 自有逐行表格抽取 / TXT 14 条正则链），ShareDialog 另有双轨剥离；Rust tantivy 索引通道（build_index/update_index_document/search_index）注册于 lib.rs 但前端/E2E/vscode-ext 零调用——所有搜索、标签、反链、外部文件变更重提取早已全部在前端 SearchEngine + IndexService（切片 B 后已走 AST）完成；Rust 侧「第三份解析」仅 indexer.rs:389-410 的 extract_title/extract_tags（22 行、零测试）。
+- **决策**：
+  - **导出**：块级结构权威归 AST（ADR-025「结构性消费一律走 AST」）——ExportModel = parseDocument 块序列（标题级别/表格补齐矩阵/列表 indent 栈重组嵌套/引用 depth/围栏 lang/任务 checked），每格式适配器从模型产出；行内格式（DOCX 富文本）共享 marked 的 `Lexer.lexInline`（renderer 新导出 `lexInlineTokens` 包装，与 renderMarkdown 同引擎同配置）——不手写强调解析器，保证 DOCX 行内格式与 HTML 渲染天然一致。app 包不再直接 import marked（唯一 marked import 收进 renderer 包）。
+  - **索引**：删除 Rust 死通道（indexer.rs 整模块 + 三命令注册 + SearchIndexState + tantivy/walkdir 依赖），桌面全文检索由前端 SearchEngine 独担（与现实一致）；`.JotLuck_index` 遗留目录 inert（点前缀被扫描忽略），不主动清理用户磁盘。
+  - **明示行为变化（各有专测）**：① 表格 `\|` 转义全格式生效（AST splitTableCells 对齐 GFM 与 live preview 管线）；② `![#tag](u)` 导出层不再固化其旧剥离行为（preprocess 直通；alt 的可见渲染语义属 renderer 存量 quirk——PRD R4 备案⑥——不在本切片范围）；③ refDefinition 行的 `#y` 不再进索引标签；④ Share「HTML」从原始 markdown 改为渲染产物；⑤ 死选项 imageHandling/readBinary 删除；⑥ TXT 导出任务项不再残留 `[x]`/`[ ]` 标记（旧链正则事故产物，清涂为改进型漂移）。另：`extractMarkdownTables/preprocessMarkdown/stripFrontmatter/convertWikiLinks` 四个旧函数名保留为 `@internal` 测试接缝、函数体已全走 AST——「旧实现删除」的验收口径按内核计，勿按函数名误报。
+- **后果**：新增导出格式 = 写「AST 模型 ↔ 格式」一个适配器；AGENTS.md 选型表「Tauri 搜索 = tantivy」行与 TAD.md 同步修订为现实；等价回归靠先行特征化基线（旧实现固化断言）+ 分叉点新行为专测。
+- **替代方案**：接通 tantivy（前端提交结构化字段）——无人使用的第二搜索引擎，违背业务优先，弃；renderer 新写行内强调解析器——必然与 marked HTML 渲染分叉（嵌套强调规则难对齐），弃；保留 Rust 解析兜底——PRD 铁律不允许第三份解析长期并存，弃。
+
+## ADR-026：聚焦行幽灵语法采用真实占宽 mark 装饰（无 widget、坐标原生）
+
+- **状态**：已接受（2026-09-14）；PRD-v0.2 R2 切片 C 定稿。原型阶段（W1–W2）kill/keep 判据双 PASS → KEEP；放量阶段（W3）覆盖 6 个 Lezer mark + AST 结构 markerRange（含全角 ＃ ＞ －）+ 表格管线（含全角 ｜ 与 \| 转义）+ wiki/tag 定界符与内容着色 + 零宽路线退役 + 早退旁路给 setext 两块。
+- **背景**：即时预览中聚焦块回退源码显示（`build()` 聚焦分叉直接 continue），渲染"破面"；PRD R2 要求居中点——聚焦行渲染保持 + 格式符号幽灵弱化可见。选型前核实：聚焦块并非纯等宽源码（全局 `JotLuckHighlightStyle` 已让标题/加粗/斜体/链接内容保持渲染观感），缺的只是符号呈现；最大风险为坐标映射与 IME。
+- **决策**：聚焦块呈现 = 真实源文本 + Lezer `syntaxTree` 的 mark 装饰幽灵化（可见低对比度、**真实占宽**）+ 既有语法高亮保持内容渲染。**不插入任何 widget、不做零宽隐藏**——点击、拖选、光标落位全部走 CodeMirror 原生坐标，"选区映射"风险被架构性化解。链接 URL 以原地幽灵样式呈现（源码中 `(url)` 本就在文字后方），不弹窗不浮层。IME 沿用 composition 冻结重建纪律（组合期仅装饰 map 不重建），幽灵装饰不新增任何重建时机。结构标记（列表/引用/表格管线等，Lezer 无 GFM 节点）一律走 ADR-025 AST 源码偏移。
+- **kill/keep 判据实测数字**：
+  - 判据① 中文 IME 连续 200 字合成组合输入（25 段×8 字），上屏后内容精确、幽灵范围仍恰好覆盖两段 `**`、前缀 6 个位置坐标与组合前一致（±1px 零漂移）、采样点击 3 字符落点正确——**PASS**。
+  - 判据② 聚焦行 19 字符逐字符真实 `mouse.click` 落点 `head ∈ {p, p+1}` 100%，加拖选段 `from ∈ {2,3}, to ∈ {12,13}`——**PASS**。
+  - 字符边界精度如实登记为设计上限（不在 100% 口径里）。
+- **后果**：非聚焦块渲染管线（RenderedBlockWidget）零改动；pin 源码语义保持全对比度（"看源码"的显式动作）；`touchesEmptyCursorLine` 零宽分支在放量期统一为幽灵模式、`.cm-live-source-marker` 路线源码零引用（仅单测反向断言）；setext 标题早退旁路给两块；早退例外数组从 codeSpans 扩到 codeSpans+wikiSpans（避免表格管线在 wiki 别名 `|` 处双染）；三档显示设置为 P2 可选、首版只做默认居中点。
+- **替代方案**：聚焦块整块渲染 widget + 自建坐标映射层（映射工程量最大且正是 PRD 点名的最高风险——弃）；零宽折叠扩展到聚焦块（符号不可见，不满足"符号弱化可见"的居中点定义——弃）；ProseMirror 富文本内核（PRD 非目标，G2 天花板被真实需求撞破前不评估）。
+- **跨会话教训**：①「幽灵 = 真实占宽 mark」天然化解 PRD 最怕的"选区映射"工程——免坐标层的根本原因是聚焦块没有 widget 插入。②CM6 不承诺合成组合期装饰 DOM 稳定——`compositionstart` ↔ `compositionend` 之间浏览器直接管理 DOM，装饰类可能抖动、可上屏文本可续进相邻 mark span 的文本节点；用户可感知承诺 =「聚焦块不闪回 widget」，断言只能保上屏后归位。③合成 IME 是对真实输入法的近似（无候选窗/preedit），手感属验证者亲自验收。④CM6 HighlightStyle 在全视图生效、与聚焦行类正交——「词仍粗体」与「符号幽灵」是两条独立路径，审查要分层看。
+
+## ADR-025：统一解析层采用自维护行扫描 AST（落 @jotluck/renderer），marked 保留为 HTML 渲染后端
+
+- **状态**：已接受（2026-09-14）；PRD-v0.2 R3 切片 B 的选型登记。
+- **背景**：同一套 Markdown 语法曾在 7 处独立手写解析（渲染扩展、frontmatter×3、大纲、索引标签/双链、编辑器块识别、行内格式剥离、分享清洗），规则互相漂移。统一解析层的底层选型有三个候选：marked lexer、Lezer（@lezer/markdown）、自维护行扫描器。
+- **决策**：权威结构解析器 = 自维护行扫描器 `parseDocument`，落 `packages/renderer/src/ast.ts`（纯 TS、无依赖、app 与 renderer 共用）。所有节点携带源码 UTF-16 偏移与行号；识别在全角归一化视图进行，范围字段一律由含全角字符类的源码空间正则直接切出（归一化下标永不充当源码偏移）。语法规则单点化到 `syntax.ts`（全角归一、wiki-link/tag 词法、表格工具、headingIdFromText），marked 扩展与 AST 行内扫描共用同一份定义。
+- **marked 保留为 HTML 渲染后端**：`renderMarkdown` 继续用 marked.parse 产 HTML，行为不变；渲染管线内的标题锚点 id 注入（addHeadingIds）跟随渲染引擎自己的 token 序列（互审实证：AST 与 marked 在引用内嵌标题/缩进 ATX/空标题等边界形态判定不同，跨引擎配对会张冠李戴）。即：结构性消费（大纲/索引/编辑器/续格式/清洗/导出）一律走 AST；HTML 生成的内部细节归 marked。
+- **不选 marked lexer 当 AST**：marked token 不携带任何源码位置（实证 marked.d.ts 无 start/end/line 字段），而装饰、续格式、大纲行号都要位置。
+- **不选 Lezer 当唯一权威**：Lezer 语法树只在编辑器内可用，服务不了 IndexService/ShareDialog/导出等非编辑器消费方；编辑器内现有两处 Lezer 消费（行内符号折叠、补全 FencedCode 判定）维持不动。
+- **前端收口事实**：useHeadings/IndexService/YAMLParser 边界/markdown-formatting 剥离/ShareDialog 清洗/cm6-smart-continue 检测/cm6-live-preview 块识别全部改消费 AST 或共享规则；零引用死代码 blockParser.ts 删除。Exporter 三路线与 Rust 索引收口属切片 D（首选前端产出结构化字段随索引提交，Rust 只存不解析）。
+- **后果**：新增一种语法（如 callout）只需在 syntax.ts/ast.ts 定义一次，结构消费方同时生效；渲染侧若需新语法的 HTML，则在 marked-extensions 消费同一规则定义。行为等价底线附带 8 处明示收紧（PRD-v0.2 变更记录 v1.3 逐条登记）。
+- **替代方案**：marked lexer 派生 AST（无位置——弃）；Lezer GFM 全量启用（出不了编辑器——弃）；AST 直产 HTML 取代 marked（重写渲染器风险远超切片收益——后置，不承诺）。
 
 ## ADR-024：V2.5 个性化采用解码期浅融合（首 token 双倍 + 纯分门控）
 
@@ -153,6 +189,10 @@
 - **后果**：测试机并行负载不会单独阻断 preview，但也不能用“环境抖动”豁免缺安装旅程、缺样本、缺 provenance、缺证据提交或产品功能失败。
 
 ## 变更记录
+
+- 2026-09-14（v1.9）：ADR-027 定稿为已接受——门禁与互审数字补全（含 R1 三大 major 的实证裁决：旧码重建审计证明快照忠实、refDefinition TXT 透传修复、双 tsc 推翻 strict 疑虑）。
+- 2026-09-14（v1.8）：新增 ADR-027（提案中）——导出与索引收口：块级权威 AST + 行内共享 marked 词法、Rust 死索引通道删除；切片 D 门禁全绿后定稿。
+- 2026-09-14（v1.7）：ADR-026 定稿为已接受；补全 kill/keep 双判据实测数字（IME 200 字合成组合零漂移 + 19 字符逐字符真实点击落点 100% 正确）；附跨会话教训（真实占宽免坐标工程、CM6 组合期 DOM 不承诺、合成 IME 近似边界、HighlightStyle 与聚焦行类正交）。
 
 - 2026-09-08（v1.5）：新增 ADR-024，V2.5 个性化第一迭代采用解码期浅融合（首 token 双倍偏置 + 纯模型分门控 + 空先验字节级回退）；设置新增个性化开关（默认开启）。
 
