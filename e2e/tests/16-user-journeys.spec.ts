@@ -149,6 +149,8 @@ test.describe('V6 用户旅程', () => {
 
   test('J1c: 即时模式表格渲染列对齐且不串行', async ({ page }) => {
     test.setTimeout(60_000);
+    // V0.2-A 起，表格行内回车按预期预填新行（doc/PRD-v0.2.md §4 R1）；
+    // 本用例考核渲染对齐而非逐键构建流程，故用 insertText 单笔注入整表。
     await typeInEditor(
       page,
       [
@@ -160,6 +162,7 @@ test.describe('V6 用户旅程', () => {
         '| AI/LLM运用 | 95 | 工程化体系 |',
         '',
       ].join('\n'),
+      { insertText: true },
     );
 
     await expect(page.locator('.cm-live-block[data-block-type="tableRow"]').first()).toBeVisible({

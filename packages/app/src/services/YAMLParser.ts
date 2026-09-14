@@ -1,4 +1,11 @@
-/** YAMLParser — YAML frontmatter 解析器 @see migration-map.md §4 */
+/**
+ * YAMLParser — YAML frontmatter 解析器
+ *
+ * 边界判定改由 @jotluck/renderer 的 parseDocument 提供，确保 frontmatter
+ * 与代码块 / 裸 JSON 等其它块级结构使用同一套解析语义。
+ */
+import { parseDocument } from '@jotluck/renderer';
+
 export interface FrontmatterData {
   title?: string;
   tags?: string | string[];
@@ -15,12 +22,15 @@ export interface FrontmatterResult {
 }
 
 export function parseFrontmatter(content: string): FrontmatterResult {
-  const match = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
-  if (!match) return { data: {}, raw: '', contentStart: 0, hasFrontmatter: false };
+  const node = parseDocument(content).frontmatter;
+  // 等价规则（与旧正则 `^---\s*\n[\s\S]*?\n---\s*\n` 对齐）：
+  // 节点存在 且 已闭合 且 闭合行后紧跟 '\n'。
+  if (!node || !node.closed || content[node.range.to] !== '\n') {
+    return { data: {}, raw: '', contentStart: 0, hasFrontmatter: false };
+  }
 
-  const raw = match[1] ?? '';
+  const raw = node.rawContent;
   const data: FrontmatterData = {};
-
   const lines = raw.split('\n');
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index] ?? '';
@@ -50,7 +60,7 @@ export function parseFrontmatter(content: string): FrontmatterResult {
     (data as Record<string, unknown>)[key] = value;
   }
 
-  return { data, raw, contentStart: match[0].length, hasFrontmatter: true };
+  return { data, raw, contentStart: node.range.to + 1, hasFrontmatter: true };
 }
 
 export function stripFrontmatter(content: string): string {
@@ -59,7 +69,8 @@ export function stripFrontmatter(content: string): string {
 }
 
 export function extractTitle(content: string): string {
-  const body = stripFrontmatter(content);
-  const h1 = body.match(/^#\s+(.+)$/m);
-  return h1?.[1]?.trim() ?? '';
+  const ast = parseDocument(content);
+  // 与旧实现 `/^#\s+(.+)$/m` 的明示收紧：fence 内的 `# x` 不再被当作标题。
+  const firstH1 = ast.blocks.find((b) => b.type === 'heading' && b.level === 1);
+  return firstH1?.type === 'heading' ? firstH1.text : '';
 }

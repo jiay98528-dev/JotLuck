@@ -1,5 +1,5 @@
 import type { FormatAction, ParagraphPreset } from '@/types';
-import { normalizeFullwidthMarkdownSyntax } from '@jotluck/renderer';
+import { normalizeFullwidthMarkdownSyntax, stripToPlainText } from '@jotluck/renderer';
 
 export interface FormattingEdit {
   changes: { from: number; to: number; insert: string };
@@ -91,19 +91,21 @@ export function toggleInlineFormat(
   return edit(from, to, insert, from + open.length, from + open.length + selected.length);
 }
 
+/**
+ * 行内 Markdown → 纯文本 — 收口到 @jotluck/renderer 的 stripToPlainText。
+ *
+ * 与旧手写正则链相比，已知可接受收紧（在本切片范围内、用户感知为「更干净」）：
+ *   1. 图片 `![alt](url)`：旧链只过链接规则 `[t](u) → t`，残留 `!alt`；
+ *      stripToPlainText 先剥图片规则，产出干净的 `alt`（或 imagePlaceholder 回调产物）。
+ *   2. 嵌套定界符（`**粗 *斜* 粗**`、`***x***` 等）由 stripToPlainText 的不动点循环剥净；
+ *      顺带行首 heading / blockquote 前缀亦走不动点循环剥净（含多级 `>>>foo`、
+ *      `## # 标题` 等）。
+ *
+ * 不剥列表标记（stripListMarkers: false）— 保持「清除格式」动作语义只剥行内格式，
+ * 不动列表 bullet / 任务 checkbox / 有序编号。
+ */
 function stripInlineMarkdown(value: string): string {
-  let result = value;
-  let previous = '';
-  while (result !== previous) {
-    previous = result;
-    result = result
-      .replace(/\[([^\]]+)]\([^)]+\)/g, '$1')
-      .replace(/\*\*([^*\n]+)\*\*/g, '$1')
-      .replace(/~~([^~\n]+)~~/g, '$1')
-      .replace(/`([^`\n]+)`/g, '$1')
-      .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1$2');
-  }
-  return result.replace(/(^|\n)(\s{0,3})(?:[#＃]{1,6}[ \u3000]+|[>＞][ \u3000]?)/g, '$1$2');
+  return stripToPlainText(value, { stripListMarkers: false });
 }
 
 export function clearMarkdownFormatting(doc: string, from: number, to: number): FormattingEdit {

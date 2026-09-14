@@ -545,17 +545,18 @@ test.describe('即时模式 (Live Preview)', () => {
     await page.keyboard.press('Control+End');
     await page.keyboard.press('Enter');
 
-    // Enter 后保留源码 DOM 供 Windows IME 建立文本上下文，但视觉上隐藏 #。
+    // Enter 后保留源码 DOM 供 Windows IME 建立文本上下文；`#` 定界符不再隐藏，
+    // 以幽灵形式（低对比度、真实占宽）可见，点击/选区映射保持原生。
     await expect(page.locator('.cm-live-block[data-block-type="heading"]')).toHaveCount(0);
     const sourcePreservingHeading = page.locator(
-      '.cm-line.cm-live-source-preserving[data-live-source-type="heading"]',
+      '.cm-line.cm-live-focused-source[data-live-source-type="heading"]',
     );
     await expect(sourcePreservingHeading).toHaveCount(1);
     await expect(sourcePreservingHeading).toContainText('# 中文标题');
 
-    const hiddenHeadingMarker = sourcePreservingHeading.locator('.cm-live-source-marker');
-    await expect(hiddenHeadingMarker).toHaveCount(1);
-    await expect(hiddenHeadingMarker).toHaveCSS('font-size', '0px');
+    const ghostHeadingMarker = sourcePreservingHeading.locator('.cm-live-ghost-mark');
+    await expect(ghostHeadingMarker).toHaveCount(1);
+    await expect(ghostHeadingMarker).toHaveText('#');
 
     await editor.dispatchEvent('compositionstart', { data: '' });
     await page.keyboard.insertText('中');
@@ -575,7 +576,8 @@ test.describe('即时模式 (Live Preview)', () => {
     await expect(renderedHeading).toContainText('中文标题');
   });
 
-  test('12-相邻空行保留粗体源码上下文但视觉隐藏定界符', async ({ page }) => {
+  test('12-相邻空行保留粗体源码上下文且定界符幽灵化', async ({ page }) => {
+    // 定界符以幽灵形式（低对比度、真实占宽）可见，源码仍完整保留。
     await typeInEditor(page, '**粗体内容**');
 
     const editor = page.locator('.cm-content');
@@ -584,13 +586,13 @@ test.describe('即时模式 (Live Preview)', () => {
     await page.keyboard.press('Enter');
 
     const sourcePreservingParagraph = page.locator(
-      '.cm-line.cm-live-source-preserving[data-live-source-type="paragraph"]',
+      '.cm-line.cm-live-focused-source[data-live-source-type="paragraph"]',
     );
     await expect(sourcePreservingParagraph).toHaveCount(1);
     await expect(sourcePreservingParagraph).toContainText('**粗体内容**');
 
-    const hiddenMarkers = sourcePreservingParagraph.locator('.cm-live-source-marker');
-    await expect(hiddenMarkers).toHaveCount(2);
-    await expect(hiddenMarkers.first()).toHaveCSS('font-size', '0px');
+    const ghostMarkers = sourcePreservingParagraph.locator('.cm-live-ghost-mark');
+    await expect(ghostMarkers).toHaveCount(2);
+    await expect(ghostMarkers.first()).toHaveText('**');
   });
 });

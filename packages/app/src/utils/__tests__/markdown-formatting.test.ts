@@ -25,6 +25,22 @@ describe('markdown formatting', () => {
     expect(edit.changes).toEqual({ from: 0, to: doc.length, insert: '中文' });
   });
 
+  it('清除格式对图片链接产出干净的 alt 文本（收口到 stripToPlainText 的可接受收紧）', () => {
+    // 旧手写链只过链接规则 `[t](u) → t`，会把 `![图](url)` 误剥成 `!图`；
+    // 新实现先走 stripToPlainText 的图片规则，得 `图`。
+    const doc = '![图](url)';
+    const edit = clearMarkdownFormatting(doc, 0, doc.length);
+    expect(edit.changes.insert).toBe('图');
+  });
+
+  it('清除格式对跨行嵌套定界符走不动点循环剥净（stripToPlainText 收紧）', () => {
+    // `**粗 *斜* 粗**` 经 stripToPlainText 的 families 不动点循环剥净：
+    // 先剥外层 `**...**` 得 `粗 *斜* 粗`，再剥内层 `*斜*` 得 `粗 斜 粗`。
+    const doc = '**粗 *斜* 粗**';
+    const edit = clearMarkdownFormatting(doc, 0, doc.length);
+    expect(edit.changes.insert).toBe('粗 斜 粗');
+  });
+
   it('标题预设替换原有段落前缀', () => {
     const edit = applyParagraphPreset('> 中文段落', 2, 6, 'heading2');
     expect(edit.changes.insert).toBe('## 中文段落');

@@ -2,8 +2,6 @@
  * IndexService — 索引构建与查询服务
  *
  * 全量扫描笔记本 → 构建 SearchIndex → 提取标签/Wiki-link/最近笔记
- *
- * @see migration-map.md §4
  */
 import type { IFileSystemService, SearchIndex, DocumentEntry, BacklinkEntry } from '@/types';
 import { translate } from '@/i18n';
@@ -14,6 +12,7 @@ import {
 } from '@/utils/note-files';
 import { SearchEngine } from './SearchEngine';
 import { parseFrontmatter, extractTitle } from './YAMLParser';
+import { extractIndexFacts, parseDocument } from '@jotluck/renderer';
 
 const MAX_INDEXED_NOTE_FILES = 2000;
 const INDEX_LIMIT_ERROR = 'JOTLUCK_INDEX_LIMIT_EXCEEDED';
@@ -261,26 +260,18 @@ export class IndexService {
           ? fm.data.tags.split(/[,，]/).map((t) => t.trim())
           : [];
 
-      // Inline #tag — strip code/headings first to avoid false positives
-      const body = content.replace(/^---[\s\S]*?^---/m, ''); // remove frontmatter block
-      const bodyClean = body
-        .replace(/^```[\s\S]*?^```/gm, '') // fenced code blocks
-        .replace(/`[^`]+`/g, '') // inline code
-        .replace(/^#{1,6}\s+/gm, ''); // ATX headings
-      const inlineTags = [...bodyClean.matchAll(/(?<!\w)#([^\s#]+)/g)].map((m) => m[1]!);
+      // Inline #tag 与 wiki-link 提取统一消费 AST（@jotluck/renderer）：
+      // 天然跳过 frontmatter / codeFence / 裸 JSON，并先剥行内 code 与
+      // 行首 heading/blockquote 前缀，避免 ATX `#` 误判为 tag。
+      const facts = extractIndexFacts(parseDocument(content));
+      const inlineTags = facts.tags;
 
       // Merge & deduplicate
       const allTags = [...new Set([...fmTags, ...inlineTags])];
 
-      // Wiki-link extraction (reuse already-loaded content — avoids separate read in buildFullIndex)
+      // Wiki-link 目标已由 AST 侧剥离 `#anchor`（明示收紧：反链图按 note 名建立）。
       this.wikiOutgoing.delete(path);
-      const wikiRegex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
-      const outgoing: string[] = [];
-      let wm: RegExpExecArray | null;
-      while ((wm = wikiRegex.exec(content)) !== null) {
-        const target = wm[1]?.trim() ?? '';
-        if (target) outgoing.push(target);
-      }
+      const outgoing = facts.wikiLinkTargets;
       this.wikiOutgoing.set(path, outgoing);
 
       // Incremental updates must keep backlinks in lockstep with outgoing links.

@@ -14,12 +14,18 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { EditorView, lineNumbers, keymap } from '@codemirror/view';
 import { EditorState, Compartment } from '@codemirror/state';
+import { isolateHistory } from '@codemirror/commands';
 import { jotluckExtensions, jotluckPlaceholder } from '@/utils/cm6-extensions';
 import { exitLivePreviewOnEscape, livePreviewExtension } from '@/utils/cm6-live-preview';
 import { ghostTextPlugin } from '@/utils/cm6-ghost-text';
+import {
+  smartCancelOnBackspace,
+  smartCancelOnEscape,
+  smartContinueOnEnter,
+} from '@/utils/cm6-smart-continue';
 import { MarkdownPredictor } from '@/services/MarkdownPredictor';
 import { getCompletionSettings, type CompletionSettings } from '@/services/CompletionSettings';
-import type { FormatAction, MarkdownBlock, ParagraphPreset } from '@/types';
+import type { FormatAction, ParagraphPreset } from '@/types';
 import {
   applyParagraphPreset,
   getInlineMarkers,
@@ -37,7 +43,6 @@ import { currentLocale, translate } from '@/i18n';
 const props = withDefaults(
   defineProps<{
     modelValue: string;
-    blocks?: MarkdownBlock[];
     readOnly?: boolean;
     showLineNumbers?: boolean;
     livePreview?: boolean;
@@ -65,7 +70,6 @@ const props = withDefaults(
     onEditorPaste?: (event: ClipboardEvent) => boolean | void | Promise<boolean>;
   }>(),
   {
-    blocks: () => [],
     readOnly: false,
     showLineNumbers: false,
     livePreview: false,
@@ -106,7 +110,6 @@ const predictor = props.predictor ?? new MarkdownPredictor(4);
 
 const emit = defineEmits<{
   'update:modelValue': [value: string];
-  'blocks-updated': [blocks: MarkdownBlock[]];
   'selection-change': [sel: { from: number; to: number } | null];
   'pending-format-ended': [];
 }>();
@@ -173,6 +176,20 @@ function registerE2EEditorBridge(): void {
     },
     focus: () => view?.focus(),
     getCursor: () => view?.state.selection.main.head ?? 0,
+    getCoordsAtPos: (pos) => {
+      if (!view) return null;
+      const offset = Math.max(0, Math.min(view.state.doc.length, Math.trunc(pos)));
+      return view.coordsAtPos(offset);
+    },
+    posAtCoordsAt: (x, y) => {
+      if (!view) return null;
+      return view.posAtCoords({ x, y });
+    },
+    getSelection: () => {
+      if (!view) return { from: 0, to: 0, anchor: 0, head: 0 };
+      const sel = view.state.selection.main;
+      return { from: sel.from, to: sel.to, anchor: sel.anchor, head: sel.head };
+    },
     getPrediction: () => {
       if (!view) return null;
       return (
@@ -260,7 +277,24 @@ function createState(doc: string) {
         EditorState.readOnly.of(props.readOnly),
         EditorView.editable.of(!props.readOnly),
       ]),
-      keymap.of([{ key: 'Enter', run: handlePendingFormatEnter }]),
+      // 续格式仲裁：Enter 先走 pendingFormat 再走智能续格式；Backspace/Escape
+      // 的空格式块取消在这里注册（位于 defaultKeymap 与 live-preview Escape 之前；
+      // ghost text 的 Tab/Escape 在 Prec.highest，天然更先执行）。
+      keymap.of([
+        {
+          key: 'Enter',
+          run: (v) =>
+            v.state.readOnly ? false : handlePendingFormatEnter(v) || smartContinueOnEnter(v),
+        },
+        {
+          key: 'Backspace',
+          run: (v) => (v.state.readOnly ? false : smartCancelOnBackspace(v)),
+        },
+        {
+          key: 'Escape',
+          run: (v) => (v.state.readOnly ? false : smartCancelOnEscape(v)),
+        },
+      ]),
       ...jotluckExtensions(props.sourceOnly),
       placeholderCompartment.of(
         jotluckPlaceholder(props.placeholder ?? translate('editor.placeholder')),
@@ -380,6 +414,7 @@ function handlePendingFormatEnter(editorView: EditorView): boolean {
     editorView.dispatch({
       changes: { from: cursor - open.length, to: cursor + close.length, insert: '\n' },
       selection: { anchor: cursor - open.length + 1 },
+      annotations: isolateHistory.of('full'),
     });
     activePendingAction = null;
     pendingInlineMarkers = null;
@@ -391,6 +426,7 @@ function handlePendingFormatEnter(editorView: EditorView): boolean {
       ? { from: cursor, to: cursor + close.length, insert: `${close}\n` }
       : { from: cursor, to: cursor, insert: '\n' },
     selection: { anchor: cursor + close.length + 1 },
+    annotations: isolateHistory.of('full'),
   });
   activePendingAction = null;
   pendingInlineMarkers = null;

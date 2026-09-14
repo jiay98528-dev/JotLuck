@@ -428,12 +428,29 @@
   font-style: italic;
 }
 
-/* ---- IME-safe adjacent-line preview ----
-   Keep Markdown source text in the DOM for Windows IME context, while
-   collapsing syntax delimiters so the line still reads like live preview. */
-.cm-live-source-marker {
-  color: transparent;
-  font-size: 0;
+/* Focused-line ghost syntax (PRD-v0.2 R2 / WO-C3): symbols stay visible at
+   low contrast with real width, so click/selection mapping stays native.
+   cm-live-focused-source 统一表示「源码显形 + 幽灵符号」（聚焦块与
+   IME 保护块共用，零宽隐藏路线已退役）。 */
+.cm-live-ghost-mark {
+  color: oklch(from var(--ink-muted) l c h / 0.45);
+  font-size: 0.85em;
+}
+
+/* 聚焦行内 wiki-link / #tag 内容按渲染态同款颜色着色（定界符仍走幽灵） */
+.cm-live-ghost-wikilink {
+  color: var(--link);
+}
+
+.cm-live-ghost-tag {
+  color: var(--accent);
+}
+
+@media (prefers-contrast: more) {
+  .cm-live-ghost-mark {
+    color: oklch(from var(--ink-muted) l c h / 0.85);
+    font-size: 1em;
+  }
 }
 
 /* ---- 未闭合格式提醒 — 持续显示直到补齐闭合标记 ---- */

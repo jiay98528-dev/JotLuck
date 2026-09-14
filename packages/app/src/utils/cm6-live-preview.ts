@@ -19,12 +19,20 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view';
-import { StateField, StateEffect, type Range } from '@codemirror/state';
+import { StateField, StateEffect, type Range, type Text } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
+// 表格行工具统一从 @jotluck/renderer 单点导入（本地副本已删除，唯一权威）。
+// 说明：tableAlignments / isTableRowCandidate 不再需要——对齐取自 AST 节点、
+// 表格结构由 parseDocument 负责（noUnusedLocals 不允许导入未用符号）。
 import {
-  findBareJsonBlockLineRanges,
+  isTableSeparatorLine,
   normalizeFullwidthMarkdownSyntax,
+  parseDocument,
   renderMarkdown,
+  splitTableCells,
+  tableGridTemplate,
+  TAG_GLOBAL_RE,
+  WIKI_LINK_GLOBAL_RE,
 } from '@jotluck/renderer';
 import type { RendererOptions } from '@jotluck/renderer';
 import DOMPurify from 'dompurify';
@@ -116,6 +124,8 @@ interface LiveBlock {
   tableHeader?: boolean;
   tableColumnCount?: number;
   headingLevel?: 1 | 2;
+  /** 结构标记源码区间（如 `- `、`> `、`---`、围栏定界行；源码 UTF-16 偏移，与 from/to 同空间） */
+  markerRange?: { from: number; to: number };
 }
 
 interface LivePreviewOptions {
@@ -146,6 +156,87 @@ const SOURCE_MARK_NODE_NAMES = new Set([
   'LinkLabel',
 ]);
 
+/** 内容型块：表格管线符 / wiki-link / #tag 的行内扫描只对这些类型执行 */
+const GHOST_INLINE_SCAN_BLOCK_TYPES = new Set<BlockType>([
+  'paragraph',
+  'heading',
+  'setextHeadingText',
+  'blockquoteLine',
+  'unorderedListItem',
+  'orderedListItem',
+  'taskListItem',
+  'tableRow',
+]);
+
+/** ATX 标题前缀识别（适配器自用，不引入对 renderer 内部的依赖）：
+ *  捕获组 1=井号（半角 # 或全角 ＃），2=后随空白（半角空格/Tab 或全角 \u3000）。 */
+const SRC_ATX_HEADING_RE = /^(\s{0,3})([＃#]{1,6})([ \t\u3000]+)/;
+
+/** 命中点前连续反斜杠数为奇 → 该字符被转义（如 `\|`） */
+function isEscaped(slice: string, index: number): boolean {
+  let backslashes = 0;
+  let i = index - 1;
+  while (i >= 0 && slice.charAt(i) === '\\') {
+    backslashes++;
+    i--;
+  }
+  return backslashes % 2 === 1;
+}
+
+/**
+ * 把 [from,to) 按行边界拆成多段（Decoration.mark 不允许跨行边界；
+ * 宁可多段也要覆盖完整，对跨行 mark 节点做防御性拆分）。
+ */
+function splitRangeByLine(
+  doc: Text,
+  from: number,
+  to: number,
+): Array<{ from: number; to: number }> {
+  const parts: Array<{ from: number; to: number }> = [];
+  let pos = from;
+  while (pos < to) {
+    const line = doc.lineAt(pos);
+    const end = Math.min(to, line.to);
+    parts.push({ from: pos, to: end });
+    pos = end === line.to ? end + 1 : end;
+  }
+  return parts;
+}
+
+/**
+ * 收集切片中的成对反引号段（行内 code 的内容不是 Lezer mark 节点，
+ * wiki-link / #tag 扫描前用这些区间剔除 `` `[[x]]` `` 之类的误染）。
+ */
+function findInlineCodeSpans(slice: string): Array<{ from: number; to: number }> {
+  const spans: Array<{ from: number; to: number }> = [];
+  let i = 0;
+  while (i < slice.length) {
+    if (slice.charAt(i) !== '`') {
+      i++;
+      continue;
+    }
+    let runEnd = i;
+    while (runEnd < slice.length && slice.charAt(runEnd) === '`') runEnd++;
+    const run = runEnd - i;
+    const close = slice.indexOf('`'.repeat(run), runEnd);
+    if (close === -1) {
+      i = runEnd;
+      continue;
+    }
+    spans.push({ from: i, to: close + run });
+    i = close + run;
+  }
+  return spans;
+}
+
+function rangesOverlap(
+  from: number,
+  to: number,
+  ranges: Array<{ from: number; to: number }>,
+): boolean {
+  return ranges.some((r) => from < r.to && to > r.from);
+}
+
 /** 生成稳定 block ID：行号 + 内容 hash，编辑上方内容不会改变 key */
 function blockKey(lineNumber: number, raw: string): string {
   let h = 0;
@@ -158,414 +249,338 @@ function groupKey(lineNumber: number): string {
   return `G${lineNumber}`;
 }
 
-function splitTableCells(raw: string): string[] {
-  const trimmed = raw.trim();
-  const withoutLeading = trimmed.startsWith('|') ? trimmed.slice(1) : trimmed;
-  const withoutTrailing = withoutLeading.endsWith('|')
-    ? withoutLeading.slice(0, -1)
-    : withoutLeading;
-  return withoutTrailing.split('|').map((cell) => cell.trim());
-}
-
-function isTableSeparatorLine(raw: string): boolean {
-  if (!raw.includes('|')) return false;
-  const cells = splitTableCells(raw);
-  return cells.length > 0 && cells.every((cell) => /^:?-{1,}:?$/.test(cell));
-}
-
-function isTableRowCandidate(raw: string): boolean {
-  return raw.includes('|') && raw.trim() !== '';
-}
-
-function tableAlignments(
-  separator: string,
-  columnCount: number,
-): Array<'left' | 'center' | 'right'> {
-  const cells = splitTableCells(separator);
-  return Array.from({ length: columnCount }, (_, index) => {
-    const cell = cells[index] ?? '';
-    const starts = cell.startsWith(':');
-    const ends = cell.endsWith(':');
-    if (starts && ends) return 'center';
-    if (ends) return 'right';
-    return 'left';
-  });
-}
-
-function tableGridTemplate(rows: string[], columnCount: number): string {
-  const widths = Array.from({ length: columnCount }, () => 4);
-  for (const row of rows) {
-    splitTableCells(row).forEach((cell, index) => {
-      if (index >= columnCount) return;
-      widths[index] = Math.max(widths[index]!, Math.min(cell.length + 2, 32));
-    });
-  }
-  return widths
-    .map((width) => `minmax(${Math.max(6, width)}ch, ${Math.max(4, width)}fr)`)
-    .join(' ');
-}
-
 // ---- Block Parser ----
 
+/**
+ * 检测内核：统一 AST（parseDocument）→ LiveBlock[] 适配层。
+ *
+ * 语义逐条复刻自旧逐行扫描器（WO-B6 现行语义钉死）：
+ * - raw 一律取归一化行文本（normalizeFullwidthMarkdownSyntax 不增删行，行号与源码一一对应）；
+ * - from/to 一律取源码 UTF-16 偏移（AST range 或行前缀和，与 AST 内部 lineStarts 同口径），
+ *   顺带修复旧实现「归一变长时装饰范围漂移」缺陷；
+ * - blockKey/groupKey 算法不变；装饰体系、renderBlockHtml、wrapBlockHtml、build() 零改动。
+ *
+ * 【明示收紧 1】代码围栏：AST 支持 ~~~ 围栏与「同字符且长度 ≥ 开围栏」闭合；
+ * 旧实现仅 ``` 且等长闭合。围栏行渲染外壳（renderBlockHtml）未改动。
+ * 【明示收紧 2】任务项降级判定在源码标记切片上进行；全角 － Bullet 仍判为任务
+ * （旧实现先归一化再判定，归一化把行首 － 转为 -，语义一致）。
+ * 【明示收紧 3】表格分隔行语义以 AST 为准（全角 － 格视为 -），与旧纯半角判定存在
+ * 理论差异；hasSeparator_live 严格按钉死取 node.separatorIndex === 1。
+ */
 function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBlock[] {
-  const normalizedText = normalizeFullwidthMarkdownSyntax(text);
-  const lines = normalizedText.split('\n');
-  const bareJsonRangesByStart = new Map(
-    findBareJsonBlockLineRanges(normalizedText).map((range) => [range.startLine, range]),
-  );
+  const ast = parseDocument(text);
+  const normalizedLines = normalizeFullwidthMarkdownSyntax(text).split('\n');
+  const sourceLines = text.split('\n');
+  // 行首源码偏移（前缀和；归一化不增删行，行号与 AST 一致）
+  const lineStarts: number[] = [];
+  let offset = 0;
+  for (let li = 0; li < sourceLines.length; li++) {
+    lineStarts.push(offset);
+    offset += sourceLines[li]!.length + 1;
+  }
+  const lineRange = (lineNumber: number): { from: number; to: number } => ({
+    from: lineStarts[lineNumber]!,
+    to: lineStarts[lineNumber]! + sourceLines[lineNumber]!.length,
+  });
+
   const blocks: LiveBlock[] = [];
-  let pos = 0;
-  let i = 0;
+  const nodes = ast.blocks;
 
-  while (i < lines.length) {
-    const line = lines[i] ?? '';
-    const lineLen = line.length;
-    const startPos = pos;
+  /** 把队列尾部同组块全部标记为 unclosed（组块总是连续入队） */
+  const markGroupUnclosed = (group: string): void => {
+    for (let k = blocks.length - 1; k >= 0; k--) {
+      if (blocks[k]!.groupKey === group) blocks[k]!.unclosed = true;
+      else break;
+    }
+  };
 
-    // Frontmatter opener (at document start only)
-    if (i === 0 && line.trim() === '---') {
-      const group = groupKey(i);
-      blocks.push({
-        key: blockKey(i, line),
-        from: startPos,
-        to: startPos + lineLen,
-        type: 'frontmatterLine',
-        raw: line,
-        html: '',
-        groupKey: group,
-        position: 'first',
-      });
-      pos = startPos + lineLen + 1;
-      i++;
-      let _j = 0;
-      let closed = false;
-      while (i < lines.length) {
-        const fl = lines[i] ?? '';
-        const flLen = fl.length;
-        const isLast = fl.trim() === '---';
-        blocks.push({
-          key: blockKey(i, fl),
-          from: pos,
-          to: pos + flLen,
+  for (let idx = 0; idx < nodes.length; idx++) {
+    const node = nodes[idx]!;
+
+    // ── Frontmatter：逐行 frontmatterLine，首 first / 闭合末行 last / 其余 middle ──
+    if (node.type === 'frontmatter') {
+      const group = groupKey(node.lineFrom);
+      for (let k = node.lineFrom; k <= node.lineTo; k++) {
+        const raw = normalizedLines[k] ?? '';
+        const range = lineRange(k);
+        const block: LiveBlock = {
+          key: blockKey(k, raw),
+          from: range.from,
+          to: range.to,
           type: 'frontmatterLine',
-          raw: fl,
+          raw,
           html: '',
           groupKey: group,
-          position: isLast ? 'last' : 'middle',
-        });
-        pos = pos + flLen + 1;
-        i++;
-        _j++;
-        if (isLast) {
-          closed = true;
-          break;
+          position:
+            k === node.lineFrom ? 'first' : k === node.lineTo && node.closed ? 'last' : 'middle',
+        };
+        // 仅 `---` 定界行幽灵化；YAML 内容行保持全对比度
+        if (k === node.lineFrom || (node.closed && k === node.lineTo)) {
+          block.markerRange = range;
         }
+        blocks.push(block);
       }
-      if (!closed) {
-        for (let k = blocks.length - 1; k >= 0; k--) {
-          if (blocks[k]!.groupKey === group) blocks[k]!.unclosed = true;
-          else break;
-        }
-      }
+      if (!node.closed) markGroupUnclosed(group);
       continue;
     }
 
-    // Reference definition line
-    if (REF_DEF_RE.test(line)) {
-      pos = startPos + lineLen + 1;
-      i++;
-      continue; // skip — not rendered as a block
-    }
+    // ── 引用定义 / 空行：不出块（现行：跳过） ──
+    if (node.type === 'refDefinition' || node.type === 'blank') continue;
 
-    // Empty line
-    if (line.trim() === '') {
-      pos = startPos + lineLen + 1;
-      i++;
-      continue;
-    }
-
-    // Code fence block ``` ... ```
-    // Spec allows ≤3 spaces indent; also match ````` etc.
-    const fenceMatch = /^(\s{0,3})(`{3,})(.*)$/.exec(line);
-    if (fenceMatch) {
-      const ticks = fenceMatch[2] ?? '```';
-      const group = groupKey(i);
-      blocks.push({
-        key: blockKey(i, line),
-        from: startPos,
-        to: startPos + lineLen,
-        type: 'codeFenceLine',
-        raw: line,
-        html: '',
-        groupKey: group,
-        position: 'first',
-      });
-      pos = startPos + lineLen + 1;
-      i++;
-      let closed = false;
-      while (i < lines.length) {
-        const cl = lines[i] ?? '';
-        const clLen = cl.length;
-        const isLast = new RegExp(`^\\s{0,3}${ticks}\\s*$`).test(cl);
-        blocks.push({
-          key: blockKey(i, cl),
-          from: pos,
-          to: pos + clLen,
+    // ── 代码围栏：逐行 codeFenceLine，位置规则同 frontmatter ──
+    if (node.type === 'codeFence') {
+      const group = groupKey(node.lineFrom);
+      for (let k = node.lineFrom; k <= node.lineTo; k++) {
+        const raw = normalizedLines[k] ?? '';
+        const range = lineRange(k);
+        const block: LiveBlock = {
+          key: blockKey(k, raw),
+          from: range.from,
+          to: range.to,
           type: 'codeFenceLine',
-          raw: cl,
+          raw,
           html: '',
           groupKey: group,
-          position: isLast ? 'last' : 'middle',
-        });
-        pos = pos + clLen + 1;
-        i++;
-        if (isLast) {
-          closed = true;
-          break;
+          position:
+            k === node.lineFrom ? 'first' : k === node.lineTo && node.closed ? 'last' : 'middle',
+        };
+        // 仅围栏定界行（含语言标签）幽灵化；代码内容行保持全对比度
+        if (k === node.openLine || (node.closed && k === node.closeLine)) {
+          block.markerRange = range;
         }
+        blocks.push(block);
       }
-      if (!closed) {
-        for (let k = blocks.length - 1; k >= 0; k--) {
-          if (blocks[k]!.groupKey === group) blocks[k]!.unclosed = true;
-          else break;
-        }
-      }
+      if (!node.closed) markGroupUnclosed(group);
       continue;
     }
 
-    // Bare JSON-like blocks use the same complete-block detection as the shared renderer.
-    const bareJsonRange = bareJsonRangesByStart.get(i);
-    if (bareJsonRange) {
-      const group = groupKey(i);
-      const count = bareJsonRange.endLine - bareJsonRange.startLine + 1;
-      for (
-        let lineIndex = bareJsonRange.startLine;
-        lineIndex <= bareJsonRange.endLine;
-        lineIndex++
-      ) {
-        const jsonLine = lines[lineIndex] ?? '';
-        const jsonPos = lineIndex === i ? startPos : pos;
-        const position =
-          count === 1
-            ? 'single'
-            : lineIndex === bareJsonRange.startLine
-              ? 'first'
-              : lineIndex === bareJsonRange.endLine
-                ? 'last'
-                : 'middle';
+    // ── 裸 JSON 块：逐行 jsonBlockLine，1 行 single / 否则 first/middle/last ──
+    if (node.type === 'jsonBlock') {
+      const group = groupKey(node.lineFrom);
+      const count = node.lineTo - node.lineFrom + 1;
+      for (let k = node.lineFrom; k <= node.lineTo; k++) {
+        const raw = normalizedLines[k] ?? '';
+        const range = lineRange(k);
         blocks.push({
-          key: blockKey(lineIndex, jsonLine),
-          from: jsonPos,
-          to: jsonPos + jsonLine.length,
+          key: blockKey(k, raw),
+          from: range.from,
+          to: range.to,
           type: 'jsonBlockLine',
-          raw: jsonLine,
+          raw,
           html: '',
           groupKey: group,
-          position,
+          position:
+            count === 1
+              ? 'single'
+              : k === node.lineFrom
+                ? 'first'
+                : k === node.lineTo
+                  ? 'last'
+                  : 'middle',
         });
-        pos = jsonPos + jsonLine.length + 1;
       }
-      i = bareJsonRange.endLine + 1;
       continue;
     }
 
-    // Horizontal rule
-    if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line.trim())) {
+    // ── 水平线：单行 horizontalRule ──
+    if (node.type === 'horizontalRule') {
+      const raw = normalizedLines[node.lineFrom] ?? '';
+      const range = lineRange(node.lineFrom);
       blocks.push({
-        key: blockKey(i, line),
-        from: startPos,
-        to: startPos + lineLen,
+        key: blockKey(node.lineFrom, raw),
+        from: range.from,
+        to: range.to,
         type: 'horizontalRule',
-        raw: line,
+        raw,
         html: '',
+        markerRange: range,
       });
-      pos = startPos + lineLen + 1;
-      i++;
       continue;
     }
 
-    // ATX Heading
-    const headingMatch = /^(#{1,6})\s+(.+)$/.exec(line);
-    if (headingMatch) {
-      blocks.push({
-        key: blockKey(i, line),
-        from: startPos,
-        to: startPos + lineLen,
-        type: 'heading',
-        raw: line,
-        html: '',
-      });
-      pos = startPos + lineLen + 1;
-      i++;
-      continue;
-    }
-
-    // Setext Heading (needs lookahead to next line)
-    if (i + 1 < lines.length) {
-      const nextLine = lines[i + 1] ?? '';
-      if (/^=+\s*$/.test(nextLine) || /^-+\s*$/.test(nextLine)) {
-        // Text line
+    // ── 标题：ATX 单行 heading；setext 拆 setextHeadingText + setextHeadingRule 两块 ──
+    if (node.type === 'heading') {
+      if (node.setext) {
+        // setext 规则线只会是 1/2 级
+        const level = node.level as 1 | 2;
+        const textRaw = normalizedLines[node.lineFrom] ?? '';
+        const textRange = lineRange(node.lineFrom);
         blocks.push({
-          key: blockKey(i, line),
-          from: startPos,
-          to: startPos + lineLen,
+          key: blockKey(node.lineFrom, textRaw),
+          from: textRange.from,
+          to: textRange.to,
           type: 'setextHeadingText',
-          raw: line,
+          raw: textRaw,
           html: '',
-          headingLevel: nextLine.trim().startsWith('=') ? 1 : 2,
+          headingLevel: level,
         });
-        // Rule line
-        const ruleLen = nextLine.length;
-        const rulePos = startPos + lineLen + 1;
+        const ruleRaw = normalizedLines[node.lineTo] ?? '';
+        const ruleRange = lineRange(node.lineTo);
         blocks.push({
-          key: blockKey(i + 1, nextLine),
-          from: rulePos,
-          to: rulePos + ruleLen,
+          key: blockKey(node.lineTo, ruleRaw),
+          from: ruleRange.from,
+          to: ruleRange.to,
           type: 'setextHeadingRule',
-          raw: nextLine,
+          raw: ruleRaw,
           html: '',
-          headingLevel: nextLine.trim().startsWith('=') ? 1 : 2,
+          headingLevel: level,
+          markerRange: ruleRange,
         });
-        pos = rulePos + ruleLen + 1;
-        i += 2;
-        continue;
+      } else {
+        const raw = normalizedLines[node.lineFrom] ?? '';
+        const range = lineRange(node.lineFrom);
+        const block: LiveBlock = {
+          key: blockKey(node.lineFrom, raw),
+          from: range.from,
+          to: range.to,
+          type: 'heading',
+          raw,
+          html: '',
+        };
+        // ATX 标题井号前缀（含后随空白）作为 markerRange：覆盖全角 `＃` —— Lezer 不识全角井号
+        const atxMatch = SRC_ATX_HEADING_RE.exec(raw);
+        if (atxMatch) {
+          const hashLen = (atxMatch[2] ?? '').length;
+          const wsLen = (atxMatch[3] ?? '').length;
+          block.markerRange = { from: range.from, to: range.from + hashLen + wsLen };
+        }
+        blocks.push(block);
       }
+      continue;
     }
 
-    // Blockquote
-    if (line.startsWith('>')) {
-      const group = groupKey(i);
-      let firstInGroup = true;
-      while (i < lines.length && (lines[i] ?? '').startsWith('>')) {
-        const bl = lines[i] ?? '';
-        const blLen = bl.length;
-        const blPos = pos;
+    // ── 引用块：逐行 blockquoteLine，单行 single / 否则 first/middle/last ──
+    if (node.type === 'blockquote') {
+      const group = groupKey(node.lineFrom);
+      const count = node.lines.length;
+      for (let k = 0; k < count; k++) {
+        const line = node.lines[k]!;
+        const raw = normalizedLines[line.lineNumber] ?? '';
         blocks.push({
-          key: blockKey(i, bl),
-          from: blPos,
-          to: blPos + blLen,
+          key: blockKey(line.lineNumber, raw),
+          from: line.range.from,
+          to: line.range.to,
           type: 'blockquoteLine',
-          raw: bl,
+          raw,
           html: '',
           groupKey: group,
-          position: firstInGroup ? 'first' : 'middle',
+          position:
+            count === 1 ? 'single' : k === 0 ? 'first' : k === count - 1 ? 'last' : 'middle',
+          // AST 在源码空间切出 `>`/＞ 及其后一个空白，全角标记同样被幽灵化
+          markerRange: line.markerRange,
         });
-        firstInGroup = false;
-        pos = blPos + blLen + 1;
-        i++;
-      }
-      // Mark last as 'last' if group has >1 lines
-      const bqBlocks = blocks.filter((b) => b.groupKey === group);
-      if (bqBlocks.length > 1) {
-        bqBlocks[bqBlocks.length - 1]!.position = 'last';
-        bqBlocks[0]!.position = 'first';
-      } else if (bqBlocks.length === 1) {
-        bqBlocks[0]!.position = 'single';
       }
       continue;
     }
 
-    // Unordered list
-    if (/^\s*[-*+]\s/.test(line)) {
-      const group = groupKey(i);
-      while (i < lines.length && /^\s*[-*+]\s/.test(lines[i] ?? '')) {
-        const ll = lines[i] ?? '';
-        const llLen = ll.length;
-        const lp = pos;
-        // Check for task list
-        const isTask = /^\s*- \[[ x]\]\s/.test(ll);
-        blocks.push({
-          key: blockKey(i, ll),
-          from: lp,
-          to: lp + llLen,
-          type: isTask ? 'taskListItem' : 'unorderedListItem',
-          raw: ll,
+    // ── 列表：连续同 family 行成组，逐行展开 ──
+    if (node.type === 'listItem') {
+      const family = node.kind === 'ordered' ? 'ordered' : 'unordered';
+      let end = idx + 1;
+      while (end < nodes.length) {
+        const next = nodes[end]!;
+        if (next.type !== 'listItem') break;
+        if ((next.kind === 'ordered' ? 'ordered' : 'unordered') !== family) break;
+        end++;
+      }
+      // 降级为 paragraph 的行会把组截断为「段」；段为最终组，
+      // 有序序号在段内 1 基重排（复刻旧逐行扫描：')' 行不属于有序组）。
+      let run: LiveBlock[] = [];
+      let runGroup = '';
+      let itemIndex = 0;
+      const flushRun = (): void => {
+        if (run.length === 0) return;
+        if (run.length === 1) run[0]!.position = 'single';
+        else {
+          run[0]!.position = 'first';
+          run[run.length - 1]!.position = 'last';
+          for (let gi = 1; gi < run.length - 1; gi++) run[gi]!.position = 'middle';
+        }
+        run = [];
+      };
+      for (let k = idx; k < end; k++) {
+        const item = nodes[k];
+        if (!item || item.type !== 'listItem') continue; // 理论不可达，守卫用
+        const raw = normalizedLines[item.lineFrom] ?? '';
+        const range = item.range; // 列表项恒为单行节点
+        // 现行奇偶：旧有序列表正则只认 '.' 定界，')' 行降级为 paragraph
+        if (family === 'ordered' && item.delimiter === ')') {
+          flushRun();
+          blocks.push({
+            key: blockKey(item.lineFrom, raw),
+            from: range.from,
+            to: range.to,
+            type: 'paragraph',
+            raw,
+            html: '',
+          });
+          continue;
+        }
+        if (run.length === 0) {
+          runGroup = groupKey(item.lineFrom);
+          itemIndex = 0;
+        }
+        itemIndex++;
+        let blockType: BlockType = 'unorderedListItem';
+        if (family === 'ordered') {
+          blockType = 'orderedListItem';
+        } else if (item.kind === 'task') {
+          // 现行奇偶：仅「- [ ] / - [x]」（dash Bullet + 小写 x/空格）为任务项；
+          // 其余 task（[X] 或 * / + Bullet）降级为无序项。全角 － 与旧归一化行为一致仍判任务。
+          const markerSlice = ast.source.slice(item.markerRange.from, item.markerRange.to);
+          if (/^[-－] \[[ x]\]$/.test(markerSlice)) blockType = 'taskListItem';
+        }
+        const liveBlock: LiveBlock = {
+          key: blockKey(item.lineFrom, raw),
+          from: range.from,
+          to: range.to,
+          type: blockType,
+          raw,
           html: '',
-          groupKey: group,
-        });
-        pos = lp + llLen + 1;
-        i++;
+          groupKey: runGroup,
+          // AST markerRange 源码空间切分：无序为 bullet、有序为 `1.`，
+          // 任务含 `[ ]`/`[x]`（全角 bullet 同样被幽灵化）
+          markerRange: item.markerRange,
+        };
+        if (family === 'ordered') liveBlock.itemIndex = itemIndex;
+        run.push(liveBlock);
+        blocks.push(liveBlock);
       }
-      const groupBlocks = blocks.filter((b) => b.groupKey === group);
-      if (groupBlocks.length === 1) groupBlocks[0]!.position = 'single';
-      else {
-        groupBlocks[0]!.position = 'first';
-        groupBlocks[groupBlocks.length - 1]!.position = 'last';
-        for (let gi = 1; gi < groupBlocks.length - 1; gi++) groupBlocks[gi]!.position = 'middle';
-      }
+      flushRun();
+      idx = end - 1;
       continue;
     }
 
-    // Ordered list
-    if (/^\s*\d+\.\s/.test(line)) {
-      const group = groupKey(i);
-      let oi = 0;
-      while (i < lines.length && /^\s*\d+\.\s/.test(lines[i] ?? '')) {
-        const ll = lines[i] ?? '';
-        const llLen = ll.length;
-        const lp = pos;
-        oi++;
-        blocks.push({
-          key: blockKey(i, ll),
-          from: lp,
-          to: lp + llLen,
-          type: 'orderedListItem',
-          raw: ll,
-          html: '',
-          groupKey: group,
-          itemIndex: oi,
-        });
-        pos = lp + llLen + 1;
-        i++;
-      }
-      const groupBlocks = blocks.filter((b) => b.groupKey === group);
-      if (groupBlocks.length === 1) groupBlocks[0]!.position = 'single';
-      else {
-        groupBlocks[0]!.position = 'first';
-        groupBlocks[groupBlocks.length - 1]!.position = 'last';
-        for (let gi = 1; gi < groupBlocks.length - 1; gi++) groupBlocks[gi]!.position = 'middle';
-      }
-      continue;
-    }
-
-    // Table row
-    if (
-      isTableRowCandidate(line) &&
-      (line.trim().startsWith('|') || isTableSeparatorLine(lines[i + 1] ?? ''))
-    ) {
-      const group = groupKey(i);
-      while (i < lines.length && isTableRowCandidate(lines[i] ?? '')) {
-        const tl = lines[i] ?? '';
-        const tlLen = tl.length;
-        const tp = pos;
-        blocks.push({
-          key: blockKey(i, tl),
-          from: tp,
-          to: tp + tlLen,
-          type: 'tableRow',
-          raw: tl,
-          html: '',
-          groupKey: group,
-        });
-        pos = tp + tlLen + 1;
-        i++;
-      }
-      const tblBlocks = blocks.filter((b) => b.groupKey === group);
-      const hasSeparator = tblBlocks.length > 1 && isTableSeparatorLine(tblBlocks[1]?.raw ?? '');
-      const visibleRows = tblBlocks
-        .filter((block) => !isTableSeparatorLine(block.raw))
-        .map((block) => block.raw);
-      const columnCount = Math.max(1, ...visibleRows.map((row) => splitTableCells(row).length));
+    // ── 表格：逐行 tableRow ──
+    if (node.type === 'table') {
+      const group = groupKey(node.lineFrom);
+      // 钉死：hasSeparator_live 仅当首个分隔行恰在第 1 行（表头行之下）
+      const hasSeparator = node.separatorIndex === 1;
+      const visibleRows = node.rows
+        .filter((row) => !row.isSeparator)
+        .map((row) => normalizedLines[row.lineNumber] ?? '');
+      const columnCount = node.columnCount;
       const gridTemplate = tableGridTemplate(visibleRows, columnCount);
       const alignments = hasSeparator
-        ? tableAlignments(tblBlocks[1]?.raw ?? '', columnCount)
+        ? node.alignments
         : Array.from({ length: columnCount }, () => 'left' as const);
+      for (const row of node.rows) {
+        const raw = normalizedLines[row.lineNumber] ?? '';
+        blocks.push({
+          key: blockKey(row.lineNumber, raw),
+          from: row.range.from,
+          to: row.range.to,
+          type: 'tableRow',
+          raw,
+          html: '',
+          groupKey: group,
+        });
+      }
+      const tblBlocks = blocks.filter((b) => b.groupKey === group);
       if (tblBlocks.length === 1) tblBlocks[0]!.position = 'single';
       else {
         tblBlocks[0]!.position = 'first';
-        if (hasSeparator) {
-          tblBlocks[1]!.position = 'separator';
-        }
+        if (hasSeparator) tblBlocks[1]!.position = 'separator';
         tblBlocks[tblBlocks.length - 1]!.position = 'last';
         for (let gi = 1; gi < tblBlocks.length - 1; gi++) {
           if (!tblBlocks[gi]!.position) tblBlocks[gi]!.position = 'middle';
@@ -577,26 +592,27 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
         tblBlock.tableAlignments = alignments;
         tblBlock.tableHeader = hasSeparator && tblBlock === tblBlocks[0];
       }
-      // Flag as unclosed if the table is missing its separator row
-      if (!hasSeparator) {
-        for (let k = tblBlocks.length - 1; k >= 0; k--) {
-          tblBlocks[k]!.unclosed = true;
-        }
-      }
+      // 缺少分隔行 → 全组 unclosed（现行）
+      if (!hasSeparator) markGroupUnclosed(group);
       continue;
     }
 
-    // Default paragraph
-    blocks.push({
-      key: blockKey(i, line),
-      from: startPos,
-      to: startPos + lineLen,
-      type: 'paragraph',
-      raw: line,
-      html: '',
-    });
-    pos = startPos + lineLen + 1;
-    i++;
+    // ── 段落：AST 多行聚合，适配器按行展开为逐行 paragraph（现行语义） ──
+    if (node.type === 'paragraph') {
+      for (let k = node.lineFrom; k <= node.lineTo; k++) {
+        const raw = normalizedLines[k] ?? '';
+        const range = lineRange(k);
+        blocks.push({
+          key: blockKey(k, raw),
+          from: range.from,
+          to: range.to,
+          type: 'paragraph',
+          raw,
+          html: '',
+        });
+      }
+      continue;
+    }
   }
 
   // Compute HTML for each block
@@ -618,6 +634,7 @@ export function __parseLiveBlocksForTest(text: string): Array<{
   tableHeader?: boolean;
   unclosed?: boolean;
   headingLevel?: 1 | 2;
+  markerRange?: { from: number; to: number };
 }> {
   return parseLiveBlocks(text).map((block) => ({
     type: block.type,
@@ -629,6 +646,7 @@ export function __parseLiveBlocksForTest(text: string): Array<{
     tableHeader: block.tableHeader,
     unclosed: block.unclosed,
     headingLevel: block.headingLevel,
+    markerRange: block.markerRange,
   }));
 }
 
@@ -731,7 +749,7 @@ function renderBlockHtml(
       }
 
       case 'setextHeadingRule':
-        // Empty widget — hidden by CSS
+        // 规则线无 widget HTML：早退前已给聚焦旁路，非聚焦态留空字符串
         return '';
 
       case 'tableRow': {
@@ -882,23 +900,6 @@ class RenderedBlockWidget extends WidgetType {
     )
       return true;
     return false;
-  }
-}
-
-/**
- * 零尺寸空 Widget：用于 Setext 标题底线等需要隐藏的行。
- */
-class EmptyWidget extends WidgetType {
-  override toDOM(): HTMLElement {
-    const span = document.createElement('span');
-    span.style.display = 'none';
-    return span;
-  }
-  override eq(): boolean {
-    return true;
-  }
-  override ignoreEvent(): boolean {
-    return true;
   }
 }
 
@@ -1350,7 +1351,15 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
             }
           }
 
-          if (!block.html) continue; // skip blocks with no visible HTML
+          if (!block.html) {
+            // 唯一例外：setext 规则线虽无 widget HTML，但聚焦态应显示规则线源码（markerRange 整行幽灵化）。
+            // 早退前给 setext 标题的两块一道旁路：setextHeadingText 聚焦时显示文字本身
+            // （全视图 HighlightStyle 已给字重/字号），setextHeadingRule 聚焦时
+            // 由 markerRange 幽灵化规则线。其他 html='' 块（如 YAML 内容行）仍跳过。
+            if (block.type !== 'setextHeadingRule' && block.type !== 'setextHeadingText') {
+              continue;
+            }
+          }
 
           const containsCursor = cursor >= block.from && cursor <= block.to;
           const isProgrammaticallyRevealed =
@@ -1367,11 +1376,18 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           const touchesEmptyCursorLine =
             cursorLine.length === 0 && block.to === cursorLine.from - 1;
 
-          if (isFocused || isPinned) continue; // show source
+          if (isPinned) continue; // pinned source stays full-contrast by explicit intent
+
+          if (isFocused) {
+            decos.push(...this.buildFocusedGhostDecorations(view, block));
+            continue;
+          }
 
           if (touchesEmptyCursorLine) {
+            // 与聚焦块同一机制：cm-live-focused-source 统一表示
+            // 「源码显形 + 幽灵符号」（聚焦块与 IME 保护块共用）
             if (SOURCE_PRESERVING_BLOCK_TYPES.has(block.type)) {
-              decos.push(...this.buildSourcePreservingDecorations(view, block));
+              decos.push(...this.buildFocusedGhostDecorations(view, block));
             }
             continue;
           }
@@ -1393,16 +1409,14 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           }
 
           if (block.type === 'setextHeadingRule') {
-            decos.push(
-              Decoration.replace({ widget: new EmptyWidget() }).range(block.from, block.to),
-            );
-          } else {
-            decos.push(
-              Decoration.replace({
-                widget: new RenderedBlockWidget(block.html, block.key),
-              }).range(block.from, block.to),
-            );
+            // 非聚焦态下规则线无 widget HTML → 不输出任何装饰（CM6 显示原文档行）
+            continue;
           }
+          decos.push(
+            Decoration.replace({
+              widget: new RenderedBlockWidget(block.html, block.key),
+            }).range(block.from, block.to),
+          );
         }
 
         // Unclosed multi-line block warnings
@@ -1427,16 +1441,62 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         return Decoration.set(decos, true);
       }
 
-      buildSourcePreservingDecorations(view: EditorView, block: LiveBlock): Range<Decoration>[] {
-        const sourceDecos: Range<Decoration>[] = [
+      buildFocusedGhostDecorations(view: EditorView, block: LiveBlock): Range<Decoration>[] {
+        const decos: Range<Decoration>[] = [
           Decoration.line({
             attributes: {
-              class: 'cm-live-source-preserving',
+              class: 'cm-live-focused-source',
               'data-live-source-type': block.type,
             },
           }).range(block.from),
         ];
 
+        // Decoration.mark 不允许跨行边界：所有 mark 一律按行拆分后入队
+        const pushGhostMark = (from: number, to: number, cls = 'cm-live-ghost-mark'): void => {
+          if (from >= to) return;
+          for (const part of splitRangeByLine(view.state.doc, from, to)) {
+            decos.push(Decoration.mark({ class: cls }).range(part.from, part.to));
+          }
+        };
+
+        const slice = view.state.doc.sliceString(block.from, block.to);
+        const scanInline = slice.length > 0 && GHOST_INLINE_SCAN_BLOCK_TYPES.has(block.type);
+
+        // 行内 code 配对段（绝对坐标）：code 内容不参与 wiki/tag/管线扫描
+        const codeSpans = scanInline
+          ? findInlineCodeSpans(slice).map((s) => ({
+              from: block.from + s.from,
+              to: block.from + s.to,
+            }))
+          : [];
+
+        // wiki-link 全域（绝对坐标）：域内归 wiki 正则专属。commonmark 不认识 [[..]]，
+        // 会产出单字符 LinkMark 误判括号——这些 Lezer 范围在域内一律豁免。
+        const wikiSpans: Array<{ from: number; to: number }> = [];
+        if (scanInline) {
+          const wikiRe = new RegExp(WIKI_LINK_GLOBAL_RE.source, 'g');
+          let wikiMatch: RegExpExecArray | null;
+          while ((wikiMatch = wikiRe.exec(slice)) !== null) {
+            const span = {
+              from: block.from + wikiMatch.index,
+              to: block.from + wikiMatch.index + wikiMatch[0].length,
+            };
+            if (rangesOverlap(span.from, span.to, codeSpans)) continue;
+            wikiSpans.push(span);
+          }
+        }
+
+        // 结构标记整域：markerRange 为权威（如围栏定界行的 CodeMark 被 markerRange 包含，去重）
+        const markerSpan =
+          block.markerRange &&
+          block.markerRange.from >= block.from &&
+          block.markerRange.to <= block.to
+            ? block.markerRange
+            : null;
+        const lezerExempt: Array<{ from: number; to: number }> = [...wikiSpans];
+        if (markerSpan) lezerExempt.push(markerSpan);
+
+        // A: Lezer 行内符号全集（HeaderMark / EmphasisMark / CodeMark / LinkMark / URL / LinkLabel）
         syntaxTree(view.state).iterate({
           from: block.from,
           to: block.to,
@@ -1453,13 +1513,52 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
               }
             }
 
-            sourceDecos.push(
-              Decoration.mark({ class: 'cm-live-source-marker' }).range(node.from, markerTo),
-            );
+            if (rangesOverlap(node.from, markerTo, lezerExempt)) return;
+            pushGhostMark(node.from, markerTo);
           },
         });
 
-        return sourceDecos;
+        // B: 结构标记走 AST markerRange（覆盖 Lezer 不认识的源码空间全角符号）
+        if (markerSpan) pushGhostMark(markerSpan.from, markerSpan.to);
+
+        if (!scanInline) return decos;
+
+        // code/wiki 双豁免（与 C3 tag 路径一致，避免聚焦行 `| [[a|b]] |` 中别名 `|` 被管线与 wiki 双重上色）
+        const inlineSkipRanges: Array<{ from: number; to: number }> = [...codeSpans, ...wikiSpans];
+
+        // C1: 表格管线符——半角 `|`（未转义）或全角 `｜` 各一条单字符幽灵；code/wiki 段内的管道不幽灵
+        if (block.type === 'tableRow') {
+          for (let i = 0; i < slice.length; i++) {
+            const ch = slice.charAt(i);
+            if (ch !== '｜' && !(ch === '|' && !isEscaped(slice, i))) continue;
+            const from = block.from + i;
+            if (inlineSkipRanges.some((s) => from >= s.from && from < s.to)) continue;
+            pushGhostMark(from, from + 1);
+          }
+        }
+
+        // C2: wiki-link 定界符幽灵 + 内容着色（内容取两定界符之间的完整内部文本）
+        for (const span of wikiSpans) {
+          pushGhostMark(span.from, span.from + 2); // [[
+          pushGhostMark(span.to - 2, span.to); // ]]
+          pushGhostMark(span.from + 2, span.to - 2, 'cm-live-ghost-wikilink');
+        }
+
+        // C3: #tag 前缀幽灵 + 内容着色；code 段与 wiki 域内的 # 不是标签，豁免
+        const tagRe = new RegExp(TAG_GLOBAL_RE.source, 'g');
+        let tagMatch: RegExpExecArray | null;
+        while ((tagMatch = tagRe.exec(slice)) !== null) {
+          const inner = tagMatch[1] ?? '';
+          const abs = block.from + tagMatch.index;
+          const innerFrom = abs + 1;
+          const innerTo = innerFrom + inner.length;
+          if (!rangesOverlap(abs, abs + 1, inlineSkipRanges)) pushGhostMark(abs, abs + 1);
+          if (!rangesOverlap(innerFrom, innerTo, inlineSkipRanges)) {
+            pushGhostMark(innerFrom, innerTo, 'cm-live-ghost-tag');
+          }
+        }
+
+        return decos;
       }
 
       destroy() {

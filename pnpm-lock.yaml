@@ -196,6 +196,13 @@ importers:
       marked:
         specifier: ^18.0.4
         version: 18.0.4
+    devDependencies:
+      jsdom:
+        specifier: ^29.1.1
+        version: 29.1.1
+      vitest:
+        specifier: ^3.2.6
+        version: 3.2.6(@types/node@25.9.1)(happy-dom@20.10.3)(jiti@2.6.1)(jsdom@29.1.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)
 
   packages/vscode-ext: {}
 
@@ -1938,6 +1945,7 @@ packages:
   eslint@9.39.5:
     resolution: {integrity: sha512-DgZS62aPLXKlnxILS/AYCoRvHaZeXceIzlXPkkGGzJWSow1aEk0lbTlxUSlyjC8jcaKxAdOnTDz+o1JFSBsyjw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'

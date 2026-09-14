@@ -21,6 +21,11 @@ export interface JotLuckE2EEditorBridge {
   setCursor: (cursorOffset: number) => void;
   focus: () => void;
   getCursor: () => number;
+  getCoordsAtPos: (
+    pos: number,
+  ) => { left: number; right: number; top: number; bottom: number } | null;
+  posAtCoordsAt: (x: number, y: number) => number | null;
+  getSelection: () => { from: number; to: number; anchor: number; head: number };
   getPrediction: () => PredictionResult | null;
   getVisiblePredictionDiagnostics: () => {
     prediction: PredictionResult;

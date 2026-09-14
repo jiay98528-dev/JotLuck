@@ -10,11 +10,60 @@
  * @see TAD.md §4
  */
 
-import { marked, type Tokens } from 'marked';
+import { marked } from 'marked';
 import { jotluckExtensions, setWikiLinkExistsResolver } from './marked-extensions';
 import { sanitize } from './sanitize';
 import { highlightCodeBlocks } from './highlight';
+import { normalizeFullwidthMarkdownSyntaxForRender, headingIdFromText } from './syntax';
+import { protectBareJsonBlocks } from './bare-json';
 import type { RemoteImageLabels, RemoteImagePolicy, RendererOptions } from './types';
+
+// 语法规则 / 裸 JSON / 块级 AST 已单点化到独立模块，此处整体 re-export（包公共面只增不减）。
+export {
+  normalizeFullwidthMarkdownSyntax,
+  normalizeFullwidthMarkdownSyntaxForRender,
+  headingIdFromText,
+  findTagStart,
+  parseWikiLinkTarget,
+  splitTableCells,
+  isTableSeparatorLine,
+  isTableRowCandidate,
+  tableAlignments,
+  tableGridTemplate,
+  TAG_GLOBAL_RE,
+  TAG_TOKEN_RE,
+  WIKI_LINK_GLOBAL_RE,
+  WIKI_LINK_TOKEN_RE,
+} from './syntax';
+export type { WikiLinkTarget } from './syntax';
+export { findBareJsonBlockLineRanges } from './bare-json';
+export type { BareJsonBlockRange } from './bare-json';
+export { parseDocument, blockAtLine } from './ast';
+export type {
+  BlockNode,
+  BlockquoteLineInfo,
+  BlockquoteNode,
+  BlankNode,
+  CodeFenceNode,
+  DocumentAst,
+  FrontmatterNode,
+  HeadingNode,
+  HorizontalRuleNode,
+  JsonBlockNode,
+  LineInfo,
+  ListItemKind,
+  ListItemNode,
+  ParagraphNode,
+  RefDefinitionNode,
+  SourceRange,
+  TableCell,
+  TableNode,
+  TableRowNode,
+} from './ast';
+export { extractIndexFacts, extractTags, stripToPlainText } from './inline';
+export type { IndexFacts, StripToPlainTextOptions } from './inline';
+export { lexInlineTokens } from './inline-tokens';
+export type { InlineToken } from './inline-tokens';
 
 const DEFAULT_REMOTE_IMAGE_LABELS: RemoteImageLabels = {
   blocked: 'Remote image blocked',
@@ -170,44 +219,12 @@ function applyImagePolicy(html: string, options?: RendererOptions): string {
   return template.innerHTML;
 }
 
-/** 将中文输入法常见全角 Markdown 定界符规范化为等长半角字符。 */
-export function normalizeFullwidthMarkdownSyntax(source: string): string {
-  return source
-    .replace(
-      /^(\s*)(＃+)[ \u3000]+/gm,
-      (_match, indent: string, marks: string) => `${indent}${marks.replaceAll('＃', '#')} `,
-    )
-    .replace(/^(\s*)＞[ \u3000]?/gm, '$1> ')
-    .replace(/^(\s*)－[ \u3000]+/gm, '$1- ')
-    .replace(/＊＊([^＊\n]+)＊＊/g, '**$1**')
-    .replace(/＊([^＊\n]+)＊/g, '*$1*')
-    .replace(/～～([^～\n]+)～～/g, '~~$1~~')
-    .replace(/｀｀｀([^｀\n]*)｀｀｀/g, '```$1```')
-    .replace(/｀([^｀\n]+)｀/g, '`$1`')
-    .replace(/［([^］\n]+)］（([^）\n]+)）/g, '[$1]($2)')
-    .replace(/｜/g, '|');
-}
-
-/** Convert a heading's inline source into the stable anchor used by previews. */
-export function headingIdFromText(text: string, occurrence = 1): string {
-  const base = text
-    .normalize('NFKC')
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/[`*_~]/g, '')
-    .replace(/<[^>]*>/g, '')
-    .replace(/[^\p{L}\p{N}\s-]/gu, '')
-    .trim()
-    .replace(/\s+/g, '-')
-    .toLowerCase();
-  const normalized = base || 'heading';
-  const anchor = `heading-${normalized}`;
-  return occurrence > 1 ? `${anchor}-${occurrence}` : anchor;
-}
-
 function addHeadingIds(html: string, source: string): string {
+  // 锚点 id 注入的是 marked 产出的 HTML，必须跟随渲染引擎自己的 token 序列
+  //（含引用/列表内嵌标题、缩进 ATX 等边界形态），否则配对错位、张冠李戴。
+  // 结构性消费（大纲/索引/编辑器）走 AST；此处与渲染同引擎是刻意取舍（R1-C3）。
   const headings: string[] = [];
-  marked.walkTokens(marked.lexer(source), (token: Tokens.Generic) => {
+  marked.walkTokens(marked.lexer(source), (token) => {
     if (token.type === 'heading') headings.push(token.text);
   });
   const occurrences = new Map<string, number>();
@@ -227,108 +244,6 @@ marked.use({ extensions: jotluckExtensions });
 // 启用 GFM (GitHub Flavored Markdown: 表格、任务列表、删除线等)
 marked.setOptions({ gfm: true, breaks: false });
 
-function startsBareJsonBlock(line: string): boolean {
-  return /^\s*[\[{]/.test(line);
-}
-
-function updateJsonDepth(
-  line: string,
-  state: { depth: number; inString: boolean; escaped: boolean },
-): void {
-  for (const char of line) {
-    if (state.escaped) {
-      state.escaped = false;
-      continue;
-    }
-    if (char === '\\' && state.inString) {
-      state.escaped = true;
-      continue;
-    }
-    if (char === '"') {
-      state.inString = !state.inString;
-      continue;
-    }
-    if (state.inString) continue;
-    if (char === '{' || char === '[') state.depth++;
-    else if (char === '}' || char === ']') state.depth--;
-  }
-}
-
-function isJsonText(value: string): boolean {
-  try {
-    JSON.parse(value);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export interface BareJsonBlockRange {
-  startLine: number;
-  endLine: number;
-}
-
-/** Locate complete bare JSON blocks without treating fenced code as JSON. */
-export function findBareJsonBlockLineRanges(source: string): BareJsonBlockRange[] {
-  const lines = source.split('\n');
-  const ranges: BareJsonBlockRange[] = [];
-  let inFence = false;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? '';
-    if (/^\s*```/.test(line)) {
-      inFence = !inFence;
-      continue;
-    }
-    if (inFence || !startsBareJsonBlock(line)) {
-      continue;
-    }
-
-    const candidate: string[] = [];
-    const state = { depth: 0, inString: false, escaped: false };
-    let end = -1;
-
-    for (let j = i; j < lines.length; j++) {
-      const current = lines[j] ?? '';
-      if (j > i && /^\s*```/.test(current)) break;
-      candidate.push(current);
-      updateJsonDepth(current, state);
-      if (state.depth < 0) break;
-      if (state.depth === 0 && !state.inString) {
-        const text = candidate.join('\n').trim();
-        if (text && isJsonText(text)) end = j;
-        break;
-      }
-    }
-
-    if (end >= i) {
-      ranges.push({ startLine: i, endLine: end });
-      i = end;
-    }
-  }
-
-  return ranges;
-}
-
-function protectBareJsonBlocks(source: string): string {
-  const lines = source.split('\n');
-  const ranges = findBareJsonBlockLineRanges(source);
-  const starts = new Map(ranges.map((range) => [range.startLine, range]));
-  const output: string[] = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    const range = starts.get(i);
-    if (range) {
-      output.push('```json', ...lines.slice(range.startLine, range.endLine + 1), '```');
-      i = range.endLine;
-    } else {
-      output.push(lines[i] ?? '');
-    }
-  }
-
-  return output.join('\n');
-}
-
 /**
  * 渲染 Markdown 字符串为安全 HTML。
  *
@@ -347,7 +262,7 @@ function protectBareJsonBlocks(source: string): string {
 export function renderMarkdown(source: string, options?: RendererOptions): string {
   // Step 1: Parse with the custom extensions. Image policy is applied to the
   // complete sanitized DOM so raw HTML <img> cannot bypass the host contract.
-  const normalizedSource = protectBareJsonBlocks(normalizeFullwidthMarkdownSyntax(source));
+  const normalizedSource = protectBareJsonBlocks(normalizeFullwidthMarkdownSyntaxForRender(source));
   setWikiLinkExistsResolver(options?.wikiLinkExists ?? null);
   let rawHtml: string;
   try {
