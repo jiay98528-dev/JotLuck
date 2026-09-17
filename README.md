@@ -40,7 +40,7 @@ For everyone who works with text, and everyone who works with AI.
 
 Current source version: `v0.15.0-preview`, a Mac-only preview release in preparation. The v0.15 Preview targets macOS Apple Silicon; Windows x64 and Linux x86_64 remain available from the archived v0.14 Preview.
 
-> **Download notice:** The `v0.15.0-preview` macOS Apple Silicon package is prepared but is awaiting publication of its GitHub Release and official update manifest. The artifact is `JotLuck_0.15.0-preview_aarch64.dmg`, 41,897,964 bytes, SHA-256 `243fe521f1c243b04669b101a6470c666cb8f50a2a287dc8587f0b398a310ea7`. Until those public links are live, use the archived `v0.14.0-preview` packages for Windows/Linux only. Do not download JotLuck from anywhere else.
+> **Download notice:** The `v0.15.0-preview` macOS Apple Silicon package is prepared but is awaiting publication of its GitHub Release and official update manifest. The artifact is `JotLuck_0.15.0-preview_aarch64.dmg`, 41,897,879 bytes, SHA-256 `66f17129390ce7ce398ca20a520e1c3d59a6ca110fed896e4f507e5ab04d6561`. Until those public links are live, use the archived `v0.14.0-preview` packages for Windows/Linux only. Do not download JotLuck from anywhere else.
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck workspace with recent notes, a Markdown editor, outline, and backlinks">
@@ -106,7 +106,7 @@ See the full [Privacy Policy](./PRIVACY.md) and the identity and integrity proce
 | File associations        | All eight extensions are optional Open With choices; installation and upgrade never replace the user's Windows default choice |
 | License                  | MIT                                                                                                                           |
 
-The v0.15 Preview is Mac-only for this release cycle. Its unsigned, ad-hoc-signed macOS Apple Silicon DMG is `JotLuck_0.15.0-preview_aarch64.dmg` (41,897,964 bytes; SHA-256 `243fe521f1c243b04669b101a6470c666cb8f50a2a287dc8587f0b398a310ea7`). The package is awaiting GitHub and website publication. The archived v0.14 Preview remains the last published Windows/Linux package line; verify those downloads against the [archived manifest](./site/public/updates/archive/v0.14.0-preview.json). Read [Known Limitations](./KNOWN_LIMITATIONS.md) and the notes attached to each release before installing.
+The v0.15 Preview is Mac-only for this release cycle. Its unsigned, ad-hoc-signed macOS Apple Silicon DMG is `JotLuck_0.15.0-preview_aarch64.dmg` (41,897,879 bytes; SHA-256 `66f17129390ce7ce398ca20a520e1c3d59a6ca110fed896e4f507e5ab04d6561`). The package is awaiting GitHub and website publication. The archived v0.14 Preview remains the last published Windows/Linux package line; verify those downloads against the [archived manifest](./site/public/updates/archive/v0.14.0-preview.json). Read [Known Limitations](./KNOWN_LIMITATIONS.md) and the notes attached to each release before installing.
 
 The archived v0.14 line remains the public Windows preview and includes the
 Linux x86_64 `.deb` `JotLuck_0.14.0_amd64.deb` (SHA-256

@@ -21,8 +21,8 @@
 
 The v0.15.0-preview macOS package is built and verified, pending GitHub Releases
 and official website publication. Artifact: `JotLuck_0.15.0-preview_aarch64.dmg`,
-41,897,964 bytes, SHA-256
-`243fe521f1c243b04669b101a6470c666cb8f50a2a287dc8587f0b398a310ea7`. The
+41,897,879 bytes, SHA-256
+`66f17129390ce7ce398ca20a520e1c3d59a6ca110fed896e4f507e5ab04d6561`. The
 archived v0.14.0-preview remains the Windows/Linux download source.
 
 ## [0.14.0-preview] - 2026-09-08

@@ -37,8 +37,8 @@ behavior boundaries.
 
 - The current Mac preview is ad-hoc signed rather than notarized. On first
   launch, macOS may require right-clicking the app and choosing Open. Verify
-  `JotLuck_0.15.0-preview_aarch64.dmg` (41,897,964 bytes; SHA-256
-  `243fe521f1c243b04669b101a6470c666cb8f50a2a287dc8587f0b398a310ea7`) against
+  `JotLuck_0.15.0-preview_aarch64.dmg` (41,897,879 bytes; SHA-256
+  `66f17129390ce7ce398ca20a520e1c3d59a6ca110fed896e4f507e5ab04d6561`) against
   the GitHub Release and official update manifest before installation. Those
   public links are pending publication at the time of this source note.
 - Tauri shell access is limited to the scoped `shell:default` capability.
