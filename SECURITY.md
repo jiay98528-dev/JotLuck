@@ -2,11 +2,11 @@
 
 ## Supported Versions
 
-JotLuck `v0.14.0-preview` is the current public source release, and the
-public preview installer on GitHub Releases is unsigned. It is not a stable
-release or an RC support line. Windows code signing is in progress. Security
-reports for the source tree and the preview installer are handled on a
-best-effort basis.
+JotLuck `v0.15.0-preview` is the Mac-only preview source line for this release
+cycle. The macOS Apple Silicon package is ad-hoc signed and not notarized; it
+is not a stable release or an RC support line. Windows x64 and Linux x86_64
+remain on the archived `v0.14.0-preview` line. Security reports for the source
+tree and preview packages are handled on a best-effort basis.
 
 ## Reporting A Vulnerability
 
@@ -35,7 +35,8 @@ In scope:
 Out of scope for this preview:
 
 - Unsigned installer reputation warnings.
-- Missing macOS/Linux notarization or signing.
+- Missing macOS notarization and the unchanged signing state of archived
+  Windows/Linux v0.14 packages.
 - Vulnerabilities that require manually installing and trusting a malicious
   local `trusted-code` theme package after the warning flow is shown.
 

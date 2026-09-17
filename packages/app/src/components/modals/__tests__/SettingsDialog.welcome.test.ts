@@ -33,7 +33,7 @@ describe('SettingsDialog welcome replay', () => {
     await flushPromises();
 
     expect(replayListener).toHaveBeenCalledTimes(1);
-    expect(localStorage.getItem(WELCOME_COMPLETED_KEY)).toBeNull();
+    expect(localStorage.getItem(WELCOME_COMPLETED_KEY)).toBe('1');
     expect(wrapper.emitted('update:visible')).toContainEqual([false]);
 
     window.removeEventListener(WELCOME_REPLAY_EVENT, replayListener);

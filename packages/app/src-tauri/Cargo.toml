@@ -1,6 +1,6 @@
 [package]
 name = "jotluck"
-version = "0.14.0"
+version = "0.15.0-preview"
 description = "JotLuck — local-first Markdown note-taking tool"
 authors = ["Linghu Technology (Shenzhen) Co., Ltd."]
 license = "MIT"
@@ -14,9 +14,11 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2.6.2", features = [] }
+semver = "1"
 
 [dependencies]
 serde_json = "1.0"
+percent-encoding = "2"
 serde = { version = "1.0", features = ["derive"] }
 base64 = "0.22"
 log = "0.4"
@@ -50,6 +52,10 @@ docx-rs = { version = "0.4.22", default-features = false }
 calamine = { version = "0.36.1", default-features = false, features = ["dates"] }
 lopdf = { version = "0.44", default-features = false }
 zip = { version = "4.3", default-features = false, features = ["deflate"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+semver = "1"
+tokio = { version = "1", features = ["time", "macros"] }
+tokio-util = { version = "0.7", features = ["rt"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"

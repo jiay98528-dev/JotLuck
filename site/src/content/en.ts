@@ -18,7 +18,7 @@ export const en: SiteContent = {
     },
     pageDescriptions: {
       download:
-        'Download the JotLuck preview for Windows x64, macOS Apple Silicon, and Linux x86_64 — a free, open-source, offline Markdown notes app. Every note is a plain-text file in your own folder.',
+        'JotLuck v0.15 Preview targets macOS Apple Silicon; archived v0.14 builds remain for Windows and Linux. Open-source Markdown notes work offline in plain files.',
       themes:
         'Themes for JotLuck, a free open-source Markdown notes app: Paper, Halo Canvas, Lumen Field — each reshapes the workspace, from paper and ink to window layout.',
       studio:
@@ -98,22 +98,24 @@ export const en: SiteContent = {
   download: {
     eyebrow: 'Download',
     title: 'Preview is live.',
-    lead: 'Windows x64, macOS Apple Silicon, and Linux x86_64 previews are ready to download now. Plain text never picks platforms, and your notes stay local files on every system.',
+    lead: 'The v0.15 Preview is available for macOS Apple Silicon. Windows x64 and Linux x86_64 remain available from the archived v0.14 Preview. Plain text stays in local files on every system.',
     statusLabel: 'First platform',
-    statusValue: 'Windows x64',
+    statusValue: 'macOS Apple Silicon',
     platformTitle: 'Platforms',
     platforms: [
-      { name: 'Windows x64', state: 'Preview live' },
-      { name: 'macOS Apple Silicon', state: 'Preview live' },
-      { name: 'Linux x86_64', state: 'Preview live' },
+      { name: 'Windows x64', state: 'Archived v0.14 Preview' },
+      { name: 'macOS Apple Silicon', state: 'v0.15 Preview live' },
+      { name: 'Linux x86_64', state: 'Archived v0.14 Preview' },
     ],
     honestyTitle: 'Preview first.',
     honestyBody:
       'The preview installer is already on GitHub Releases — downloadable, verifiable, reversible.',
-    previewTitle: 'v0.14.0 Preview',
+    previewTitle: 'v0.15.0 Preview · Mac first',
+    previousVersionLabel: 'Archived v0.14 Preview',
     downloadBtn: 'Download Preview (Windows x64)',
     downloadBtnLinux: 'Download Preview (Linux .deb)',
     downloadBtnMac: 'Download Preview (macOS .dmg)',
+    downloadBtnMacMirror: 'Mac website mirror',
     githubBtn: 'GitHub',
     releaseBtn: 'Release notes & checksum',
     signNote:

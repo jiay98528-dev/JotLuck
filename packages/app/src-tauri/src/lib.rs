@@ -13,6 +13,7 @@ mod file_watcher;
 mod fs_ops;
 mod indexer;
 mod path;
+mod update_service;
 mod window_session;
 mod windows_integration;
 
@@ -150,6 +151,10 @@ fn attach_window_cleanup(window: &WebviewWindow) {
     let label = window.label().to_string();
     let app = window.app_handle().clone();
     window.on_window_event(move |event| {
+        if matches!(event, WindowEvent::Focused(true)) {
+            app.state::<update_service::UpdateService>().check_if_due();
+            return;
+        }
         if !matches!(event, WindowEvent::Destroyed) {
             return;
         }
@@ -165,6 +170,8 @@ fn attach_window_cleanup(window: &WebviewWindow) {
             .revoke_for_window(&label);
         app.state::<document_import::DocumentImportState>()
             .cleanup_for_window(&label);
+        app.state::<update_service::UpdateService>()
+            .remove_window(&label);
     });
 }
 
@@ -382,7 +389,11 @@ fn system_prefers_chinese() -> bool {
     std::process::Command::new("defaults")
         .args(["read", "-g", "AppleLocale"])
         .output()
-        .map(|output| String::from_utf8_lossy(&output.stdout).trim().starts_with("zh"))
+        .map(|output| {
+            String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .starts_with("zh")
+        })
         .unwrap_or(false)
 }
 
@@ -452,12 +463,15 @@ pub fn run() {
         .manage(completion_decoder::CompletionDecoderState::new())
         .manage(completion_retrieval::CompletionRetrievalStates::new())
         .manage(indexer::SearchIndexState::new())
+        .manage(update_service::UpdateService::new())
         .setup(move |app| {
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()
                     .level(log::LevelFilter::Info)
                     .build(),
             )?;
+            app.state::<update_service::UpdateService>()
+                .initialize(app.handle().clone());
 
             // macOS 菜单栏须在主窗口创建前安装（首个窗口出现时生效）。
             #[cfg(target_os = "macos")]
@@ -466,17 +480,15 @@ pub fn run() {
             // 主窗口在 setup 内经 build_window 创建（tauri.conf.json 不再自动创建），
             // 使 additional_browser_args 重注入覆盖主窗口——config 自动创建路径
             // 会绕过注入（2026-08-09 CI 探针实锤：浏览器进程命令行无调试端口）。
-            let main = build_window(app.handle(), "main")?;
             if let Some(first) = startup_files.first() {
                 open_external_file_in_window(app.handle(), first, Some("main"))?;
             } else {
-                app.state::<window_session::WindowSessionRegistry>()
-                    .ensure_workspace("main");
-                attach_window_cleanup(&main);
-                // 对齐 create_workspace_window / open_external_file_in_window：
-                // setup 建主窗口后同样显式 show + set_focus（Windows 上对已
-                // 可见的前台窗口为幂等 no-op，行为不变）。
-                focus_window(&main);
+                // LaunchServices delivers macOS cold-start files via Opened,
+                // after setup. Wait for the first event batch before deciding
+                // whether this was an icon launch. Never build a blank WebView
+                // before its window-scoped bootstrap session is registered.
+                #[cfg(not(target_os = "macos"))]
+                create_workspace_window(app.handle(), "main")?;
             }
             // macOS 熄屏/锁屏启动时窗口 frame 可能损坏且不会自愈（见上），
             // 挂几何 guard 兜底；其他平台无此故障路径，零影响。
@@ -497,6 +509,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             destroy_current_window,
             platform_os,
+            update_service::get_update_state,
+            update_service::set_update_preferences,
+            update_service::check_for_updates,
+            update_service::dismiss_update_version,
+            update_service::claim_welcome,
+            update_service::complete_welcome,
+            update_service::release_welcome,
+            update_service::claim_update_notification,
             window_session::get_window_bootstrap,
             window_session::enable_external_edit,
             window_session::promote_external_file_to_notebook,
@@ -559,7 +579,9 @@ pub fn run() {
         }
     };
 
-    app.run(|app, event| {
+    #[cfg(target_os = "macos")]
+    let mut initial_event_batch = true;
+    app.run(move |app, event| {
         #[cfg(target_os = "macos")]
         match event {
             tauri::RunEvent::ExitRequested { api, .. } => {
@@ -571,10 +593,19 @@ pub fn run() {
                 }
             }
             tauri::RunEvent::Reopen { .. } => {
+                if !initial_event_batch && app.webview_windows().is_empty() {
+                    if let Err(error) = create_workspace_window(app, "main") {
+                        report_window_error(app, &error);
+                    }
+                }
+            }
+            tauri::RunEvent::MainEventsCleared if initial_event_batch => {
+                initial_event_batch = false;
                 if app.webview_windows().is_empty() {
                     if let Err(error) = create_workspace_window(app, "main") {
                         report_window_error(app, &error);
                     }
+                    spawn_window_geometry_guard(app.clone(), "main");
                 }
             }
             // macOS 双击关联文件 / Finder「打开方式」：LaunchServices 经
@@ -589,11 +620,20 @@ pub fn run() {
                     .filter(|path| {
                         path.extension()
                             .and_then(|ext| ext.to_str())
-                            .map(|ext| is_supported_opened_file_extension(&ext.to_ascii_lowercase()))
+                            .map(|ext| {
+                                is_supported_opened_file_extension(&ext.to_ascii_lowercase())
+                            })
                             .unwrap_or(false)
                     })
                     .collect();
-                open_secondary_invocation(app.clone(), files);
+                // Already on the event-loop thread: build readers now so the
+                // initial MainEventsCleared decision observes these windows.
+                // Unsupported URLs must not be mistaken for an icon launch.
+                for path in files {
+                    if let Err(error) = open_external_file_in_window(app, &path, None) {
+                        report_window_error(app, &error);
+                    }
+                }
             }
             _ => {}
         }

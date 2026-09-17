@@ -1,7 +1,8 @@
 export const APP_NAME = 'JotLuck';
 
 export const APP_VERSION = __APP_VERSION__;
-export const APP_VERSION_LABEL = `v${APP_VERSION}`;
+export const APP_VERSION_LABEL =
+  APP_VERSION === '0.15.0-preview' ? 'V0.15 Preview' : `v${APP_VERSION}`;
 
 export const APP_REPOSITORY_URL =
   import.meta.env.VITE_JOTLUCK_REPOSITORY_URL || 'https://github.com/jiay98528-dev/JotLuck';

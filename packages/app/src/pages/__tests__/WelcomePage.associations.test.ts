@@ -87,6 +87,8 @@ describe('WelcomePage Windows default-app decision', () => {
     next();
     await flushPromises();
 
+    next();
+    await flushPromises();
     const choices = [
       ...document.querySelectorAll<HTMLInputElement>('.welcome-association-checkbox'),
     ];

@@ -1,4 +1,26 @@
 export const messages = {
+  updateService: {
+    viewWebsite: '查看官网',
+    viewGitHub: '查看 GitHub 发布页',
+    previousResult: '上次成功检查发现版本 {version}；此结果尚未重新验证。',
+    unsupported: '此版本暂无适合当前系统和架构的安装包。',
+    noUpdate: '当前通道暂无可用更新。',
+    welcomeTitle: '欢迎使用新版 JotLuck',
+    autoCheck: '自动获取更新信息',
+    consent:
+      '开启后，应用运行期间会定期访问官网和 GitHub 检查版本；不上传笔记内容，不自动下载或安装，可随时在设置中关闭。',
+    saveFailed: '无法保存设置，请重试。',
+    desktopOnly: '请在桌面安装版中检查更新。',
+    channel: '更新通道',
+    stable: '正式版',
+    preview: '预览版及正式版',
+    current: '当前版本 {version}',
+    lastChecked: '上次成功检查 {date}',
+    unverified: '发现版本信息，但官网与 GitHub 尚未完整确认。',
+    outOfSync: '发布信息尚未同步，暂不可推荐下载。',
+    download: '前往下载',
+    viewSource: '查看版本来源',
+  },
   common: {
     appName: 'JotLuck',
     close: '关闭',

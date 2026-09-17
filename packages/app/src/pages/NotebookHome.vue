@@ -532,23 +532,6 @@
   </ThemeSlotBoundary>
 
   <!-- Update Notification -->
-  <ThemeSlotBoundary
-    slot-id="update-notification"
-    :theme-id="theme.renderedTheme.manifest.id"
-    :recipe="theme.activeUxRecipes['update-notification']"
-    :actions="shellActions"
-    :slot-props="updateNotificationSlotProps"
-  >
-    <UpdateNotification
-      :visible="showUpdateNotification"
-      :latest-version="updateLatestVersion"
-      :release-url="updateReleaseUrl"
-      :release-notes="updateReleaseNotes"
-      @update:visible="showUpdateNotification = $event"
-      @dismiss-version="onDismissVersion"
-    />
-  </ThemeSlotBoundary>
-
   <!-- Markdown Cheat Sheet -->
   <ThemeSlotBoundary
     slot-id="markdown-cheat-sheet"
@@ -869,7 +852,6 @@ import type {
   SaveExternalNoteAsRequest,
 } from '@/types';
 import { EditorView } from '@codemirror/view';
-import { useVersionCheck } from '@/composables/useVersionCheck';
 import { useImageUpload } from '@/composables/useImageUpload';
 import { usePreviewImageResolver } from '@/composables/usePreviewImageResolver';
 import { useRemoteImageSession } from '@/composables/useRemoteImageSession';
@@ -937,9 +919,6 @@ const CommandPalette = defineAsyncComponent(
 const MarkdownEditor = defineAsyncComponent(() => import('@/components/editor/MarkdownEditor.vue'));
 const FileDrawer = defineAsyncComponent(() => import('@/components/overlays/FileDrawer.vue'));
 const ThemeDialog = defineAsyncComponent(() => import('@/components/theme/ThemeDialog.vue'));
-const UpdateNotification = defineAsyncComponent(
-  () => import('@/components/overlays/UpdateNotification.vue'),
-);
 const MarkdownCheatSheet = defineAsyncComponent(
   () => import('@/components/overlays/MarkdownCheatSheet.vue'),
 );
@@ -1454,15 +1433,6 @@ const shareDialogSlotProps = computed(() => ({
 
 const toastSlotProps = computed(() => ({
   activeThemeId: theme.activeThemeId,
-}));
-
-const updateNotificationSlotProps = computed(() => ({
-  visible: showUpdateNotification.value,
-  latestVersion: updateLatestVersion.value,
-  releaseUrl: updateReleaseUrl.value,
-  close: () => {
-    showUpdateNotification.value = false;
-  },
 }));
 
 const markdownCheatSheetSlotProps = computed(() => ({
@@ -5275,25 +5245,6 @@ watch(
   },
 );
 
-// ── Version Check ──────────────────────────────────────────
-const VERSION_AUTO_CHECK_KEY = 'jotluck:version:autoCheck';
-const { hasUpdate, latestVersion, releaseUrl, releaseNotes, checkNow } = useVersionCheck();
-const showUpdateNotification = ref(false);
-const updateLatestVersion = computed(() => latestVersion.value);
-const updateReleaseUrl = computed(() => releaseUrl.value);
-const updateReleaseNotes = computed(() => releaseNotes.value);
-
-// Show update notification 15s after mount if update available
-let updateTimer: ReturnType<typeof setTimeout> | null = null;
-
-function shouldRunBackgroundVersionCheck(): boolean {
-  try {
-    return localStorage.getItem(VERSION_AUTO_CHECK_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
-
 function setupDesktopLifecycleListeners(): void {
   void getCurrentWindow()
     .onCloseRequested((event) => {
@@ -5337,15 +5288,6 @@ onMounted(async () => {
     },
     () => completionStorageScope.value,
   );
-
-  // Check for updates after a delay only when the user enabled auto-check.
-  updateTimer = setTimeout(async () => {
-    if (!shouldRunBackgroundVersionCheck()) return;
-    await checkNow();
-    if (hasUpdate.value) {
-      showUpdateNotification.value = true;
-    }
-  }, 15000); // 15 seconds after mount
 });
 
 onUnmounted(() => {
@@ -5358,7 +5300,6 @@ onUnmounted(() => {
   if (splitEditorMountTimer) clearTimeout(splitEditorMountTimer);
   if (previewRenderTimer) clearTimeout(previewRenderTimer);
   previewImages.reset();
-  if (updateTimer) clearTimeout(updateTimer);
   if (backgroundTrainingTimer) clearTimeout(backgroundTrainingTimer);
   if (watcherRefreshTimer) clearTimeout(watcherRefreshTimer);
   if (splitDragCleanup) splitDragCleanup();
@@ -5371,11 +5312,6 @@ onUnmounted(() => {
   void revokeExternalGrant(externalFile.value);
   unlistenWindowClose?.();
 });
-
-function onDismissVersion(version: string) {
-  localStorage.setItem('jotluck:version:dismissedVersion', version);
-  showUpdateNotification.value = false;
-}
 </script>
 
 <style scoped>

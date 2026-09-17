@@ -1,6 +1,6 @@
 {
   "name": "jotluck",
-  "version": "0.14.0",
+  "version": "0.15.0-preview",
   "private": true,
   "description": "Lightweight, local-first Markdown note-taking tool",
   "author": "Linghu Technology (Shenzhen) Co., Ltd.",
@@ -46,6 +46,8 @@
     "audit:js:all": "pnpm audit --audit-level high",
     "audit:rust": "cargo audit --file packages/app/src-tauri/Cargo.lock",
     "release:rc-gate": "node scripts/release-rc-gate.mjs",
+    "release:generate-update-manifest": "node scripts/release/generate-update-manifest.mjs",
+    "release:verify-update-manifest": "node scripts/release/verify-update-manifest.mjs",
     "release:preview-gate": "node scripts/release/verify-preview-release-gate.mjs",
     "release:capture-installed-evidence": "node scripts/release/capture-installed-app-evidence-v2.mjs",
     "release:resolve-current-run-provenance": "node scripts/release/resolve-current-run-provenance.mjs",

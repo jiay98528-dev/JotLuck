@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "channels": {
+    "stable": {
+      "enabled": false,
+      "release": null
+    },
+    "preview": {
+      "enabled": true,
+      "release": {
+        "version": "0.14.0-preview",
+        "tag": "v0.14.0-preview",
+        "publishedAt": "2026-09-08T14:00:11Z",
+        "notes": "Personalized local completion, a resilient V2.5 engine loader, and platform-specific preview packaging. This unsigned preview is published for verification and rollback.",
+        "releaseUrl": "https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.14.0-preview",
+        "assets": [
+          {
+            "os": "windows",
+            "arch": "x86_64",
+            "packageType": "nsis",
+            "name": "JotLuck_0.14.0_x64-setup.exe",
+            "url": "https://github.com/jiay98528-dev/JotLuck/releases/download/v0.14.0-preview/JotLuck_0.14.0_x64-setup.exe",
+            "size": 22508308,
+            "sha256": "d78a8a0e601154c3f9c79021ffe853c1f4925866fba2f4119cbf64adef08b8f4"
+          },
+          {
+            "os": "macos",
+            "arch": "aarch64",
+            "packageType": "dmg",
+            "name": "JotLuck_0.14.0_aarch64.dmg",
+            "url": "https://github.com/jiay98528-dev/JotLuck/releases/download/v0.14.0-preview/JotLuck_0.14.0_aarch64.dmg",
+            "size": 41242396,
+            "sha256": "fb10381d0c0e199921ba691a32db7e52910060cb59a2aab8a0735ad5fd10e1c6"
+          },
+          {
+            "os": "linux",
+            "arch": "x86_64",
+            "packageType": "deb",
+            "name": "JotLuck_0.14.0_amd64.deb",
+            "url": "https://github.com/jiay98528-dev/JotLuck/releases/download/v0.14.0-preview/JotLuck_0.14.0_amd64.deb",
+            "size": 39678902,
+            "sha256": "3d5f7b709c0eaf9fea2877593696c30cbc15f0a640733d208a040d8fc3a3ed77"
+          }
+        ]
+      }
+    }
+  }
+}

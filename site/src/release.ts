@@ -1,29 +1,130 @@
-/** 站点级常量：发布状态、外部链接、部署域。诚实约束的唯一事实源。 */
+import manifestJson from '../public/updates/v1.json';
+import archivedPreviewJson from '../public/updates/archive/v0.14.0-preview.json';
+
+/** 站点级常量：发布状态、外部链接、部署域。版本事实来自更新清单。 */
 export const SITE_URL = 'https://jotluck.com';
 
+export type UpdateChannel = 'stable' | 'preview';
+export type UpdateOs = 'windows' | 'macos' | 'linux';
+export type UpdateArch = 'x86_64' | 'aarch64';
+export type UpdatePackageType = 'nsis' | 'dmg' | 'deb' | 'appimage';
+
+export interface UpdateAsset {
+  os: UpdateOs;
+  arch: UpdateArch;
+  packageType: UpdatePackageType;
+  name: string;
+  url: string;
+  size: number;
+  sha256: string;
+}
+
+export interface UpdateRelease {
+  version: string;
+  tag: string;
+  publishedAt: string;
+  notes: string;
+  releaseUrl: string;
+  assets: UpdateAsset[];
+}
+
+export interface UpdateManifest {
+  schemaVersion: 1;
+  channels: Record<UpdateChannel, { enabled: boolean; release: UpdateRelease | null }>;
+}
+
+export interface ReleaseViewAsset {
+  asset: UpdateAsset;
+  version: string;
+  releaseUrl: string;
+  isCurrent: boolean;
+}
+
+export const UPDATE_MANIFEST = manifestJson as UpdateManifest;
+
+function enabledRelease(channel: UpdateChannel): UpdateRelease | null {
+  const entry = UPDATE_MANIFEST.channels[channel];
+  return entry.enabled ? entry.release : null;
+}
+
+const previewRelease = enabledRelease('preview');
+const stableRelease = enabledRelease('stable');
+const currentChannel: UpdateChannel | null = stableRelease
+  ? 'stable'
+  : previewRelease
+    ? 'preview'
+    : null;
+const currentRelease = stableRelease ?? previewRelease;
+function releaseView(release: UpdateRelease | null) {
+  if (!release) return null;
+  const windowsAsset = release.assets.find(
+    (asset) => asset.os === 'windows' && asset.arch === 'x86_64' && asset.packageType === 'nsis',
+  );
+  const linuxAsset = release.assets.find(
+    (asset) => asset.os === 'linux' && asset.arch === 'x86_64' && asset.packageType === 'deb',
+  );
+  const macosAsset = release.assets.find(
+    (asset) => asset.os === 'macos' && asset.arch === 'aarch64' && asset.packageType === 'dmg',
+  );
+  return {
+    version: release.version,
+    dateISO: release.publishedAt.slice(0, 10),
+    downloadUrl: windowsAsset?.url,
+    tagUrl: release.releaseUrl,
+    sha256: windowsAsset?.sha256,
+    linuxDeb: linuxAsset ? { downloadUrl: linuxAsset.url, sha256: linuxAsset.sha256 } : undefined,
+    macosDmg: macosAsset ? { downloadUrl: macosAsset.url, sha256: macosAsset.sha256 } : undefined,
+    assets: release.assets,
+  };
+}
+
+const archivePreviewRelease = (archivedPreviewJson as UpdateManifest).channels.preview.release;
+const platformSpecs = [
+  { key: 'windows', os: 'windows' as const, arch: 'x86_64' as const, packageType: 'nsis' as const },
+  { key: 'macos', os: 'macos' as const, arch: 'aarch64' as const, packageType: 'dmg' as const },
+  { key: 'linux', os: 'linux' as const, arch: 'x86_64' as const, packageType: 'deb' as const },
+] as const;
+
+/**
+ * 每个平台独立选择可下载产物。新 preview 只发布 macOS 时，Windows/Linux
+ * 明确回退到归档的 0.14 事实，避免把旧产物冒充成当前版本。
+ */
+const platformReleases: Array<ReleaseViewAsset | null> = platformSpecs.map((spec) => {
+  const currentAsset = currentRelease?.assets.find(
+    (asset) =>
+      asset.os === spec.os && asset.arch === spec.arch && asset.packageType === spec.packageType,
+  );
+  if (currentAsset && currentRelease) {
+    return {
+      asset: currentAsset,
+      version: currentRelease.version,
+      releaseUrl: currentRelease.releaseUrl,
+      isCurrent: true,
+    };
+  }
+  const archivedAsset = archivePreviewRelease?.assets.find(
+    (asset) =>
+      asset.os === spec.os && asset.arch === spec.arch && asset.packageType === spec.packageType,
+  );
+  if (archivedAsset && archivePreviewRelease) {
+    return {
+      asset: archivedAsset,
+      version: archivePreviewRelease.version,
+      releaseUrl: archivePreviewRelease.releaseUrl,
+      isCurrent: false,
+    };
+  }
+  return null;
+});
+
 export const RELEASE = {
-  platform: 'Windows x64 / macOS Apple Silicon / Linux x86_64',
-  /** preview = 预览版已上架 GitHub Releases（当前 2026-09-08 v0.14.0-preview，公开 Pre-release）；下载按钮点亮 */
-  state: 'preview' as const,
-  /** Preview 事实（裁决 33）：版本/链接/校验的唯一事实源，下载页模板引用；事实值不进五语 content */
-  preview: {
-    version: '0.14.0-preview',
-    dateISO: '2026-09-08',
-    downloadUrl:
-      'https://github.com/jiay98528-dev/JotLuck/releases/download/v0.14.0-preview/JotLuck_0.14.0_x64-setup.exe',
-    tagUrl: 'https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.14.0-preview',
-    sha256: 'd78a8a0e601154c3f9c79021ffe853c1f4925866fba2f4119cbf64adef08b8f4',
-    linuxDeb: {
-      downloadUrl:
-        'https://github.com/jiay98528-dev/JotLuck/releases/download/v0.14.0-preview/JotLuck_0.14.0_amd64.deb',
-      sha256: '3d5f7b709c0eaf9fea2877593696c30cbc15f0a640733d208a040d8fc3a3ed77',
-    },
-    macosDmg: {
-      downloadUrl:
-        'https://github.com/jiay98528-dev/JotLuck/releases/download/v0.14.0-preview/JotLuck_0.14.0_aarch64.dmg',
-      sha256: 'fb10381d0c0e199921ba691a32db7e52910060cb59a2aab8a0735ad5fd10e1c6',
-    },
-  },
+  platform: 'macOS Apple Silicon (current preview) · Windows x64 / Linux x86_64 (previous preview)',
+  /** 发布状态由 public/updates/v1.json 的已启用渠道派生。 */
+  state: currentChannel ?? ('withdrawn' as const),
+  manifest: UPDATE_MANIFEST,
+  current: releaseView(currentRelease),
+  preview: releaseView(previewRelease),
+  platforms: platformReleases,
 };
 
 export const EXTERNAL = {

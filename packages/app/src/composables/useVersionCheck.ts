@@ -1,286 +1,197 @@
-/**
- * useVersionCheck — GitHub Releases 版本检查组合式函数
- *
- * 检查 GitHub Releases 是否有新版本，使用 localStorage 做 24 小时缓存。
- * 所有状态为模块级单例，多个组件调用共享同一份数据，避免重复请求。
- *
- * @remarks
- * - autoInstall 功能当前锁定（签名证书未获取），`autoInstallAvailable` 始终返回 false
- * - 网络错误静默失败，不抛出异常
- */
-
-import { ref, computed } from 'vue';
-import { APP_RELEASES_API_URL, APP_VERSION } from '@/config/app-meta';
+/** Window adapter for the process-wide desktop update service. */
+import { computed, ref } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { APP_VERSION } from '@/config/app-meta';
+import { isDesktopRuntime } from '@/utils/runtime';
 import { translate } from '@/i18n';
-import { localizeUserError } from '@/services/command-errors';
-import { isSemVerNewer, normalizeReleaseVersion } from '@/utils/semver';
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-const LS_KEYS = {
-  lastCheck: 'jotluck:version:lastCheck',
-  latestInfo: 'jotluck:version:latestInfo',
-  autoCheck: 'jotluck:version:autoCheck',
-  autoInstall: 'jotluck:version:autoInstall',
-  dismissedVersion: 'jotluck:version:dismissedVersion',
-} as const;
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface CachedLatestInfo {
-  latest: string;
+export type UpdateChannel = 'stable' | 'preview';
+export interface UpdateCandidate {
+  version: string;
   releaseUrl: string;
-  releaseNotes: string;
-  checkedAt: number;
+  notes: string;
+  downloadUrl: string | null;
+  source: 'website' | 'github' | 'confirmed';
 }
-
-interface GitHubRelease {
-  tag_name: string;
-  html_url: string;
-  body: string | null;
+export interface UpdateState {
+  revision: number;
+  currentVersion: string;
+  channel: UpdateChannel;
+  autoCheck: boolean;
+  status:
+    | 'idle'
+    | 'checking'
+    | 'latest'
+    | 'available'
+    | 'unverified'
+    | 'outOfSync'
+    | 'unsupported'
+    | 'failed';
+  candidate: UpdateCandidate | null;
+  lastChecked: number | null;
+  welcomeCompleted: boolean;
+  welcomeRevision: string | null;
 }
-
-// ---------------------------------------------------------------------------
-// Module-level reactive state (singleton — shared across all consumers)
-// ---------------------------------------------------------------------------
-
-const hasUpdate = ref(false);
-const latestVersion = ref('');
-const currentVersion = ref(APP_VERSION);
-const releaseUrl = ref('');
-const releaseNotes = ref('');
-const checking = ref(false);
+export const WELCOME_CONTENT_REVISION = 'updates-opt-in-v1';
+const state = ref<UpdateState>({
+  revision: 0,
+  currentVersion: APP_VERSION,
+  channel: APP_VERSION.includes('-') ? 'preview' : 'stable',
+  autoCheck: false,
+  status: 'idle',
+  candidate: null,
+  lastChecked: null,
+  welcomeCompleted: false,
+  welcomeRevision: null,
+});
 const error = ref<string | null>(null);
-const lastChecked = ref<number | null>(null);
-
-const autoInstallAvailable = computed(() => false);
-
-/** Guard to prevent concurrent fetch requests */
-let pendingCheck: Promise<void> | null = null;
-/** Guard to ensure init() only runs once */
-let initialized = false;
-
-// ---------------------------------------------------------------------------
-// Version utilities
-// ---------------------------------------------------------------------------
-
-/**
- * GitHub release tags conventionally use a leading `v`, while the stored
- * application version remains strict SemVer without that prefix.
- */
-function cleanVersion(raw: string): string {
-  return normalizeReleaseVersion(raw) ?? '';
-}
-
-// ---------------------------------------------------------------------------
-// localStorage helpers
-// ---------------------------------------------------------------------------
-
-function safeGetItem(key: string): string | null {
+const saving = ref(false);
+let initialization: Promise<void> | null = null;
+let unlisten: UnlistenFn | null = null;
+let browserWelcomeOwner = false;
+function legacy() {
   try {
-    return localStorage.getItem(key);
+    return {
+      autoCheck: localStorage.getItem('jotluck:version:autoCheck') === 'true',
+      welcomeCompleted: localStorage.getItem('jotluck:welcome:completed') === '1',
+    };
   } catch {
-    return null;
+    return { autoCheck: false, welcomeCompleted: false };
   }
 }
-
-function safeSetItem(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    /* localStorage may be unavailable or full — silently ignore */
-  }
+function apply(next: UpdateState) {
+  if (next.revision >= state.value.revision) state.value = next;
 }
-
-function getDismissedVersion(): string | null {
-  return safeGetItem(LS_KEYS.dismissedVersion);
-}
-
-/**
- * Check whether the given latest version has been dismissed by the user.
- * Compares after stripping 'v' prefix so both '0.2.0' and 'v0.2.0' match.
- */
-function isDismissed(latest: string): boolean {
-  const dismissed = getDismissedVersion();
-  if (!dismissed) return false;
-  return cleanVersion(dismissed) === cleanVersion(latest);
-}
-
-function readCachedInfo(): CachedLatestInfo | null {
-  try {
-    const raw = safeGetItem(LS_KEYS.latestInfo);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as CachedLatestInfo;
-    // Basic shape validation
-    if (!parsed.latest || !parsed.checkedAt) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function writeCachedInfo(info: CachedLatestInfo): void {
-  safeSetItem(LS_KEYS.latestInfo, JSON.stringify(info));
-  safeSetItem(LS_KEYS.lastCheck, String(info.checkedAt));
-}
-
-// ---------------------------------------------------------------------------
-// State helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Apply a CachedLatestInfo to the reactive state, respecting the dismissed check.
- */
-function applyLatestInfo(info: CachedLatestInfo): void {
-  latestVersion.value = info.latest;
-  releaseUrl.value = info.releaseUrl;
-  releaseNotes.value = info.releaseNotes;
-  lastChecked.value = info.checkedAt;
-
-  if (isSemVerNewer(info.latest, APP_VERSION) && !isDismissed(info.latest)) {
-    hasUpdate.value = true;
-  } else {
-    hasUpdate.value = false;
-  }
-}
-
-/**
- * Determine whether an automatic check should be performed:
- * - autoCheck flag must be 'true'
- * - No previous check, OR the last check is older than 24 hours
- */
-function shouldAutoCheck(): boolean {
-  try {
-    const autoCheck = safeGetItem(LS_KEYS.autoCheck);
-    if (autoCheck !== 'true') return false;
-
-    const lastCheckStr = safeGetItem(LS_KEYS.lastCheck);
-    if (!lastCheckStr) return true;
-
-    const lastCheckTs = parseInt(lastCheckStr, 10);
-    if (isNaN(lastCheckTs)) return true;
-
-    const elapsed = Date.now() - lastCheckTs;
-    return elapsed > CACHE_TTL_MS;
-  } catch {
-    return false;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-export function useVersionCheck() {
-  // ------------------------------------------------------------------
-  // checkNow — always fetches, bypassing the 24h cache and autoCheck flag
-  // ------------------------------------------------------------------
-
-  async function checkNow(): Promise<void> {
-    // Deduplicate: if a check is already in flight, return that promise
-    if (pendingCheck) {
-      await pendingCheck;
+async function initialize() {
+  if (initialization) return initialization;
+  initialization = (async () => {
+    if (!isDesktopRuntime()) {
+      const old = legacy();
+      let revision: string | null = null;
+      try {
+        revision = localStorage.getItem('jotluck:welcome:revision');
+      } catch {
+        /* optional browser storage */
+      }
+      state.value = { ...state.value, ...old, welcomeRevision: revision };
       return;
     }
+    // Listen before reading the snapshot; revisions resolve event/read races.
+    unlisten = await listen<UpdateState>('jotluck://update-state', ({ payload }) => apply(payload));
+    apply(await invoke<UpdateState>('get_update_state', { legacy: legacy() }));
+  })().catch(() => {
+    unlisten?.();
+    unlisten = null;
+    initialization = null;
+    error.value = translate('settings.updates.failed');
+    throw new Error('update initialization failed');
+  });
+  return initialization;
+}
 
-    checking.value = true;
+export function useVersionCheck() {
+  async function setPreferences(autoCheck: boolean, channel = state.value.channel) {
+    if (saving.value) return;
+    saving.value = true;
     error.value = null;
-
-    pendingCheck = (async () => {
-      try {
-        const response = await fetch(APP_RELEASES_API_URL, {
-          headers: {
-            Accept: 'application/vnd.github.v3+json',
-          },
-        });
-
-        if (!response.ok) {
-          error.value = translate('settings.updates.failed');
-          return;
-        }
-
-        const release: GitHubRelease = await response.json();
-        const latest = cleanVersion(release.tag_name);
-        if (!latest) {
-          error.value = translate('settings.updates.failed');
-          return;
-        }
-        const info: CachedLatestInfo = {
-          latest,
-          releaseUrl: release.html_url,
-          releaseNotes: release.body ?? '',
-          checkedAt: Date.now(),
-        };
-
-        writeCachedInfo(info);
-        applyLatestInfo(info);
-      } catch (e: unknown) {
-        // Network/library diagnostics stay out of user-visible reactive state.
-        // eslint-disable-next-line no-console
-        console.warn('[version-check] release lookup failed', e);
-        error.value = localizeUserError(e, 'settings.updates.failed');
-      } finally {
-        checking.value = false;
-        pendingCheck = null;
+    try {
+      await initialize();
+      if (isDesktopRuntime())
+        apply(await invoke<UpdateState>('set_update_preferences', { autoCheck, channel }));
+      else {
+        localStorage.setItem('jotluck:version:autoCheck', String(autoCheck));
+        state.value = { ...state.value, autoCheck, channel };
       }
-    })();
-
-    await pendingCheck;
-  }
-
-  // ------------------------------------------------------------------
-  // One-time initialization
-  // ------------------------------------------------------------------
-
-  function init(): void {
-    if (initialized) return;
-    initialized = true;
-
-    // Restore cached results
-    const cached = readCachedInfo();
-    if (cached) {
-      applyLatestInfo(cached);
-    }
-
-    // Auto-check if eligible
-    if (shouldAutoCheck()) {
-      // Fire-and-forget — do not block the composable setup
-      void checkNow();
+    } catch {
+      error.value = translate('updateService.saveFailed');
+    } finally {
+      saving.value = false;
     }
   }
-
-  // Run init immediately (first call only due to the guard)
-  init();
-
+  async function checkNow() {
+    error.value = null;
+    try {
+      await initialize();
+      if (!isDesktopRuntime()) {
+        error.value = translate('updateService.desktopOnly');
+        return;
+      }
+      apply(await invoke<UpdateState>('check_for_updates'));
+    } catch {
+      error.value = translate('settings.updates.failed');
+    }
+  }
+  async function claimWelcome(replay = false): Promise<{ show: boolean; mode: 'new' | 'upgrade' }> {
+    await initialize();
+    if (isDesktopRuntime()) return invoke('claim_welcome', { replay });
+    const show =
+      !browserWelcomeOwner && (replay || state.value.welcomeRevision !== WELCOME_CONTENT_REVISION);
+    browserWelcomeOwner = show || browserWelcomeOwner;
+    return { show, mode: !replay && state.value.welcomeCompleted ? 'upgrade' : 'new' };
+  }
+  async function completeWelcome() {
+    error.value = null;
+    try {
+      if (isDesktopRuntime()) apply(await invoke<UpdateState>('complete_welcome'));
+      else {
+        localStorage.setItem('jotluck:welcome:completed', '1');
+        localStorage.setItem('jotluck:welcome:revision', WELCOME_CONTENT_REVISION);
+        state.value = {
+          ...state.value,
+          welcomeCompleted: true,
+          welcomeRevision: WELCOME_CONTENT_REVISION,
+        };
+        browserWelcomeOwner = false;
+      }
+      return true;
+    } catch {
+      error.value = translate('updateService.saveFailed');
+      return false;
+    }
+  }
+  async function releaseWelcome() {
+    if (isDesktopRuntime()) await invoke('release_welcome');
+    else browserWelcomeOwner = false;
+  }
+  async function dismissVersion(version: string) {
+    try {
+      if (isDesktopRuntime())
+        apply(await invoke<UpdateState>('dismiss_update_version', { version }));
+    } catch {
+      error.value = translate('updateService.saveFailed');
+    }
+  }
+  async function claimNotification(): Promise<boolean> {
+    if (!isDesktopRuntime()) return false;
+    return invoke('claim_update_notification');
+  }
   return {
-    /** Whether a newer version is available AND not dismissed */
-    hasUpdate,
-    /** Latest version string from GitHub (e.g. '0.2.0') */
-    latestVersion,
-    /** Current app version from app-meta */
-    currentVersion,
-    /** URL to the GitHub release page */
-    releaseUrl,
-    /** Release notes / changelog body from GitHub */
-    releaseNotes,
-    /** True while a fetch request is in-flight */
-    checking,
-    /** Error message if the last fetch failed, null otherwise */
+    state,
     error,
-    /** Timestamp (ms) of the last successful check */
-    lastChecked,
-    /**
-     * Whether auto-install is available.
-     * Currently LOCKED (certificate not obtained) — always returns false.
-     */
-    autoInstallAvailable,
-    /** Fetch the latest release from GitHub, bypassing the 24h cache */
+    saving,
+    initialize,
+    setPreferences,
     checkNow,
-  } as const;
+    claimWelcome,
+    completeWelcome,
+    releaseWelcome,
+    dismissVersion,
+    claimNotification,
+    autoCheck: computed(() => state.value.autoCheck),
+    checking: computed(() => state.value.status === 'checking'),
+    hasUpdate: computed(
+      () => ['available', 'unverified'].includes(state.value.status) && !!state.value.candidate,
+    ),
+    latestVersion: computed(() => state.value.candidate?.version ?? ''),
+    currentVersion: computed(() => state.value.currentVersion),
+    releaseUrl: computed(() =>
+      state.value.candidate?.source === 'website'
+        ? 'https://jotluck.com/'
+        : (state.value.candidate?.releaseUrl ?? ''),
+    ),
+    releaseNotes: computed(() => state.value.candidate?.notes ?? ''),
+    lastChecked: computed(() => state.value.lastChecked),
+    autoInstallAvailable: computed(() => false),
+  };
 }

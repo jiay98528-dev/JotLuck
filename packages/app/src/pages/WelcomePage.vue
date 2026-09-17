@@ -17,7 +17,7 @@
           </div>
 
           <div class="welcome-steps" role="tablist" :aria-label="t('welcome.progress')">
-            <template v-for="i in TOTAL_STEPS" :key="i">
+            <template v-for="i in totalSteps" :key="i">
               <span
                 class="welcome-step-dot"
                 :class="{ active: currentStep >= i }"
@@ -26,7 +26,7 @@
                 :aria-label="t('welcome.stepAria', { step: i })"
               />
               <span
-                v-if="i < TOTAL_STEPS"
+                v-if="i < totalSteps"
                 class="welcome-step-line"
                 :class="{ active: currentStep > i }"
               />
@@ -36,21 +36,50 @@
           <div class="welcome-content">
             <Transition name="step-slide" mode="out-in">
               <div v-if="currentStep === 1" class="welcome-step-body">
+                <h2 class="welcome-step-title">{{ t('updateService.welcomeTitle') }}</h2>
+                <div class="welcome-setting-row">
+                  <div class="welcome-setting-info">
+                    <span id="welcome-update-label" class="welcome-setting-label">{{
+                      t('updateService.autoCheck')
+                    }}</span>
+                    <button
+                      class="toggle-track"
+                      :class="{ active: autoCheckEnabled }"
+                      type="button"
+                      role="switch"
+                      aria-labelledby="welcome-update-label"
+                      aria-describedby="welcome-update-description"
+                      :aria-checked="autoCheckEnabled"
+                      :disabled="saving"
+                      @click="setPreferences(!autoCheckEnabled)"
+                    >
+                      <span class="toggle-thumb" />
+                    </button>
+                  </div>
+                  <p id="welcome-update-description" class="welcome-setting-desc">
+                    {{ t('updateService.consent') }}
+                  </p>
+                  <p v-if="updateError" class="welcome-setting-note" role="alert">
+                    {{ updateError }}
+                  </p>
+                </div>
+              </div>
+              <div v-else-if="currentStep === 2" class="welcome-step-body">
                 <h2 class="welcome-step-title">{{ t('welcome.plainTitle') }}</h2>
                 <p class="welcome-step-text">{{ t('welcome.plainBody') }}</p>
               </div>
 
-              <div v-else-if="currentStep === 2" class="welcome-step-body">
+              <div v-else-if="currentStep === 3" class="welcome-step-body">
                 <h2 class="welcome-step-title">{{ t('welcome.workspaceTitle') }}</h2>
                 <p class="welcome-step-text">{{ t('welcome.workspaceBody') }}</p>
               </div>
 
-              <div v-else-if="currentStep === 3" class="welcome-step-body">
+              <div v-else-if="currentStep === 4" class="welcome-step-body">
                 <h2 class="welcome-step-title">{{ t('welcome.workflowTitle') }}</h2>
                 <p class="welcome-step-text">{{ t('welcome.workflowBody') }}</p>
               </div>
 
-              <div v-else-if="currentStep === 4" class="welcome-step-body">
+              <div v-else-if="currentStep === 5" class="welcome-step-body">
                 <h2 class="welcome-step-title">{{ t('welcome.defaultEditorTitle') }}</h2>
                 <p class="welcome-step-text">{{ defaultEditorBodyText }}</p>
                 <fieldset class="welcome-association-summary">
@@ -122,26 +151,6 @@
                 </p>
               </div>
 
-              <div v-else-if="currentStep === 5" class="welcome-step-body">
-                <h2 class="welcome-step-title">{{ t('welcome.updatesTitle') }}</h2>
-                <div class="welcome-setting-row">
-                  <div class="welcome-setting-info">
-                    <span class="welcome-setting-label">{{ t('welcome.autoCheck') }}</span>
-                    <button
-                      class="toggle-track"
-                      :class="{ active: autoCheckEnabled }"
-                      type="button"
-                      role="switch"
-                      :aria-checked="autoCheckEnabled"
-                      @click="autoCheckEnabled = !autoCheckEnabled"
-                    >
-                      <span class="toggle-thumb" />
-                    </button>
-                  </div>
-                  <p class="welcome-setting-desc">{{ t('welcome.autoCheckBody') }}</p>
-                </div>
-              </div>
-
               <div v-else class="welcome-step-body">
                 <h2 class="welcome-step-title">{{ t('welcome.readyTitle') }}</h2>
                 <p class="welcome-step-text">{{ t('welcome.readyBody') }}</p>
@@ -149,8 +158,16 @@
             </Transition>
           </div>
 
+          <p v-if="updateError && currentStep !== 1" class="welcome-setting-note" role="alert">
+            {{ updateError }}
+          </p>
           <div class="welcome-footer">
-            <button v-if="currentStep < TOTAL_STEPS" class="welcome-skip-link" @click="skip">
+            <button
+              v-if="currentStep < totalSteps"
+              class="welcome-skip-link"
+              :disabled="saving || completing"
+              @click="skip"
+            >
               {{ t('welcome.skip') }}
             </button>
             <span v-else class="welcome-footer-spacer" />
@@ -160,9 +177,10 @@
               size="md"
               class="welcome-next-btn"
               data-dialog-initial-focus
+              :disabled="saving || completing"
               @click="nextStep"
             >
-              {{ currentStep < TOTAL_STEPS ? t('common.next') : t('welcome.finish') }}
+              {{ currentStep < totalSteps ? t('common.next') : t('welcome.finish') }}
             </Button>
           </div>
         </div>
@@ -178,7 +196,7 @@ import Button from '@/components/common/Button.vue';
 import { useDialogFocus } from '@/composables/useDialogFocus';
 import { isDesktopRuntime } from '@/utils/runtime';
 import { isWindows } from '@/utils/platform';
-import { hasCompletedWelcome, markWelcomeCompleted } from '@/utils/welcome';
+import { useVersionCheck } from '@/composables/useVersionCheck';
 import { useI18n } from 'vue-i18n';
 import type {
   AssociationApplicationState,
@@ -186,17 +204,25 @@ import type {
   WindowsAssociationStatus,
 } from '@/types';
 
-const props = defineProps<{ visible: boolean }>();
+const props = withDefaults(defineProps<{ visible: boolean; mode?: 'new' | 'upgrade' }>(), {
+  mode: 'new',
+});
 const emit = defineEmits<{ 'update:visible': [boolean]; complete: [] }>();
 const { t } = useI18n();
 
-const AUTO_CHECK_KEY = 'jotluck:version:autoCheck';
-const AUTO_INSTALL_KEY = 'jotluck:version:autoInstall';
 const DEFAULT_EDITOR_PROMPT_KEY = 'jotluck:welcome:defaultEditorPrompted';
-const TOTAL_STEPS = 6;
+const totalSteps = computed(() => (props.mode === 'upgrade' ? 1 : 6));
 
 const currentStep = ref(1);
-const autoCheckEnabled = ref(localStorage.getItem(AUTO_CHECK_KEY) === 'true');
+const {
+  autoCheck: autoCheckEnabled,
+  saving,
+  error: updateError,
+  setPreferences,
+  completeWelcome,
+  initialize,
+} = useVersionCheck();
+const completing = ref(false);
 type DefaultEditorNotice = '' | 'webPreview' | 'settingsOpened' | 'settingsFailed';
 type AssociationGroupId = AssociationGroupStatus['id'];
 const associationGroupDefinitions: Array<Pick<AssociationGroupStatus, 'id' | 'extensions'>> = [
@@ -253,6 +279,7 @@ const associationActionLabel = computed(() => {
   return t('welcome.openSystemSettings');
 });
 const defaultEditorBodyText = computed(() =>
+  // i18n-dynamic-key: welcome.defaultEditorBody | welcome.defaultEditorBodyNonWindows
   t(isWindows() ? 'welcome.defaultEditorBody' : 'welcome.defaultEditorBodyNonWindows'),
 );
 const defaultEditorNotice = computed(() => {
@@ -278,9 +305,7 @@ useDialogFocus({
 
 onMounted(() => {
   window.addEventListener('focus', refreshAssociationStatus);
-  if (hasCompletedWelcome()) {
-    emit('update:visible', false);
-  }
+  void initialize().catch(() => {});
 });
 
 onBeforeUnmount(() => window.removeEventListener('focus', refreshAssociationStatus));
@@ -290,7 +315,6 @@ watch(
   (visible) => {
     if (!visible) return;
     currentStep.value = 1;
-    autoCheckEnabled.value = localStorage.getItem(AUTO_CHECK_KEY) === 'true';
     defaultEditorNoticeKind.value = '';
     selectedAssociationGroups.value = defaultAssociationSelections();
     void refreshAssociationStatus();
@@ -298,11 +322,12 @@ watch(
 );
 
 watch(currentStep, (step) => {
-  if (step === 4) void refreshAssociationStatus();
+  if (step === 5) void refreshAssociationStatus();
 });
 
 function nextStep(): void {
-  if (currentStep.value < TOTAL_STEPS) {
+  if (saving.value || completing.value) return;
+  if (currentStep.value < totalSteps.value) {
     currentStep.value += 1;
     return;
   }
@@ -317,12 +342,17 @@ function close(): void {
   skip();
 }
 
-function complete(): void {
-  markWelcomeCompleted();
-  localStorage.setItem(AUTO_CHECK_KEY, String(autoCheckEnabled.value));
-  localStorage.setItem(AUTO_INSTALL_KEY, 'false');
-  emit('update:visible', false);
-  emit('complete');
+async function complete(): Promise<void> {
+  if (saving.value || completing.value) return;
+  completing.value = true;
+  try {
+    if (await completeWelcome()) {
+      emit('update:visible', false);
+      emit('complete');
+    }
+  } finally {
+    completing.value = false;
+  }
 }
 
 async function onSetDefaultEditor(): Promise<void> {
@@ -350,7 +380,7 @@ async function onSetDefaultEditor(): Promise<void> {
 }
 
 async function refreshAssociationStatus(): Promise<void> {
-  if (!props.visible || currentStep.value !== 4) return;
+  if (!props.visible || currentStep.value !== 5) return;
   if (!isWindows()) {
     associationStatus.value = null;
     return;

@@ -1,6 +1,29 @@
 import type { MessageSchema } from './zh-CN';
 
 export const messages = {
+  updateService: {
+    viewWebsite: '공식 웹사이트 보기',
+    viewGitHub: 'GitHub 릴리스 보기',
+    previousResult:
+      '마지막 확인에서 버전 {version}을 찾았습니다. 이 결과는 아직 다시 확인되지 않았습니다.',
+    unsupported: '현재 시스템과 아키텍처에 맞는 설치 파일이 없습니다.',
+    noUpdate: '현재 채널에 사용 가능한 업데이트가 없습니다.',
+    welcomeTitle: '새로운 JotLuck에 오신 것을 환영합니다',
+    autoCheck: '업데이트 정보 자동 확인',
+    consent:
+      '켜면 앱 실행 중 공식 웹사이트와 GitHub에서 버전을 주기적으로 확인합니다. 노트 내용은 전송하지 않으며 자동 다운로드나 설치도 하지 않습니다. 설정에서 언제든 끌 수 있습니다.',
+    saveFailed: '설정을 저장하지 못했습니다. 다시 시도하세요.',
+    desktopOnly: '설치된 데스크톱 앱에서 업데이트를 확인하세요.',
+    channel: '업데이트 채널',
+    stable: '정식 버전',
+    preview: '미리보기 및 정식 버전',
+    current: '현재 버전 {version}',
+    lastChecked: '마지막 확인 성공 {date}',
+    unverified: '버전 정보를 찾았지만 웹사이트와 GitHub의 확인이 완료되지 않았습니다.',
+    outOfSync: '릴리스 정보가 동기화되지 않았습니다. 아직 다운로드를 권장하지 않습니다.',
+    download: '다운로드로 이동',
+    viewSource: '릴리스 출처 보기',
+  },
   common: {
     appName: 'JotLuck',
     close: '닫기',

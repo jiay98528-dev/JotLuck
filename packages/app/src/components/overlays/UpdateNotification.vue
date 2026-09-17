@@ -26,8 +26,17 @@
             <span>{{ t('updateNotification.dontRemind') }}</span>
           </label>
           <div class="footer-actions">
+            <button v-if="downloadUrl" class="link-btn" @click="openDownload">
+              {{ t('updateService.download') }}
+            </button>
             <button class="link-btn" @click="openRelease">
-              {{ t('updateNotification.details') }}
+              {{
+                unverified
+                  ? source === 'website'
+                    ? t('updateService.viewWebsite')
+                    : t('updateService.viewGitHub')
+                  : t('updateNotification.details')
+              }}
             </button>
             <button
               class="close-btn"
@@ -70,6 +79,9 @@ const props = defineProps<{
   releaseUrl: string;
   /** Release notes summary (first 2-3 lines displayed, max ~120 chars). */
   releaseNotes?: string;
+  downloadUrl?: string | null;
+  unverified?: boolean;
+  source?: 'website' | 'github' | 'confirmed';
 }>();
 const { t } = useI18n();
 
@@ -146,6 +158,9 @@ function close(): void {
 
 function openRelease(): void {
   void openExternalUrl(props.releaseUrl);
+}
+function openDownload(): void {
+  if (props.downloadUrl) void openExternalUrl(props.downloadUrl);
 }
 
 // ─── Watchers ──────────────────────────────────────────────────────────

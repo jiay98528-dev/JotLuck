@@ -84,11 +84,13 @@ export interface DownloadContent {
   platforms: Array<{ name: string; state: string }>;
   honestyTitle: string;
   honestyBody: string;
-  /** Preview 下载区文案（裁决 33；版本/SHA-256/链接等事实值在 release.ts RELEASE.preview） */
+  /** 下载区文案（版本/SHA-256/链接等事实值在 public/updates/v1.json） */
   previewTitle: string;
+  previousVersionLabel: string;
   downloadBtn: string;
   downloadBtnLinux: string;
   downloadBtnMac: string;
+  downloadBtnMacMirror: string;
   /** GitHub 下载页分流按钮（品牌名不译；URL 在 release.ts EXTERNAL.githubReleases） */
   githubBtn: string;
   releaseBtn: string;

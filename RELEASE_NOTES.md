@@ -1,3 +1,44 @@
+# JotLuck v0.15.0-preview — Preview Release Notes
+
+> Date: 2026-09-17
+> Mac-only preview release preparation. Windows x64 and Linux x86_64 remain on
+> the archived `v0.14.0-preview` package line. The v0.15 DMG is not published
+> until its build, checksum, GitHub Release and website manifest are verified.
+
+## What's new in 0.15.0
+
+- **Mac-only Apple Silicon preview.** This release is scoped to macOS Apple
+  Silicon. Windows x64 and Linux x86_64 continue to use their published v0.14
+  Preview packages and are not relabeled as v0.15.
+- **Cold start opens the requested file directly.** Opening an existing `.md`
+  file creates only the read-only preview page. The blank editor appears only
+  when JotLuck is launched from its application icon.
+- **Opt-in background update information.** Users can enable automatic checks
+  from the new welcome screen or Settings. While JotLuck is running it checks
+  the official website manifest and the matching public GitHub Release. No
+  notebook content, path, or device identifier is sent, and updates are not
+  downloaded or installed automatically.
+- **A new welcome first screen.** New users see the update choice immediately;
+  existing users see this release's update introduction once, without losing
+  their previous preference. The choice can be changed later in Settings.
+- **Unsigned, ad-hoc-signed macOS package.** The Apple Silicon DMG is not
+  notarized. If Gatekeeper warns on first launch, right-click the app and
+  choose Open.
+
+## Distribution
+
+The macOS Apple Silicon DMG is built and verified, pending GitHub Release and
+website manifest publication. Artifact: `JotLuck_0.15.0-preview_aarch64.dmg`,
+41,897,964 bytes, SHA-256
+`243fe521f1c243b04669b101a6470c666cb8f50a2a287dc8587f0b398a310ea7`. After
+publication, the canonical download URL is
+`https://github.com/jiay98528-dev/JotLuck/releases/download/v0.15.0-preview/JotLuck_0.15.0-preview_aarch64.dmg`.
+
+Windows x64 and Linux x86_64 remain available through the archived
+`v0.14.0-preview` Release. See the v0.14 notes below for their package facts.
+
+---
+
 # JotLuck v0.14.0-preview — Preview Release Notes
 
 > Date: 2026-09-08

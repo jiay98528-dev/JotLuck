@@ -41,6 +41,7 @@ const SITE_ROOT = fileURLToPath(new URL('..', import.meta.url)); // scripts/ 的
 const DIST = join(SITE_ROOT, 'dist');
 
 const SITE_URL = 'https://jotluck.com';
+const EXTERNAL_RELEASES_URL = 'https://github.com/jiay98528-dev/JotLuck/releases';
 const CARD_URL = `${SITE_URL}/assets/brand/social-preview.png`;
 const LOCALES = ['zh', 'en', 'ja', 'ko', 'fr'];
 const TAGS = { zh: 'zh-CN', en: 'en', ja: 'ja', ko: 'ko', fr: 'fr' };
@@ -67,14 +68,36 @@ const EXPECTED_FONT_PRELOADS = {
 const EXPECTED_ORG_NAME = '鸰湖科技（深圳）有限公司';
 const EXPECTED_ORG_ALT = 'LeankomStudio';
 
-/** (k) 下载页 Preview 事实期望（裁决 33，与 src/release.ts RELEASE.preview 同源；改版本须同步——护栏意义即在此） */
-const EXPECTED_PREVIEW = {
-  exe: 'https://github.com/jiay98528-dev/JotLuck/releases/download/v0.14.0-preview/JotLuck_0.14.0_x64-setup.exe',
-  tag: 'https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.14.0-preview',
-  sha: 'd78a8a0e601154c3f9c79021ffe853c1f4925866fba2f4119cbf64adef08b8f4',
-  policy: 'https://github.com/jiay98528-dev/JotLuck/blob/main/CODE_SIGNING.md',
-  releases: 'https://github.com/jiay98528-dev/JotLuck/releases',
-};
+/** (k) 下载页发布事实从唯一公开更新清单派生。 */
+const UPDATE_MANIFEST = JSON.parse(readFileSync(join(SITE_ROOT, 'public/updates/v1.json'), 'utf8'));
+const ARCHIVED_PREVIEW_MANIFEST = JSON.parse(
+  readFileSync(join(SITE_ROOT, 'public/updates/archive/v0.14.0-preview.json'), 'utf8'),
+);
+const ACTIVE_RELEASE =
+  (UPDATE_MANIFEST.channels.stable.enabled && UPDATE_MANIFEST.channels.stable.release) ||
+  (UPDATE_MANIFEST.channels.preview.enabled && UPDATE_MANIFEST.channels.preview.release) ||
+  null;
+const ARCHIVED_RELEASE = ARCHIVED_PREVIEW_MANIFEST.channels.preview.release;
+const PLATFORM_FACTS = [
+  ['windows', 'x86_64', 'nsis'],
+  ['macos', 'aarch64', 'dmg'],
+  ['linux', 'x86_64', 'deb'],
+].map(([os, arch, packageType]) => {
+  const current = ACTIVE_RELEASE?.assets.find(
+    (asset) => asset.os === os && asset.arch === arch && asset.packageType === packageType,
+  );
+  const archived = ARCHIVED_RELEASE?.assets.find(
+    (asset) => asset.os === os && asset.arch === arch && asset.packageType === packageType,
+  );
+  return { asset: current ?? archived, release: current ? ACTIVE_RELEASE : ARCHIVED_RELEASE };
+});
+const EXPECTED_RELEASE = ACTIVE_RELEASE
+  ? {
+      tag: ACTIVE_RELEASE.releaseUrl,
+      policy: 'https://github.com/jiay98528-dev/JotLuck/blob/main/CODE_SIGNING.md',
+      releases: 'https://github.com/jiay98528-dev/JotLuck/releases',
+    }
+  : null;
 
 let passCount = 0;
 let failCount = 0;
@@ -121,7 +144,9 @@ function expectationFor(path) {
   if (path === 'index.html') {
     return { pageKind: 'gate', lang: 'en', canonical: `${SITE_URL}/` };
   }
-  const m = /^([a-z]{2})\/(index\.html|(download|themes|studio|privacy|changelog)\.html)$/.exec(path);
+  const m = /^([a-z]{2})\/(index\.html|(download|themes|studio|privacy|changelog)\.html)$/.exec(
+    path,
+  );
   if (!m) return null;
   const locale = m[1];
   const pageKind = m[2] === 'index.html' ? 'home' : m[3];
@@ -397,18 +422,29 @@ for (const rel of expectedFiles) {
   // (i) 全站 26 页（含门页，裁决 32 门页补 JSON-LD）：恰好 1 个且可解析
   checkJsonLd(html, rel);
 
-  // (k) 五语下载页 Preview 事实（裁决 33）：exe 直链 / Release tag 页 / 完整 SHA-256 三者齐全
+  // (k) 五语下载页发布事实：由唯一更新清单派生；无候选时只断言安全回退。
   if (exp.pageKind === 'download') {
-    check(html.includes(EXPECTED_PREVIEW.exe), `Preview exe 直链`, EXPECTED_PREVIEW.exe);
-    check(html.includes(EXPECTED_PREVIEW.tag), `Preview tag 页`, EXPECTED_PREVIEW.tag);
-    check(html.includes(EXPECTED_PREVIEW.sha), `Preview SHA-256`, EXPECTED_PREVIEW.sha);
+    if (EXPECTED_RELEASE) {
+      for (const { asset, release } of PLATFORM_FACTS) {
+        if (!asset || !release) continue;
+        check(html.includes(asset.url), `发布 ${asset.os} 下载直链`, asset.url);
+        check(html.includes(asset.sha256), `发布 ${asset.os} SHA-256`, asset.sha256);
+        check(html.includes(release.releaseUrl), `发布 ${asset.os} tag 页`, release.releaseUrl);
+      }
+    } else {
+      check(!html.includes('/releases/download/'), `无候选时不显示下载直链`, '清单无已启用发布');
+    }
     // (k2) 代码签名政策链接（裁决 35，SignPath 审查披露项）
-    check(html.includes(EXPECTED_PREVIEW.policy), `签名政策链接`, EXPECTED_PREVIEW.policy);
+    check(
+      html.includes(EXPECTED_RELEASE?.policy ?? 'CODE_SIGNING.md'),
+      `签名政策链接`,
+      EXPECTED_RELEASE?.policy ?? 'CODE_SIGNING.md',
+    );
     // (k4) GitHub 分流按钮（裁决 39）：releases 索引直链（带引号精确匹配，区别 tag 链接）
     check(
-      html.includes(`href="${EXPECTED_PREVIEW.releases}"`),
+      html.includes(`href="${EXPECTED_RELEASE?.releases ?? EXTERNAL_RELEASES_URL}"`),
       `GitHub 分流链接`,
-      EXPECTED_PREVIEW.releases,
+      EXPECTED_RELEASE?.releases ?? EXTERNAL_RELEASES_URL,
     );
   }
 
@@ -416,7 +452,11 @@ for (const rel of expectedFiles) {
   if (/^[a-z]{2}\/index\.html$/.test(rel)) {
     checkStatementH1(html, rel);
     // (k3) 首页页脚签名政策链接（裁决 37，SignPath 首页披露项）
-    check(html.includes(EXPECTED_PREVIEW.policy), `页脚签名政策链接`, EXPECTED_PREVIEW.policy);
+    check(
+      html.includes(EXPECTED_RELEASE?.policy ?? 'CODE_SIGNING.md'),
+      `页脚签名政策链接`,
+      EXPECTED_RELEASE?.policy ?? 'CODE_SIGNING.md',
+    );
   }
 }
 

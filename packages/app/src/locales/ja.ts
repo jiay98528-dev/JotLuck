@@ -1,6 +1,29 @@
 import type { MessageSchema } from './zh-CN';
 
 export const messages = {
+  updateService: {
+    viewWebsite: '公式サイトを見る',
+    viewGitHub: 'GitHub の公開ページを見る',
+    previousResult:
+      '前回の確認ではバージョン {version} が見つかりました。この結果はまだ再確認されていません。',
+    unsupported: 'このシステムとアーキテクチャに対応するインストーラーはありません。',
+    noUpdate: 'このチャンネルに利用可能な更新はありません。',
+    welcomeTitle: '新しい JotLuck へようこそ',
+    autoCheck: '更新情報を自動取得',
+    consent:
+      '有効にすると、アプリの実行中に公式サイトと GitHub のバージョン情報を定期的に確認します。ノート内容は送信せず、自動ダウンロードやインストールも行いません。設定でいつでも無効にできます。',
+    saveFailed: '設定を保存できませんでした。再試行してください。',
+    desktopOnly: 'インストール済みのデスクトップアプリで更新を確認してください。',
+    channel: '更新チャンネル',
+    stable: '安定版',
+    preview: 'プレビュー版と安定版',
+    current: '現在のバージョン {version}',
+    lastChecked: '前回の確認成功 {date}',
+    unverified: 'バージョン情報が見つかりましたが、公式サイトと GitHub の確認は未完了です。',
+    outOfSync: '公開情報が同期されていません。ダウンロードはまだ推奨できません。',
+    download: 'ダウンロードへ',
+    viewSource: '公開元を確認',
+  },
   common: {
     appName: 'JotLuck',
     close: '閉じる',

@@ -273,6 +273,7 @@ export async function waitForAppReady(page: Page): Promise<void> {
   // Without this, the welcome overlay intercepts all pointer events in tests.
   await page.addInitScript(() => {
     localStorage.setItem('jotluck:welcome:completed', '1');
+    localStorage.setItem('jotluck:welcome:revision', 'updates-opt-in-v1');
     if (!localStorage.getItem('jotluck:locale:v1')) {
       localStorage.setItem('jotluck:locale:v1', 'zh-CN');
     }
@@ -327,6 +328,7 @@ export async function waitForCleanAppReady(page: Page): Promise<void> {
     sessionStorage.clear();
     sessionStorage.setItem(cleanBootMarker, '1');
     localStorage.setItem('jotluck:welcome:completed', '1');
+    localStorage.setItem('jotluck:welcome:revision', 'updates-opt-in-v1');
     localStorage.setItem('jotluck:locale:v1', 'zh-CN');
   });
   await waitForAppReady(page);
@@ -373,6 +375,7 @@ export async function resetAppState(page: Page): Promise<void> {
     keysToRemove.forEach((k) => localStorage.removeItem(k));
     sessionStorage.clear();
     localStorage.setItem('jotluck:welcome:completed', '1');
+    localStorage.setItem('jotluck:welcome:revision', 'updates-opt-in-v1');
     localStorage.setItem('jotluck:locale:v1', 'zh-CN');
   });
   await page.reload({ waitUntil: 'domcontentloaded' });

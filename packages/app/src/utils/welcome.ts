@@ -10,6 +10,5 @@ export function markWelcomeCompleted(): void {
 }
 
 export function requestWelcomeReplay(): void {
-  localStorage.removeItem(WELCOME_COMPLETED_KEY);
   window.dispatchEvent(new Event(WELCOME_REPLAY_EVENT));
 }

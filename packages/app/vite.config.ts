@@ -54,7 +54,7 @@ function startupModulePreload(): Plugin {
 export default defineConfig({
   plugins: [vue(), startupModulePreload()],
   define: {
-    __APP_VERSION__: JSON.stringify(packageJson.version),
+    __APP_VERSION__: JSON.stringify(process.env.JOTLUCK_RELEASE_VERSION || packageJson.version),
   },
   resolve: {
     alias: {

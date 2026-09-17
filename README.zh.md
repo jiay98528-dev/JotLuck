@@ -10,7 +10,7 @@
 
 <p align="center">
   <strong>文件就是笔记，文件夹就是笔记本。</strong><br>
-  一款轻量、本地优先、离线可用的 Windows Markdown 笔记工具。
+  一款轻量、本地优先、离线可用的 macOS Apple Silicon Markdown 笔记工具。
 </p>
 
 <p align="center">
@@ -38,9 +38,9 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 适合所有与文字打交道的人，也适合与 AI 协作的你。
 
-当前源码版本：`v0.14.0-preview`，Windows 公开预览版。经过完整测试，代码签名正在处理中。
+当前源码版本：`v0.15.0-preview`，Mac 专属预览版，正在准备发布。本版面向 macOS Apple Silicon；Windows x64 与 Linux x86_64 继续使用归档的 v0.14 Preview。
 
-> **下载提示：** 官方安装包只会出现在 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases)。`v0.14.0-preview` 安装包已上架，尚未签名——安装前请核对 SHA-256（`d78a8a0e601154c3f9c79021ffe853c1f4925866fba2f4119cbf64adef08b8f4`）。请勿从其他任何渠道下载 JotLuck。
+> **下载提示：** `v0.15.0-preview` 的 macOS Apple Silicon 安装包已经构建，正在等待 GitHub Release 与官网更新清单发布。文件为 `JotLuck_0.15.0-preview_aarch64.dmg`，41,897,964 bytes，SHA-256 为 `243fe521f1c243b04669b101a6470c666cb8f50a2a287dc8587f0b398a310ea7`。公开链接生效前，请仅使用归档的 `v0.14.0-preview` Windows/Linux 安装包。请勿从其他任何渠道下载 JotLuck。
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck 工作区，左侧是最近笔记，中间是 Markdown 编辑器，右侧是大纲与反向链接">
@@ -95,18 +95,22 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 ## 当前发行范围
 
-| 项目         | 当前范围                                                                                   |
-| ------------ | ------------------------------------------------------------------------------------------ |
-| 当前源码版本 | `v0.14.0-preview`                                                                          |
-| 发行阶段     | 公开预览版，未签名；不是稳定版                                                             |
-| 候选平台     | Windows x64 与 Linux x86_64 未签名预览已上架 GitHub Releases；macOS 尚未打包               |
-| 桌面运行时   | Tauri 2；Windows 为 WebView2，Linux 为 WebKitGTK 4.1                                       |
-| 可编辑格式   | `.md`、`.markdown`、`.mdx`、`.txt`                                                         |
-| 只读导入格式 | `.docx`、`.pdf`、`.xlsx`、`.xls`；提供 Markdown 语义预览，不承诺 Office/PDF 像素级版式复刻 |
-| 文件关联     | 八种扩展名均为可选“打开方式”；安装和升级都不替换用户在 Windows 中的默认选择                |
-| 许可证       | MIT                                                                                        |
+| 项目         | 当前范围                                                                                       |
+| ------------ | ---------------------------------------------------------------------------------------------- |
+| 当前源码版本 | `v0.15.0-preview`                                                                              |
+| 发行阶段     | 公开预览版，未签名；不是稳定版                                                                 |
+| 候选平台     | macOS Apple Silicon v0.15 Preview 正在准备；Windows x64 与 Linux x86_64 保留归档 v0.14 Preview |
+| 桌面运行时   | Tauri 2；Windows 为 WebView2，Linux 为 WebKitGTK 4.1                                           |
+| 可编辑格式   | `.md`、`.markdown`、`.mdx`、`.txt`                                                             |
+| 只读导入格式 | `.docx`、`.pdf`、`.xlsx`、`.xls`；提供 Markdown 语义预览，不承诺 Office/PDF 像素级版式复刻     |
+| 文件关联     | 八种扩展名均为可选“打开方式”；安装和升级都不替换用户在 Windows 中的默认选择                    |
+| 许可证       | MIT                                                                                            |
 
-Linux x86_64 未签名 `.deb` 已随 `v0.14.0-preview` 发布到 GitHub Releases（`JotLuck_0.14.0_amd64.deb`，SHA-256 `3d5f7b709c0eaf9fea2877593696c30cbc15f0a640733d208a040d8fc3a3ed77`）。本机构建请用 [`scripts/release/linux-preview-pack.sh`](./scripts/release/README-linux-preview.md)。macOS 版本尚未完成对应主机的打包、签名与发行验证。完整边界请阅读 [已知限制](./KNOWN_LIMITATIONS.md) 和每次发布附带的说明。
+本轮 v0.15 Preview 仅面向 Mac。macOS Apple Silicon 未 notarize、ad-hoc 签名的 `.dmg` 为 `JotLuck_0.15.0-preview_aarch64.dmg`（41,897,964 bytes，SHA-256 `243fe521f1c243b04669b101a6470c666cb8f50a2a287dc8587f0b398a310ea7`），正在等待 GitHub Release 与官网更新清单发布。Windows/Linux 上一次已发布的 v0.14 Preview 请根据 [归档更新清单](./site/public/updates/archive/v0.14.0-preview.json) 核对下载。完整边界请阅读 [已知限制](./KNOWN_LIMITATIONS.md) 和每次发布附带的说明。
+
+归档 v0.14 仍是公开 Windows 预览版，并包含 Linux x86_64 `.deb`
+`JotLuck_0.14.0_amd64.deb`（SHA-256
+`3d5f7b709c0eaf9fea2877593696c30cbc15f0a640733d208a040d8fc3a3ed77`）。如需复现该归档 Linux 包，请使用 [`scripts/release/linux-preview-pack.sh`](./scripts/release/README-linux-preview.md)。
 
 ## 常见问题
 

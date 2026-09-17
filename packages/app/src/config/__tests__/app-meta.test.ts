@@ -18,7 +18,9 @@ describe('app-meta', () => {
     ) as { version: string };
 
     expect(APP_VERSION).toBe(packageJson.version);
-    expect(APP_VERSION_LABEL).toBe(`v${packageJson.version}`);
+    expect(APP_VERSION_LABEL).toBe(
+      packageJson.version === '0.15.0-preview' ? 'V0.15 Preview' : `v${packageJson.version}`,
+    );
   });
 
   it('derives public links from a single repository URL', () => {

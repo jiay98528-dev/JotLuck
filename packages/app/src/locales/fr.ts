@@ -1,6 +1,30 @@
 import type { MessageSchema } from './zh-CN';
 
 export const messages = {
+  updateService: {
+    viewWebsite: 'Voir le site officiel',
+    viewGitHub: 'Voir la publication GitHub',
+    previousResult:
+      'La dernière vérification réussie a trouvé la version {version} ; ce résultat n’a pas encore été revérifié.',
+    unsupported: 'Aucun programme d’installation disponible pour ce système et cette architecture.',
+    noUpdate: 'Aucune mise à jour disponible sur ce canal.',
+    welcomeTitle: 'Bienvenue dans le nouveau JotLuck',
+    autoCheck: 'Obtenir automatiquement les informations de mise à jour',
+    consent:
+      'Lorsque cette option est activée, l’application en cours d’exécution vérifie régulièrement le site officiel et GitHub. Aucune note n’est envoyée. Aucun téléchargement ni installation automatique. Vous pouvez désactiver cette option dans les paramètres.',
+    saveFailed: 'Impossible d’enregistrer les paramètres. Réessayez.',
+    desktopOnly: 'Vérifiez les mises à jour dans l’application de bureau installée.',
+    channel: 'Canal de mise à jour',
+    stable: 'Versions stables',
+    preview: 'Préversions et versions stables',
+    current: 'Version actuelle {version}',
+    lastChecked: 'Dernière vérification réussie {date}',
+    unverified: 'Informations trouvées, mais la vérification du site et de GitHub est incomplète.',
+    outOfSync:
+      'Les informations de publication ne sont pas synchronisées. Le téléchargement n’est pas encore recommandé.',
+    download: 'Accéder au téléchargement',
+    viewSource: 'Voir la source de publication',
+  },
   common: {
     appName: 'JotLuck',
     close: 'Fermer',

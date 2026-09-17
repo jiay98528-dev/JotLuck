@@ -26,7 +26,7 @@ export const zh: SiteContent = {
       privacy:
         'JotLuck 隐私说明：这款开源 Markdown 笔记软件完全离线运行，笔记以纯文本文件保存在你自己的文件夹中——写作无需账号、无遥测。本站为静态网站，不使用 Cookie 与分析追踪。',
       changelog:
-        'JotLuck 更新日志：桌面预览版的每一次发布记录——本地补全、导出、搜索与主题持续改进，全部公开可查，免费开源，无需注册。',
+        'JotLuck 更新日志：桌面预览版的每一次发布记录——本地补全、导出、搜索与主题持续改进，全部公开可查，免费开源，无需注册，并标注 Mac-only v0.15 与归档平台版本。',
     },
   },
   localeName: '中文',
@@ -98,21 +98,23 @@ export const zh: SiteContent = {
   download: {
     eyebrow: '下载',
     title: 'Preview 已上架。',
-    lead: 'Windows x64、macOS Apple Silicon 与 Linux x86_64 预览版现在均可下载。纯文本从不挑平台，你的笔记在任何系统上都是本地文件。',
+    lead: 'v0.15 Preview 现已提供 macOS Apple Silicon 版本。Windows x64 与 Linux x86_64 继续提供归档的 v0.14 Preview。纯文本从不挑平台，你的笔记在任何系统上都是本地文件。',
     statusLabel: '首发平台',
-    statusValue: 'Windows x64',
+    statusValue: 'macOS Apple Silicon',
     platformTitle: '平台',
     platforms: [
-      { name: 'Windows x64', state: 'Preview 已上架' },
-      { name: 'macOS Apple Silicon', state: 'Preview 已上架' },
-      { name: 'Linux x86_64', state: 'Preview 已上架' },
+      { name: 'Windows x64', state: '归档 v0.14 Preview' },
+      { name: 'macOS Apple Silicon', state: 'v0.15 Preview 已上架' },
+      { name: 'Linux x86_64', state: '归档 v0.14 Preview' },
     ],
     honestyTitle: '预览版先行。',
     honestyBody: '预览版安装包已上架 GitHub Releases——可下载、可校验、可回退。',
-    previewTitle: 'v0.14.0 Preview',
+    previewTitle: 'v0.15.0 Preview · Mac 首发',
+    previousVersionLabel: '归档 v0.14 Preview',
     downloadBtn: '下载 Preview（Windows x64）',
     downloadBtnLinux: '下载 Preview（Linux .deb）',
     downloadBtnMac: '下载 Preview（macOS .dmg）',
+    downloadBtnMacMirror: 'Mac 官网镜像',
     githubBtn: 'GitHub',
     releaseBtn: 'Release 说明与校验',
     signNote:

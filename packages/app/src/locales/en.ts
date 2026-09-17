@@ -1,6 +1,29 @@
 import type { MessageSchema } from './zh-CN';
 
 export const messages = {
+  updateService: {
+    viewWebsite: 'View website',
+    viewGitHub: 'View GitHub release',
+    previousResult:
+      'The last successful check found version {version}; this result has not been revalidated.',
+    unsupported: 'No installer is available for this system and architecture.',
+    noUpdate: 'No update is available on this channel.',
+    welcomeTitle: 'Welcome to the new JotLuck',
+    autoCheck: 'Automatically get update information',
+    consent:
+      'When enabled, the running app periodically checks the website and GitHub. No note content is uploaded. Updates are not downloaded or installed automatically. You can turn this off in settings.',
+    saveFailed: 'Could not save settings. Please try again.',
+    desktopOnly: 'Check for updates in the installed desktop app.',
+    channel: 'Update channel',
+    stable: 'Stable releases',
+    preview: 'Preview and stable releases',
+    current: 'Current version {version}',
+    lastChecked: 'Last successful check {date}',
+    unverified: 'Version information found; website and GitHub verification is incomplete.',
+    outOfSync: 'Release information is not synchronized. Download is not recommended yet.',
+    download: 'Go to download',
+    viewSource: 'View release source',
+  },
   common: {
     appName: 'JotLuck',
     close: 'Close',

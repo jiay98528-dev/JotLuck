@@ -18,7 +18,7 @@ export const fr: SiteContent = {
     },
     pageDescriptions: {
       download:
-        'Téléchargez la Preview de JotLuck pour Windows x64, macOS Apple Silicon et Linux x86_64 : notes Markdown gratuites et open source, hors ligne. Chaque note reste un fichier texte dans votre dossier.',
+        'Préversion v0.15 pour macOS Apple Silicon ; l’archive v0.14 reste disponible pour Windows et Linux. Notes Markdown open source, hors ligne, en fichiers locaux.',
       themes:
         "Thèmes de JotLuck, notes Markdown gratuites et open source : Paper, Halo Canvas, Lumen Field — chacun remodèle l'espace de travail, du papier aux fenêtres.",
       studio:
@@ -101,22 +101,24 @@ export const fr: SiteContent = {
   download: {
     eyebrow: 'Téléchargement',
     title: 'La Preview est en ligne.',
-    lead: 'Les Previews Windows x64, macOS Apple Silicon et Linux x86_64 sont prêtes à télécharger dès maintenant. Le texte brut ne choisit jamais sa plateforme, et vos notes restent des fichiers locaux sur tous les systèmes.',
+    lead: 'La Preview v0.15 est disponible pour macOS Apple Silicon. Windows x64 et Linux x86_64 restent disponibles dans la Preview v0.14 archivée. Vos notes restent des fichiers locaux sur tous les systèmes.',
     statusLabel: 'Première plateforme',
-    statusValue: 'Windows x64',
+    statusValue: 'macOS Apple Silicon',
     platformTitle: 'Plateformes',
     platforms: [
-      { name: 'Windows x64', state: 'Preview en ligne' },
-      { name: 'macOS Apple Silicon', state: 'Preview en ligne' },
-      { name: 'Linux x86_64', state: 'Preview en ligne' },
+      { name: 'Windows x64', state: 'Preview v0.14 archivée' },
+      { name: 'macOS Apple Silicon', state: 'Preview v0.15 en ligne' },
+      { name: 'Linux x86_64', state: 'Preview v0.14 archivée' },
     ],
     honestyTitle: "La Preview d'abord.",
     honestyBody:
       "L'installateur Preview est déjà sur GitHub Releases — téléchargeable, vérifiable, réversible.",
-    previewTitle: 'v0.14.0 Preview',
+    previewTitle: 'v0.15.0 Preview · Mac en premier',
+    previousVersionLabel: 'Preview v0.14 archivée',
     downloadBtn: 'Télécharger la Preview (Windows x64)',
     downloadBtnLinux: 'Télécharger la Preview (Linux .deb)',
     downloadBtnMac: 'Télécharger la Preview (macOS .dmg)',
+    downloadBtnMacMirror: 'Miroir officiel Mac',
     githubBtn: 'GitHub',
     releaseBtn: 'Notes de version et checksum',
     signNote:

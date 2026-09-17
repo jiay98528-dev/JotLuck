@@ -1,15 +1,15 @@
 # Known Limitations
 
-This document describes limitations for JotLuck `v0.14.0-preview`. These are not
+This document describes limitations for JotLuck `v0.15.0-preview`. These are not
 marketing claims; they are the remaining release constraints and expected
 behavior boundaries.
 
 ## Preview Status
 
-- `v0.14.0-preview` is the current public, unsigned preview of the source,
-  and is not a stable release. The Windows installer for this version is not
-  yet published; once published on GitHub Releases it may trigger a Windows
-  SmartScreen warning. Windows code signing is in progress.
+- `v0.15.0-preview` is the Mac-only preview line for this release cycle, and is
+  not a stable release. It targets macOS Apple Silicon and uses an unsigned,
+  ad-hoc-signed DMG. The public Windows x64 and Linux x86_64 packages remain
+  on the archived `v0.14.0-preview` line.
 - This preview does not claim complete installed-app release evidence, final
   Rust audit evidence, signing, notarization, or host-specific validation for
   every supported platform.
@@ -35,9 +35,12 @@ behavior boundaries.
 
 ## Desktop App Limits
 
-- The current Windows preview is unsigned. Its only official public download
-  is the `v0.14.0-preview` GitHub Release; verify the SHA-256 published on
-  that page before installation.
+- The current Mac preview is ad-hoc signed rather than notarized. On first
+  launch, macOS may require right-clicking the app and choosing Open. Verify
+  `JotLuck_0.15.0-preview_aarch64.dmg` (41,897,964 bytes; SHA-256
+  `243fe521f1c243b04669b101a6470c666cb8f50a2a287dc8587f0b398a310ea7`) against
+  the GitHub Release and official update manifest before installation. Those
+  public links are pending publication at the time of this source note.
 - Tauri shell access is limited to the scoped `shell:default` capability.
   Unscoped `shell:allow-open`, `process:*`, and `fs:*` capabilities are not
   granted in the default desktop capability file.
@@ -52,8 +55,9 @@ behavior boundaries.
   handler on install; that is host behavior, not a claimed default-app
   override. Some WebKitGTK sessions need
   `WEBKIT_DISABLE_DMABUF_RENDERER=1` (the Linux binary sets this when unset).
-- macOS packages still need host-specific packaging, signing, and
-  release validation.
+- Windows and Linux are not rebuilt for v0.15; their archived v0.14 packages
+  remain available with their original checksums. macOS v0.15 still requires
+  host-specific release validation and notarization is not included.
 
 ## Rust Dependency Audit Warnings
 

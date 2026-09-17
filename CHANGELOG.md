@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.15.0-preview] - 2026-09-17
+
+### Added (macOS Apple Silicon preview)
+
+- Mac-only preview track for this release cycle. Windows x64 and Linux x86_64
+  continue to use the archived `v0.14.0-preview` packages.
+- Fixed cold-start file opening so opening an existing `.md` file creates only
+  its read-only preview; the blank editor appears only when launching JotLuck
+  directly.
+- Added opt-in background update checks. When enabled, the app checks the
+  official website manifest and the matching public GitHub Release while it is
+  running; it never uploads notebook content or installs updates automatically.
+- Added a first-screen welcome explanation for the update setting, including
+  the same choice for new users and a one-time re-prompt for existing users.
+- macOS Apple Silicon distribution uses an unsigned, ad-hoc-signed DMG and
+  requires right-click → Open on first launch when Gatekeeper asks for it.
+
+### Distribution status
+
+The v0.15.0-preview macOS package is built and verified, pending GitHub Releases
+and official website publication. Artifact: `JotLuck_0.15.0-preview_aarch64.dmg`,
+41,897,964 bytes, SHA-256
+`243fe521f1c243b04669b101a6470c666cb8f50a2a287dc8587f0b398a310ea7`. The
+archived v0.14.0-preview remains the Windows/Linux download source.
+
 ## [0.14.0-preview] - 2026-09-08
 
 ### Added (macOS port — 2026-09-11)

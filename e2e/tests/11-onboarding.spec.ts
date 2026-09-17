@@ -42,7 +42,11 @@ test.describe('启动体验', () => {
 
   test('01-首次访问显示欢迎向导，跳过后记录完成状态', async ({ page }) => {
     await expect(page.getByRole('dialog', { name: 'JotLuck' })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('你的笔记就是纯文本文件')).toBeVisible();
+    await expect(page.getByText('欢迎使用新版 JotLuck')).toBeVisible();
+    await expect(page.getByRole('switch', { name: '自动获取更新信息' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
     await skipWelcome(page);
     await expect
       .poll(() => page.evaluate(() => localStorage.getItem('jotluck:welcome:completed')))
@@ -78,6 +82,7 @@ test.describe('启动体验', () => {
     await next.click();
     await next.click();
     await next.click();
+    await next.click();
 
     await expect(page.getByRole('heading', { name: '选择用 JotLuck 打开的文件' })).toBeVisible();
     const choices = page.locator('.welcome-association-checkbox');
@@ -99,5 +104,41 @@ test.describe('启动体验', () => {
     await textChoice.check();
     await expect(textChoice).toBeChecked();
     await expect(textChoice.locator('xpath=..')).toContainText('当前平台不支持');
+  });
+
+  test('06-新版欢迎首屏立即保存更新选择，跳过不会撤销选择', async ({ page }) => {
+    const updateSwitch = page.getByRole('switch', { name: '自动获取更新信息' });
+    await updateSwitch.click();
+    await expect(updateSwitch).toHaveAttribute('aria-checked', 'true');
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem('jotluck:version:autoCheck')))
+      .toBe('true');
+    await skipWelcome(page);
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem('jotluck:welcome:revision')))
+      .toBe('updates-opt-in-v1');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.welcome-overlay')).toHaveCount(0);
+  });
+
+  test('07-老用户升级只看一屏介绍且保留此前关闭的选择', async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem('jotluck:welcome:completed', '1');
+      localStorage.setItem('jotluck:version:autoCheck', 'false');
+      localStorage.removeItem('jotluck:welcome:revision');
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: '欢迎使用新版 JotLuck' })).toBeVisible();
+    await expect(page.getByRole('switch', { name: '自动获取更新信息' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
+    await page.getByRole('button', { name: '完成设置' }).click();
+    await expect(page.locator('.welcome-overlay')).toHaveCount(0);
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem('jotluck:version:autoCheck')))
+      .toBe('false');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.welcome-overlay')).toHaveCount(0);
   });
 });

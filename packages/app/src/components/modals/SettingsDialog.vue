@@ -341,21 +341,47 @@
               <h3 class="section-title">{{ t('settings.updates.title') }}</h3>
 
               <div class="setting-row">
-                <span class="setting-label">{{ t('settings.updates.autoCheck') }}</span>
-                <span
+                <span id="settings-update-label" class="setting-label">{{
+                  t('updateService.autoCheck')
+                }}</span>
+                <button
                   class="toggle-track"
                   :class="{ active: autoCheckUpdates }"
+                  type="button"
+                  :disabled="savingUpdates"
                   role="switch"
-                  tabindex="0"
-                  :aria-label="t('settings.updates.autoCheck')"
+                  aria-labelledby="settings-update-label"
                   :aria-checked="autoCheckUpdates"
-                  @click="autoCheckUpdates = !autoCheckUpdates"
-                  @keydown.enter.prevent="autoCheckUpdates = !autoCheckUpdates"
-                  @keydown.space.prevent="autoCheckUpdates = !autoCheckUpdates"
+                  @click="setUpdatePreferences(!autoCheckUpdates)"
                 >
                   <span class="toggle-thumb"></span>
-                </span>
+                </button>
               </div>
+              <p class="setting-help">{{ t('updateService.consent') }}</p>
+              <div class="setting-row">
+                <label for="update-channel" class="setting-label">{{
+                  t('updateService.channel')
+                }}</label>
+                <select
+                  id="update-channel"
+                  :value="updateState.channel"
+                  :disabled="savingUpdates"
+                  @change="onUpdateChannel"
+                >
+                  <option value="stable">{{ t('updateService.stable') }}</option>
+                  <option value="preview">{{ t('updateService.preview') }}</option>
+                </select>
+              </div>
+              <p class="setting-help">
+                {{ t('updateService.current', { version: updateState.currentVersion }) }}
+              </p>
+              <p v-if="updateState.lastChecked" class="setting-help">
+                {{
+                  t('updateService.lastChecked', {
+                    date: formatDate(new Date(updateState.lastChecked)),
+                  })
+                }}
+              </p>
 
               <div class="setting-row disabled">
                 <span class="setting-label">{{ t('settings.updates.autoInstall') }}</span>
@@ -372,6 +398,28 @@
               </div>
 
               <p v-if="updateStatus" class="setting-help">{{ updateStatus }}</p>
+              <p
+                v-if="updateState.status === 'failed' && updateState.candidate"
+                class="setting-help"
+              >
+                {{ t('updateService.previousResult', { version: updateState.candidate.version }) }}
+              </p>
+              <p v-if="updateError" class="setting-help" role="alert">{{ updateError }}</p>
+              <button
+                v-if="
+                  updateState.candidate && ['available', 'unverified'].includes(updateState.status)
+                "
+                class="segment-btn"
+                @click="openUpdatePage"
+              >
+                {{
+                  updateState.status === 'available'
+                    ? t('updateService.download')
+                    : updateState.candidate.source === 'website'
+                      ? t('updateService.viewWebsite')
+                      : t('updateService.viewGitHub')
+                }}
+              </button>
             </section>
 
             <section v-show="activeTab === 'about'" class="section">
@@ -407,9 +455,7 @@ import { useI18n } from 'vue-i18n';
 import {
   APP_ISSUES_URL,
   APP_LICENSE_URL,
-  APP_RELEASES_API_URL,
   APP_REPOSITORY_URL,
-  APP_VERSION,
   APP_VERSION_LABEL,
 } from '@/config/app-meta';
 import {
@@ -418,6 +464,8 @@ import {
 } from '@/services/CompletionSettings';
 import type { CompletionTrainingMeta } from '@/services/CompletionTrainingService';
 import { useDialogFocus } from '@/composables/useDialogFocus';
+import { useVersionCheck, type UpdateChannel } from '@/composables/useVersionCheck';
+import { openExternalUrl } from '@/utils/urlUtils';
 import { requestWelcomeReplay } from '@/utils/welcome';
 import { formatDate } from '@/i18n';
 import { useLocale } from '@/composables/useLocale';
@@ -503,11 +551,28 @@ const autoCompleteEnabled = ref(props.completionSettings.enabled);
 const backgroundTraining = ref(props.completionSettings.backgroundTraining);
 const personalization = ref(props.completionSettings.personalization);
 
-const AUTO_CHECK_KEY = 'jotluck:version:autoCheck';
-const AUTO_INSTALL_KEY = 'jotluck:version:autoInstall';
-const autoCheckUpdates = ref(localStorage.getItem(AUTO_CHECK_KEY) === 'true');
-const checking = ref(false);
-const updateStatus = ref('');
+const {
+  state: updateState,
+  autoCheck: autoCheckUpdates,
+  checking,
+  saving: savingUpdates,
+  error: updateError,
+  setPreferences: setUpdatePreferences,
+  checkNow,
+  initialize: initializeUpdates,
+} = useVersionCheck();
+const updateStatus = computed(() => {
+  if (updateState.value.status === 'idle') return '';
+  if (updateState.value.status === 'available')
+    return t('settings.updates.newVersion', { version: updateState.value.candidate?.version });
+  if (updateState.value.status === 'latest') return t('updateService.noUpdate');
+  if (updateState.value.status === 'checking') return t('settings.updates.checking');
+  if (updateState.value.status === 'failed') return t('settings.updates.failed');
+  if (updateState.value.status === 'unverified') return t('updateService.unverified');
+  if (updateState.value.status === 'unsupported') return t('updateService.unsupported');
+  return t('updateService.outOfSync');
+});
+void initializeUpdates().catch(() => {});
 const appVersion = APP_VERSION_LABEL;
 
 const aboutLinks = computed(() => [
@@ -594,13 +659,6 @@ watch(
   },
 );
 
-watch(autoCheckUpdates, (value) => {
-  localStorage.setItem(AUTO_CHECK_KEY, String(value));
-  if (!value) {
-    localStorage.setItem(AUTO_INSTALL_KEY, 'false');
-  }
-});
-
 watch(
   [() => props.visible, activeTab],
   ([visible, tab]) => {
@@ -660,28 +718,22 @@ async function openAssociationSettings(): Promise<void> {
 }
 
 async function onCheckUpdate(): Promise<void> {
-  if (checking.value) return;
-  checking.value = true;
-  updateStatus.value = '';
-  try {
-    const resp = await fetch(APP_RELEASES_API_URL);
-    if (!resp.ok) {
-      updateStatus.value = t('settings.updates.failed');
-      return;
-    }
-    const data = await resp.json();
-    const latest = data.tag_name || data.name || '';
-    const current = APP_VERSION;
-    const cleanVersion = (value: string) => value.replace(/^v/, '');
-    updateStatus.value =
-      latest && cleanVersion(latest) !== current
-        ? t('settings.updates.newVersion', { version: latest })
-        : t('settings.updates.latest');
-  } catch {
-    updateStatus.value = t('settings.updates.failed');
-  } finally {
-    checking.value = false;
-  }
+  await checkNow();
+}
+function onUpdateChannel(event: Event) {
+  const channel = (event.target as HTMLSelectElement).value as UpdateChannel;
+  void setUpdatePreferences(autoCheckUpdates.value, channel);
+}
+function openUpdatePage() {
+  const candidate = updateState.value.candidate;
+  if (candidate)
+    void openExternalUrl(
+      updateState.value.status === 'available'
+        ? (candidate.downloadUrl ?? candidate.releaseUrl)
+        : candidate.source === 'website'
+          ? 'https://jotluck.com/'
+          : candidate.releaseUrl,
+    );
 }
 
 function onReplayWelcome(): void {

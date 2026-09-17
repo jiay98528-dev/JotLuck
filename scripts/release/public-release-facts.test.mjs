@@ -46,11 +46,11 @@ describe('public release facts', () => {
       expect(document.content, document.file).not.toContain('v0.10.0-rc.1');
     }
 
-    expect(readDocument('README.md')).toContain('public Windows preview');
-    expect(readDocument('README.zh.md')).toContain('公开预览版');
-    expect(readDocument('KNOWN_LIMITATIONS.md')).toContain('public, unsigned preview');
-    expect(readDocument('RELEASE_NOTES.md')).toMatch(/public Windows x64 preview[\s\S]*unsigned/iu);
-    expect(readDocument('SECURITY.md')).toMatch(/public preview installer[\s\S]*unsigned/iu);
+    expect(readDocument('README.md')).toContain('Mac-only preview');
+    expect(readDocument('README.zh.md')).toContain('Mac 专属预览版');
+    expect(readDocument('KNOWN_LIMITATIONS.md')).toContain('Mac-only preview line');
+    expect(readDocument('RELEASE_NOTES.md')).toMatch(/Mac-only preview[\s\S]*ad-hoc-signed/iu);
+    expect(readDocument('SECURITY.md')).toMatch(/Mac-only preview[\s\S]*ad-hoc signed/iu);
     for (const document of publicDocuments) {
       expect(document.content, document.file).not.toMatch(
         /安装包已签名|\binstaller is signed|\bdigitally signed installer/iu,

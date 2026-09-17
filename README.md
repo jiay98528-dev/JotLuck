@@ -10,7 +10,7 @@
 
 <p align="center">
   <strong>Files are notes. Folders are notebooks.</strong><br>
-  A lightweight, local-first Markdown notebook for Windows that works offline.
+  A lightweight, local-first Markdown notebook for macOS Apple Silicon that works offline.
 </p>
 
 <p align="center">
@@ -31,16 +31,16 @@
   · <a href="https://github.com/jiay98528-dev/JotLuck/issues/new/choose">Send feedback</a>
 </p>
 
-JotLuck is a local-first Markdown notebook for Windows.
+JotLuck is a local-first Markdown notebook for Windows, macOS, and Linux.
 Notes are plain files in a folder you own. No account. No database. Nothing uploaded.
 
 It opens and renders Markdown in seconds, beautifully. Read-only preview or full editing, a workspace arranged your way — your call.
 
 For everyone who works with text, and everyone who works with AI.
 
-Current source version: `v0.14.0-preview`, a public Windows preview. Tested and usable. Windows code signing is in progress.
+Current source version: `v0.15.0-preview`, a Mac-only preview release in preparation. The v0.15 Preview targets macOS Apple Silicon; Windows x64 and Linux x86_64 remain available from the archived v0.14 Preview.
 
-> **Download notice:** Official installers appear only on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases). The `v0.14.0-preview` installer is published and unsigned — verify the SHA-256 (`d78a8a0e601154c3f9c79021ffe853c1f4925866fba2f4119cbf64adef08b8f4`) before installing. Please don't download JotLuck from anywhere else.
+> **Download notice:** The `v0.15.0-preview` macOS Apple Silicon package is prepared but is awaiting publication of its GitHub Release and official update manifest. The artifact is `JotLuck_0.15.0-preview_aarch64.dmg`, 41,897,964 bytes, SHA-256 `243fe521f1c243b04669b101a6470c666cb8f50a2a287dc8587f0b398a310ea7`. Until those public links are live, use the archived `v0.14.0-preview` packages for Windows/Linux only. Do not download JotLuck from anywhere else.
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck workspace with recent notes, a Markdown editor, outline, and backlinks">
@@ -97,16 +97,22 @@ See the full [Privacy Policy](./PRIVACY.md) and the identity and integrity proce
 
 | Item                     | Current scope                                                                                                                 |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| Current source version   | `v0.14.0-preview`                                                                                                             |
+| Current source version   | `v0.15.0-preview`                                                                                                             |
 | Release stage            | Public preview, unsigned; not a stable release                                                                                |
-| Candidate platform       | Windows x64 and Linux x86_64 unsigned previews on GitHub Releases; macOS not yet packaged                                     |
+| Candidate platform       | macOS Apple Silicon v0.15 Preview in preparation; Windows x64 and Linux x86_64 remain archived v0.14 Preview                  |
 | Desktop runtime          | Tauri 2; WebView2 on Windows, WebKitGTK 4.1 on Linux                                                                          |
 | Editable note formats    | `.md`, `.markdown`, `.mdx`, `.txt`                                                                                            |
 | Read-only import formats | `.docx`, `.pdf`, `.xlsx`, `.xls`; semantic Markdown preview, not pixel-perfect Office/PDF layout                              |
 | File associations        | All eight extensions are optional Open With choices; installation and upgrade never replace the user's Windows default choice |
 | License                  | MIT                                                                                                                           |
 
-Linux x86_64 unsigned `.deb` is published on the `v0.14.0-preview` GitHub Release (`JotLuck_0.14.0_amd64.deb`, SHA-256 `3d5f7b709c0eaf9fea2877593696c30cbc15f0a640733d208a040d8fc3a3ed77`). Rebuild on a Debian/Ubuntu 24.04-family host with [`scripts/release/linux-preview-pack.sh`](./scripts/release/README-linux-preview.md). macOS packages have not completed host-specific packaging, signing, or release validation. Read [Known Limitations](./KNOWN_LIMITATIONS.md) and the notes attached to each release before installing.
+The v0.15 Preview is Mac-only for this release cycle. Its unsigned, ad-hoc-signed macOS Apple Silicon DMG is `JotLuck_0.15.0-preview_aarch64.dmg` (41,897,964 bytes; SHA-256 `243fe521f1c243b04669b101a6470c666cb8f50a2a287dc8587f0b398a310ea7`). The package is awaiting GitHub and website publication. The archived v0.14 Preview remains the last published Windows/Linux package line; verify those downloads against the [archived manifest](./site/public/updates/archive/v0.14.0-preview.json). Read [Known Limitations](./KNOWN_LIMITATIONS.md) and the notes attached to each release before installing.
+
+The archived v0.14 line remains the public Windows preview and includes the
+Linux x86_64 `.deb` `JotLuck_0.14.0_amd64.deb` (SHA-256
+`3d5f7b709c0eaf9fea2877593696c30cbc15f0a640733d208a040d8fc3a3ed77`). Use
+[`scripts/release/linux-preview-pack.sh`](./scripts/release/README-linux-preview.md)
+only when reproducing that archived Linux package.
 
 ## Frequently asked questions
 

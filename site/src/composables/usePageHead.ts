@@ -48,7 +48,7 @@ export const JSON_LD = JSON.stringify({
       name: 'JotLuck',
       applicationCategory: 'BusinessApplication',
       operatingSystem: 'Windows, macOS, Linux',
-      softwareVersion: RELEASE.preview.version,
+      softwareVersion: RELEASE.current?.version ?? 'unreleased',
       url: SITE_URL,
       description:
         'Free, open-source Markdown notes app — local-first and offline; every note is a plain-text file.',
