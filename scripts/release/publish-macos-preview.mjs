@@ -82,8 +82,22 @@ const body = [
   '- Version manifest: https://jotluck.com/updates/v1.json',
 ].join('\n');
 let record = await api(`/releases/tags/${tag}`);
+// GitHub's by-tag endpoint may omit drafts. Locate the owner's draft through
+// the authenticated list instead of creating a second empty release.
+if (!record) {
+  const records = await api('/releases?per_page=100');
+  const drafts = records.filter((item) => item.tag_name === tag && item.draft);
+  record =
+    drafts.find((item) =>
+      item.assets.some((asset) => asset.name === name && asset.digest === `sha256:${sha256}`),
+    ) ??
+    drafts[0] ??
+    null;
+}
 if (record && !record.draft)
   throw new Error('This release is already published; refusing to overwrite it');
+if (!record && operation === 'publish')
+  throw new Error('No verified draft exists for this preview');
 if (!record)
   record = await api('/releases', 'POST', {
     tag_name: tag,

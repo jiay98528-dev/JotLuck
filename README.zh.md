@@ -38,9 +38,9 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 适合所有与文字打交道的人，也适合与 AI 协作的你。
 
-当前源码版本：`v0.15.0-preview`，Mac 专属预览版，正在准备发布。本版面向 macOS Apple Silicon；Windows x64 与 Linux x86_64 继续使用归档的 v0.14 Preview。
+当前源码版本：`v0.15.0-preview`，Mac 专属预览版。本版面向 macOS Apple Silicon；Windows x64 与 Linux x86_64 继续使用归档的 v0.14 Preview。
 
-> **下载提示：** `v0.15.0-preview` 的 macOS Apple Silicon 安装包已经构建，正在等待 GitHub Release 与官网更新清单发布。文件为 `JotLuck_0.15.0-preview_aarch64.dmg`，41,897,879 bytes，SHA-256 为 `66f17129390ce7ce398ca20a520e1c3d59a6ca110fed896e4f507e5ab04d6561`。公开链接生效前，请仅使用归档的 `v0.14.0-preview` Windows/Linux 安装包。请勿从其他任何渠道下载 JotLuck。
+> **下载提示：** `v0.15.0-preview` 的 macOS Apple Silicon 安装包已发布到 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.15.0-preview)。文件为 `JotLuck_0.15.0-preview_aarch64.dmg`，41,897,879 bytes，SHA-256 为 `66f17129390ce7ce398ca20a520e1c3d59a6ca110fed896e4f507e5ab04d6561`。官网更新清单与 Mac 直接镜像均已上线并核验。请勿从其他任何渠道下载 JotLuck。
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck 工作区，左侧是最近笔记，中间是 Markdown 编辑器，右侧是大纲与反向链接">
@@ -95,18 +95,18 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 ## 当前发行范围
 
-| 项目         | 当前范围                                                                                       |
-| ------------ | ---------------------------------------------------------------------------------------------- |
-| 当前源码版本 | `v0.15.0-preview`                                                                              |
-| 发行阶段     | 公开预览版，未签名；不是稳定版                                                                 |
-| 候选平台     | macOS Apple Silicon v0.15 Preview 正在准备；Windows x64 与 Linux x86_64 保留归档 v0.14 Preview |
-| 桌面运行时   | Tauri 2；Windows 为 WebView2，Linux 为 WebKitGTK 4.1                                           |
-| 可编辑格式   | `.md`、`.markdown`、`.mdx`、`.txt`                                                             |
-| 只读导入格式 | `.docx`、`.pdf`、`.xlsx`、`.xls`；提供 Markdown 语义预览，不承诺 Office/PDF 像素级版式复刻     |
-| 文件关联     | 八种扩展名均为可选“打开方式”；安装和升级都不替换用户在 Windows 中的默认选择                    |
-| 许可证       | MIT                                                                                            |
+| 项目         | 当前范围                                                                                     |
+| ------------ | -------------------------------------------------------------------------------------------- |
+| 当前源码版本 | `v0.15.0-preview`                                                                            |
+| 发行阶段     | 公开预览版，未签名；不是稳定版                                                               |
+| 候选平台     | macOS Apple Silicon v0.15 Preview 已发布；Windows x64 与 Linux x86_64 保留归档 v0.14 Preview |
+| 桌面运行时   | Tauri 2；Windows 为 WebView2，Linux 为 WebKitGTK 4.1                                         |
+| 可编辑格式   | `.md`、`.markdown`、`.mdx`、`.txt`                                                           |
+| 只读导入格式 | `.docx`、`.pdf`、`.xlsx`、`.xls`；提供 Markdown 语义预览，不承诺 Office/PDF 像素级版式复刻   |
+| 文件关联     | 八种扩展名均为可选“打开方式”；安装和升级都不替换用户在 Windows 中的默认选择                  |
+| 许可证       | MIT                                                                                          |
 
-本轮 v0.15 Preview 仅面向 Mac。macOS Apple Silicon 未 notarize、ad-hoc 签名的 `.dmg` 为 `JotLuck_0.15.0-preview_aarch64.dmg`（41,897,879 bytes，SHA-256 `66f17129390ce7ce398ca20a520e1c3d59a6ca110fed896e4f507e5ab04d6561`），正在等待 GitHub Release 与官网更新清单发布。Windows/Linux 上一次已发布的 v0.14 Preview 请根据 [归档更新清单](./site/public/updates/archive/v0.14.0-preview.json) 核对下载。完整边界请阅读 [已知限制](./KNOWN_LIMITATIONS.md) 和每次发布附带的说明。
+本轮 v0.15 Preview 仅面向 Mac。macOS Apple Silicon 未 notarize、ad-hoc 签名的 `.dmg` 为 `JotLuck_0.15.0-preview_aarch64.dmg`（41,897,879 bytes，SHA-256 `66f17129390ce7ce398ca20a520e1c3d59a6ca110fed896e4f507e5ab04d6561`），已发布到 GitHub Release，官网更新清单与 Mac 直接镜像均已上线并核验。Windows/Linux 上一次已发布的 v0.14 Preview 请根据 [归档更新清单](./site/public/updates/archive/v0.14.0-preview.json) 核对下载。完整边界请阅读 [已知限制](./KNOWN_LIMITATIONS.md) 和每次发布附带的说明。
 
 归档 v0.14 仍是公开 Windows 预览版，并包含 Linux x86_64 `.deb`
 `JotLuck_0.14.0_amd64.deb`（SHA-256

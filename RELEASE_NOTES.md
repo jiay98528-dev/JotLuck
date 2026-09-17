@@ -1,9 +1,9 @@
 # JotLuck v0.15.0-preview — Preview Release Notes
 
 > Date: 2026-09-17
-> Mac-only preview release preparation. Windows x64 and Linux x86_64 remain on
-> the archived `v0.14.0-preview` package line. The v0.15 DMG is not published
-> until its build, checksum, GitHub Release and website manifest are verified.
+> Mac-only preview release. Windows x64 and Linux x86_64 remain on the archived
+> `v0.14.0-preview` package line. The v0.15 DMG is published on GitHub Releases;
+> the official website manifest and direct Mac mirror are live and verified.
 
 ## What's new in 0.15.0
 
@@ -27,12 +27,13 @@
 
 ## Distribution
 
-The macOS Apple Silicon DMG is built and verified, pending GitHub Release and
-website manifest publication. Artifact: `JotLuck_0.15.0-preview_aarch64.dmg`,
+The macOS Apple Silicon DMG is built and verified, and published on GitHub
+Releases. Artifact: `JotLuck_0.15.0-preview_aarch64.dmg`,
 41,897,879 bytes, SHA-256
-`66f17129390ce7ce398ca20a520e1c3d59a6ca110fed896e4f507e5ab04d6561`. After
-publication, the canonical download URL is
+`66f17129390ce7ce398ca20a520e1c3d59a6ca110fed896e4f507e5ab04d6561`. The
+canonical download URL is
 `https://github.com/jiay98528-dev/JotLuck/releases/download/v0.15.0-preview/JotLuck_0.15.0-preview_aarch64.dmg`.
+The website update manifest and direct Mac mirror are live and verified against this GitHub Release.
 
 Windows x64 and Linux x86_64 remain available through the archived
 `v0.14.0-preview` Release. See the v0.14 notes below for their package facts.

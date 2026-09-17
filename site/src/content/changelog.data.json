@@ -1,14 +1,14 @@
 {
-  "syncedAt": "2026-09-17T11:00:00.000Z",
+  "syncedAt": "2026-09-17T03:08:08.758Z",
   "source": "https://github.com/jiay98528-dev/JotLuck/releases",
   "releases": [
     {
       "tag": "v0.15.0-preview",
-      "name": "JotLuck v0.15.0-preview",
-      "dateISO": "2026-09-17T11:00:00Z",
+      "name": "JotLuck V0.15 Preview — macOS Apple Silicon",
+      "dateISO": "2026-09-17T03:07:01Z",
       "url": "https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.15.0-preview",
       "prerelease": true,
-      "bodyMD": "Mac-only preview for this release cycle. Windows x64 and Linux x86_64 remain on the archived v0.14.0-preview package line.\n\n## What's new in 0.15.0\n\n- **macOS Apple Silicon preview.** The unsigned, ad-hoc-signed DMG is `JotLuck_0.15.0-preview_aarch64.dmg` (41,897,879 bytes; SHA-256 `66f17129390ce7ce398ca20a520e1c3d59a6ca110fed896e4f507e5ab04d6561`).\n- **Cold start opens the requested file directly.** Opening an existing `.md` file creates only its read-only preview; the blank editor appears only when JotLuck is launched from its application icon.\n- **Opt-in background update information.** When enabled, JotLuck checks the official website manifest and matching public GitHub Release while it runs. Notebook content, paths, and device identifiers are not sent; updates are not downloaded or installed automatically.\n- **Welcome screen update choice.** New users see the setting on the first screen, and existing users see this update introduction once without losing their previous preference.\n\nThe v0.15 package is pending GitHub Release and website manifest publication. The archived v0.14.0-preview remains the Windows/Linux download source."
+      "bodyMD": "# JotLuck V0.15 Preview — macOS Apple Silicon\n\nThis is a **Mac-only pre-release**. Windows x64 and Linux x86_64 downloads remain at v0.14.0-preview.\n\n## What changed\n- Opening an existing .md file on cold start creates only its read-only preview. Direct app-icon launches open the editor.\n- Opt-in background update information cross-checks the official website manifest and the matching GitHub Release.\n- A new first-screen welcome choice introduces automatic checks. Existing users see it once; previous preferences are preserved.\n- No note content, paths or device identifiers are uploaded. Updates are not downloaded, installed or restarted automatically.\n\n## Mac package\n- File: `JotLuck_0.15.0-preview_aarch64.dmg`\n- Size: 41,897,879 bytes\n- SHA-256: `66f17129390ce7ce398ca20a520e1c3d59a6ca110fed896e4f507e5ab04d6561`\n- Architecture: Apple Silicon / arm64. Intel Mac, Windows and Linux packages are not included in this release.\n- Signing: complete ad-hoc signature; no Apple Developer identity and no notarization. macOS may require right-click → Open.\n- Install: mount the DMG and drag JotLuck to Applications. Quit the old application before replacing it.\n\n## Verification\n- Native Mac smoke: default-off welcome setting, immediate preference persistence, preference retention and Finder Markdown cold-start preview verified in an isolated application profile.\n- Full app signature and disk-image checks passed. Update-service tests passed; existing unrelated repository-wide environment/path/i18n failures are not claimed as passing.\n- Source commit: `f0b354d3c5ed4706d2a83a8ce6c2ae44a6423527`\n- Website: https://jotluck.com/zh/download\n- Website package mirror: https://jotluck.com/downloads/JotLuck_0.15.0-preview_aarch64.dmg\n- Version manifest: https://jotluck.com/updates/v1.json"
     },
     {
       "tag": "v0.14.0-preview",

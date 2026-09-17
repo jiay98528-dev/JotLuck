@@ -39,8 +39,9 @@ behavior boundaries.
   launch, macOS may require right-clicking the app and choosing Open. Verify
   `JotLuck_0.15.0-preview_aarch64.dmg` (41,897,879 bytes; SHA-256
   `66f17129390ce7ce398ca20a520e1c3d59a6ca110fed896e4f507e5ab04d6561`) against
-  the GitHub Release and official update manifest before installation. Those
-  public links are pending publication at the time of this source note.
+  the GitHub Release and official update manifest before installation. Both
+  sources are public and verified; the official Mac mirror serves the same
+  package checksum.
 - Tauri shell access is limited to the scoped `shell:default` capability.
   Unscoped `shell:allow-open`, `process:*`, and `fs:*` capabilities are not
   granted in the default desktop capability file.

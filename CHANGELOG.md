@@ -19,11 +19,12 @@
 
 ### Distribution status
 
-The v0.15.0-preview macOS package is built and verified, pending GitHub Releases
-and official website publication. Artifact: `JotLuck_0.15.0-preview_aarch64.dmg`,
+The v0.15.0-preview macOS package is built, verified, and published on GitHub
+Releases. Artifact: `JotLuck_0.15.0-preview_aarch64.dmg`,
 41,897,879 bytes, SHA-256
 `66f17129390ce7ce398ca20a520e1c3d59a6ca110fed896e4f507e5ab04d6561`. The
-archived v0.14.0-preview remains the Windows/Linux download source.
+archived v0.14.0-preview remains the Windows/Linux download source. The official
+website update manifest and direct Mac mirror are live and verified against the GitHub Release.
 
 ## [0.14.0-preview] - 2026-09-08
 
