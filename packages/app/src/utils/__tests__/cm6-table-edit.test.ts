@@ -1,0 +1,566 @@
+/**
+ * cm6-table-edit 单测（V0.2-E3 spec §7.1）
+ *
+ * 覆盖（spec §7.1 八组用例）：
+ *   1. 光标→表格/行角色/列解析（表头/分隔行/数据行/两 cell 之间）
+ *   2. 插行：数据行上下、表头特判（上方=首行前、下方=分隔行后）、末行下方、columnCount 补齐
+ *   3. 插列：左右、锯齿行补齐、分隔行同步、全角 `｜` 表
+ *   4. 删行：中部/末行；表头与分隔行禁用断言
+ *   5. 删列：中部/末列、`a | b` 无外管道、`\|` 转义 cell 保真、单列表禁用
+ *   6. 对齐三分支只改分隔行（数据行字节不动）、锯齿分隔行补齐
+ *   7. 删除整表：文档中部/首/尾、邻接空行收敛、其余内容字节不变
+ *   8. 每操作单步撤销恢复；IME 守卫；readOnly 无操作且无工具条
+ *
+ * 风格沿用 `cm6-smart-continue.test.ts`（headless EditorView + jsdom）；
+ * 仅断言状态与文档内容，不断言几何坐标（spec §4）。
+ */
+import { Compartment, EditorState } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
+import { history, undo } from '@codemirror/commands';
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  applyTableAction,
+  buildTableToolbarItems,
+  resolveTableContext,
+  tableEditExtension,
+  type TableActionId,
+} from '../cm6-table-edit';
+
+const mountedViews: EditorView[] = [];
+
+/** 测试自有的 readOnly 重配舱（复刻 MarkdownEditor 的 readOnlyCompartment 用法） */
+const readOnlyCompartment = new Compartment();
+
+function mountEditor(doc: string, cursor = doc.length, readOnly = false): EditorView {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const view = new EditorView({
+    state: EditorState.create({
+      doc,
+      selection: { anchor: cursor },
+      extensions: [history(), readOnlyCompartment.of([]), ...tableEditExtension()],
+    }),
+    parent: host,
+  });
+  mountedViews.push(view);
+  if (readOnly) {
+    view.dispatch({
+      effects: readOnlyCompartment.reconfigure([EditorState.readOnly.of(true)]),
+    });
+  } else {
+    view.dispatch({ selection: { anchor: cursor } });
+  }
+  view.focus();
+  return view;
+}
+
+function startIme(view: EditorView): void {
+  view.contentDOM.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+}
+
+function endIme(view: EditorView): void {
+  view.contentDOM.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+}
+
+afterEach(() => {
+  while (mountedViews.length > 0) mountedViews.pop()?.destroy();
+  document.body.replaceChildren();
+});
+
+/** 标准三行表：表头 + 分隔 + 数据 */
+const STD_TABLE = '| h1 | h2 |\n| --- | --- |\n| d1 | d2 |';
+/** cursor at "d1" cell start = 21 (after separator line) */
+const CURSOR_D1 = STD_TABLE.indexOf('d1');
+/** cursor at "d2" cell start = 25 */
+const CURSOR_D2 = STD_TABLE.indexOf('d2');
+// helper for clarity
+function cellPos(doc: string, cellText: string): number {
+  return doc.indexOf(cellText);
+}
+
+// ─── 1. 光标→表格/行角色/列解析 ────────────────────────────────────────
+
+describe('resolveTableContext', () => {
+  it('detects header row with columnIndex 0 when cursor sits in the first header cell', () => {
+    const view = mountEditor(STD_TABLE, cellPos(STD_TABLE, 'h1') + 1);
+    const ctx = resolveTableContext(view.state);
+    expect(ctx).not.toBeNull();
+    expect(ctx?.rowRole).toBe('header');
+    expect(ctx?.columnIndex).toBe(0);
+  });
+
+  it('detects separator row when cursor sits on the second cell', () => {
+    // 第二个 '---' 的格内（第一个 '---' 的 +3 是格端点，按 spec §2 端点取前格）
+    const secondSep = STD_TABLE.indexOf('---', STD_TABLE.indexOf('---') + 1);
+    const view = mountEditor(STD_TABLE, secondSep + 1);
+    const ctx = resolveTableContext(view.state);
+    expect(ctx?.rowRole).toBe('separator');
+    expect(ctx?.columnIndex).toBe(1);
+  });
+
+  it('detects data row when cursor sits on the last cell', () => {
+    const view = mountEditor(STD_TABLE, cellPos(STD_TABLE, 'd2') + 1);
+    const ctx = resolveTableContext(view.state);
+    expect(ctx?.rowRole).toBe('data');
+    expect(ctx?.columnIndex).toBe(1);
+  });
+
+  it('columnIndex picks the previous cell when cursor lands at exact cell boundary', () => {
+    // d1 的 range 为 [27,29)：+2 = 29 恰为 cell.range.to 端点 → 取前格（spec §2）
+    const view = mountEditor(STD_TABLE, CURSOR_D1 + 2);
+    const ctx = resolveTableContext(view.state);
+    expect(ctx?.columnIndex).toBe(0);
+  });
+
+  it('returns null when cursor sits outside the table (paragraph line)', () => {
+    const doc = 'a paragraph\n' + STD_TABLE + '\nmore text';
+    const view = mountEditor(doc, 4);
+    expect(resolveTableContext(view.state)).toBeNull();
+  });
+
+  it('returns null when table has no separator (paragraph of pipes)', () => {
+    // `a | b` without a separator line is a paragraph, not a table
+    const doc = 'a | b\nc | d';
+    const view = mountEditor(doc, 2);
+    expect(resolveTableContext(view.state)).toBeNull();
+  });
+
+  it('returns null on readOnly state', () => {
+    const view = mountEditor(STD_TABLE, CURSOR_D1 + 1, true);
+    expect(resolveTableContext(view.state)).toBeNull();
+  });
+
+  it('returns null when the selection is a range, not a single cursor', () => {
+    const view = mountEditor(STD_TABLE, CURSOR_D1);
+    view.dispatch({ selection: { anchor: CURSOR_D1, head: CURSOR_D2 } });
+    expect(resolveTableContext(view.state)).toBeNull();
+  });
+});
+
+// ─── 2. 插行 ───────────────────────────────────────────────────────────
+
+describe('applyTableAction insertRowAbove / insertRowBelow', () => {
+  it('inserts an empty data row below the current data row, cursor lands at first cell', () => {
+    const view = mountEditor(STD_TABLE, CURSOR_D1 + 1);
+    expect(applyTableAction(view, 'insertRowBelow')).toBe(true);
+    const doc = view.state.doc.toString();
+    // 新行 = `|  |  |`
+    expect(doc).toBe('| h1 | h2 |\n| --- | --- |\n| d1 | d2 |\n|  |  |');
+    // 光标在新行首格 = 原末行尾 + `\n` + `| ` 共 3 个字符
+    const expectedCursor = STD_TABLE.length + 1 + 2;
+    expect(view.state.selection.main.head).toBe(expectedCursor);
+  });
+
+  it('inserts an empty row above the current data row', () => {
+    const view = mountEditor(STD_TABLE, CURSOR_D2 + 1);
+    expect(applyTableAction(view, 'insertRowAbove')).toBe(true);
+    const doc = view.state.doc.toString();
+    expect(doc).toBe('| h1 | h2 |\n| --- | --- |\n|  |  |\n| d1 | d2 |');
+  });
+
+  it('header insertRowAbove places the new row at table start (before header)', () => {
+    const view = mountEditor(STD_TABLE, cellPos(STD_TABLE, 'h2') + 1);
+    expect(applyTableAction(view, 'insertRowAbove')).toBe(true);
+    const doc = view.state.doc.toString();
+    expect(doc.startsWith('|  |  |\n')).toBe(true);
+    // 紧跟其后是原表头 + 分隔 + 数据
+    expect(doc).toContain('|  |  |\n| h1 | h2 |\n| --- | --- |\n| d1 | d2 |');
+  });
+
+  it('header insertRowBelow places the new row after the separator (first data slot)', () => {
+    const view = mountEditor(STD_TABLE, cellPos(STD_TABLE, 'h1') + 1);
+    expect(applyTableAction(view, 'insertRowBelow')).toBe(true);
+    const doc = view.state.doc.toString();
+    // 新行 = `|  |  |`，且位于分隔行之后
+    const sepEnd = STD_TABLE.indexOf('| --- | --- |') + '| --- | --- |'.length;
+    expect(doc.slice(0, sepEnd + 1)).toBe('| h1 | h2 |\n| --- | --- |\n');
+    expect(doc.slice(sepEnd + 1, sepEnd + 1 + '|  |  |'.length)).toBe('|  |  |');
+  });
+
+  it('insertRowBelow on last row appends at end (after newline)', () => {
+    const view = mountEditor(STD_TABLE, CURSOR_D2 + 1);
+    expect(applyTableAction(view, 'insertRowBelow')).toBe(true);
+    const doc = view.state.doc.toString();
+    expect(doc.endsWith('\n|  |  |')).toBe(true);
+  });
+
+  it('insertRow on separator row is rejected (returns false)', () => {
+    const view = mountEditor(STD_TABLE, cellPos(STD_TABLE, '---') + 1);
+    expect(applyTableAction(view, 'insertRowAbove')).toBe(false);
+    expect(view.state.doc.toString()).toBe(STD_TABLE);
+    expect(applyTableAction(view, 'insertRowBelow')).toBe(false);
+  });
+
+  it('insertRow matches columnCount from header (2 cells)', () => {
+    const doc = '| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |';
+    const view = mountEditor(doc, doc.indexOf('1') + 1);
+    expect(applyTableAction(view, 'insertRowBelow')).toBe(true);
+    const after = view.state.doc.toString();
+    // 文档末尾无换行 → 新行即 EOF，不带尾换行（与「末行下方」用例同一约定）
+    expect(after).toContain('|  |  |  |');
+  });
+});
+
+// ─── 3. 插列 ───────────────────────────────────────────────────────────
+
+describe('applyTableAction insertColumnLeft / insertColumnRight', () => {
+  it('insertColumnRight adds a new empty cell to header / separator / data row simultaneously', () => {
+    const view = mountEditor(STD_TABLE, CURSOR_D1 + 1);
+    expect(applyTableAction(view, 'insertColumnRight')).toBe(true);
+    const doc = view.state.doc.toString();
+    // 光标在 d1（第 0 列）→ 新列插在 d1 与 d2 之间（当前列右侧）
+    expect(doc).toContain('| h1 |  | h2 |');
+    expect(doc).toContain('| --- | --- | --- |');
+    expect(doc).toContain('| d1 |  | d2 |');
+  });
+
+  it('insertColumnLeft adds a new empty cell to all rows at the current column', () => {
+    const view = mountEditor(STD_TABLE, CURSOR_D2 + 1);
+    expect(applyTableAction(view, 'insertColumnLeft')).toBe(true);
+    const doc = view.state.doc.toString();
+    // 光标在 d2（第 1 列）→ 新列插在 d1 与 d2 之间（当前列左侧）；空格呈
+    // 与行模板一致的 `|  |` 双空格形态
+    expect(doc).toContain('| h1 |  | h2 |');
+    expect(doc).toContain('| --- | --- | --- |');
+    expect(doc).toContain('| d1 |  | d2 |');
+  });
+
+  it('jagged row补齐 when target column is past existing cells', () => {
+    // 锯齿：表头 + 分隔 + 数据（少一格）
+    const doc = '| a | b |\n| --- |\n| 1 |';
+    const view = mountEditor(doc, doc.indexOf('1') + 1);
+    expect(applyTableAction(view, 'insertColumnRight')).toBe(true);
+    const after = view.state.doc.toString();
+    // 数据行从 1 cell 补齐到 2 cells（`| 1 |  |`）
+    expect(after).toContain('| 1 |  |');
+  });
+
+  it('separator row stays in sync (--- new cell, all other rows stay empty cells)', () => {
+    const view = mountEditor(STD_TABLE, CURSOR_D1 + 1);
+    expect(applyTableAction(view, 'insertColumnRight')).toBe(true);
+    const doc = view.state.doc.toString();
+    expect(doc).toContain('| --- | --- | --- |');
+  });
+
+  it('works on fullwidth ｜ separator tables', () => {
+    const doc = '｜ a ｜ b ｜\n｜ --- ｜ --- ｜\n｜ 1 ｜ 2 ｜';
+    const cursorIn1 = doc.indexOf('1') + 1;
+    const view = mountEditor(doc, cursorIn1);
+    expect(applyTableAction(view, 'insertColumnRight')).toBe(true);
+    const after = view.state.doc.toString();
+    // 光标在 '1'（第 0 列）→ 新列插在 1 与 2 之间；全角定界保留
+    expect(after).toContain('｜ 1 ｜  ｜ 2 ｜');
+    expect(after).toContain('｜ a ｜  ｜ b ｜');
+    expect(after).toContain('｜ --- ｜ --- ｜ --- ｜');
+  });
+});
+
+// ─── 4. 删行 ───────────────────────────────────────────────────────────
+
+describe('applyTableAction deleteRow', () => {
+  it('deletes a middle data row and lands cursor on previous data row first cell', () => {
+    const doc = '| h |\n| --- |\n| a |\n| b |\n| c |';
+    const view = mountEditor(doc, doc.indexOf('b') + 1);
+    expect(applyTableAction(view, 'deleteRow')).toBe(true);
+    const after = view.state.doc.toString();
+    expect(after).toBe('| h |\n| --- |\n| a |\n| c |');
+    // 光标落点：上一数据行 a 首格内容起点（doc.indexOf('a')）
+    expect(view.state.selection.main.head).toBe(doc.indexOf('a'));
+  });
+
+  it('deletes the last data row; cursor falls through to the preceding data row', () => {
+    const doc = '| h |\n| --- |\n| a |\n| b |';
+    const view = mountEditor(doc, doc.indexOf('b') + 1);
+    expect(applyTableAction(view, 'deleteRow')).toBe(true);
+    expect(view.state.doc.toString()).toBe('| h |\n| --- |\n| a |');
+    expect(view.state.selection.main.head).toBe(doc.indexOf('a'));
+  });
+
+  it('deleteRow on header is rejected (returns false)', () => {
+    const view = mountEditor(STD_TABLE, cellPos(STD_TABLE, 'h1') + 1);
+    expect(applyTableAction(view, 'deleteRow')).toBe(false);
+    expect(view.state.doc.toString()).toBe(STD_TABLE);
+  });
+
+  it('deleteRow on separator is rejected (returns false)', () => {
+    const view = mountEditor(STD_TABLE, cellPos(STD_TABLE, '---') + 1);
+    expect(applyTableAction(view, 'deleteRow')).toBe(false);
+    expect(view.state.doc.toString()).toBe(STD_TABLE);
+  });
+
+  it('deleting the only data row is allowed (table = header + separator remains legal)', () => {
+    const doc = '| h |\n| --- |\n| a |';
+    const view = mountEditor(doc, doc.indexOf('a') + 1);
+    expect(applyTableAction(view, 'deleteRow')).toBe(true);
+    expect(view.state.doc.toString()).toBe('| h |\n| --- |');
+  });
+});
+
+// ─── 5. 删列 ───────────────────────────────────────────────────────────
+
+describe('applyTableAction deleteColumn', () => {
+  it('deletes a middle column of a 3-col table; surrounding columns keep content verbatim', () => {
+    // 互审 F8：3 列表删真中间列（第 1 列），两侧内容逐字保留
+    const doc = '| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |';
+    const view = mountEditor(doc, doc.indexOf('2') + 1);
+    expect(applyTableAction(view, 'deleteColumn')).toBe(true);
+    const after = view.state.doc.toString();
+    expect(after).toBe('| a | c |\n| --- | --- |\n| 1 | 3 |');
+    // 光标落点：数据行左邻 cell（'1'）在新行中的起点
+    expect(view.state.selection.main.head).toBe(after.indexOf('1'));
+  });
+
+  it('deletes the last column with byte-level preservation of other cells', () => {
+    const view = mountEditor(STD_TABLE, CURSOR_D2 + 1);
+    expect(applyTableAction(view, 'deleteColumn')).toBe(true);
+    expect(view.state.doc.toString()).toBe('| h1 |\n| --- |\n| d1 |');
+  });
+
+  it('preserves `\\|` escape sequence inside remaining cell text', () => {
+    const doc = '| a\\|b | c |\n| --- | --- |\n| d\\|e | f |';
+    const view = mountEditor(doc, doc.indexOf('c') + 1);
+    expect(applyTableAction(view, 'deleteColumn')).toBe(true);
+    const after = view.state.doc.toString();
+    // 删 c 列 → 留下 a\|b、d\|e 两行
+    expect(after).toBe('| a\\|b |\n| --- |\n| d\\|e |');
+    expect(after).toContain('a\\|b');
+    expect(after).toContain('d\\|e');
+  });
+
+  it('handles `a | b` (no outer pipes) without regex-blind rewriting', () => {
+    const doc = 'h1 | h2\n--- | ---\nd1 | d2';
+    const view = mountEditor(doc, doc.indexOf('d2') + 1);
+    expect(applyTableAction(view, 'deleteColumn')).toBe(true);
+    const after = view.state.doc.toString();
+    expect(after).toBe('h1\n---\nd1');
+  });
+
+  it('handles fullwidth ｜ no outer pipes', () => {
+    const doc = 'h1 ｜ h2\n--- ｜ ---\nd1 ｜ d2';
+    const view = mountEditor(doc, doc.indexOf('d2') + 1);
+    expect(applyTableAction(view, 'deleteColumn')).toBe(true);
+    const after = view.state.doc.toString();
+    expect(after).toBe('h1\n---\nd1');
+  });
+
+  it('rejects deleteColumn when columnCount === 1', () => {
+    const doc = '| only |\n| --- |\n| one |';
+    const view = mountEditor(doc, doc.indexOf('one') + 1);
+    expect(applyTableAction(view, 'deleteColumn')).toBe(false);
+    expect(view.state.doc.toString()).toBe(doc);
+  });
+});
+
+// ─── 6. 对齐 ───────────────────────────────────────────────────────────
+
+describe('applyTableAction alignLeft / alignCenter / alignRight', () => {
+  it('alignCenter only rewrites the separator cell to `:---:`, data bytes untouched', () => {
+    const view = mountEditor(STD_TABLE, CURSOR_D1 + 1);
+    expect(applyTableAction(view, 'alignCenter')).toBe(true);
+    const after = view.state.doc.toString();
+    expect(after).toBe('| h1 | h2 |\n| :---: | --- |\n| d1 | d2 |');
+  });
+
+  it('alignRight only rewrites the targeted separator cell to `---:`', () => {
+    const view = mountEditor(STD_TABLE, CURSOR_D1 + 1);
+    expect(applyTableAction(view, 'alignRight')).toBe(true);
+    const after = view.state.doc.toString();
+    expect(after).toBe('| h1 | h2 |\n| ---: | --- |\n| d1 | d2 |');
+  });
+
+  it('alignLeft resets cell back to `---`', () => {
+    // 先居中
+    const doc = '| h1 | h2 |\n| :---: | --- |\n| d1 | d2 |';
+    const view = mountEditor(doc, doc.indexOf('d1') + 1);
+    expect(applyTableAction(view, 'alignLeft')).toBe(true);
+    expect(view.state.doc.toString()).toBe('| h1 | h2 |\n| --- | --- |\n| d1 | d2 |');
+  });
+
+  it('jagged separator row gets补齐 with `---` cells up to the target column', () => {
+    // 分隔行少一格
+    const doc = '| a | b |\n| --- |\n| 1 | 2 |';
+    const view = mountEditor(doc, doc.indexOf('1') + 1);
+    expect(applyTableAction(view, 'insertColumnRight')).toBe(true);
+    // 锯齿分隔行补齐 1 格 `---`
+    expect(view.state.doc.toString()).toContain('| --- | --- |');
+  });
+
+  it('alignment pads a jagged separator with `---` before writing the mark (spec §7.1.6)', () => {
+    // 互审 F8：doSetAlignment 的分隔行补齐路径——光标在第 1 列，分隔行只有 1 格
+    const doc = '| a | b |\n| --- |\n| 1 | 2 |';
+    const view = mountEditor(doc, doc.indexOf('2') + 1);
+    expect(applyTableAction(view, 'alignCenter')).toBe(true);
+    const after = view.state.doc.toString();
+    // 分隔行补到 2 格，第 1 格写 :---:（GFM 冒号必须半角）
+    expect(after).toContain('| --- | :---: |');
+    expect(after).toContain('| a | b |');
+    expect(after).toContain('| 1 | 2 |');
+  });
+
+  it('alignment applies regardless of cursor row (always targets separator cell)', () => {
+    const view = mountEditor(STD_TABLE, CURSOR_D1 + 1);
+    // 对齐按钮对任何行角色均可用（操作对象是分隔行 cell）
+    expect(applyTableAction(view, 'alignLeft')).toBe(true);
+    // cell 已是 `---`，文档不变
+    expect(view.state.doc.toString()).toBe(STD_TABLE);
+    // 居中对齐实际改写分隔行
+    expect(applyTableAction(view, 'alignCenter')).toBe(true);
+    expect(view.state.doc.toString()).toContain('| :---: | --- |');
+  });
+});
+
+// ─── 7. 删除整表 ────────────────────────────────────────────────────────
+
+describe('applyTableAction deleteTable', () => {
+  it('removes table in the middle of the document, leaves surrounding paragraphs intact', () => {
+    const doc = 'before\n' + STD_TABLE + '\nafter';
+    const view = mountEditor(doc, CURSOR_D1 + 4); // 4 = length of "before\n"
+    expect(applyTableAction(view, 'deleteTable')).toBe(true);
+    const after = view.state.doc.toString();
+    expect(after).toBe('before\n\nafter');
+  });
+
+  it('collapses adjacent blank lines to a single blank when table is sandwiched between empties', () => {
+    const doc = 'before\n\n' + STD_TABLE + '\n\nafter';
+    const view = mountEditor(doc, doc.indexOf('d1') + 'before\n\n'.length);
+    expect(applyTableAction(view, 'deleteTable')).toBe(true);
+    const after = view.state.doc.toString();
+    // 两侧空行收敛为单个空行（`before` / `` / `after`）
+    expect(after).toBe('before\n\nafter');
+  });
+
+  it('removes table at document start, keeps single newline boundary before content', () => {
+    const doc = STD_TABLE + '\nafter';
+    const view = mountEditor(doc, CURSOR_D1);
+    expect(applyTableAction(view, 'deleteTable')).toBe(true);
+    const after = view.state.doc.toString();
+    expect(after.startsWith('\nafter')).toBe(true);
+  });
+
+  it('removes table at document end, content before untouched', () => {
+    const doc = 'before\n' + STD_TABLE;
+    const view = mountEditor(doc, CURSOR_D1 + 'before\n'.length);
+    expect(applyTableAction(view, 'deleteTable')).toBe(true);
+    const after = view.state.doc.toString();
+    expect(after.startsWith('before\n')).toBe(true);
+    // 末尾不应残留表格内容
+    expect(after).not.toContain('d1');
+  });
+});
+
+// ─── 8. 撤销 / IME / readOnly ───────────────────────────────────────────
+
+describe('undo and IME / readOnly guards', () => {
+  it('insertRowBelow is one-step undoable back to the original doc', () => {
+    const view = mountEditor(STD_TABLE, CURSOR_D1 + 1);
+    expect(applyTableAction(view, 'insertRowBelow')).toBe(true);
+    const afterInsert = view.state.doc.toString();
+    expect(afterInsert).not.toBe(STD_TABLE);
+    expect(undo(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(STD_TABLE);
+  });
+
+  it('deleteColumn is one-step undoable', () => {
+    const view = mountEditor(STD_TABLE, CURSOR_D1 + 1);
+    expect(applyTableAction(view, 'deleteColumn')).toBe(true);
+    expect(undo(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(STD_TABLE);
+  });
+
+  it('alignCenter is one-step undoable', () => {
+    const view = mountEditor(STD_TABLE, CURSOR_D1 + 1);
+    expect(applyTableAction(view, 'alignCenter')).toBe(true);
+    expect(undo(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(STD_TABLE);
+  });
+
+  it('deleteTable is one-step undoable', () => {
+    const doc = 'before\n' + STD_TABLE + '\nafter';
+    const view = mountEditor(doc, CURSOR_D1 + 'before\n'.length);
+    expect(applyTableAction(view, 'deleteTable')).toBe(true);
+    expect(undo(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(doc);
+  });
+
+  it('deleteRow is one-step undoable', () => {
+    const doc = '| h1 | h2 |\n| --- | --- |\n| d1 | d2 |';
+    const view = mountEditor(doc, doc.indexOf('d1') + 1);
+    expect(applyTableAction(view, 'deleteRow')).toBe(true);
+    expect(undo(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(doc);
+  });
+
+  it('insertColumnRight is one-step undoable and lands the cursor inside the original cell', () => {
+    const doc = STD_TABLE;
+    const view = mountEditor(doc, CURSOR_D1 + 1);
+    expect(applyTableAction(view, 'insertColumnRight')).toBe(true);
+    // 光标等效位（互审 F1）：原 d1 cell 在新行（`| d1 |  | d2 |`）中的起点
+    const newDoc = view.state.doc.toString();
+    expect(view.state.selection.main.head).toBe(newDoc.indexOf('d1'));
+    expect(undo(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(doc);
+  });
+
+  it('applyTableAction returns false during active IME composition', () => {
+    const view = mountEditor(STD_TABLE, CURSOR_D1 + 1);
+    startIme(view);
+    expect(applyTableAction(view, 'insertRowBelow')).toBe(false);
+    expect(view.state.doc.toString()).toBe(STD_TABLE);
+    endIme(view);
+  });
+
+  it('applyTableAction returns false on readOnly state', () => {
+    const view = mountEditor(STD_TABLE, CURSOR_D1 + 1, true);
+    expect(applyTableAction(view, 'insertRowBelow')).toBe(false);
+    expect(view.state.doc.toString()).toBe(STD_TABLE);
+  });
+
+  it('resolveTableContext returns null on readOnly so toolbar stays hidden', () => {
+    const view = mountEditor(STD_TABLE, CURSOR_D1 + 1, true);
+    expect(resolveTableContext(view.state)).toBeNull();
+  });
+
+  it('toolbar DOM is not created/applied when cursor is outside the table', () => {
+    const doc = 'paragraph\n' + STD_TABLE;
+    const view = mountEditor(doc, 4);
+    // 触发一次 update 周期
+    view.dispatch({ selection: { anchor: 4 } });
+    // 工具条若挂上，应当有 cm-jotluck-table-toolbar 元素；否则为空
+    const tools = view.dom.querySelectorAll('.cm-jotluck-table-toolbar');
+    // 因为不是表格行，工具条不应挂载
+    expect(tools.length).toBe(0);
+  });
+});
+
+// ─── 工具条条目规格 ────────────────────────────────────────────────────
+
+describe('buildTableToolbarItems', () => {
+  it('exposes exactly 10 stable toolbar buttons (11th i18n key toolbarAria is aria-only)', () => {
+    const items = buildTableToolbarItems();
+    expect(items.length).toBe(10); // 10 操作按钮；toolbarAria 是容器 aria-label 键，不入按钮列表
+    const ids = items.map((i) => i.id);
+    expect(ids).toContain('insertRowAbove');
+    expect(ids).toContain('insertRowBelow');
+    expect(ids).toContain('insertColumnLeft');
+    expect(ids).toContain('insertColumnRight');
+    expect(ids).toContain('deleteRow');
+    expect(ids).toContain('deleteColumn');
+    expect(ids).toContain('deleteTable');
+    expect(ids).toContain('alignLeft');
+    expect(ids).toContain('alignCenter');
+    expect(ids).toContain('alignRight');
+  });
+
+  it('all label keys fall under editor.table.* namespace', () => {
+    const items = buildTableToolbarItems();
+    for (const item of items) {
+      expect(item.labelKey.startsWith('editor.table.')).toBe(true);
+    }
+  });
+
+  it('all 10 action ids are unique', () => {
+    const ids = new Set<TableActionId>();
+    for (const item of buildTableToolbarItems()) ids.add(item.id);
+    expect(ids.size).toBe(buildTableToolbarItems().length);
+  });
+});

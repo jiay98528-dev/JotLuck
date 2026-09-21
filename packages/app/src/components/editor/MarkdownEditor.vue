@@ -20,6 +20,7 @@ import { exitLivePreviewOnEscape, livePreviewExtension } from '@/utils/cm6-live-
 import { findReplaceExtension } from '@/utils/cm6-find-replace';
 import { ghostTextPlugin } from '@/utils/cm6-ghost-text';
 import { slashCommandsExtension } from '@/utils/cm6-slash-commands';
+import { tableEditExtension } from '@/utils/cm6-table-edit';
 import {
   smartCancelOnBackspace,
   smartCancelOnEscape,
@@ -280,6 +281,7 @@ function createState(doc: string) {
         EditorView.editable.of(!props.readOnly),
       ]),
       ...slashCommandsExtension(),
+      ...tableEditExtension(),
       // 续格式仲裁：Enter 先走 pendingFormat 再走智能续格式；Backspace/Escape
       // 的空格式块取消在这里注册（位于 defaultKeymap 与 live-preview Escape 之前；
       // ghost text 的 Tab/Escape 在 Prec.highest，天然更先执行）。
