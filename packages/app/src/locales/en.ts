@@ -614,6 +614,16 @@ export const messages = {
         features:
           "Workbench TopBar{'|'}Atlas right wing{'|'}Dashboard status bar{'|'}Declarative theme cards",
       },
+      constellation: {
+        name: 'Constellation',
+        headline: 'A mission deck on a milky-white hull.',
+        story:
+          'NASA punk at its most restrained: on a matte milky-white hull, every panel is a flat matte plane, divided only by tonal steps and hairline rules — no relief shadows, no ornament. International Orange accents; ice blue links.',
+        bestFor:
+          "Daily writing{'|'}Spaceflight fans{'|'}Ordered workstations{'|'}Long-form editing",
+        features:
+          "Full-width command and telemetry bars{'|'}Flat matte panels with hairline rules{'|'}International Orange accent{'|'}Monospace telemetry with status LEDs{'|'}Hard corners and calm whitespace",
+      },
       haloCanvas: {
         name: 'Halo Canvas',
         headline: 'Recent notes, the writing canvas and knowledge tools stay in three columns.',

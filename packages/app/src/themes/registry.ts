@@ -6,10 +6,11 @@
  */
 import type { OfficialThemeModule } from '@/types/theme-pack';
 
+import createConstellationModule from './constellation';
 import createPaperModule from './paper';
 
 export function getAllThemeModules(): OfficialThemeModule[] {
-  return [createPaperModule()];
+  return [createPaperModule(), createConstellationModule()];
 }
 
 /** 按模块自声明的 id 精确查找（O(1)） */

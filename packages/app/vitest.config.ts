@@ -8,10 +8,11 @@ export default mergeConfig(
       environment: 'jsdom',
       setupFiles: ['./src/test/setup-i18n.ts'],
       include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
-      // Official themes inject CSS strings through ThemeRegistry. Keep the Halo
-      // asset real in Vitest so fallback and accessibility contracts are tested.
+      // Official themes inject CSS strings through ThemeRegistry. Keep the
+      // material-bearing theme assets real in Vitest so fallback and
+      // accessibility contracts are tested.
       css: {
-        include: [/halo-canvas\.css(?:\?.*)?$/],
+        include: [/halo-canvas\.css(?:\?.*)?$/, /constellation\.css(?:\?.*)?$/],
       },
       coverage: {
         provider: 'v8',

@@ -137,7 +137,7 @@ describe('localized program content', () => {
     await setLocale(locale, { persist: false });
     const themes = [...getAllThemeModules(), ...getLocalMarketModules()];
 
-    expect(themes).toHaveLength(5);
+    expect(themes).toHaveLength(6);
     expect(themes.every((theme) => theme.name && theme.meta.headline && theme.meta.story)).toBe(
       true,
     );

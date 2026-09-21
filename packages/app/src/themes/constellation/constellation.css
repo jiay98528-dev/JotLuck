@@ -1,0 +1,1540 @@
+/*
+ * Constellation 群星 — NASA Punk, flat matte
+ *
+ * A matte milky-white polymer hull carries every panel. Surfaces are flat
+ * matte planes separated only by tonal steps and 1px hairlines — no relief
+ * shadows, gradients, or textures. International Orange is the single mission
+ * accent; ice blue is reserved for links. Geometry stays hard: 2/4/6px radii,
+ * monospace micro-labels, disciplined whitespace.
+ */
+
+/* ============================================================
+ * 0. Keyframes
+ * ========================================================== */
+
+@keyframes constellation-panel-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* ============================================================
+ * 1. Hull — one flat matte surface
+ * ========================================================== */
+
+[data-theme-id='jotluck.constellation'] .constellation-hull {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--paper-bg);
+}
+
+/* Starfield layer — JS-driven canvas of drifting glows rides at z0. */
+[data-theme-id='jotluck.constellation'] .constellation-stars {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Lift every direct child above the decorative layer. */
+[data-theme-id='jotluck.constellation'] .constellation-hull > :not(.constellation-stars) {
+  position: relative;
+  z-index: 1;
+}
+
+[data-theme-id='jotluck.constellation'] .deck-shell {
+  background: transparent;
+}
+
+/* ============================================================
+ * 2. Deck geometry — flat panels, full-bleed bars
+ * ========================================================== */
+
+[data-theme-id='jotluck.constellation'] .deck-shell__left {
+  padding: var(--space-12) 0 var(--space-12) var(--space-12);
+}
+
+[data-theme-id='jotluck.constellation'] .deck-shell__main {
+  padding: var(--space-12) 0;
+}
+
+[data-theme-id='jotluck.constellation'] .deck-shell__right {
+  padding: var(--space-12) var(--space-12) var(--space-12) 0;
+}
+
+[data-theme-id='jotluck.constellation'] .editor-area--deck {
+  background: transparent;
+}
+
+[data-theme-id='jotluck.constellation'] .deck-shell .editor-scroll {
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+/* ============================================================
+ * 3. Command bar — flat deck strip, hairline lower edge
+ * ========================================================== */
+
+[data-theme-id='jotluck.constellation'] .constellation-command-bar {
+  position: relative;
+  background: var(--constellation-deck-bar);
+  border-bottom: var(--border-thin) solid var(--constellation-deck-edge);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-theme-id='jotluck.constellation'] .constellation-command-bar {
+    background: var(--constellation-deck-bar-glass);
+    -webkit-backdrop-filter: blur(var(--constellation-frost-blur)) saturate(1.02);
+    backdrop-filter: blur(var(--constellation-frost-blur)) saturate(1.02);
+  }
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-command-bar .topbar {
+  height: var(--topbar-height);
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-command-bar .topbar-inner--workbench {
+  grid-template-columns: minmax(200px, 1fr) minmax(240px, 1.05fr) auto;
+  gap: var(--space-12);
+  padding-inline: var(--space-16);
+}
+
+/* Mission mark — one flat orange square beside the notebook name. */
+[data-theme-id='jotluck.constellation'] .constellation-command-bar .topbar-identity-copy {
+  position: relative;
+  padding-left: var(--space-18);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-command-bar .topbar-identity-copy::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  content: '';
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  transform: translateY(-50%);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-command-bar .topbar-notebook--caps {
+  color: var(--ink-muted);
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--constellation-stencil-tracking);
+  line-height: var(--lh-ui);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-command-bar .topbar-title--workbench {
+  color: var(--ink-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-ui);
+}
+
+/* Keys stay invisible until hovered, then read as flat tonal chips. */
+[data-theme-id='jotluck.constellation'] .constellation-command-bar .shell-action {
+  border: var(--border-thin) solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: var(--lh-ui);
+}
+
+[data-theme-id='jotluck.constellation']
+  .constellation-command-bar
+  .shell-action:not(.shell-action--search) {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: var(--space-8);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-command-bar .shell-action:hover {
+  border-color: var(--rule);
+  background: color-mix(in oklch, var(--paper-raised) 72%, transparent);
+  color: var(--ink-primary);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-command-bar .shell-action:active {
+  background: color-mix(in oklch, var(--paper-bg) 72%, transparent);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-command-bar .shell-action.is-active {
+  border-color: color-mix(in oklch, var(--accent) 42%, transparent);
+  background: color-mix(in oklch, var(--accent-soft) 68%, transparent);
+  box-shadow: inset 0 -2px 0 var(--accent);
+  color: var(--accent-hover);
+}
+
+/* Search is a flat field with a hairline edge. */
+[data-theme-id='jotluck.constellation'] .constellation-command-bar .shell-action--search {
+  width: min(100%, 380px);
+  min-height: 34px;
+  padding-inline: var(--space-12);
+  border-color: var(--rule);
+  border-radius: var(--radius);
+  background: color-mix(in oklch, var(--paper-surface) 72%, transparent);
+  color: var(--ink-secondary);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-command-bar .shell-action--search:hover {
+  border-color: color-mix(in oklch, var(--accent) 48%, var(--rule));
+  background: var(--paper-surface);
+  color: var(--accent-hover);
+}
+
+/* ============================================================
+ * 4. Nav panel — flat tonal plate, hairline border
+ * ========================================================== */
+
+[data-theme-id='jotluck.constellation'] .constellation-nav-panel {
+  display: flex;
+  width: var(--wing-left-width);
+  min-height: 0;
+  overflow: hidden;
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius-lg);
+  background: var(--paper-surface);
+  animation: constellation-panel-enter var(--constellation-panel-enter) var(--ease-enter);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-theme-id='jotluck.constellation'] .constellation-nav-panel {
+    background: var(--constellation-panel-glass);
+    -webkit-backdrop-filter: blur(var(--constellation-frost-blur)) saturate(1.02);
+    backdrop-filter: blur(var(--constellation-frost-blur)) saturate(1.02);
+  }
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-nav-panel .left-wing {
+  flex: 1 1 0;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  padding: var(--space-14) var(--space-10) var(--space-12);
+  border: 0;
+  background: transparent;
+}
+
+/* The host logo becomes a flat mission square. */
+[data-theme-id='jotluck.constellation'] .constellation-nav-panel .wing-logo {
+  align-self: center;
+  width: 32px;
+  min-height: 32px;
+  margin-bottom: var(--space-10);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: oklch(0.968 0.008 95);
+  opacity: 1;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-nav-panel .wing-logo:hover {
+  background: var(--accent-hover);
+  opacity: 1;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-nav-panel .wing-rule {
+  width: 100%;
+  margin: var(--space-8) 0 var(--space-12);
+  background: var(--rule-wing);
+}
+
+/* Micro-label: wide-tracked caps with a trailing hairline. */
+[data-theme-id='jotluck.constellation'] .constellation-nav-panel .wing-panel-kicker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: 0 var(--space-4) var(--space-10);
+  color: var(--ink-muted);
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--constellation-stencil-tracking);
+  line-height: var(--lh-ui);
+  text-transform: uppercase;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-nav-panel .wing-panel-kicker::after {
+  flex: 1;
+  height: var(--border-thin);
+  content: '';
+  background: var(--rule-wing);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-nav-panel .wing-bookmarks {
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+}
+
+[data-theme-id='jotluck.constellation']
+  .constellation-nav-panel
+  .left-wing--layout-navigator
+  .wing-bookmark-dot {
+  min-height: 40px;
+  padding: var(--space-6) var(--space-8);
+  border: var(--border-thin) solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  box-shadow: none;
+  color: var(--dot-color);
+}
+
+[data-theme-id='jotluck.constellation']
+  .constellation-nav-panel
+  .left-wing--layout-navigator
+  .wing-bookmark-dot:hover {
+  background: var(--surface-hover);
+}
+
+/* The current note is a flat tonal row with an orange rail. */
+[data-theme-id='jotluck.constellation']
+  .constellation-nav-panel
+  .left-wing--layout-navigator
+  .wing-bookmark-dot.active {
+  background: var(--surface-hover);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* Bookmark dots are flat color cores. */
+[data-theme-id='jotluck.constellation'] .constellation-nav-panel .dot-ring {
+  display: none;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-nav-panel .wing-bookmark-name {
+  color: var(--ink-primary);
+  font-size: var(--text-xs);
+  line-height: var(--lh-ui);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-nav-panel .wing-bookmark-path {
+  color: var(--ink-muted);
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  line-height: var(--lh-ui);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-nav-panel .wing-action-stack .shell-action {
+  width: 32px;
+  height: 32px;
+  border: var(--border-thin) solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-secondary);
+}
+
+[data-theme-id='jotluck.constellation']
+  .constellation-nav-panel
+  .wing-action-stack
+  .shell-action:hover {
+  border-color: var(--rule);
+  background: var(--surface-hover);
+  color: var(--ink-primary);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-nav-panel .wing-empty-dot {
+  background: var(--rule-wing);
+}
+
+[data-theme-id='jotluck.constellation'] .wing-bookmark-label {
+  border-color: var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  box-shadow: var(--constellation-float-shadow);
+  color: var(--ink-primary);
+}
+
+/* ============================================================
+ * 5. Aux panel — flat instrument stack, hairline sections
+ * ========================================================== */
+
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius-lg);
+  background: var(--paper-surface);
+  animation: constellation-panel-enter var(--constellation-panel-enter) var(--ease-enter);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-theme-id='jotluck.constellation'] .constellation-aux-panel {
+    background: var(--constellation-panel-glass);
+    -webkit-backdrop-filter: blur(var(--constellation-frost-blur)) saturate(1.02);
+    backdrop-filter: blur(var(--constellation-frost-blur)) saturate(1.02);
+  }
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .right-wing {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .grab-handle {
+  width: var(--space-12);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .grab-line {
+  background: var(--rule-strong);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .grab-handle:hover .grab-line,
+[data-theme-id='jotluck.constellation']
+  .constellation-aux-panel
+  .grab-handle:focus-visible
+  .grab-line {
+  background: var(--accent);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .inspector-rail-toggle {
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-secondary);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .inspector-rail-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--ink-primary);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .wing-content {
+  padding: var(--space-8) 0 var(--space-16);
+  background: transparent;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .section-header {
+  min-height: 36px;
+  padding: var(--space-6) var(--space-14);
+  border-bottom: var(--border-thin) solid color-mix(in oklch, var(--rule) 54%, transparent);
+  border-radius: 0;
+  background: transparent;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .section-header:hover {
+  background: var(--surface-hover);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .section-label {
+  color: var(--ink-muted);
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--constellation-stencil-tracking);
+  line-height: var(--lh-ui);
+  text-transform: uppercase;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .section-icon {
+  color: color-mix(in oklch, var(--accent) 42%, var(--ink-muted));
+  opacity: 0.9;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .count-badge {
+  min-width: 20px;
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-muted);
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .section-rule {
+  margin: var(--space-8) var(--space-14);
+  background: var(--rule);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .heading-link,
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .backlink-item {
+  border-radius: var(--radius);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .heading-link:hover,
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .backlink-item:hover {
+  background: var(--surface-hover);
+}
+
+[data-theme-id='jotluck.constellation']
+  .constellation-aux-panel
+  .heading-node.active
+  .heading-link {
+  background: var(--surface-hover);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* Tags are flat hairline rectangles, not pills. */
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .tag-chip {
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-secondary);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .tag-chip:hover {
+  border-color: color-mix(in oklch, var(--accent) 52%, var(--rule));
+  background: color-mix(in oklch, var(--accent-soft) 42%, transparent);
+  color: var(--accent-hover);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-aux-panel .empty-hint {
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+  font-style: normal;
+}
+
+/* ============================================================
+ * 6. Control deck — flat key strip above the screen
+ * ========================================================== */
+
+[data-theme-id='jotluck.constellation'] .constellation-control-deck {
+  flex: 0 0 auto;
+  margin: 0 0 var(--space-10);
+  padding: var(--space-4) var(--space-8);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius-lg);
+  background: var(--paper-surface);
+  animation: constellation-panel-enter var(--constellation-panel-enter) var(--ease-enter);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-theme-id='jotluck.constellation'] .constellation-control-deck {
+    background: var(--constellation-panel-glass);
+    -webkit-backdrop-filter: blur(var(--constellation-frost-blur)) saturate(1.02);
+    backdrop-filter: blur(var(--constellation-frost-blur)) saturate(1.02);
+  }
+}
+
+[data-theme-id='jotluck.constellation']
+  .constellation-control-deck:has(.editor-control-strip[data-view-mode='read']) {
+  display: none;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-control-deck .editor-control-strip {
+  gap: var(--space-4);
+  min-height: 34px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-control-deck .editor-control-strip__stack {
+  gap: var(--space-8);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-control-deck .editor-control-strip__actions {
+  order: -1;
+  gap: var(--space-2);
+  padding-right: var(--space-8);
+  border-right: var(--border-thin) solid color-mix(in oklch, var(--rule) 68%, transparent);
+}
+
+[data-theme-id='jotluck.constellation']
+  .constellation-control-deck
+  .editor-control-strip[data-view-mode='read']
+  .editor-control-strip__actions {
+  padding-right: var(--space-2);
+  border-right: 0;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-control-deck .shell-action {
+  min-height: 30px;
+  border: var(--border-thin) solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-secondary);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-control-deck .shell-action:hover {
+  border-color: var(--rule);
+  background: var(--surface-hover);
+  color: var(--ink-primary);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-control-deck .shell-action.is-active {
+  border-color: color-mix(in oklch, var(--accent) 42%, transparent);
+  background: color-mix(in oklch, var(--accent-soft) 62%, transparent);
+  color: var(--accent-hover);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-control-deck .format-toolbar {
+  flex: 1 1 auto;
+  gap: var(--space-2);
+  max-height: none;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-control-deck .format-toolbar__preset select {
+  height: 28px;
+  border-color: var(--rule);
+  border-radius: var(--radius);
+  background: color-mix(in oklch, var(--paper-bg) 58%, transparent);
+  color: var(--ink-secondary);
+}
+
+[data-theme-id='jotluck.constellation']
+  .constellation-control-deck
+  .format-toolbar__preset
+  select:hover,
+[data-theme-id='jotluck.constellation']
+  .constellation-control-deck
+  .format-toolbar__preset
+  select:focus-visible {
+  background: color-mix(in oklch, var(--accent-soft) 38%, transparent);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-control-deck .format-toolbar__button,
+[data-theme-id='jotluck.constellation'] .constellation-control-deck .format-toolbar__clear {
+  min-height: 28px;
+  border: var(--border-thin) solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-secondary);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-control-deck .format-toolbar__button:hover,
+[data-theme-id='jotluck.constellation'] .constellation-control-deck .format-toolbar__clear:hover {
+  border-color: var(--rule);
+  background: var(--surface-hover);
+  color: var(--ink-primary);
+}
+
+[data-theme-id='jotluck.constellation']
+  .constellation-control-deck
+  .format-toolbar__button.is-active {
+  border-color: color-mix(in oklch, var(--accent) 46%, transparent);
+  background: color-mix(in oklch, var(--accent-soft) 52%, transparent);
+  color: var(--accent-hover);
+}
+
+/* ============================================================
+ * 7. Screen — the editor is a flat bright plane in the deck
+ * ========================================================== */
+
+[data-theme-id='jotluck.constellation'] .constellation-canvas {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-canvas > .workflow-canvas {
+  flex: 1 1 auto;
+  min-height: 0;
+  background: transparent;
+}
+
+[data-theme-id='jotluck.constellation'] .workflow-canvas[data-workspace-intent='studio'] {
+  flex-direction: column;
+  padding: 0;
+  background: transparent;
+}
+
+[data-theme-id='jotluck.constellation']
+  .workflow-canvas[data-workspace-intent='studio']
+  .workflow-canvas__main {
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-screen {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius-lg);
+  background: var(--editor-bg);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-screen > .markdown-editor,
+[data-theme-id='jotluck.constellation'] .constellation-screen > .split-pane,
+[data-theme-id='jotluck.constellation'] .constellation-screen > .notebook-open-gate {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Reader scrolling stays with the host workbench, never the screen frame. */
+[data-theme-id='jotluck.constellation'] .constellation-screen > .reader-workbench {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden auto;
+  background: transparent;
+}
+
+[data-theme-id='jotluck.constellation'] .reader-workbench__bar {
+  min-height: 40px;
+  padding: var(--space-6) var(--space-12);
+  border-bottom: var(--border-thin) solid var(--rule);
+  background: color-mix(in oklch, var(--paper-bg) 55%, var(--editor-bg));
+}
+
+[data-theme-id='jotluck.constellation'] .reader-workbench__label {
+  color: var(--ink-muted);
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--constellation-stencil-tracking);
+  line-height: var(--lh-ui);
+  text-transform: uppercase;
+}
+
+[data-theme-id='jotluck.constellation'] .reader-workbench__bar .shell-action--view-toggle {
+  border: var(--border-thin) solid color-mix(in oklch, var(--accent) 38%, var(--rule));
+  border-radius: var(--radius);
+  background: color-mix(in oklch, var(--accent-soft) 58%, transparent);
+  color: var(--accent-hover);
+}
+
+[data-theme-id='jotluck.constellation'] .split-pane {
+  background: transparent;
+}
+
+[data-theme-id='jotluck.constellation'] .split-divider {
+  background: var(--rule);
+}
+
+[data-theme-id='jotluck.constellation'] .split-divider:hover {
+  background: var(--accent);
+}
+
+[data-theme-id='jotluck.constellation'] .split-right {
+  border-left: var(--border-thin) solid var(--rule);
+  background: color-mix(in oklch, var(--paper-bg) 34%, transparent);
+}
+
+/* CodeMirror reads through the screen material. */
+[data-theme-id='jotluck.constellation'] .cm-editor,
+[data-theme-id='jotluck.constellation'] .cm-scroller,
+[data-theme-id='jotluck.constellation'] .cm-content,
+[data-theme-id='jotluck.constellation'] .markdown-body {
+  background: transparent;
+  color: var(--ink-primary);
+}
+
+[data-theme-id='jotluck.constellation'] .cm-gutters {
+  border-right: var(--border-thin) solid color-mix(in oklch, var(--rule) 68%, transparent);
+  background: color-mix(in oklch, var(--paper-bg) 42%, transparent);
+  color: var(--editor-gutter);
+}
+
+[data-theme-id='jotluck.constellation'] .cm-activeLine,
+[data-theme-id='jotluck.constellation'] .cm-activeLineGutter {
+  background: var(--editor-line-highlight);
+}
+
+[data-theme-id='jotluck.constellation'] .cm-live-block {
+  border-color: var(--rule);
+}
+
+[data-theme-id='jotluck.constellation'] .cm-code-lang {
+  color: var(--ink-muted);
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  letter-spacing: var(--constellation-stencil-tracking);
+  text-transform: uppercase;
+}
+
+[data-theme-id='jotluck.constellation'] .wikilink {
+  color: var(--link);
+}
+
+[data-theme-id='jotluck.constellation'] .wikilink--dead {
+  color: var(--link-broken);
+}
+
+[data-theme-id='jotluck.constellation'] .md-tag {
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklch, var(--accent-soft) 52%, transparent);
+  color: var(--accent-hover);
+}
+
+[data-theme-id='jotluck.constellation'] .cm-ghost-text {
+  color: color-mix(in oklch, var(--ink-muted) 72%, transparent);
+}
+
+[data-theme-id='jotluck.constellation'] .cm-list-marker {
+  color: var(--accent);
+}
+
+[data-theme-id='jotluck.constellation'] .cm-task-toggle {
+  accent-color: var(--accent);
+}
+
+/* ============================================================
+ * 8. Telemetry bar — flat strip with mono readouts and LEDs
+ * ========================================================== */
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry {
+  background: var(--constellation-deck-bar);
+  border-top: var(--border-thin) solid var(--constellation-deck-edge);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-theme-id='jotluck.constellation'] .constellation-telemetry {
+    background: var(--constellation-deck-bar-glass);
+    -webkit-backdrop-filter: blur(var(--constellation-frost-blur)) saturate(1.02);
+    backdrop-filter: blur(var(--constellation-frost-blur)) saturate(1.02);
+  }
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-bar {
+  height: var(--statusbar-height);
+  padding: 0 var(--space-12);
+  border: 0;
+  background: transparent;
+  color: var(--ink-secondary);
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-bar--layout-dashboard {
+  height: var(--statusbar-height);
+  background: transparent;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-left--dashboard strong {
+  color: var(--ink-primary);
+  font-weight: var(--fw-semibold);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-center--dashboard {
+  margin-inline: auto;
+  color: var(--ink-muted);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-dashboard-actions {
+  gap: var(--space-4);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .shell-action {
+  min-height: 26px;
+  border: var(--border-thin) solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-secondary);
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .shell-action:hover {
+  border-color: var(--rule);
+  background: color-mix(in oklch, var(--paper-raised) 72%, transparent);
+  color: var(--ink-primary);
+}
+
+/* Save-state LEDs are small static dots. */
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-saved,
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-dirty,
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-saving {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-saved::before,
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-dirty::before,
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-saving::before {
+  width: 7px;
+  height: 7px;
+  content: '';
+  border-radius: var(--radius-full);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-saved {
+  color: var(--signal-success);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-saved::before {
+  background: var(--constellation-led-green);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-dirty {
+  color: var(--signal-warning);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-dirty::before {
+  background: var(--constellation-led-amber);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-saving {
+  color: var(--accent-hover);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-saving::before {
+  background: var(--accent);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-error-message {
+  color: var(--signal-error);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-error-action {
+  border: var(--border-thin) solid color-mix(in oklch, var(--signal-error) 44%, transparent);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--signal-error);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-error-action--secondary {
+  border-color: var(--rule);
+  color: var(--ink-secondary);
+}
+
+/* ============================================================
+ * 9. Teleported surfaces — flat cards, one soft float shadow
+ * ========================================================== */
+
+[data-theme-id='jotluck.constellation'] .modal-overlay,
+[data-theme-id='jotluck.constellation'] .palette-overlay,
+[data-theme-id='jotluck.constellation'] .drawer-overlay {
+  background: var(--overlay);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-theme-id='jotluck.constellation'] .modal-overlay,
+  [data-theme-id='jotluck.constellation'] .palette-overlay,
+  [data-theme-id='jotluck.constellation'] .drawer-overlay {
+    -webkit-backdrop-filter: blur(4px) saturate(0.98);
+    backdrop-filter: blur(4px) saturate(0.98);
+  }
+}
+
+[data-theme-id='jotluck.constellation'] .modal-card,
+[data-theme-id='jotluck.constellation'] .palette,
+[data-theme-id='jotluck.constellation'] .file-drawer,
+[data-theme-id='jotluck.constellation'] .theme-center,
+[data-theme-id='jotluck.constellation'] .update-card {
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius-lg);
+  background: var(--paper-raised);
+  box-shadow: var(--constellation-float-shadow);
+}
+
+[data-theme-id='jotluck.constellation'] .modal-header {
+  border-bottom: var(--border-thin) solid var(--rule);
+  color: var(--ink-primary);
+}
+
+[data-theme-id='jotluck.constellation'] .modal-close {
+  border-radius: var(--radius);
+  color: var(--ink-secondary);
+}
+
+[data-theme-id='jotluck.constellation'] .modal-close:hover {
+  background: var(--surface-hover);
+  color: var(--ink-primary);
+}
+
+[data-theme-id='jotluck.constellation'] .modal-footer {
+  border-top: var(--border-thin) solid var(--rule);
+}
+
+[data-theme-id='jotluck.constellation'] .palette-search input {
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: color-mix(in oklch, var(--paper-bg) 58%, transparent);
+  color: var(--ink-primary);
+}
+
+[data-theme-id='jotluck.constellation'] .palette-search input:focus-visible {
+  border-color: color-mix(in oklch, var(--accent) 52%, var(--rule));
+  outline: none;
+}
+
+[data-theme-id='jotluck.constellation'] .palette-footer {
+  border-top: var(--border-thin) solid var(--rule);
+  color: var(--ink-muted);
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+[data-theme-id='jotluck.constellation'] .esc-badge {
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-muted);
+  font-family: var(--ff-mono);
+}
+
+[data-theme-id='jotluck.constellation'] .match-highlight {
+  color: var(--accent-hover);
+}
+
+[data-theme-id='jotluck.constellation'] .drawer-header {
+  border-bottom: var(--border-thin) solid var(--rule);
+}
+
+[data-theme-id='jotluck.constellation'] .drawer-rule {
+  background: var(--rule);
+}
+
+[data-theme-id='jotluck.constellation'] .context-menu,
+[data-theme-id='jotluck.constellation'] .ctx-menu,
+[data-theme-id='jotluck.constellation'] .format-bubble {
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  box-shadow: var(--constellation-float-shadow);
+}
+
+[data-theme-id='jotluck.constellation'] .context-menu-item:hover,
+[data-theme-id='jotluck.constellation'] .ctx-item:hover {
+  background: var(--surface-hover);
+}
+
+[data-theme-id='jotluck.constellation'] .context-menu-item--danger,
+[data-theme-id='jotluck.constellation'] .ctx-item--danger {
+  color: var(--signal-error);
+}
+
+[data-theme-id='jotluck.constellation'] .bubble-btn {
+  border-radius: var(--radius-sm);
+  color: var(--ink-secondary);
+}
+
+[data-theme-id='jotluck.constellation'] .bubble-btn:hover {
+  background: var(--surface-hover);
+  color: var(--ink-primary);
+}
+
+[data-theme-id='jotluck.constellation'] .bubble-btn.is-active {
+  background: color-mix(in oklch, var(--accent-soft) 62%, transparent);
+  color: var(--accent-hover);
+}
+
+[data-theme-id='jotluck.constellation'] .toast {
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  box-shadow: var(--constellation-float-shadow);
+  color: var(--ink-primary);
+}
+
+[data-theme-id='jotluck.constellation'] .toast--success .toast-icon {
+  color: var(--signal-success);
+}
+
+[data-theme-id='jotluck.constellation'] .toast--error .toast-icon {
+  color: var(--signal-error);
+}
+
+[data-theme-id='jotluck.constellation'] .toast--info .toast-icon {
+  color: var(--link);
+}
+
+[data-theme-id='jotluck.constellation'] .timer-bar {
+  background: var(--accent);
+}
+
+/* Theme center cards: the active/previewing pack gets an orange ring. */
+[data-theme-id='jotluck.constellation'] .theme-card.is-active,
+[data-theme-id='jotluck.constellation'] .theme-card.is-preview {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 var(--border-thin) var(--accent-ring);
+}
+
+/* ============================================================
+ * 10. Buttons — flat keys; primary carries flat orange
+ * ========================================================== */
+
+[data-theme-id='jotluck.constellation'] .mk-btn--secondary,
+[data-theme-id='jotluck.constellation'] .mk-btn--outline,
+[data-theme-id='jotluck.constellation'] .btn--secondary {
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-primary);
+}
+
+[data-theme-id='jotluck.constellation'] .mk-btn--secondary:hover:not(:disabled),
+[data-theme-id='jotluck.constellation'] .mk-btn--outline:hover:not(:disabled),
+[data-theme-id='jotluck.constellation'] .btn--secondary:hover:not(:disabled) {
+  border-color: var(--rule-strong);
+  background: var(--surface-hover);
+}
+
+[data-theme-id='jotluck.constellation'] .mk-btn--secondary:active:not(:disabled),
+[data-theme-id='jotluck.constellation'] .mk-btn--outline:active:not(:disabled),
+[data-theme-id='jotluck.constellation'] .btn--secondary:active:not(:disabled) {
+  background: color-mix(in oklch, var(--paper-bg) 72%, transparent);
+}
+
+[data-theme-id='jotluck.constellation'] .mk-btn--default,
+[data-theme-id='jotluck.constellation'] .btn--primary {
+  border: var(--border-thin) solid color-mix(in oklch, var(--accent-hover) 62%, transparent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: oklch(0.972 0.008 95);
+}
+
+[data-theme-id='jotluck.constellation'] .mk-btn--default:hover:not(:disabled),
+[data-theme-id='jotluck.constellation'] .btn--primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+[data-theme-id='jotluck.constellation'] .mk-btn--default:active:not(:disabled),
+[data-theme-id='jotluck.constellation'] .btn--primary:active:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+[data-theme-id='jotluck.constellation'] .mk-btn--destructive {
+  border: var(--border-thin) solid color-mix(in oklch, var(--signal-error-hover) 62%, transparent);
+  border-radius: var(--radius);
+  background: var(--signal-error);
+  color: oklch(0.972 0.008 95);
+}
+
+[data-theme-id='jotluck.constellation'] .mk-btn--ghost {
+  border-radius: var(--radius);
+  color: var(--ink-secondary);
+}
+
+[data-theme-id='jotluck.constellation'] .mk-btn--ghost:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--ink-primary);
+}
+
+/* ============================================================
+ * 11. Markdown body — hairline rules, tonal code wells
+ * ========================================================== */
+
+[data-theme-id='jotluck.constellation'] .markdown-body h1,
+[data-theme-id='jotluck.constellation'] .markdown-body h2 {
+  padding-bottom: var(--space-8);
+  border-bottom: var(--border-thin) solid var(--rule);
+  color: var(--ink-primary);
+}
+
+[data-theme-id='jotluck.constellation'] .markdown-body h3,
+[data-theme-id='jotluck.constellation'] .markdown-body h4,
+[data-theme-id='jotluck.constellation'] .markdown-body h5,
+[data-theme-id='jotluck.constellation'] .markdown-body h6 {
+  color: var(--ink-primary);
+}
+
+[data-theme-id='jotluck.constellation'] .markdown-body blockquote {
+  border-left: 3px solid var(--blockquote-rule);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+[data-theme-id='jotluck.constellation'] .markdown-body code {
+  border: var(--border-thin) solid color-mix(in oklch, var(--rule) 58%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--code-bg);
+  color: var(--code-text);
+}
+
+[data-theme-id='jotluck.constellation'] .markdown-body pre {
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--code-block-bg);
+}
+
+[data-theme-id='jotluck.constellation'] .markdown-body pre code {
+  border: 0;
+  background: transparent;
+}
+
+[data-theme-id='jotluck.constellation'] .markdown-body th {
+  border-color: var(--rule-strong);
+  background: var(--table-stripe);
+  color: var(--ink-primary);
+}
+
+[data-theme-id='jotluck.constellation'] .markdown-body td {
+  border-color: var(--rule);
+}
+
+[data-theme-id='jotluck.constellation'] .markdown-body tr:nth-child(even) {
+  background: var(--table-stripe);
+}
+
+[data-theme-id='jotluck.constellation'] .markdown-body hr {
+  background: var(--rule);
+}
+
+[data-theme-id='jotluck.constellation'] .markdown-body a {
+  color: var(--link);
+}
+
+[data-theme-id='jotluck.constellation'] .markdown-body a:hover {
+  color: var(--link-visited);
+}
+
+[data-theme-id='jotluck.constellation'] .markdown-body img {
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+}
+
+[data-theme-id='jotluck.constellation'] .markdown-body input[type='checkbox'] {
+  accent-color: var(--accent);
+}
+
+[data-theme-id='jotluck.constellation'] .markdown-body mark {
+  background: var(--highlight);
+}
+
+/* ============================================================
+ * 12. Scrollbars, selection, focus
+ * ========================================================== */
+
+[data-theme-id='jotluck.constellation'] ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+[data-theme-id='jotluck.constellation'] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-theme-id='jotluck.constellation'] ::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--radius);
+  background: var(--scrollbar-thumb);
+  background-clip: content-box;
+}
+
+[data-theme-id='jotluck.constellation'] ::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: content-box;
+}
+
+[data-theme-id='jotluck.constellation'] ::selection {
+  background: var(--editor-selection);
+}
+
+/* ============================================================
+ * 16. Self-illumination — static glows, no keyframes
+ * ========================================================== */
+
+/* Mission mark beside the notebook name picks up a soft orange halo. */
+[data-theme-id='jotluck.constellation'] .constellation-command-bar .topbar-identity-copy::before {
+  box-shadow: 0 0 10px var(--constellation-glow-accent);
+}
+
+/* Current-note rail glows outward in addition to the inset accent stripe. */
+[data-theme-id='jotluck.constellation']
+  .constellation-nav-panel
+  .left-wing--layout-navigator
+  .wing-bookmark-dot.active {
+  box-shadow:
+    inset 3px 0 0 var(--accent),
+    0 0 12px var(--constellation-glow-accent);
+}
+
+/* Telemetry LEDs glow in their own signal color. */
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-saved::before {
+  box-shadow: 0 0 8px var(--constellation-glow-success);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-dirty::before {
+  box-shadow: 0 0 8px oklch(0.68 0.15 77.5 / 0.45);
+}
+
+[data-theme-id='jotluck.constellation'] .constellation-telemetry .status-saving::before {
+  box-shadow: 0 0 8px var(--constellation-glow-accent);
+}
+
+/* Primary buttons cast a soft orange halo on hover. */
+[data-theme-id='jotluck.constellation'] .mk-btn--default:hover:not(:disabled),
+[data-theme-id='jotluck.constellation'] .btn--primary:hover:not(:disabled) {
+  box-shadow: 0 0 14px var(--constellation-glow-accent);
+}
+
+/* Ice-blue links take on a faint cool text glow on hover. */
+[data-theme-id='jotluck.constellation'] .markdown-body a:hover {
+  text-shadow: 0 0 8px var(--constellation-glow-ice);
+}
+
+/* Command bar carries a thin ice-blue light strip along its lower edge. */
+[data-theme-id='jotluck.constellation'] .constellation-command-bar::after {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  content: '';
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--constellation-glow-ice) 30% 70%,
+    transparent
+  );
+}
+
+/* ============================================================
+ * 13. Interaction physics — colors shift, nothing casts shadows
+ * ========================================================== */
+
+@media (hover: hover) and (pointer: fine) {
+  [data-theme-id='jotluck.constellation'] .shell-action,
+  [data-theme-id='jotluck.constellation'] .wing-bookmark-dot,
+  [data-theme-id='jotluck.constellation'] .section-header,
+  [data-theme-id='jotluck.constellation'] .heading-link,
+  [data-theme-id='jotluck.constellation'] .backlink-item,
+  [data-theme-id='jotluck.constellation'] .tag-chip,
+  [data-theme-id='jotluck.constellation'] .format-toolbar__button,
+  [data-theme-id='jotluck.constellation'] .format-toolbar__clear,
+  [data-theme-id='jotluck.constellation'] .mk-btn,
+  [data-theme-id='jotluck.constellation'] .inspector-rail-toggle {
+    transition:
+      background-color var(--dur-micro) var(--ease-fade),
+      border-color var(--dur-micro) var(--ease-fade),
+      color var(--dur-micro) var(--ease-fade);
+  }
+}
+
+/* ============================================================
+ * 14. Responsive — rail-ify nav, fold aux, keep bars readable
+ * ========================================================== */
+
+@media (width <= 1280px) {
+  [data-theme-id='jotluck.constellation'] .constellation-command-bar .topbar-inner--workbench {
+    grid-template-columns: minmax(170px, 0.9fr) minmax(200px, 1fr) auto;
+    gap: var(--space-10);
+  }
+}
+
+@media (721px <= width <= 900px) {
+  [data-theme-id='jotluck.constellation'] {
+    --wing-left-width: 64px;
+  }
+
+  [data-theme-id='jotluck.constellation'] .constellation-nav-panel .left-wing {
+    align-items: center;
+    padding-inline: var(--space-8);
+  }
+
+  [data-theme-id='jotluck.constellation'] .constellation-nav-panel .wing-panel-kicker,
+  [data-theme-id='jotluck.constellation'] .constellation-nav-panel .wing-bookmark-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  [data-theme-id='jotluck.constellation']
+    .constellation-nav-panel
+    .left-wing--layout-navigator
+    .wing-bookmark-dot {
+    display: grid;
+    width: 42px;
+    min-height: 42px;
+    place-items: center;
+    padding: 0;
+  }
+
+  [data-theme-id='jotluck.constellation'] .constellation-telemetry .status-center--dashboard {
+    display: none;
+  }
+}
+
+@media (width <= 720px) {
+  [data-theme-id='jotluck.constellation'] .constellation-command-bar .topbar-inner--workbench {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-8);
+    padding-inline: var(--space-10);
+  }
+
+  [data-theme-id='jotluck.constellation']
+    .constellation-command-bar
+    .topbar-command-zone--workbench {
+    display: none;
+  }
+
+  [data-theme-id='jotluck.constellation'] .deck-shell__left {
+    padding: var(--space-8) 0 var(--space-8) var(--space-8);
+  }
+
+  [data-theme-id='jotluck.constellation'] .deck-shell__main {
+    padding: var(--space-8) var(--space-8) var(--space-8) 0;
+  }
+
+  [data-theme-id='jotluck.constellation'] .constellation-control-deck {
+    flex-wrap: nowrap;
+    max-height: 96px;
+    padding: var(--space-4);
+  }
+
+  [data-theme-id='jotluck.constellation'] .constellation-control-deck .editor-control-strip {
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+
+  [data-theme-id='jotluck.constellation'] .constellation-control-deck .format-toolbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+
+  [data-theme-id='jotluck.constellation'] .constellation-telemetry .status-center--dashboard {
+    display: none;
+  }
+}
+
+/* 窄窗时遥测栏按宿主意图折成两行：底栏行高随内容增长，deck 底行自动让位 */
+@media (width <= 760px) {
+  [data-theme-id='jotluck.constellation'] .constellation-telemetry .status-bar,
+  [data-theme-id='jotluck.constellation'] .constellation-telemetry .status-bar--layout-dashboard {
+    height: auto;
+    min-height: var(--statusbar-height);
+    row-gap: var(--space-4);
+    padding-block: var(--space-6);
+  }
+}
+
+@media (width <= 480px) {
+  [data-theme-id='jotluck.constellation'] .deck-shell__main {
+    padding: var(--space-8);
+  }
+
+  [data-theme-id='jotluck.constellation'] .constellation-control-deck {
+    margin-bottom: var(--space-8);
+  }
+}
+
+@media (pointer: coarse) {
+  [data-theme-id='jotluck.constellation'] .constellation-command-bar .shell-action,
+  [data-theme-id='jotluck.constellation'] .constellation-telemetry .shell-action,
+  [data-theme-id='jotluck.constellation'] .wing-bookmark-dot,
+  [data-theme-id='jotluck.constellation'] .section-header,
+  [data-theme-id='jotluck.constellation'] .heading-link,
+  [data-theme-id='jotluck.constellation'] .backlink-item,
+  [data-theme-id='jotluck.constellation'] .tag-chip,
+  [data-theme-id='jotluck.constellation'] .inspector-rail-toggle {
+    min-height: var(--touch-target-min);
+  }
+
+  [data-theme-id='jotluck.constellation']
+    .constellation-command-bar
+    .shell-action:not(.shell-action--search) {
+    min-width: var(--touch-target-min);
+  }
+}
+
+/* ============================================================
+ * 15. Reduced motion and forced colors
+ * ========================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  /* Starfield stillness is the JS engine's responsibility; this stylesheet
+     introduces no new keyframes for Section 16 self-illumination — all glows
+     are static — so reduced-motion needs no extra overrides beyond what is
+     already declared for panel enter and transition lists below. */
+  [data-theme-id='jotluck.constellation'] .constellation-nav-panel,
+  [data-theme-id='jotluck.constellation'] .constellation-aux-panel,
+  [data-theme-id='jotluck.constellation'] .constellation-control-deck {
+    animation: none;
+  }
+
+  [data-theme-id='jotluck.constellation'] .shell-action,
+  [data-theme-id='jotluck.constellation'] .wing-bookmark-dot,
+  [data-theme-id='jotluck.constellation'] .section-header,
+  [data-theme-id='jotluck.constellation'] .heading-link,
+  [data-theme-id='jotluck.constellation'] .backlink-item,
+  [data-theme-id='jotluck.constellation'] .tag-chip,
+  [data-theme-id='jotluck.constellation'] .format-toolbar__button,
+  [data-theme-id='jotluck.constellation'] .mk-btn,
+  [data-theme-id='jotluck.constellation'] .inspector-rail-toggle {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  [data-theme-id='jotluck.constellation'] .constellation-hull,
+  [data-theme-id='jotluck.constellation'] .constellation-command-bar,
+  [data-theme-id='jotluck.constellation'] .constellation-nav-panel,
+  [data-theme-id='jotluck.constellation'] .constellation-aux-panel,
+  [data-theme-id='jotluck.constellation'] .constellation-control-deck,
+  [data-theme-id='jotluck.constellation'] .constellation-screen,
+  [data-theme-id='jotluck.constellation'] .constellation-telemetry,
+  [data-theme-id='jotluck.constellation'] .modal-card,
+  [data-theme-id='jotluck.constellation'] .palette,
+  [data-theme-id='jotluck.constellation'] .file-drawer,
+  [data-theme-id='jotluck.constellation'] .theme-center {
+    border-color: CanvasText;
+    background: Canvas;
+    box-shadow: none;
+    color: CanvasText;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  [data-theme-id='jotluck.constellation'] .wing-bookmark-dot.active,
+  [data-theme-id='jotluck.constellation'] .heading-node.active .heading-link,
+  [data-theme-id='jotluck.constellation'] .shell-action.is-active,
+  [data-theme-id='jotluck.constellation'] .format-toolbar__button.is-active,
+  [data-theme-id='jotluck.constellation'] .inspector-rail-toggle[aria-expanded='true'] {
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  /* Drop the decorative starfield layer in forced-colors mode. */
+  [data-theme-id='jotluck.constellation'] .constellation-stars {
+    display: none;
+  }
+
+  /* Drop the command-bar light strip as well. */
+  [data-theme-id='jotluck.constellation'] .constellation-command-bar::after {
+    display: none;
+  }
+
+  /* Zero every self-illumination shadow/text-shadow from Section 16. */
+  [data-theme-id='jotluck.constellation'] .constellation-command-bar .topbar-identity-copy::before,
+  [data-theme-id='jotluck.constellation']
+    .constellation-nav-panel
+    .left-wing--layout-navigator
+    .wing-bookmark-dot.active,
+  [data-theme-id='jotluck.constellation'] .constellation-telemetry .status-saved::before,
+  [data-theme-id='jotluck.constellation'] .constellation-telemetry .status-dirty::before,
+  [data-theme-id='jotluck.constellation'] .constellation-telemetry .status-saving::before,
+  [data-theme-id='jotluck.constellation'] .mk-btn--default:hover:not(:disabled),
+  [data-theme-id='jotluck.constellation'] .btn--primary:hover:not(:disabled) {
+    box-shadow: none;
+  }
+
+  [data-theme-id='jotluck.constellation'] .markdown-body a:hover {
+    text-shadow: none;
+  }
+}

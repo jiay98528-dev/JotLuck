@@ -129,6 +129,7 @@ function moduleToPack(
 const officialLocaleKeys: Record<string, string> = {
   paper: 'paper',
   'jotluck.ability-lab': 'abilityLab',
+  'jotluck.constellation': 'constellation',
   'jotluck.halo-canvas': 'haloCanvas',
   'jotluck.lumen-field': 'lumenField',
   'jotluck.super-workbench': 'superWorkbench',

@@ -620,6 +620,16 @@ export const messages = {
         features:
           "Workbench TopBar{'|'}Aile droite Atlas{'|'}Barre d’état Dashboard{'|'}Cartes déclaratives",
       },
+      constellation: {
+        name: 'Constellation',
+        headline: 'Un pont de mission sur une coque blanc laiteux.',
+        story:
+          'Le NASA punk dans sa forme la plus sobre : sur une coque mate blanc laiteux, chaque panneau est une surface mate et plane, délimitée uniquement par des nuances et de fins filets — aucun relief, aucun ornement. Orange international pour l’accent, bleu glace pour les liens.',
+        bestFor:
+          "Écriture quotidienne{'|'}Amateurs d’espace{'|'}Postes ordonnés{'|'}Édition longue",
+        features:
+          "Barres de commande et télémétrie pleine largeur{'|'}Panneaux mats et plats à filets fins{'|'}Accent orange international{'|'}Télémétrie monospace et voyants d’état{'|'}Angles durs et espaces apaisés",
+      },
       haloCanvas: {
         name: 'Halo Canvas',
         headline:

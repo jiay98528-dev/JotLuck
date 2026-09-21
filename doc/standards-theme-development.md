@@ -91,19 +91,19 @@ Manifest 类型权威来源是 `packages/app/src/types/theme-pack.ts` 的 `Theme
 
 必填字段：
 
-| 字段            | 类型                     | 要求                                                                                   |
-| --------------- | ------------------------ | -------------------------------------------------------------------------------------- |
-| `id`            | `string`                 | 稳定包名格式，必须匹配 `/^[a-z0-9][a-z0-9._-]+$/i`。                                   |
-| `version`       | `string`                 | 主题版本。                                                                             |
-| `themeApi`      | `2`                      | 当前仅支持 Theme API v2。                                                              |
-| `runtime`       | `ThemeRuntime`           | `declarative`、`official-code` 或 `trusted-code`。                                     |
-| `minAppVersion` | `string`                 | 不得高于当前 `APP_THEME_VERSION`。                                                     |
-| `name`          | `string`                 | 用户可见主题名。                                                                       |
-| `author`        | `string`                 | 作者名。                                                                               |
-| `capabilities`  | `ThemeCapability[]`      | 能力声明。                                                                             |
-| `permissions`   | `ThemePermission[]`      | 当前作为本地能力声明，不作为默认安装阻断。                                             |
-| `layoutPreset`  | `ThemeLayoutPreset`      | 当前可选：`winged`、`focus`、`archive`、`reader`、`studio`、`atelier`、`single-page`。 |
-| `checksums`     | `Record<string, string>` | 包文件 checksum 映射。                                                                 |
+| 字段            | 类型                     | 要求                                                                                           |
+| --------------- | ------------------------ | ---------------------------------------------------------------------------------------------- |
+| `id`            | `string`                 | 稳定包名格式，必须匹配 `/^[a-z0-9][a-z0-9._-]+$/i`。                                           |
+| `version`       | `string`                 | 主题版本。                                                                                     |
+| `themeApi`      | `2`                      | 当前仅支持 Theme API v2。                                                                      |
+| `runtime`       | `ThemeRuntime`           | `declarative`、`official-code` 或 `trusted-code`。                                             |
+| `minAppVersion` | `string`                 | 不得高于当前 `APP_THEME_VERSION`。                                                             |
+| `name`          | `string`                 | 用户可见主题名。                                                                               |
+| `author`        | `string`                 | 作者名。                                                                                       |
+| `capabilities`  | `ThemeCapability[]`      | 能力声明。                                                                                     |
+| `permissions`   | `ThemePermission[]`      | 当前作为本地能力声明，不作为默认安装阻断。                                                     |
+| `layoutPreset`  | `ThemeLayoutPreset`      | 当前可选：`winged`、`focus`、`archive`、`reader`、`studio`、`atelier`、`single-page`、`deck`。 |
+| `checksums`     | `Record<string, string>` | 包文件 checksum 映射。                                                                         |
 
 可选产品字段：
 
@@ -199,6 +199,8 @@ interface ThemeDrawerShellRecipe {
 - `bottom` 通常使用 `editor-control` 与 `status-bar`，承载命令、格式工具和保存状态。
 - 抽屉默认关闭；用户可临时打开或固定。固定后宿主必须让出版心，不能长期遮挡正文。
 - 抽屉布局是通用 recipe 能力，宿主不得为某个 `themeId` 写特判。
+
+`deck` 预设（2026-09-13 起）使用宿主 `DeckShell` 壳：顶栏与底栏贯通窗口全宽，左右翼收缩为中间行的面板区域；翼板宽度仍由 `--wing-left-width` 与宿主 resize 合同决定，编辑区滚动归属不变（`.editor-scroll` / `reader-workbench` 规则与 winged 相同）。
 
 当前 action id：
 
@@ -628,6 +630,9 @@ pnpm.cmd --filter @jotluck/app build
 仅修改本文档或元指令时，可只执行文档一致性与格式检查。
 
 ## 变更记录
+
+- 2026-09-13：新增 `deck` 布局预设（宿主 `DeckShell` 壳，全宽顶/底栏 + 中间三列面板），官方主题 `jotluck.constellation`（扁平哑光 NASA 朋克，性能 4 级）作为其首个实现；不新增 slot 与 action。
+- 2026-09-13：`jotluck.constellation` 增补「磨砂舷窗」环境层——hull 组件承载零依赖 WebGL2/Canvas2D 星空画布（`starfield.ts`，reduced-motion 静态化、hidden 暂停、dispose 释放上下文），磨砂层与自发光细节为纯 CSS；不新增 slot 与 action，正文面板保持不透明。
 
 - 2026-08-11：补充主题编辑表面的滚动所有权合同，并要求官方主题目录文案与预览资产同步当前运行时基线。
 

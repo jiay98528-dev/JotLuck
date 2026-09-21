@@ -595,6 +595,15 @@ export const messages = {
         bestFor: "主题系统验收{'|'}UX 组件重排{'|'}本地市场演示",
         features: "Workbench TopBar{'|'}Atlas 右翼{'|'}Dashboard 状态栏{'|'}声明式主题中心卡片",
       },
+      constellation: {
+        name: '群星（Constellation）',
+        headline: '乳白舱体上的任务甲板。',
+        story:
+          'NASA 朋克的克制表达：哑光乳白舱体上，所有面板都是平整的哑光平面，只靠明暗阶梯与发丝刻线分区，没有浮雕阴影和多余装饰。国际橙负责强调，冰蓝负责链接。',
+        bestFor: "日常写作{'|'}太空题材爱好者{'|'}秩序感工作台{'|'}长时间编辑",
+        features:
+          "全宽指挥栏与遥测栏{'|'}平整哑光面板与发丝刻线{'|'}国际橙任务强调色{'|'}等宽遥测读数与状态灯{'|'}硬朗小圆角与克制留白",
+      },
       haloCanvas: {
         name: '光环画布（Halo Canvas）',
         headline: '最近笔记、写作画布与知识检查器常驻三栏。',

@@ -68,9 +68,10 @@ describe('ThemeDialog', () => {
     const images = Array.from(document.body.querySelectorAll<HTMLImageElement>('.theme-card img'));
     const sources = images.map((image) => image.getAttribute('src') ?? '');
 
-    expect(images).toHaveLength(3);
+    expect(images).toHaveLength(4);
     expect(sources.every(Boolean)).toBe(true);
     expect(sources.some((source) => source.includes('halo-canvas-preview'))).toBe(true);
+    expect(sources.some((source) => source.includes('constellation-preview'))).toBe(true);
   });
 
   it('shows developer themes only behind the local dev switch', () => {

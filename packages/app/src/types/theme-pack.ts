@@ -18,7 +18,8 @@ export type ThemeLayoutPreset =
   | 'reader'
   | 'studio'
   | 'atelier'
-  | 'single-page';
+  | 'single-page'
+  | 'deck';
 
 export type ThemeCapability =
   | 'tokens'
@@ -582,6 +583,7 @@ export const THEME_LAYOUT_PRESETS: ThemeLayoutPreset[] = [
   'studio',
   'atelier',
   'single-page',
+  'deck',
 ];
 
 export const THEME_CAPABILITIES: ThemeCapability[] = [

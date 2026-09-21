@@ -89,6 +89,117 @@
         </ThemeSlotBoundary>
       </template>
     </SinglePageDrawerShell>
+    <DeckShell
+      v-else-if="themeChrome.layoutPreset === 'deck'"
+      :data-chrome-topbar="themeChrome.topBarVariant"
+      :data-chrome-left-wing="themeChrome.leftWingMode"
+      :data-chrome-right-wing="themeChrome.rightWingMode"
+      :data-chrome-toolbar="themeChrome.toolbarDensity"
+      :data-chrome-reading="themeChrome.readingWidth"
+      :data-chrome-official="themeChrome.official ? 'true' : 'false'"
+      :data-workspace-intent="themeChrome.workspaceIntent"
+      :data-topbar-layout="themeChrome.topBarLayout"
+      :data-left-wing-layout="themeChrome.leftWingLayout"
+      :data-editor-control-layout="themeChrome.editorControlLayout"
+      :data-status-layout="themeChrome.statusLayout"
+      :data-right-wing-policy="themeChrome.rightWingPolicy"
+    >
+      <template v-if="showTopBar" #top>
+        <ThemeSlotBoundary
+          slot-id="topbar"
+          :theme-id="theme.renderedTheme.manifest.id"
+          :recipe="theme.activeUxRecipes.topbar"
+          :actions="actions"
+          :slot-props="topBarSlotProps"
+        >
+          <TopBar
+            :note-title="noteTitle"
+            :notebook-name="notebookName"
+            :region="topBarRegion"
+            :left-actions="actionsFor('topbar-left')"
+            :center-actions="actionsFor('topbar-center')"
+            :right-actions="actionsFor('topbar-right')"
+          />
+        </ThemeSlotBoundary>
+      </template>
+
+      <template #left>
+        <ThemeSlotBoundary
+          slot-id="left-wing"
+          :theme-id="theme.renderedTheme.manifest.id"
+          :recipe="theme.activeUxRecipes['left-wing']"
+          :actions="actions"
+          :slot-props="leftWingSlotProps"
+        >
+          <LeftWing
+            :notes="recentNotes"
+            :active-path="activePath"
+            :region="leftWingRegion"
+            :actions="actionsFor('left-wing')"
+            @select-note="$emit('select-note', $event)"
+          />
+        </ThemeSlotBoundary>
+      </template>
+
+      <template #main>
+        <main class="editor-area editor-area--deck">
+          <div class="editor-scroll">
+            <slot name="editor" />
+          </div>
+        </main>
+      </template>
+
+      <template v-if="showRightWing" #right>
+        <ThemeSlotBoundary
+          slot-id="right-wing"
+          :theme-id="theme.renderedTheme.manifest.id"
+          :recipe="theme.activeUxRecipes['right-wing']"
+          :actions="actions"
+          :slot-props="rightWingSlotProps"
+        >
+          <RightWing
+            :headings="headings"
+            :backlinks="backlinks"
+            :tags="tags"
+            :active-heading-id="activeHeadingId"
+            :collapsed="!showRightWing"
+            :region="rightWingRegion"
+            @navigate-heading="(id: string, ln: number) => $emit('navigate-heading', id, ln)"
+            @navigate-backlink="(entry: BacklinkEntry) => $emit('navigate-backlink', entry)"
+            @select-tag="$emit('select-tag', $event)"
+            @toggle-collapse="$emit('toggle-right-wing')"
+          />
+        </ThemeSlotBoundary>
+      </template>
+
+      <template #bottom>
+        <ThemeSlotBoundary
+          slot-id="status-bar"
+          :theme-id="theme.renderedTheme.manifest.id"
+          :recipe="theme.activeUxRecipes['status-bar']"
+          :actions="actions"
+          :status-text="statusText"
+          :slot-props="statusBarSlotProps"
+        >
+          <StatusBar
+            :char-count="charCount"
+            :word-count="wordCount"
+            :line-count="lineCount"
+            :cursor-line="cursorLine"
+            :cursor-col="cursorCol"
+            :is-dirty="isDirty"
+            :is-saving="isSaving"
+            :save-error="saveError"
+            :status-note="statusNote"
+            :last-saved-at="lastSavedAt"
+            :region="statusBarRegion"
+            :actions="actionsFor('status-right')"
+            @retry-save="$emit('retry-save')"
+            @save-copy="$emit('save-copy')"
+          />
+        </ThemeSlotBoundary>
+      </template>
+    </DeckShell>
     <div
       v-else
       class="app-shell"
@@ -206,6 +317,7 @@
  */
 import LeftWing from './LeftWing.vue';
 import RightWing from './RightWing.vue';
+import DeckShell from './DeckShell.vue';
 import SinglePageDrawerShell from './SinglePageDrawerShell.vue';
 import TopBar from '../editor/TopBar.vue';
 import StatusBar from '../editor/StatusBar.vue';

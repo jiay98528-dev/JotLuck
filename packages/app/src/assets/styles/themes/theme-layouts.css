@@ -46,6 +46,13 @@ html[data-theme-id] body {
   --editor-max-width: 680px;
 }
 
+/* deck 预设：全宽顶/底栏 + 中间三列面板。壳结构见 components/layout/DeckShell.vue。 */
+[data-layout-preset='deck'] {
+  --wing-left-width: 232px;
+  --wing-right-width: 256px;
+  --editor-max-width: 720px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html[data-theme-id] body,
   [data-layout-preset] .left-wing,

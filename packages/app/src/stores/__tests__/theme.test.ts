@@ -25,8 +25,13 @@ describe('useThemeStore', () => {
 
     expect(theme.activeThemeId).toBe(DEFAULT_THEME_ID);
     expect(theme.activeThemeLabel).toBe('羽翼布局');
-    expect(theme.themes.length).toBeGreaterThanOrEqual(5);
-    expect(publicIds).toEqual(['jotluck.halo-canvas', 'jotluck.lumen-field', 'paper']);
+    expect(theme.themes.length).toBeGreaterThanOrEqual(6);
+    expect(publicIds).toEqual([
+      'jotluck.constellation',
+      'jotluck.halo-canvas',
+      'jotluck.lumen-field',
+      'paper',
+    ]);
     expect(developerIds).toEqual(['jotluck.ability-lab', 'jotluck.super-workbench']);
     expect(theme.themeCenterCatalogThemes.map((pack) => pack.manifest.id).sort()).toEqual(
       publicIds,
@@ -53,6 +58,7 @@ describe('useThemeStore', () => {
     expect(theme.showDeveloperThemesInCatalog).toBe(true);
     expect(theme.themeCenterCatalogThemes.map((pack) => pack.manifest.id).sort()).toEqual([
       'jotluck.ability-lab',
+      'jotluck.constellation',
       'jotluck.halo-canvas',
       'jotluck.lumen-field',
       'jotluck.super-workbench',
@@ -192,6 +198,49 @@ describe('useThemeStore', () => {
     expect(document.documentElement.hasAttribute('data-drawer-shell')).toBe(false);
     expect(document.getElementById(ACTIVE_THEME_STYLE_ID)?.textContent).not.toContain(
       'halo-canvas',
+    );
+  });
+
+  it('activates Constellation with deck chrome and scoped material CSS', () => {
+    const theme = useThemeStore();
+
+    theme.init();
+    theme.activateTheme('jotluck.constellation');
+
+    expect(theme.activeThemeId).toBe('jotluck.constellation');
+    expect(theme.activeChromeState.layoutPreset).toBe('deck');
+    expect(theme.activeChromeState.workspaceIntent).toBe('studio');
+    expect(theme.activeChromeState.defaultViewMode).toBe('live');
+    expect(theme.activeChromeState.drawerShell).toBeUndefined();
+    expect(theme.activeTheme.manifest.runtime).toBe('official-code');
+    expect(theme.activeTheme.officialProfile?.performanceLevel).toBe(4);
+    expect(theme.activeTheme.manifest.slots).toEqual(
+      expect.arrayContaining([
+        'app-shell',
+        'topbar',
+        'left-wing',
+        'right-wing',
+        'editor-control',
+        'status-bar',
+        'workflow-canvas',
+        'editor-surface',
+        'external-reader',
+      ]),
+    );
+    expect(theme.activeTheme.css).toContain("[data-theme-id='jotluck.constellation']");
+    expect(theme.activeTheme.css).toContain('constellation-panel-enter');
+    expect(theme.activeTheme.css).toContain('@media (prefers-reduced-motion: reduce)');
+    expect(theme.activeTheme.css).toContain('@media (forced-colors: active)');
+    expect(document.documentElement.getAttribute('data-theme-id')).toBe('jotluck.constellation');
+    expect(document.documentElement.getAttribute('data-layout-preset')).toBe('deck');
+    expect(document.documentElement.hasAttribute('data-drawer-shell')).toBe(false);
+
+    theme.activateTheme(DEFAULT_THEME_ID);
+
+    expect(document.documentElement.getAttribute('data-theme-id')).toBe(DEFAULT_THEME_ID);
+    expect(document.documentElement.getAttribute('data-layout-preset')).toBe('winged');
+    expect(document.getElementById(ACTIVE_THEME_STYLE_ID)?.textContent).not.toContain(
+      'constellation',
     );
   });
 

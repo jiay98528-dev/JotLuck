@@ -3,6 +3,7 @@ import { translate } from '@/i18n';
 export type OfficialThemeLocaleKey =
   | 'paper'
   | 'abilityLab'
+  | 'constellation'
   | 'haloCanvas'
   | 'lumenField'
   | 'superWorkbench';
