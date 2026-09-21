@@ -1264,7 +1264,7 @@
 }
 
 [data-theme-id='jotluck.constellation'] .constellation-telemetry .status-dirty::before {
-  box-shadow: 0 0 8px oklch(0.68 0.15 77.5 / 0.45);
+  box-shadow: 0 0 8px var(--constellation-glow-warning);
 }
 
 [data-theme-id='jotluck.constellation'] .constellation-telemetry .status-saving::before {

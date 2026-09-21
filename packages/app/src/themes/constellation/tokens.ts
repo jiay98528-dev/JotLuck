@@ -121,6 +121,7 @@ export const tokens: ThemeTokenSet = {
   '--constellation-glow-accent': 'oklch(0.623 0.188 46.5 / 0.5)',
   '--constellation-glow-ice': 'oklch(0.72 0.09 251.5 / 0.45)',
   '--constellation-glow-success': 'oklch(0.62 0.15 158.5 / 0.55)',
+  '--constellation-glow-warning': 'oklch(0.68 0.15 77.5 / 0.45)',
 
   /* ── 等宽字体栈（遥测读数 / 微标签用） ────────────────────────── */
   '--ff-mono':

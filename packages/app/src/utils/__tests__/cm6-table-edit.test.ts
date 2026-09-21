@@ -327,20 +327,34 @@ describe('applyTableAction deleteColumn', () => {
     expect(after).toContain('d\\|e');
   });
 
-  it('handles `a | b` (no outer pipes) without regex-blind rewriting', () => {
+  it('handles `a | b` (no outer pipes) — delete-to-1col forces outer pipes (setext guard)', () => {
     const doc = 'h1 | h2\n--- | ---\nd1 | d2';
     const view = mountEditor(doc, doc.indexOf('d2') + 1);
     expect(applyTableAction(view, 'deleteColumn')).toBe(true);
     const after = view.state.doc.toString();
-    expect(after).toBe('h1\n---\nd1');
+    // 黑盒审计 B MAJOR-1 守卫：裸 cell 行 + `---` 会被重解析为 setext 标题，
+    // 删至单列统一补外管道保表格结构（cell 内容逐字保留）
+    expect(after).toBe('| h1 |\n| --- |\n| d1 |');
   });
 
-  it('handles fullwidth ｜ no outer pipes', () => {
+  it('handles fullwidth ｜ no outer pipes — same setext guard (fullwidth outer pipes)', () => {
     const doc = 'h1 ｜ h2\n--- ｜ ---\nd1 ｜ d2';
     const view = mountEditor(doc, doc.indexOf('d2') + 1);
     expect(applyTableAction(view, 'deleteColumn')).toBe(true);
     const after = view.state.doc.toString();
-    expect(after).toBe('h1\n---\nd1');
+    // 守卫补的外管道跟随该行定界风格（全角行用 ｜）
+    expect(after).toBe('｜ h1 ｜\n｜ --- ｜\n｜ d1 ｜');
+  });
+
+  it('keeps the table alive when a jagged separator loses its only cell (MINOR-2 guard)', () => {
+    // 分隔行只有 1 格：删列 0 后兜底一格 '---'，表格不退化
+    const doc = '| a | b |\n| --- |\n| 1 | 2 |';
+    const view = mountEditor(doc, doc.indexOf('2') + 1);
+    expect(applyTableAction(view, 'deleteColumn')).toBe(true);
+    const after = view.state.doc.toString();
+    expect(after).toBe('| a |\n| --- |\n| 1 |');
+    // 仍是合法表格（工具条语境可解析）
+    expect(resolveTableContext(view.state)?.rowRole).toBe('data');
   });
 
   it('rejects deleteColumn when columnCount === 1', () => {

@@ -539,6 +539,16 @@ class SlashMenuPlugin implements PluginValue {
     if (len === 0) return true; // 消费事件，避免落入续格式
     this.state.selectedIndex = (this.state.selectedIndex + delta + len) % len;
     this.render();
+    // 10 项超过 maxHeight 需滚动——键盘循环到折叠区时把选中项滚入视野
+    // （黑盒审计 A-F5）；jsdom 未实现 scrollIntoView，try/catch 兜底
+    const selected = this.root.querySelector('[aria-selected="true"]');
+    if (selected instanceof HTMLElement) {
+      try {
+        selected.scrollIntoView({ block: 'nearest' });
+      } catch {
+        /* jsdom/旧环境无实现——忽略 */
+      }
+    }
     return true;
   }
 

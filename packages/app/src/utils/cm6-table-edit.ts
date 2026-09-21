@@ -460,15 +460,24 @@ function doDeleteColumn(view: EditorView, ctx: TableContext): boolean {
   if (block.columnCount <= 1) return false;
   const doc = view.state.doc;
   const changes: Array<{ from: number; to: number; insert: string }> = [];
+  // 结构守卫（黑盒审计 B MAJOR-1/MINOR-2）：删至单列且原行无外管道时，
+  // 裸 cell 行 + 下一行 `---` 会被重解析为 setext 标题（表格解体）；
+  // 空行（分隔行被删到 0 格）则整块退化为段落。删列产物统一补外管道、
+  // 空行兜底一格（分隔行 '---'、其余空 cell），保证产物仍是合法表格。
+  const forceOuterPipes = block.columnCount === 2;
   for (const row of block.rows) {
     if (columnIndex >= row.cells.length) continue; // 锯齿行缺该列跳过
     const original = doc.sliceString(row.range.from, row.range.to);
     const texts = row.cells.map((cell) => cell.text);
     texts.splice(columnIndex, 1);
+    if (texts.length === 0) texts.push(row.isSeparator ? '---' : '');
+    const rowMeta = rowLineMeta(original);
     changes.push({
       from: row.range.from,
       to: row.range.to,
-      insert: rebuildRowLine(original, texts),
+      insert: forceOuterPipes
+        ? rebuildRowLine(`${rowMeta.indent}| ${original.trim()} |`, texts)
+        : rebuildRowLine(original, texts),
     });
   }
   if (changes.length === 0) return false;
@@ -480,14 +489,16 @@ function doDeleteColumn(view: EditorView, ctx: TableContext): boolean {
   const cursorOriginal = doc.sliceString(ctx.row.range.from, ctx.row.range.to);
   const cursorTexts = ctx.row.cells.map((cell) => cell.text);
   if (columnIndex < cursorTexts.length) cursorTexts.splice(columnIndex, 1);
-  const cursorMeta = rowLineMeta(cursorOriginal);
+  if (cursorTexts.length === 0) cursorTexts.push(ctx.row.isSeparator ? '---' : '');
+  const cursorHasLeading = forceOuterPipes || rowLineMeta(cursorOriginal).hasLeading;
+  const cursorIndentLength = rowLineMeta(cursorOriginal).indent.length;
   const neighborIndex = columnIndex === 0 ? 0 : columnIndex - 1;
   const selection = {
     anchor:
       ctx.row.range.from +
       deltaBefore +
-      cursorMeta.indent.length +
-      cellStartOffset(cursorTexts, neighborIndex, cursorMeta.hasLeading),
+      cursorIndentLength +
+      cellStartOffset(cursorTexts, neighborIndex, cursorHasLeading),
   };
   changes.sort((a, b) => b.from - a.from);
   view.dispatch({ changes, selection, annotations: isolateHistory.of('full') });
@@ -520,29 +531,22 @@ function doDeleteTable(view: EditorView, ctx: TableContext): boolean {
     k++;
   }
   const trailingBlanks = Math.max(0, trailingCount - 1);
-  // 默认删除范围：表行本身（保留两侧边界 `\n` 为「其余内容」）
+  // 默认删除范围：表行本身（保留两侧边界 `\n` 为「其余内容」）。
+  // 注：文档首/尾由该默认路径正确承担（黑盒审计 B MINOR-4：原先基于
+  // isAtDocStart/isAtDocEnd 的两个附加分支经推演不可达，已删除）
   let changeFrom = from - leadingBlanks;
   let changeTo = to + trailingBlanks;
   let insertText = '';
-  const isAtDocEnd = changeTo >= docText.length;
-  const isAtDocStart = changeFrom <= 0;
-  if (leadingBlanks > 0 && trailingBlanks > 0 && !isAtDocStart && !isAtDocEnd) {
+  if (leadingBlanks > 0 && trailingBlanks > 0) {
     // 中部夹心空行 → 收敛为一个空行（保留 `before` 与 `after` 间恰好一条
     // 空行 = 两个换行）：吃掉两侧边界 + 所有空行，插入 `\n\n`
     changeFrom = from - leadingBlanks - 1;
     changeTo = to + 1 + trailingBlanks;
     insertText = '\n\n';
-  } else if (leadingBlanks > 0 && trailingBlanks > 0 && isAtDocEnd) {
-    // 表在文档末 + 两侧均有空行 → 保留表前空行集合，吃掉表后
-    changeTo = to + 1 + trailingBlanks;
-    insertText = '';
-  } else if (leadingBlanks > 0 && trailingBlanks > 0 && isAtDocStart) {
-    // 表在文档首 + 两侧均有空行 → 保留表后空行集合，吃掉表前
-    changeFrom = from - leadingBlanks - 1;
-    insertText = '';
   }
-  // 光标落点：表格原位置后的首个非空内容
-  const cursorTarget = computeCursorAfterDelete(docText, changeFrom, insertText);
+  // 光标落点：新文档中表格原位置后的首个非空内容（黑盒审计 A-F2/B-MINOR-3：
+  // 必须在新坐标系上扫描，旧坐标与被删区间重叠会偏移）
+  const cursorTarget = computeCursorAfterDelete(docText, changeFrom, changeTo, insertText);
   view.dispatch({
     changes: { from: changeFrom, to: changeTo, insert: insertText },
     selection: { anchor: cursorTarget },
@@ -552,13 +556,18 @@ function doDeleteTable(view: EditorView, ctx: TableContext): boolean {
 }
 
 /**
- * 删除后光标定位：插入文本段末端向后找首个非空字符。
+ * 删除后光标定位：在删除后的新文档串上，从插入文本段末端向后找首个非空字符。
  */
-function computeCursorAfterDelete(docText: string, changeFrom: number, insertText: string): number {
-  const afterPos = changeFrom + insertText.length;
-  let k = afterPos;
-  while (k < docText.length && docText.charAt(k) === '\n') k++;
-  // 若整个 doc 只剩空行，k === docText.length，光标落在末尾即可
+function computeCursorAfterDelete(
+  docText: string,
+  changeFrom: number,
+  changeTo: number,
+  insertText: string,
+): number {
+  const newDoc = docText.slice(0, changeFrom) + insertText + docText.slice(changeTo);
+  let k = changeFrom + insertText.length;
+  while (k < newDoc.length && newDoc.charAt(k) === '\n') k++;
+  // 若整个 doc 只剩空行，k === newDoc.length，光标落在末尾即可
   return k;
 }
 
