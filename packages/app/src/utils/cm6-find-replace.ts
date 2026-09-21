@@ -45,6 +45,7 @@ function buildPhrases(): { [key: string]: string } {
   ];
   const phrases: { [key: string]: string } = {};
   for (const [source, key] of keys) {
+    // i18n-dynamic-key — 键为上方静态 17 项，全部已在 locales/editor.find.* 注册
     phrases[source] = translate(key);
   }
   return phrases;
