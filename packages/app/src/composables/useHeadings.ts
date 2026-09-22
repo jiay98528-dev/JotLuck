@@ -9,11 +9,12 @@
  *
  * @see migration-map.md §5
  */
-import { ref } from 'vue';
+import { ref, getCurrentScope, onScopeDispose } from 'vue';
+import type { DocumentAnalysis } from '@/services/document-analysis';
 import type { HeadingItem } from '@/types';
-import { parseDocument, type HeadingNode } from '@jotluck/renderer';
+import { parseDocument, type DocumentAst, type HeadingNode } from '@jotluck/renderer';
 
-export function useHeadings() {
+export function useHeadings(analysis?: DocumentAnalysis) {
   const headings = ref<HeadingItem[]>([]);
 
   /**
@@ -23,8 +24,7 @@ export function useHeadings() {
    * setext 行号 = lineFrom + 1（AST 的 lineFrom 是 0 基闭区间 lineTo 指向规则线），
    * 而 ATX 直接是 lineFrom + 1。
    */
-  function buildTree(content: string): HeadingItem[] {
-    const ast = parseDocument(content);
+  function buildTree(content: string, ast: DocumentAst = parseDocument(content)): HeadingItem[] {
     const flat: HeadingItem[] = [];
     for (const block of ast.blocks) {
       if (block.type !== 'heading') continue;
@@ -62,7 +62,18 @@ export function useHeadings() {
   }
 
   function update(content: string): void {
+    if (analysis) {
+      analysis.update(content);
+      return;
+    }
     headings.value = buildTree(content);
+  }
+
+  if (analysis) {
+    const unsubscribe = analysis.subscribe(({ ast }) => {
+      headings.value = buildTree(ast.source, ast);
+    });
+    if (getCurrentScope()) onScopeDispose(unsubscribe);
   }
 
   function getActiveHeadingId(cursorLine: number): string | null {

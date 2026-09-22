@@ -1,3 +1,4 @@
+import { getDocumentAst } from './cm6-document-analysis';
 /**
  * cm6-slash-commands — CodeMirror 6 斜杠命令（块插入菜单）
  *
@@ -23,7 +24,7 @@ import type { EditorState, Extension } from '@codemirror/state';
 import { isolateHistory } from '@codemirror/commands';
 import { EditorView, ViewPlugin, keymap } from '@codemirror/view';
 import type { KeyBinding, PluginValue, ViewUpdate } from '@codemirror/view';
-import { blockAtLine, parseDocument } from '@jotluck/renderer';
+import { blockAtLine } from '@jotluck/renderer';
 import { translate } from '@/i18n';
 
 // ─── 条目静态描述（spec §3 逐字表） ────────────────────────────────────
@@ -209,7 +210,7 @@ export function getSlashTrigger(state: EditorState): SlashTrigger | null {
 
   // 块级语境判定：与 cm6-smart-continue 同一口径
   const lineNumber = line.number - 1;
-  const ast = parseDocument(state.doc.toString());
+  const ast = getDocumentAst(state);
   const block = blockAtLine(ast, lineNumber);
   if (block) {
     if (

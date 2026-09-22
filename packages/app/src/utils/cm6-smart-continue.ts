@@ -1,3 +1,4 @@
+import { getDocumentAst } from './cm6-document-analysis';
 /**
  * cm6-smart-continue — CodeMirror 6 智能续格式
  *
@@ -15,7 +16,7 @@ import type { EditorState } from '@codemirror/state';
 import type { Command, KeyBinding } from '@codemirror/view';
 import { EditorView } from '@codemirror/view';
 import { isolateHistory } from '@codemirror/commands';
-import { blockAtLine, parseDocument } from '@jotluck/renderer';
+import { blockAtLine } from '@jotluck/renderer';
 
 export type ContinuationKind =
   | 'unorderedListItem'
@@ -50,7 +51,7 @@ export function detectContinuationContext(state: EditorState): ContinuationConte
   const lineNumber = line.number - 1;
 
   const docText = state.doc.toString();
-  const ast = parseDocument(docText);
+  const ast = getDocumentAst(state);
   const block = blockAtLine(ast, lineNumber);
   if (!block) return null;
 
@@ -178,7 +179,7 @@ function exitEmptyTableRow(view: EditorView, context: ContinuationContext): bool
 
   // R4-9③：查被删行之后是否仍有同表数据行
   const lineNumber = state.doc.lineAt(lineFrom).number - 1;
-  const ast = parseDocument(docText);
+  const ast = getDocumentAst(state);
   const block = blockAtLine(ast, lineNumber);
   let hasFollowingDataRow = false;
   let nextRowFirstCellOffset: number | null = null;

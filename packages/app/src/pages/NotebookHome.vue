@@ -72,8 +72,21 @@
                   <span>{{ externalError }}</span>
                 </div>
                 <!-- eslint-disable vue/no-v-html -->
+                <ProgressivePreview
+                  v-if="!loading && !externalError && isLargeDocument"
+                  ref="progressivePreviewRef"
+                  :key="`${activeNotebookRoot}:${shellActivePath}:${externalFilePath}`"
+                  class="markdown-body external-preview"
+                  :source="currentContent"
+                  :analysis="documentAnalysis"
+                  :options="progressivePreviewOptions"
+                  :revision="`${wikiLinkRevision}:${previewImages.imageRevision.value}:${remoteImages.revision.value}:${currentLocale}`"
+                  @click="onPreviewClick"
+                  @load.capture="onRemoteImageLoad"
+                  @error.capture="onRemoteImageError"
+                />
                 <article
-                  v-else
+                  v-else-if="!loading && !externalError"
                   class="markdown-body external-preview"
                   @click="onPreviewClick"
                   @load.capture="onRemoteImageLoad"
@@ -237,7 +250,21 @@
                         </div>
                       </div>
                       <!-- eslint-disable vue/no-v-html -->
+                      <ProgressivePreview
+                        v-if="isLargeDocument"
+                        ref="progressivePreviewRef"
+                        :key="`${activeNotebookRoot}:${shellActivePath}:${externalFilePath}`"
+                        class="markdown-body reader-preview"
+                        :source="currentContent"
+                        :analysis="documentAnalysis"
+                        :options="progressivePreviewOptions"
+                        :revision="`${wikiLinkRevision}:${previewImages.imageRevision.value}:${remoteImages.revision.value}:${currentLocale}`"
+                        @click="onPreviewClick"
+                        @load.capture="onRemoteImageLoad"
+                        @error.capture="onRemoteImageError"
+                      />
                       <article
+                        v-else
                         class="markdown-body reader-preview"
                         @click="onPreviewClick"
                         @load.capture="onRemoteImageLoad"
@@ -262,6 +289,7 @@
                             ref="editorRef"
                             :key="`split-${isScratchSession ? 'draft' : shellActivePath}`"
                             :model-value="currentContent"
+                            :analysis="documentAnalysis"
                             :read-only="isInteractionLocked"
                             :placeholder="
                               isScratchSession ? t('notebook.status.scratchPlaceholder') : undefined
@@ -312,7 +340,21 @@
                         />
                         <div class="split-right" :style="{ flex: `0 0 ${100 - splitRatio}%` }">
                           <!-- eslint-disable vue/no-v-html -->
+                          <ProgressivePreview
+                            v-if="isLargeDocument"
+                            ref="progressivePreviewRef"
+                            :key="`${activeNotebookRoot}:${shellActivePath}:${externalFilePath}`"
+                            class="markdown-body split-preview"
+                            :source="currentContent"
+                            :analysis="documentAnalysis"
+                            :options="progressivePreviewOptions"
+                            :revision="`${wikiLinkRevision}:${previewImages.imageRevision.value}:${remoteImages.revision.value}:${currentLocale}`"
+                            @click="onPreviewClick"
+                            @load.capture="onRemoteImageLoad"
+                            @error.capture="onRemoteImageError"
+                          />
                           <div
+                            v-else
                             class="markdown-body split-preview"
                             @click="onPreviewClick"
                             @load.capture="onRemoteImageLoad"
@@ -328,6 +370,7 @@
                         ref="editorRef"
                         :key="`live-${isScratchSession ? 'draft' : shellActivePath}`"
                         :model-value="currentContent"
+                        :analysis="documentAnalysis"
                         :read-only="isInteractionLocked"
                         :placeholder="
                           isScratchSession ? t('notebook.status.scratchPlaceholder') : undefined
@@ -848,6 +891,11 @@ import {
 import { useIndexStore } from '@/stores/index';
 import { useSearchStore } from '@/stores/search';
 import { useThemeStore } from '@/stores/theme';
+import ProgressivePreview from '@/components/editor/ProgressivePreview.vue';
+import {
+  DocumentAnalysis,
+  isLargeDocument as shouldUseProgressiveRendering,
+} from '@/services/document-analysis';
 import { useHeadings } from '@/composables/useHeadings';
 import { renderMarkdown, highlightCodeBlocks } from '@jotluck/renderer';
 import type {
@@ -927,7 +975,7 @@ import type {
 } from '@/types/theme-pack';
 import { createUserMessageError, normalizeCommandError } from '@/services/command-errors';
 
-const { t } = useI18n();
+const { t, locale: currentLocale } = useI18n();
 const router = useRouter();
 
 const CommandPalette = defineAsyncComponent(
@@ -973,12 +1021,6 @@ function createFileSystem(): IFileSystemService {
 }
 const fs: IFileSystemService = createFileSystem();
 const supportedNoteExtensionsText = supportedNoteExtensionsLabel();
-const LARGE_DOCUMENT_PREVIEW_DELAY_THRESHOLD_CHARS = 120_000;
-const LARGE_DOCUMENT_PREVIEW_DELAY_THRESHOLD_LINES = 3_000;
-const LARGE_DOCUMENT_DEFERRED_WORK_DELAY_MS = 1800;
-const largeDocumentPreviewPendingHtml = computed(
-  () => `<p class="large-doc-preview-pending">${t('notebook.status.renderingLargePreview')}</p>`,
-);
 const STARTUP_IPC_TIMEOUT_MS = 8_000;
 const EXTERNAL_FILE_READ_TIMEOUT_MS = 15_000;
 
@@ -1042,7 +1084,8 @@ const isSinglePageLayout = computed(
 // --- Index & Search ---
 const indexStore = useIndexStore();
 const searchStore = useSearchStore();
-const { headings, update: updateHeadings, getActiveHeadingId } = useHeadings();
+const documentAnalysis = new DocumentAnalysis();
+const { headings, update: updateHeadings, getActiveHeadingId } = useHeadings(documentAnalysis);
 
 // --- UI State ---
 type ViewMode = ThemeViewMode | string;
@@ -1052,7 +1095,6 @@ const splitPreviewHtml = ref('');
 const wikiLinkRevision = ref(0);
 const deferSplitEditorMount = ref(false);
 let splitDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-let splitEditorMountTimer: ReturnType<typeof setTimeout> | null = null;
 
 const showRightWing = ref(true);
 const showLeftDrawer = ref(false);
@@ -1703,6 +1745,28 @@ function onPreviewClick(event: MouseEvent): void {
   if (!(target instanceof Element)) return;
   const anchor = target.closest('a');
   const href = anchor?.getAttribute('href');
+  if (href?.startsWith('#') && progressivePreviewRef.value) {
+    event.preventDefault();
+    try {
+      progressivePreviewRef.value.scrollToHeading(decodeURIComponent(href.slice(1)));
+    } catch {
+      /* malformed anchor */
+    }
+    return;
+  }
+  if (anchor?.hasAttribute('data-note') && progressivePreviewRef.value) {
+    event.preventDefault();
+    void onLivePreviewWikiLinkClick(
+      anchor.getAttribute('data-note')!,
+      anchor.getAttribute('data-anchor'),
+    );
+    return;
+  }
+  if (anchor?.hasAttribute('data-tag') && progressivePreviewRef.value) {
+    event.preventDefault();
+    onTagSelect(anchor.getAttribute('data-tag')!);
+    return;
+  }
   if (!href || !/^(?:https?:\/\/|mailto:|tel:|ftp:|www\.)/i.test(href)) return;
   event.preventDefault();
   void openExternalUrl(href);
@@ -1774,18 +1838,6 @@ function refreshSplitPreviewIfVisible(): void {
 }
 
 function scheduleSplitEditorMountForCurrentMode(): void {
-  if (splitEditorMountTimer) {
-    clearTimeout(splitEditorMountTimer);
-    splitEditorMountTimer = null;
-  }
-  if (viewMode.value === 'split' && isLargeDocument.value) {
-    deferSplitEditorMount.value = true;
-    splitEditorMountTimer = setTimeout(() => {
-      deferSplitEditorMount.value = false;
-      splitEditorMountTimer = null;
-    }, LARGE_DOCUMENT_DEFERRED_WORK_DELAY_MS);
-    return;
-  }
   deferSplitEditorMount.value = false;
 }
 
@@ -1909,10 +1961,8 @@ const editorStats = reactive({
   cursorLine: null as number | null,
   cursorCol: null as number | null,
 });
-const isLargeDocument = computed(
-  () =>
-    currentContent.value.length > LARGE_DOCUMENT_PREVIEW_DELAY_THRESHOLD_CHARS ||
-    editorStats.lineCount > LARGE_DOCUMENT_PREVIEW_DELAY_THRESHOLD_LINES,
+const isLargeDocument = computed(() =>
+  shouldUseProgressiveRendering(currentContent.value, editorStats.lineCount),
 );
 
 // --- Computed ---
@@ -1925,6 +1975,10 @@ const pendingDeleteName = computed(() =>
     ? (pendingDeletePath.value.split('/').pop() ?? pendingDeletePath.value)
     : '',
 );
+
+documentAnalysis.subscribe(({ wordCount }) => {
+  editorStats.wordCount = wordCount;
+});
 
 const activeHeadingId = computed(() => getActiveHeadingId(editorStats.cursorLine ?? 0));
 const currentBacklinks = computed((): BacklinkEntry[] => {
@@ -4059,16 +4113,9 @@ function wikiLinkExists(noteTitle: string): boolean {
  */
 function updateSplitPreview(): void {
   if (previewRenderTimer) clearTimeout(previewRenderTimer);
+  if (isLargeDocument.value) return;
   const content = currentContent.value;
-  const lineCount = content ? content.split('\n').length : 0;
-  const renderDelay =
-    content.length > LARGE_DOCUMENT_PREVIEW_DELAY_THRESHOLD_CHARS ||
-    lineCount > LARGE_DOCUMENT_PREVIEW_DELAY_THRESHOLD_LINES
-      ? LARGE_DOCUMENT_DEFERRED_WORK_DELAY_MS
-      : 50;
-  if (renderDelay > 50) {
-    splitPreviewHtml.value = largeDocumentPreviewPendingHtml.value;
-  }
+  const renderDelay = 50;
   previewRenderTimer = setTimeout(() => {
     try {
       splitPreviewHtml.value = renderMarkdown(content, {
@@ -4104,6 +4151,7 @@ function updateSplitPreview(): void {
 }
 
 function updateExternalPreview(): void {
+  if (isLargeDocument.value) return;
   try {
     externalPreviewHtml.value = renderMarkdown(currentContent.value, {
       remoteImages: remoteImagePolicy.value,
@@ -4217,6 +4265,10 @@ async function openExternalParentAsNotebook(): Promise<void> {
 }
 
 function scrollExternalHeading(id: string): void {
+  if (progressivePreviewRef.value) {
+    progressivePreviewRef.value.scrollToHeading(id);
+    return;
+  }
   const target = document.getElementById(id);
   target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -4331,8 +4383,14 @@ function onEditorContentUpdate(content: string): void {
 
 function updateEditorStats(content: string): void {
   editorStats.charCount = content.length;
-  editorStats.wordCount = content ? content.split(/\s+/).filter(Boolean).length : 0;
-  editorStats.lineCount = content ? content.split('\n').length : 0;
+  if (documentAnalysis.result?.ast.source === content)
+    editorStats.wordCount = documentAnalysis.result.wordCount;
+  const editorDoc = editorRef.value?.getEditorView()?.state.doc;
+  editorStats.lineCount = !content
+    ? 0
+    : editorDoc?.length === content.length && editorDoc.toString() === content
+      ? editorDoc.lines
+      : content.split('\n').length;
 }
 
 async function debouncedSave(
@@ -4520,7 +4578,11 @@ watch(imageUpload.uploadError, (message) => {
 function onSelectionChange(sel: { from: number; to: number } | null): void {
   const view = editorRef.value?.getEditorView();
   if (view && sel) {
-    activeParagraphPreset.value = detectParagraphPreset(view.state.doc.toString(), sel.from);
+    const cursorLine = view.state.doc.lineAt(sel.from);
+    activeParagraphPreset.value = detectParagraphPreset(
+      cursorLine.text,
+      sel.from - cursorLine.from,
+    );
   }
   if (!sel || sel.from === sel.to) {
     bubbleVisible.value = false;
@@ -4714,8 +4776,27 @@ function onQuickAction(action: 'new-note' | 'export' | 'settings'): void {
   else if (action === 'settings') showSettings.value = true;
 }
 
+watch(
+  () => `${activeNotebookRoot.value}:${activePath.value}:${externalFilePath.value}`,
+  () => {
+    documentAnalysis.reset();
+  },
+  { flush: 'sync' },
+);
+
+const progressivePreviewRef = ref<InstanceType<typeof ProgressivePreview> | null>(null);
+const progressivePreviewOptions = computed(() => ({
+  wikiLinkExists,
+  resolveImageSrc: previewImages.resolveImageSrc,
+  remoteImages: remoteImagePolicy.value,
+}));
+
 // --- Navigation ---
 function onNavTreeNavigate(_headingId: string, lineNumber: number): void {
+  if (viewMode.value === 'read' && progressivePreviewRef.value) {
+    progressivePreviewRef.value.scrollToHeading(_headingId);
+    return;
+  }
   const view = editorRef.value?.getEditorView();
   if (!view || lineNumber <= 0) return;
   const line = view.state.doc.line(Math.min(lineNumber, view.state.doc.lines));
@@ -4893,6 +4974,24 @@ async function onCreateBlank(): Promise<void> {
 // --- Keyboard ---
 function onGlobalKeydown(e: KeyboardEvent): void {
   const key = e.key.toLowerCase();
+  if (
+    (e.ctrlKey || e.metaKey) &&
+    key === 'f' &&
+    progressivePreviewRef.value &&
+    (viewMode.value === 'read' || isExternalReadonly.value)
+  ) {
+    e.preventDefault();
+    e.stopPropagation();
+    progressivePreviewRef.value.openFind();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && key === 'p' && progressivePreviewRef.value) {
+    e.preventDefault();
+    e.stopPropagation();
+    // Export prepares the complete document, not the currently mounted virtual range.
+    showExport.value = true;
+    return;
+  }
   if (
     isInteractionLocked.value &&
     (e.ctrlKey || e.metaKey) &&
@@ -5340,13 +5439,13 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  documentAnalysis.destroy();
   componentUnmounted = true;
   externalSessionGeneration++;
   window.removeEventListener('keydown', onGlobalKeydown, { capture: true });
   window.removeEventListener('beforeunload', onBeforeUnload);
   if (saveTimer) clearTimeout(saveTimer);
   if (splitDebounceTimer) clearTimeout(splitDebounceTimer);
-  if (splitEditorMountTimer) clearTimeout(splitEditorMountTimer);
   if (previewRenderTimer) clearTimeout(previewRenderTimer);
   previewImages.reset();
   if (updateTimer) clearTimeout(updateTimer);

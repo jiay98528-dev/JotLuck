@@ -48,11 +48,21 @@ function isJsonText(value: string): boolean {
 
 /** Locate complete bare JSON blocks without treating fenced code as JSON. */
 export function findBareJsonBlockLineRanges(source: string): BareJsonBlockRange[] {
+  const scanner = scanBareJsonBlockLineRanges(source);
+  let result = scanner.next();
+  while (!result.done) result = scanner.next();
+  return result.value;
+}
+
+export function* scanBareJsonBlockLineRanges(
+  source: string,
+): Generator<void, BareJsonBlockRange[]> {
   const lines = source.split('\n');
   const ranges: BareJsonBlockRange[] = [];
   let inFence = false;
 
   for (let i = 0; i < lines.length; i++) {
+    if (i % 128 === 0) yield;
     const line = lines[i] ?? '';
     if (/^\s*```/.test(line)) {
       inFence = !inFence;
@@ -67,6 +77,7 @@ export function findBareJsonBlockLineRanges(source: string): BareJsonBlockRange[
     let end = -1;
 
     for (let j = i; j < lines.length; j++) {
+      if (j % 128 === 0) yield;
       const current = lines[j] ?? '';
       if (j > i && /^\s*```/.test(current)) break;
       candidate.push(current);

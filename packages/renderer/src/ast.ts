@@ -10,7 +10,7 @@
  * 含全角字符类的正则直接切，禁止把归一化后的下标当源码偏移。
  */
 
-import { findBareJsonBlockLineRanges } from './bare-json';
+import { scanBareJsonBlockLineRanges } from './bare-json';
 import {
   headingIdFromText,
   isTableRowCandidate,
@@ -334,15 +334,117 @@ function normalizeBulletChar(raw: string): string {
  *
  * @param source - 原始 Markdown 源码（未归一化）
  */
+/** Same scanner for synchronous commands and cooperative background analysis. */
 export function parseDocument(source: string): DocumentAst {
+  const scanner = scanDocument(source);
+  let result = scanner.next();
+  while (!result.done) result = scanner.next();
+  return result.value;
+}
+
+export async function parseDocumentAsync(
+  source: string,
+  cancelled: () => boolean = () => false,
+): Promise<DocumentAst> {
+  const scanner = scanDocument(source);
+  let deadline = performance.now() + 8;
+  for (;;) {
+    if (cancelled()) throw new Error('Document analysis cancelled');
+    const result = scanner.next();
+    if (result.done) return result.value;
+    if (performance.now() >= deadline) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      deadline = performance.now() + 8;
+    }
+  }
+}
+
+/** Safe fast path for ordinary prose edits; structural edits use the same full scanner. */
+export async function updateDocumentAsync(
+  previous: DocumentAst | null,
+  source: string,
+  cancelled: () => boolean = () => false,
+): Promise<DocumentAst> {
+  if (!previous) return parseDocumentAsync(source, cancelled);
+  if (previous.source === source) return previous;
+  const before = previous.source;
+  let from = 0;
+  const limit = Math.min(source.length, before.length);
+  while (from < limit && source.charCodeAt(from) === before.charCodeAt(from)) from++;
+  let oldEnd = before.length;
+  let newEnd = source.length;
+  while (
+    oldEnd > from &&
+    newEnd > from &&
+    before.charCodeAt(oldEnd - 1) === source.charCodeAt(newEnd - 1)
+  ) {
+    oldEnd--;
+    newEnd--;
+  }
+  const removed = before.slice(from, oldEnd);
+  const inserted = source.slice(from, newEnd);
+  // No line boundary, punctuation, indentation, or Markdown marker may change here.
+  const safe = /^[\p{L}\p{N} ]*$/u;
+  if (!safe.test(removed) || !safe.test(inserted) || /\n/.test(removed + inserted))
+    return parseDocumentAsync(source, cancelled);
+  const index = previous.blocks.findIndex(
+    (block) => block.range.from < from && block.range.to > oldEnd,
+  );
+  const changed = previous.blocks[index];
+  if (!changed || changed.type !== 'paragraph' || changed.lineFrom !== changed.lineTo)
+    return parseDocumentAsync(source, cancelled);
+  const delta = source.length - before.length;
+  const local = source.slice(changed.range.from, changed.range.to + delta);
+  const localAst = parseDocument(local);
+  if (localAst.blocks.length !== 1 || localAst.blocks[0]?.type !== 'paragraph')
+    return parseDocumentAsync(source, cancelled);
+  const blocks: BlockNode[] = [];
+  let deadline = performance.now() + 8;
+  // Offsets change, source-derived text and row numbers do not. Never mutate old snapshots.
+  const shift = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(shift);
+    if (!value || typeof value !== 'object') return value;
+    const result: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value))
+      result[key] =
+        (key === 'from' || key === 'to') && typeof entry === 'number'
+          ? entry + delta
+          : shift(entry);
+    return result;
+  };
+  for (let i = 0; i < previous.blocks.length; i++) {
+    if (cancelled()) throw new Error('Document analysis cancelled');
+    const block = previous.blocks[i]!;
+    if (i < index) blocks.push(block);
+    else if (i === index)
+      blocks.push({
+        ...changed,
+        range: { from: changed.range.from, to: changed.range.to + delta },
+        text: source.slice(changed.range.from, changed.range.to + delta),
+      });
+    else blocks.push(shift(block) as BlockNode);
+    if (performance.now() >= deadline) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      deadline = performance.now() + 8;
+    }
+  }
+  return { source, blocks, lineMap: previous.lineMap, frontmatter: previous.frontmatter };
+}
+
+function* scanDocument(source: string): Generator<void, DocumentAst> {
   const sourceLines = source.split('\n');
   const lineCount = sourceLines.length;
-  const detectLines = sourceLines.map(normalizeLineForDetect);
+  const detectLines: string[] = [];
+  for (let line = 0; line < lineCount; line++) {
+    detectLines.push(normalizeLineForDetect(sourceLines[line]!));
+    if (line % 128 === 0) yield;
+  }
 
   // 行首源码偏移（前缀和）
   const lineStarts: number[] = new Array<number>(lineCount);
   let offset = 0;
   for (let i = 0; i < lineCount; i++) {
+    if (i % 256 === 0) yield;
     lineStarts[i] = offset;
     offset += sourceLines[i]!.length + 1;
   }
@@ -353,7 +455,10 @@ export function parseDocument(source: string): DocumentAst {
 
   // 裸 JSON 范围（归一化全文，行号直接对应源码行）
   const jsonRangesByStart = new Map(
-    findBareJsonBlockLineRanges(detectLines.join('\n')).map((range) => [range.startLine, range]),
+    (yield* scanBareJsonBlockLineRanges(detectLines.join('\n'))).map((range) => [
+      range.startLine,
+      range,
+    ]),
   );
 
   const blocks: BlockNode[] = [];
@@ -381,12 +486,16 @@ export function parseDocument(source: string): DocumentAst {
 
   let i = 0;
   while (i < lineCount) {
+    yield;
     const detectLine = detectLines[i] ?? '';
 
     // ── Frontmatter（仅文档第 0 行 `---` 开启） ──
     if (i === 0 && detectLine.trim() === '---') {
       let j = 1;
-      while (j < lineCount && (detectLines[j] ?? '').trim() !== '---') j++;
+      while (j < lineCount && (detectLines[j] ?? '').trim() !== '---') {
+        if (j % 128 === 0) yield;
+        j++;
+      }
       const closed = j < lineCount;
       const lineTo = closed ? j : lineCount - 1;
       const contentFrom = lineStarts[0]! + sourceLines[0]!.length + 1;
@@ -439,6 +548,7 @@ export function parseDocument(source: string): DocumentAst {
       let j = i + 1;
       let closed = false;
       while (j < lineCount) {
+        if (j % 128 === 0) yield;
         const closeMatch = FENCE_CLOSE_RE.exec(detectLines[j] ?? '');
         if (
           closeMatch &&
@@ -562,6 +672,7 @@ export function parseDocument(source: string): DocumentAst {
       const lines: BlockquoteLineInfo[] = [];
       let j = i;
       while (j < lineCount && (detectLines[j] ?? '').startsWith('>')) {
+        if (j % 128 === 0) yield;
         const srcLine = sourceLines[j] ?? '';
         const detLine = detectLines[j] ?? '';
         const srcMatch = SRC_BLOCKQUOTE_RE.exec(srcLine);
@@ -590,7 +701,7 @@ export function parseDocument(source: string): DocumentAst {
         range: { from: lineStarts[i]!, to: lineRange(j - 1).to },
         lineFrom: i,
         lineTo: j - 1,
-        depth: Math.max(...lines.map((line) => line.depth)),
+        depth: lines.reduce((max, line) => Math.max(max, line.depth), 0),
         lines,
       };
       pushBlock(node);
@@ -604,12 +715,14 @@ export function parseDocument(source: string): DocumentAst {
       const groupFrom = i;
       let j = i;
       while (j < lineCount) {
+        if (j % 128 === 0) yield;
         const itemDetect = detectListItem(detectLines[j] ?? '');
         if (!itemDetect || itemDetect.family !== listDetect.family) break;
         j++;
       }
       const groupRange: SourceRange = { from: lineStarts[groupFrom]!, to: lineRange(j - 1).to };
       for (let k = groupFrom; k < j; k++) {
+        if (k % 128 === 0) yield;
         const srcLine = sourceLines[k] ?? '';
         const base = lineRange(k);
         let kind: ListItemKind = 'unordered';
@@ -696,10 +809,14 @@ export function parseDocument(source: string): DocumentAst {
         (i + 1 < lineCount && isSeparatorDetectLine(detectLines[i + 1] ?? '')))
     ) {
       let j = i;
-      while (j < lineCount && isTableRowCandidate(detectLines[j] ?? '')) j++;
+      while (j < lineCount && isTableRowCandidate(detectLines[j] ?? '')) {
+        if (j % 128 === 0) yield;
+        j++;
+      }
       const rows: TableRowNode[] = [];
       let separatorIndex: number | null = null;
       for (let k = i; k < j; k++) {
+        if (k % 128 === 0) yield;
         const isSeparator = isSeparatorDetectLine(detectLines[k] ?? '');
         if (isSeparator && separatorIndex === null) separatorIndex = k - i;
         rows.push({
@@ -711,9 +828,9 @@ export function parseDocument(source: string): DocumentAst {
         });
       }
       const hasSeparator = separatorIndex !== null;
-      const columnCount = Math.max(
+      const columnCount = rows.reduce(
+        (max, row) => (row.isSeparator ? max : Math.max(max, row.cells.length)),
         1,
-        ...rows.filter((row) => !row.isSeparator).map((row) => row.cells.length),
       );
       for (let r = 0; r < rows.length; r++) {
         rows[r]!.isHeader = separatorIndex === 1 && r === 0;
@@ -742,6 +859,7 @@ export function parseDocument(source: string): DocumentAst {
     const paraFrom = i;
     let j = i;
     while (j < lineCount) {
+      if (j % 128 === 0) yield;
       const nextDetect = detectLines[j] ?? '';
       if (nextDetect.trim() === '') break;
       if (j !== paraFrom) {

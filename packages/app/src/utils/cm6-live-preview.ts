@@ -1,3 +1,11 @@
+import {
+  getDocumentAst,
+  peekDocumentAst,
+  documentAnalysisFacet,
+  documentAnalysisReady,
+} from './cm6-document-analysis';
+import { isLargeDocument } from '@/services/document-analysis';
+import type { DocumentAst, BlockNode } from '@jotluck/renderer';
 /**
  * cm6-live-preview — CodeMirror 6 块级即时渲染
  *
@@ -48,17 +56,15 @@ function escapeAttr(text: string): string {
 
 // ---- Reference Definitions ----
 
-const REF_DEF_RE = /^\s*\[([^\]]+)\]:\s*(\S+)(?:\s+"([^"]*)")?\s*$/;
-
 /**
  * 扫描全文收集引用式链接/图片定义。
  * 渲染每 block 时前置注入，确保 marked 能解析 [text][ref] 和 ![img][ref]。
  */
-function collectRefDefs(text: string): Map<string, string> {
+function collectRefDefs(ast: DocumentAst): Map<string, string> {
   const refs = new Map<string, string>();
-  for (const line of text.split('\n')) {
-    const m = REF_DEF_RE.exec(line);
-    if (m) refs.set(m[1]!.toLowerCase(), line);
+  for (const block of ast.blocks) {
+    if (block.type === 'refDefinition')
+      refs.set(block.label.toLowerCase(), ast.source.slice(block.range.from, block.range.to));
   }
   return refs;
 }
@@ -306,22 +312,42 @@ function groupKey(lineNumber: number): string {
  * 【明示收紧 3】表格分隔行语义以 AST 为准（全角 － 格视为 -），与旧纯半角判定存在
  * 理论差异；hasSeparator_live 严格按钉死取 node.separatorIndex === 1。
  */
-function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBlock[] {
-  const ast = parseDocument(text);
-  const normalizedLines = normalizeFullwidthMarkdownSyntax(text).split('\n');
-  const sourceLines = text.split('\n');
-  // 行首源码偏移（前缀和；归一化不增删行，行号与 AST 一致）
-  const lineStarts: number[] = [];
+const liveLines = new WeakMap<
+  DocumentAst,
+  { lines: string[]; starts: number[]; refs: Map<string, string> }
+>();
+const tableWidths = new WeakMap<BlockNode, string>();
+
+function documentLines(ast: DocumentAst) {
+  const cached = liveLines.get(ast);
+  if (cached) return cached;
+  const lines = ast.source.split('\n');
   let offset = 0;
-  for (let li = 0; li < sourceLines.length; li++) {
-    lineStarts.push(offset);
-    offset += sourceLines[li]!.length + 1;
-  }
-  const lineRange = (lineNumber: number): { from: number; to: number } => ({
+  const starts = lines.map((line) => {
+    const from = offset;
+    offset += line.length + 1;
+    return from;
+  });
+  const result = { lines, starts, refs: collectRefDefs(ast) };
+  liveLines.set(ast, result);
+  return result;
+}
+
+function parseLiveBlocks(
+  text: string,
+  options: LivePreviewOptions = {},
+  ast = parseDocument(text),
+  firstLine = 0,
+  lastLine = ast.lineMap.length - 1,
+  render = true,
+): LiveBlock[] {
+  const { lines: sourceLines, starts: lineStarts } = documentLines(ast);
+  const normalizedLine = (line: number): string =>
+    normalizeFullwidthMarkdownSyntax(sourceLines[line] ?? '');
+  const lineRange = (lineNumber: number) => ({
     from: lineStarts[lineNumber]!,
     to: lineStarts[lineNumber]! + sourceLines[lineNumber]!.length,
   });
-
   const blocks: LiveBlock[] = [];
   const nodes = ast.blocks;
 
@@ -333,14 +359,16 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
     }
   };
 
-  for (let idx = 0; idx < nodes.length; idx++) {
+  for (let idx = ast.lineMap[firstLine]?.blockIndex ?? 0; idx < nodes.length; idx++) {
     const node = nodes[idx]!;
+    if (node.lineFrom > lastLine) break;
+    if (node.lineTo < firstLine) continue;
 
     // ── Frontmatter：逐行 frontmatterLine，首 first / 闭合末行 last / 其余 middle ──
     if (node.type === 'frontmatter') {
       const group = groupKey(node.lineFrom);
-      for (let k = node.lineFrom; k <= node.lineTo; k++) {
-        const raw = normalizedLines[k] ?? '';
+      for (let k = Math.max(node.lineFrom, firstLine); k <= Math.min(node.lineTo, lastLine); k++) {
+        const raw = normalizedLine(k);
         const range = lineRange(k);
         const block: LiveBlock = {
           key: blockKey(k, raw),
@@ -369,8 +397,8 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
     // ── 代码围栏：逐行 codeFenceLine，位置规则同 frontmatter ──
     if (node.type === 'codeFence') {
       const group = groupKey(node.lineFrom);
-      for (let k = node.lineFrom; k <= node.lineTo; k++) {
-        const raw = normalizedLines[k] ?? '';
+      for (let k = Math.max(node.lineFrom, firstLine); k <= Math.min(node.lineTo, lastLine); k++) {
+        const raw = normalizedLine(k);
         const range = lineRange(k);
         const block: LiveBlock = {
           key: blockKey(k, raw),
@@ -397,8 +425,8 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
     if (node.type === 'jsonBlock') {
       const group = groupKey(node.lineFrom);
       const count = node.lineTo - node.lineFrom + 1;
-      for (let k = node.lineFrom; k <= node.lineTo; k++) {
-        const raw = normalizedLines[k] ?? '';
+      for (let k = Math.max(node.lineFrom, firstLine); k <= Math.min(node.lineTo, lastLine); k++) {
+        const raw = normalizedLine(k);
         const range = lineRange(k);
         blocks.push({
           key: blockKey(k, raw),
@@ -423,7 +451,7 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
 
     // ── 水平线：单行 horizontalRule ──
     if (node.type === 'horizontalRule') {
-      const raw = normalizedLines[node.lineFrom] ?? '';
+      const raw = normalizedLine(node.lineFrom);
       const range = lineRange(node.lineFrom);
       blocks.push({
         key: blockKey(node.lineFrom, raw),
@@ -442,7 +470,7 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
       if (node.setext) {
         // setext 规则线只会是 1/2 级
         const level = node.level as 1 | 2;
-        const textRaw = normalizedLines[node.lineFrom] ?? '';
+        const textRaw = normalizedLine(node.lineFrom);
         const textRange = lineRange(node.lineFrom);
         blocks.push({
           key: blockKey(node.lineFrom, textRaw),
@@ -453,7 +481,7 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
           html: '',
           headingLevel: level,
         });
-        const ruleRaw = normalizedLines[node.lineTo] ?? '';
+        const ruleRaw = normalizedLine(node.lineTo);
         const ruleRange = lineRange(node.lineTo);
         blocks.push({
           key: blockKey(node.lineTo, ruleRaw),
@@ -466,7 +494,7 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
           markerRange: ruleRange,
         });
       } else {
-        const raw = normalizedLines[node.lineFrom] ?? '';
+        const raw = normalizedLine(node.lineFrom);
         const range = lineRange(node.lineFrom);
         const block: LiveBlock = {
           key: blockKey(node.lineFrom, raw),
@@ -492,9 +520,13 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
     if (node.type === 'blockquote') {
       const group = groupKey(node.lineFrom);
       const count = node.lines.length;
-      for (let k = 0; k < count; k++) {
+      for (
+        let k = Math.max(0, firstLine - node.lineFrom);
+        k < Math.min(count, lastLine - node.lineFrom + 1);
+        k++
+      ) {
         const line = node.lines[k]!;
-        const raw = normalizedLines[line.lineNumber] ?? '';
+        const raw = normalizedLine(line.lineNumber);
         blocks.push({
           key: blockKey(line.lineNumber, raw),
           from: line.range.from,
@@ -513,6 +545,38 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
     }
 
     // ── 列表：连续同 family 行成组，逐行展开 ──
+    if (node.type === 'listItem' && !render) {
+      const raw = normalizedLine(node.lineFrom);
+      const markerSlice = ast.source.slice(node.markerRange.from, node.markerRange.to);
+      const type: BlockType =
+        node.kind === 'ordered'
+          ? node.delimiter === ')'
+            ? 'paragraph'
+            : 'orderedListItem'
+          : node.kind === 'task' && /^[-－] \[[ x]\]$/.test(markerSlice)
+            ? 'taskListItem'
+            : 'unorderedListItem';
+      blocks.push({
+        key: blockKey(node.lineFrom, raw),
+        from: node.range.from,
+        to: node.range.to,
+        raw,
+        html: '',
+        type,
+        markerRange: node.markerRange,
+        itemIndex: node.itemIndex,
+        groupKey: `G${node.groupRange.from}`,
+        position:
+          node.range.from === node.groupRange.from
+            ? node.range.to === node.groupRange.to
+              ? 'single'
+              : 'first'
+            : node.range.to === node.groupRange.to
+              ? 'last'
+              : 'middle',
+      });
+      continue;
+    }
     if (node.type === 'listItem') {
       const family = node.kind === 'ordered' ? 'ordered' : 'unordered';
       let end = idx + 1;
@@ -540,7 +604,7 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
       for (let k = idx; k < end; k++) {
         const item = nodes[k];
         if (!item || item.type !== 'listItem') continue; // 理论不可达，守卫用
-        const raw = normalizedLines[item.lineFrom] ?? '';
+        const raw = normalizedLine(item.lineFrom);
         const range = item.range; // 列表项恒为单行节点
         // 现行奇偶：旧有序列表正则只认 '.' 定界，')' 行降级为 paragraph
         if (family === 'ordered' && item.delimiter === ')') {
@@ -595,16 +659,23 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
       const group = groupKey(node.lineFrom);
       // 钉死：hasSeparator_live 仅当首个分隔行恰在第 1 行（表头行之下）
       const hasSeparator = node.separatorIndex === 1;
-      const visibleRows = node.rows
-        .filter((row) => !row.isSeparator)
-        .map((row) => normalizedLines[row.lineNumber] ?? '');
       const columnCount = node.columnCount;
-      const gridTemplate = tableGridTemplate(visibleRows, columnCount);
+      let gridTemplate = tableWidths.get(node);
+      if (!gridTemplate) {
+        // All rows influence width; this is computed once per table snapshot.
+        gridTemplate = tableGridTemplate(
+          node.rows.filter((row) => !row.isSeparator).map((row) => normalizedLine(row.lineNumber)),
+          columnCount,
+        );
+        tableWidths.set(node, gridTemplate);
+      }
       const alignments = hasSeparator
         ? node.alignments
         : Array.from({ length: columnCount }, () => 'left' as const);
-      for (const row of node.rows) {
-        const raw = normalizedLines[row.lineNumber] ?? '';
+      for (let ri = Math.max(0, firstLine - node.lineFrom); ri < node.rows.length; ri++) {
+        const row = node.rows[ri]!;
+        if (row.lineNumber > lastLine) break;
+        const raw = normalizedLine(row.lineNumber);
         blocks.push({
           key: blockKey(row.lineNumber, raw),
           from: row.range.from,
@@ -613,23 +684,21 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
           raw,
           html: '',
           groupKey: group,
+          position:
+            node.rows.length === 1
+              ? 'single'
+              : ri === 0
+                ? 'first'
+                : hasSeparator && ri === 1
+                  ? 'separator'
+                  : ri === node.rows.length - 1
+                    ? 'last'
+                    : 'middle',
+          tableColumnCount: columnCount,
+          tableGridTemplate: gridTemplate,
+          tableAlignments: alignments,
+          tableHeader: hasSeparator && ri === 0,
         });
-      }
-      const tblBlocks = blocks.filter((b) => b.groupKey === group);
-      if (tblBlocks.length === 1) tblBlocks[0]!.position = 'single';
-      else {
-        tblBlocks[0]!.position = 'first';
-        if (hasSeparator) tblBlocks[1]!.position = 'separator';
-        tblBlocks[tblBlocks.length - 1]!.position = 'last';
-        for (let gi = 1; gi < tblBlocks.length - 1; gi++) {
-          if (!tblBlocks[gi]!.position) tblBlocks[gi]!.position = 'middle';
-        }
-      }
-      for (const tblBlock of tblBlocks) {
-        tblBlock.tableColumnCount = columnCount;
-        tblBlock.tableGridTemplate = gridTemplate;
-        tblBlock.tableAlignments = alignments;
-        tblBlock.tableHeader = hasSeparator && tblBlock === tblBlocks[0];
       }
       // 缺少分隔行 → 全组 unclosed（现行）
       if (!hasSeparator) markGroupUnclosed(group);
@@ -638,8 +707,8 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
 
     // ── 段落：AST 多行聚合，适配器按行展开为逐行 paragraph（现行语义） ──
     if (node.type === 'paragraph') {
-      for (let k = node.lineFrom; k <= node.lineTo; k++) {
-        const raw = normalizedLines[k] ?? '';
+      for (let k = Math.max(node.lineFrom, firstLine); k <= Math.min(node.lineTo, lastLine); k++) {
+        const raw = normalizedLine(k);
         const range = lineRange(k);
         blocks.push({
           key: blockKey(k, raw),
@@ -655,10 +724,10 @@ function parseLiveBlocks(text: string, options: LivePreviewOptions = {}): LiveBl
   }
 
   // Compute HTML for each block
-  const refDefsForRender = collectRefDefs(text);
-  for (const block of blocks) {
-    block.html = renderBlockHtml(block, refDefsForRender, options);
-  }
+  if (render)
+    for (const block of blocks) {
+      block.html = renderBlockHtml(block, documentLines(ast).refs, options);
+    }
 
   return blocks;
 }
@@ -997,10 +1066,21 @@ const pinnedSourceField = StateField.define<Set<string>>({
 
 function toggleTaskListItemAtWidget(view: EditorView, widget: Element): boolean {
   const docText = view.state.doc.toString();
-  const blockFrom = Number(widget.getAttribute('data-block-from'));
+  const blockFrom = view.posAtDOM(widget);
   const blockKey = widget.getAttribute('data-block-key');
   const block = blockKey
-    ? parseLiveBlocks(docText).find((candidate) => candidate.key === blockKey)
+    ? parseLiveBlocks(
+        docText,
+        {},
+        getDocumentAst(view.state),
+        view.state.doc.lineAt(
+          Number.isFinite(blockFrom) ? blockFrom : view.state.selection.main.head,
+        ).number - 1,
+        view.state.doc.lineAt(
+          Number.isFinite(blockFrom) ? blockFrom : view.state.selection.main.head,
+        ).number - 1,
+        false,
+      ).find((candidate) => candidate.key === blockKey)
     : null;
   const line = Number.isFinite(blockFrom)
     ? view.state.doc.lineAt(blockFrom)
@@ -1053,6 +1133,19 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
   return ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
+      renderFrame: number | null = null;
+      renderCache = new Map<string, string>();
+      renderBytes = 0;
+      lastAst: DocumentAst | null = null;
+      currentBlocks: LiveBlock[] = [];
+      renderMore(view: EditorView): void {
+        if (this.renderFrame !== null) return;
+        this.renderFrame = requestAnimationFrame(() => {
+          this.renderFrame = null;
+          if (!this.destroyed) view.dispatch({ effects: documentAnalysisReady.of() });
+        });
+      }
+
       /** True while an IME composition is in progress — skip decoration rebuilds */
       isComposing = false;
       /** Set to true in destroy() — prevents rAF callbacks on destroyed views */
@@ -1315,6 +1408,14 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           return;
         }
 
+        if (update.docChanged) {
+          this.decorations = this.decorations.map(update.changes);
+          this.currentBlocks = this.currentBlocks.map((block) => ({
+            ...block,
+            from: update.changes.mapPos(block.from, 1),
+            to: update.changes.mapPos(block.to, -1),
+          }));
+        }
         if (
           update.docChanged ||
           update.selectionSet ||
@@ -1322,6 +1423,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           update.viewportChanged ||
           revealedPosition !== null ||
           searchQueryChanged ||
+          update.transactions.some((tr) => tr.effects.some((e) => e.is(documentAnalysisReady))) ||
           !this.decorationsBuilt
         ) {
           this.decorations = this.build(update.view, revealedPosition);
@@ -1338,14 +1440,10 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         );
       }
 
-      findBlockForWidget(view: EditorView, widget: HTMLElement): LiveBlock | null {
+      findBlockForWidget(_view: EditorView, widget: HTMLElement): LiveBlock | null {
         const blockKey = widget.getAttribute('data-block-key');
         if (!blockKey) return null;
-        return (
-          parseLiveBlocks(view.state.doc.toString(), options).find(
-            (block) => block.key === blockKey,
-          ) ?? null
-        );
+        return this.currentBlocks.find((block) => block.key === blockKey) ?? null;
       }
 
       clearPendingCompositionRebuild(): void {
@@ -1378,9 +1476,35 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
       }
 
       build(view: EditorView, revealedPosition: number | null = null): DecorationSet {
-        const text = view.state.doc.toString();
-        const blocks = parseLiveBlocks(text, options);
+        const ast = view.state.facet(documentAnalysisFacet)
+          ? peekDocumentAst(view.state)
+          : getDocumentAst(view.state);
+        if (!ast) {
+          // Existing, mapped widgets stay visible. No stale result may edit the source.
+          return this.decorations;
+        }
+        if (ast !== this.lastAst) {
+          const oldRefs = this.lastAst ? [...documentLines(this.lastAst).refs] : [];
+          if (JSON.stringify(oldRefs) !== JSON.stringify([...documentLines(ast).refs])) {
+            this.renderCache.clear();
+            this.renderBytes = 0;
+          }
+          this.lastAst = ast;
+        }
+        const large = isLargeDocument(ast.source, view.state.doc.lines);
+        const first = large
+          ? Math.max(0, view.state.doc.lineAt(view.viewport.from).number - 1 - 60)
+          : 0;
+        const last = large
+          ? Math.min(
+              view.state.doc.lines - 1,
+              view.state.doc.lineAt(view.viewport.to).number - 1 + 60,
+            )
+          : view.state.doc.lines - 1;
+        const blocks = parseLiveBlocks(ast.source, options, ast, first, last, false);
         const cursor = view.state.selection.main.head;
+        this.currentBlocks = blocks;
+        const deadline = performance.now() + 8;
         const cursorLine = view.state.doc.lineAt(cursor);
         const pinned = view.state.field(pinnedSourceField, false) ?? new Set<string>();
         const searchMatcher = buildSearchRevealMatcher(view.state);
@@ -1396,6 +1520,40 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
             }
           }
 
+          // Very long source lines stay native so CM6 can virtualize horizontal content.
+          if (block.raw.length > 16_384) continue;
+          const cacheKey = JSON.stringify([
+            block.key,
+            block.raw,
+            block.type,
+            block.from,
+            block.to,
+            block.position,
+            block.itemIndex,
+            block.tableGridTemplate,
+            block.tableAlignments,
+          ]);
+          const cached = this.renderCache.get(cacheKey);
+          if (cached !== undefined) {
+            block.html = cached;
+            this.renderCache.delete(cacheKey);
+            this.renderCache.set(cacheKey, cached);
+          } else if (large && performance.now() >= deadline) {
+            this.renderMore(view);
+            continue;
+          } else {
+            block.html = renderBlockHtml(block, documentLines(ast).refs, options);
+            const cost = (cacheKey.length + block.html.length) * 2;
+            if (cost <= 24 * 1024 * 1024) {
+              while (this.renderBytes + cost > 24 * 1024 * 1024 && this.renderCache.size) {
+                const oldest = this.renderCache.keys().next().value!;
+                this.renderBytes -= (oldest.length + this.renderCache.get(oldest)!.length) * 2;
+                this.renderCache.delete(oldest);
+              }
+              this.renderCache.set(cacheKey, block.html);
+              this.renderBytes += cost;
+            }
+          }
           if (!block.html) {
             // 唯一例外：setext 规则线虽无 widget HTML，但聚焦态应显示规则线源码（markerRange 整行幽灵化）。
             // 早退前给 setext 标题的两块一道旁路：setextHeadingText 聚焦时显示文字本身
@@ -1615,6 +1773,10 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
 
       destroy() {
         this.destroyed = true;
+        if (this.renderFrame !== null) cancelAnimationFrame(this.renderFrame);
+        this.renderCache.clear();
+        this.currentBlocks = [];
+        this.lastAst = null;
         if (this.editorView) {
           pendingRestoredBlockFocusCleanup.get(this.editorView)?.();
           pendingRestoredBlockFocusCleanup.delete(this.editorView);
@@ -1676,7 +1838,8 @@ export function revealLivePreviewSourceAt(view: EditorView, position: number): v
 /** TAB 切换当前聚焦 block 的 pin 状态 */
 export function toggleBlockRender(view: EditorView): boolean {
   const text = view.state.doc.toString();
-  const blocks = parseLiveBlocks(text);
+  const line = view.state.doc.lineAt(view.state.selection.main.head).number - 1;
+  const blocks = parseLiveBlocks(text, {}, getDocumentAst(view.state), line, line, false);
   const cursor = view.state.selection.main.head;
   const target = blocks.find((b) => cursor >= b.from && cursor <= b.to);
   if (!target) return false;
@@ -1730,7 +1893,8 @@ function focusRenderedBlock(block: HTMLElement): boolean {
 export function unpinFocusedBlock(view: EditorView): boolean {
   pendingRestoredBlockFocusCleanup.get(view)?.();
   const text = view.state.doc.toString();
-  const blocks = parseLiveBlocks(text);
+  const line = view.state.doc.lineAt(view.state.selection.main.head).number - 1;
+  const blocks = parseLiveBlocks(text, {}, getDocumentAst(view.state), line, line, false);
   const cursor = view.state.selection.main.head;
   const target = blocks.find((b) => cursor >= b.from && cursor <= b.to);
   if (!target) return false;

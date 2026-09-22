@@ -273,7 +273,20 @@ export function renderMarkdown(source: string, options?: RendererOptions): strin
     setWikiLinkExistsResolver(null);
   }
 
-  const initiallyCleanHtml = sanitize(addHeadingIds(rawHtml, normalizedSource));
+  return finalizePreparedHtml(addHeadingIds(rawHtml, normalizedSource), options);
+}
+
+/** Sanitize untrusted worker HTML before and after applying host image policy. */
+export function finalizePreparedHtml(rawHtml: string, options?: RendererOptions): string {
+  let initiallyCleanHtml = sanitize(rawHtml);
+  if (options?.wikiLinkExists && initiallyCleanHtml.includes('data-note=')) {
+    const template = document.createElement('template');
+    template.innerHTML = initiallyCleanHtml;
+    for (const link of template.content.querySelectorAll<HTMLElement>('a.wikilink[data-note]')) {
+      link.classList.toggle('wikilink--dead', !options.wikiLinkExists(link.dataset.note ?? ''));
+    }
+    initiallyCleanHtml = template.innerHTML;
+  }
   const cleanHtml = sanitize(applyImagePolicy(initiallyCleanHtml, options), true);
 
   return cleanHtml;

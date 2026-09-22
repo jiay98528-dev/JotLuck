@@ -12,6 +12,8 @@
  * @see migration-map.md §1.2
  */
 import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { DocumentAnalysis } from '@/services/document-analysis';
+import { documentAnalysisExtension } from '@/utils/cm6-document-analysis';
 import { EditorView, lineNumbers, keymap } from '@codemirror/view';
 import { EditorState, Compartment } from '@codemirror/state';
 import { isolateHistory } from '@codemirror/commands';
@@ -46,6 +48,7 @@ import { currentLocale, translate } from '@/i18n';
 const props = withDefaults(
   defineProps<{
     modelValue: string;
+    analysis?: DocumentAnalysis;
     readOnly?: boolean;
     showLineNumbers?: boolean;
     livePreview?: boolean;
@@ -82,6 +85,7 @@ const props = withDefaults(
     enableAutocomplete: true,
     completionSettings: undefined,
     predictor: undefined,
+    analysis: undefined,
     onLivePreviewExternalLinkClick: undefined,
     onLivePreviewTagClick: undefined,
     onLivePreviewWikiLinkClick: undefined,
@@ -99,6 +103,9 @@ const props = withDefaults(
     onEditorPaste: undefined,
   },
 );
+
+const analysis = props.analysis ?? new DocumentAnalysis();
+const ownsAnalysis = !props.analysis;
 
 const lineNumberCompartment = new Compartment();
 const livePreviewCompartment = new Compartment();
@@ -273,6 +280,7 @@ function createState(doc: string) {
   return EditorState.create({
     doc,
     extensions: [
+      ...documentAnalysisExtension(analysis),
       // Ghost text keymap must precede defaultKeymap (indentWithTab) so Tab
       // is intercepted for ghost text acceptance before indentation logic.
       autocompleteCompartment.of(autocompleteExtensions()),
@@ -343,7 +351,7 @@ function createState(doc: string) {
         if (update.docChanged && !suppressSync) {
           const value = update.state.doc.toString();
           internallyEmittedValues.add(value);
-          if (internallyEmittedValues.size > 32) {
+          if (internallyEmittedValues.size > 2) {
             const oldest = internallyEmittedValues.values().next().value;
             if (oldest !== undefined) internallyEmittedValues.delete(oldest);
           }
@@ -603,6 +611,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  if (ownsAnalysis) analysis.destroy();
   const e2eBridge = getJotLuckE2EBridge();
   if (e2eBridge?.editor?.id === INSTANCE_ID) delete e2eBridge.editor;
   document.removeEventListener('selectionchange', onSelectionChange);

@@ -1,3 +1,5 @@
+import { prepareDocumentHtml } from './progressive-print';
+import { isLargeDocument } from './document-analysis';
 /**
  * Exporter — 6 格式导出服务
  *
@@ -213,7 +215,20 @@ function exportPDF(
   const signal = options?.signal;
   throwIfExportAborted(signal);
   const opts = buildInternalOpts(options);
-  const bodyHtml = renderToStyledHtml(md, opts);
+  if (isLargeDocument(md)) {
+    return prepareDocumentHtml(preprocessMarkdown(md, opts), undefined, signal).then((bodyHtml) =>
+      printPreparedDocument(bodyHtml, fileName, signal),
+    );
+  }
+  return printPreparedDocument(renderToStyledHtml(md, opts), fileName, signal);
+}
+
+function printPreparedDocument(
+  bodyHtml: string,
+  fileName: string,
+  signal?: AbortSignal,
+): Promise<ExportResult> {
+  throwIfExportAborted(signal);
   const printableHtml = `<!DOCTYPE html>
 <html lang="${getCurrentLocale()}">
 <head>

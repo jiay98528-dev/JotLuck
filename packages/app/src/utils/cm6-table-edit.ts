@@ -1,3 +1,9 @@
+import {
+  getDocumentAst,
+  peekDocumentAst,
+  documentAnalysisFacet,
+  documentAnalysisReady,
+} from './cm6-document-analysis';
 /**
  * cm6-table-edit — CodeMirror 6 表格编辑 UI（V0.2 切片 E3）
  *
@@ -18,7 +24,7 @@ import type { EditorState, Extension } from '@codemirror/state';
 import { isolateHistory } from '@codemirror/commands';
 import { EditorView, ViewPlugin } from '@codemirror/view';
 import type { PluginValue, ViewUpdate } from '@codemirror/view';
-import { blockAtLine, parseDocument, type TableNode, type TableRowNode } from '@jotluck/renderer';
+import { blockAtLine, type TableNode, type TableRowNode } from '@jotluck/renderer';
 import { translate } from '@/i18n';
 
 // ─── 公开类型 ──────────────────────────────────────────────────────────
@@ -71,14 +77,16 @@ export interface TableToolbarItem {
  *   - rowRole 由 separatorIndex / 行号综合判定
  *   - columnIndex = cells 中第一个 to > cursor；否则取最后一格
  */
-export function resolveTableContext(state: EditorState): TableContext | null {
+export function resolveTableContext(state: EditorState, passive = false): TableContext | null {
   if (state.readOnly) return null;
   const sel = state.selection.main;
   if (!sel.empty) return null;
   const cursor = sel.head;
   const line = state.doc.lineAt(cursor);
   const lineNumber = line.number - 1;
-  const ast = parseDocument(state.doc.toString());
+  const ast =
+    passive && state.facet(documentAnalysisFacet) ? peekDocumentAst(state) : getDocumentAst(state);
+  if (!ast) return null;
   const block = blockAtLine(ast, lineNumber);
   if (!block || block.type !== 'table') return null;
   if (!block.hasSeparator) return null;
@@ -666,7 +674,12 @@ class TableToolbarPlugin implements PluginValue {
       this.closeToolbar();
       return;
     }
-    if (update.selectionSet || update.docChanged || update.focusChanged) {
+    if (
+      update.selectionSet ||
+      update.docChanged ||
+      update.focusChanged ||
+      update.transactions.some((tr) => tr.effects.some((e) => e.is(documentAnalysisReady)))
+    ) {
       this.recomputeFromState();
     }
   }
@@ -696,7 +709,7 @@ class TableToolbarPlugin implements PluginValue {
       this.hide();
       return;
     }
-    const ctx = resolveTableContext(this.view.state);
+    const ctx = resolveTableContext(this.view.state, true);
     if (!ctx) {
       this.closeToolbar();
       return;
