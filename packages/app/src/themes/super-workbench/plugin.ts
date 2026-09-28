@@ -1,3 +1,5 @@
+import OutlineList from '@/components/editor/OutlineList.vue';
+import BacklinkList from '@/components/editor/BacklinkList.vue';
 /* eslint-disable vue/one-component-per-file -- Theme plugin registers compact slot components together. */
 import { defineComponent, h, type PropType, type VNode, type VNodeChild } from 'vue';
 import type { BacklinkEntry, HeadingItem, TagEntry } from '@/types';
@@ -92,6 +94,7 @@ const SuperRightWing = defineComponent({
   name: 'SuperRightWing',
   props: {
     headings: { type: Array as PropType<HeadingItem[]>, default: () => [] },
+    activeHeadingId: { type: String, default: null },
     backlinks: { type: Array as PropType<BacklinkEntry[]>, default: () => [] },
     tags: { type: Array as PropType<TagEntry[]>, default: () => [] },
     onNavigateHeading: {
@@ -116,33 +119,19 @@ const SuperRightWing = defineComponent({
           h('span', 'Atlas'),
           h('strong', tr('theme.plugin.knowledgeNavigation')),
         ]),
-        section(
-          tr('theme.plugin.outline'),
-          props.headings.length,
-          props.headings.map((heading) =>
-            h(
-              'button',
-              {
-                class: ['super-heading', `super-heading--level-${heading.level}`],
-                onClick: () => props.onNavigateHeading?.(heading.id, heading.lineNumber),
-              },
-              heading.text,
-            ),
-          ),
-        ),
-        section(
-          tr('theme.plugin.backlinks'),
-          props.backlinks.length,
-          props.backlinks
-            .slice(0, 5)
-            .map((entry) =>
-              h(
-                'button',
-                { class: 'super-backlink', onClick: () => props.onNavigateBacklink?.(entry) },
-                entry.noteTitle,
-              ),
-            ),
-        ),
+        section(tr('theme.plugin.outline'), props.headings.length, [
+          h(OutlineList, {
+            nodes: props.headings,
+            activeId: props.activeHeadingId,
+            onNavigate: (id: string, line: number) => props.onNavigateHeading?.(id, line),
+          }),
+        ]),
+        section(tr('theme.plugin.backlinks'), props.backlinks.length, [
+          h(BacklinkList, {
+            entries: props.backlinks,
+            onNavigate: (entry: BacklinkEntry) => props.onNavigateBacklink?.(entry),
+          }),
+        ]),
         section(
           tr('theme.plugin.tags'),
           props.tags.length,

@@ -57,7 +57,9 @@ export function jotluckPlaceholder(text: string): Extension {
 
 export function jotluckExtensions(sourceOnly = false): Extension[] {
   return [
-    markdown(),
+    // The host owns Enter/Backspace (shared syntax, tasks, IME and one-step undo).
+    // The language's high-priority markup keymap would bypass that arbitration.
+    markdown({ addKeymap: false }),
     history(),
     highlightActiveLine(),
     keymap.of([...defaultKeymap, ...historyKeymap]),

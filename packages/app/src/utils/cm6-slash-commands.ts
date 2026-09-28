@@ -1,3 +1,6 @@
+import { guardPointerClicks } from './editor-pointer';
+import { observeEditorViewport, positionEditorOverlay } from './editor-overlay';
+import { rememberEditorSelection, getInteractionSelection } from './cm6-interaction-selection';
 import { getDocumentAst } from './cm6-document-analysis';
 /**
  * cm6-slash-commands — CodeMirror 6 斜杠命令（块插入菜单）
@@ -301,25 +304,7 @@ function positionMenu(root: HTMLElement, view: EditorView, slashPos: number): vo
     root.style.visibility = 'hidden';
     return;
   }
-  const viewRect = view.dom.getBoundingClientRect();
-  const rootRect = root.getBoundingClientRect();
-  const menuHeight = rootRect.height || 240;
-  const menuWidth = rootRect.width || 240;
-
-  let left = coords.left - viewRect.left;
-  if (left + menuWidth > viewRect.width) {
-    left = Math.max(0, viewRect.width - menuWidth);
-  }
-  if (left < 0) left = 0;
-
-  const anchorTop = coords.top - viewRect.top;
-  const anchorBottom = coords.bottom - viewRect.top;
-  const spaceBelow = viewRect.height - anchorBottom;
-  const top = spaceBelow >= menuHeight + 4 ? anchorBottom : Math.max(0, anchorTop - menuHeight);
-
-  root.style.left = `${left}px`;
-  root.style.top = `${top}px`;
-  root.style.visibility = 'visible';
+  positionEditorOverlay(root, view.dom, coords);
 }
 
 // ─── 内部：ViewPlugin 管理菜单生命周期 ─────────────────────────────────
@@ -354,6 +339,7 @@ class SlashMenuPlugin implements PluginValue {
   /** compositionend 的重判定时器句柄——destroy 时清掉，防止向已脱离 DOM 的 view 挂回 root（互审 L3） */
   private compTimer: ReturnType<typeof setTimeout> | null = null;
   private detachFns: Array<() => void> = [];
+  private overlay: ReturnType<typeof observeEditorViewport>;
 
   public readonly controller: SlashMenuController;
 
@@ -372,6 +358,13 @@ class SlashMenuPlugin implements PluginValue {
       composing: false,
     };
     view.dom.appendChild(this.root);
+    this.overlay = observeEditorViewport(() => {
+      if (this.root.isConnected) positionMenu(this.root, this.view, this.state.slashPos);
+    });
+    this.detachFns.push(
+      this.overlay.destroy,
+      guardPointerClicks(this.root, () => rememberEditorSelection(this.view)),
+    );
 
     this.controller = {
       isOpen: () => this.state.open,
@@ -410,7 +403,9 @@ class SlashMenuPlugin implements PluginValue {
       this.closeMenu();
       return;
     }
+    if (this.root.dataset.pointerActive === 'true') return;
     // 失焦：focusChanged=true 且当前无焦点 → 关菜单（spec §2 「编辑器失焦」）
+    if (update.focusChanged && this.root.contains(document.activeElement)) return;
     if (update.focusChanged && !update.view.hasFocus) {
       this.closeMenu();
       return;
@@ -491,9 +486,17 @@ class SlashMenuPlugin implements PluginValue {
         btn.setAttribute('aria-selected', String(idx === this.state.selectedIndex));
         btn.dataset.slashId = item.id;
         btn.dataset.cmJotluck = 'slash-item';
-        btn.addEventListener('mousedown', (event) => {
-          // @mousedown.prevent 保焦点（BUG-052 纪律，spec §5）
-          event.preventDefault();
+        const commandDoc = this.view.state.doc;
+        const commandSelection = this.view.state.selection;
+        btn.addEventListener('mousedown', (event) => event.preventDefault());
+        btn.addEventListener('click', () => {
+          if (this.view.state.readOnly || commandDoc !== this.view.state.doc) return;
+          if (!this.view.composing && !this.view.compositionStarted) {
+            const saved = getInteractionSelection(this.view);
+            this.view.dispatch({
+              selection: saved ? { anchor: saved.from, head: saved.to } : commandSelection,
+            });
+          }
           this.handleItemPicked(item.id);
         });
         const icon = document.createElement('span');
@@ -507,9 +510,7 @@ class SlashMenuPlugin implements PluginValue {
       });
     }
     // rAF 等下一帧再定位——此时 root.getBoundingClientRect 才有内容高度
-    const slashPos = this.state.slashPos;
-    const view = this.view;
-    requestAnimationFrame(() => positionMenu(this.root, view, slashPos));
+    this.overlay.schedule();
   }
 
   private handleItemPicked(id: SlashItemId): void {
@@ -520,7 +521,10 @@ class SlashMenuPlugin implements PluginValue {
       return;
     }
     const ok = applySlashItem(this.view, id);
-    if (ok) this.closeMenu();
+    if (ok) {
+      this.closeMenu();
+      this.view.focus();
+    }
   }
 
   private flushDeferredItem(): void {

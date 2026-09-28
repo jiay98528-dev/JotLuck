@@ -21,6 +21,7 @@ interface WritingStats {
   mixedTriggers: number;
   totalChars: number;
   latencies: number[];
+  automationLatencies: number[];
   falseSamples: Array<{ id: string; marker: string; suggestion: string; remaining: string }>;
   missingSamples: Array<{ id: string; marker: string; remaining: string }>;
 }
@@ -202,6 +203,7 @@ test.describe('autocomplete real Chinese writing score', () => {
       mixedTriggers: 0,
       totalChars: 0,
       latencies: [],
+      automationLatencies: [],
       falseSamples: [],
       missingSamples: [],
     };
@@ -223,11 +225,15 @@ test.describe('autocomplete real Chinese writing score', () => {
           cursor + checkpoint.marker.length,
         );
 
+        await observeCommittedGhost(page, item.text.slice(0, checkpointEnd));
+        const operationStarted = Date.now();
         await typeWritingText(page, item.text.slice(cursor, checkpointEnd), browserName);
         cursor = checkpointEnd;
+        await expect
+          .poll(() => page.evaluate(() => window.__jotluck_e2e?.editor?.getContent()))
+          .toBe(item.text.slice(0, cursor));
         stats.opportunities += 1;
 
-        const startedAt = Date.now();
         // WebKit may deliver the same committed-text update one rendering turn
         // later than Chromium/Firefox. Keep the quality oracle unchanged while
         // allowing the observable ghost node enough time to settle.
@@ -243,7 +249,10 @@ test.describe('autocomplete real Chinese writing score', () => {
         }
 
         stats.triggers += 1;
-        stats.latencies.push(Date.now() - startedAt);
+        stats.latencies.push(
+          await page.evaluate(() => (window as any).__writingTiming.visibleMs as number),
+        );
+        stats.automationLatencies.push(Date.now() - operationStarted);
 
         if (/^[A-Za-z]/.test(suggestion.trim())) stats.mixedTriggers += 1;
 
@@ -265,6 +274,9 @@ test.describe('autocomplete real Chinese writing score', () => {
 
       await typeWritingText(page, item.text.slice(cursor), browserName);
       stats.totalChars += item.text.length;
+      await expect
+        .poll(() => page.evaluate(() => window.__jotluck_e2e?.editor?.getContent()))
+        .toBe(item.text);
       await expect(page.locator('.split-left .cm-content')).toContainText(
         item.text.slice(Math.max(0, item.text.length - 24)),
         { timeout: 3000 },
@@ -293,6 +305,8 @@ test.describe('autocomplete real Chinese writing score', () => {
           falseTriggerRate,
           ghostsPer100Chars,
           p90,
+          pageSamplesMs: stats.latencies,
+          automationSamplesMs: stats.automationLatencies,
         },
         null,
         2,
@@ -300,6 +314,15 @@ test.describe('autocomplete real Chinese writing score', () => {
     );
 
     expect(crashErrors).toEqual([]);
+    await testInfo.attach('writing-latency-samples.json', {
+      contentType: 'application/json',
+      body: JSON.stringify({
+        browserName,
+        pageSamplesMs: stats.latencies,
+        automationSamplesMs: stats.automationLatencies,
+        p90,
+      }),
+    });
     expect(stats.mixedTriggers).toBe(0);
     expect(falseTriggerRate).toBeLessThanOrEqual(0.03);
     expect(triggerRate).toBeGreaterThanOrEqual(0.35);
@@ -342,6 +365,49 @@ async function typeWritingText(page: Page, text: string, browserName: string): P
   await page.keyboard.type(text, { delay: 1 });
 }
 
+/** Observe the submitted text and actual visible ghost in the page, without polling overhead. */
+async function observeCommittedGhost(page: Page, expectedText: string): Promise<void> {
+  await page.evaluate((expected) => {
+    (window as any).__stopWritingTiming?.();
+    const root = document.querySelector<HTMLElement>('.split-left .cm-content')!;
+    const timing = { inputAt: 0, visibleMs: null as number | null };
+    (window as any).__writingTiming = timing;
+    let frame = 0;
+    const check = () => {
+      const ghost = root.querySelector<HTMLElement>('.cm-ghost-text');
+      const text = [...root.querySelectorAll('.cm-line')]
+        .map((line) => {
+          const clone = line.cloneNode(true) as HTMLElement;
+          clone.querySelectorAll('.cm-ghost-text').forEach((node) => node.remove());
+          return clone.textContent ?? '';
+        })
+        .join('\n');
+      const rect = ghost?.getBoundingClientRect();
+      if (
+        text === expected &&
+        ghost?.textContent &&
+        rect &&
+        rect.width > 0 &&
+        rect.height > 0 &&
+        getComputedStyle(ghost).visibility !== 'hidden'
+      ) {
+        timing.visibleMs = performance.now() - timing.inputAt;
+      } else if (performance.now() - timing.inputAt < 2000) frame = requestAnimationFrame(check);
+    };
+    const input = () => {
+      timing.inputAt = performance.now();
+      timing.visibleMs = null;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(check);
+    };
+    root.addEventListener('beforeinput', input, true);
+    (window as any).__stopWritingTiming = () => {
+      root.removeEventListener('beforeinput', input, true);
+      cancelAnimationFrame(frame);
+    };
+  }, expectedText);
+}
+
 async function openAppWithoutInternalBridge(page: Page): Promise<void> {
   await waitForAppReady(page);
   await ensureEditorReady(page);
@@ -380,12 +446,32 @@ async function replaceEditorTextByKeyboard(page: Page, text: string): Promise<vo
 }
 
 async function readGhostText(page: Page, timeout: number): Promise<string> {
-  const ghost = page.locator('.cm-ghost-text');
-  await expect(ghost)
-    .toBeVisible({ timeout })
-    .catch(() => undefined);
-  if (!(await ghost.isVisible().catch(() => false))) return '';
-  return (await ghost.textContent()) ?? '';
+  try {
+    // Pair quality scoring with the frame that observed this committed source.
+    // Separate visibility/text calls could observe a ghost from the previous edit.
+    const shown = await page.waitForFunction(
+      () => {
+        if ((window as any).__writingTiming?.visibleMs == null) return false;
+        const ghost = document.querySelector<HTMLElement>('.split-left .cm-ghost-text');
+        const rect = ghost?.getBoundingClientRect();
+        return (
+          ghost &&
+          rect &&
+          rect.width > 0 &&
+          rect.height > 0 &&
+          getComputedStyle(ghost).visibility !== 'hidden' &&
+          ghost.textContent
+        );
+      },
+      undefined,
+      { timeout },
+    );
+    const text = await shown.jsonValue();
+    await shown.dispose();
+    return typeof text === 'string' ? text : '';
+  } catch {
+    return '';
+  }
 }
 
 function isUsableChineseSuggestion(remainingText: string, suggestion: string): boolean {

@@ -26,6 +26,11 @@ const unusedAdapter: PublicFreeDecoderTauriAdapter = {
 };
 
 describe('public free decoder evaluation factory', () => {
+  it('does not fetch a desktop manifest in an ordinary browser without an injected adapter', async () => {
+    const fetcher = vi.fn();
+    expect(await createCanonicalPublicFreeDecoderEngine({ fetcher })).toBeNull();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it('requires desktop plus an explicit dev/E2E flag and rejects production mode', () => {
     const flagged = { VITE_AUTOCOMPLETE_PUBLIC_FREE_DECODER: '1' };
     expect(

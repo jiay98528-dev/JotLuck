@@ -117,7 +117,9 @@ export async function waitForMockFileContent(
   await expect
     .poll(
       () =>
-        page.evaluate((targetPath) => {
+        page.evaluate(async (targetPath) => {
+          const read = window.__jotluck_e2e?.readNoteFile;
+          if (read) return read(targetPath);
           const raw = localStorage.getItem('jotluck-mockfs');
           if (!raw) return '';
           const data = JSON.parse(raw) as { files?: Record<string, { content?: string }> };

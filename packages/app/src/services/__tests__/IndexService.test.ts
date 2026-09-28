@@ -136,6 +136,7 @@ describe('IndexService unified-AST index extraction', () => {
 
   it('builds backlinks keyed by note name, stripping #anchor from [[note#anchor]]', async () => {
     const fs = new MockFSService(0, { persist: false });
+    await fs.writeFile('/note.md', '# Target');
     await fs.writeFile(
       '/source.md',
       '# Source\n\nLinking to [[note#section]] and [[note|with alias]] in body.\n',
@@ -149,6 +150,29 @@ describe('IndexService unified-AST index extraction', () => {
     expect(graph.outgoing['/source.md']).toEqual(['note', 'note']);
 
     const backlinks = service.getBacklinks('/note.md');
-    expect(backlinks.map((b) => b.notePath)).toEqual(['/source.md']);
+    expect(backlinks.map((b) => b.notePath)).toEqual(['/source.md', '/source.md']);
+    expect(backlinks.map((entry) => entry.lineNumber)).toEqual([3, 3]);
+    expect(backlinks[0]!.location!.from).toBeLessThan(backlinks[1]!.location!.from);
+  });
+
+  it('refreshes occurrences on edits, deletion and target resolution changes', async () => {
+    const fs = new MockFSService(0, { persist: false });
+    await fs.writeFile('/target.md', '# Shared');
+    await fs.writeFile('/Shared.md', '# Different');
+    await fs.writeFile('/source.md', '[[Shared]] then [[Shared|alias]]');
+    const service = new IndexService(fs);
+    await service.buildFullIndex();
+    expect(service.resolveWikiLink('Shared')?.path).toBe('/target.md');
+    expect(service.getBacklinks('/Shared.md')).toEqual([]);
+    const entry = service.getBacklinks('/target.md')[1]!;
+    expect(service.isBacklinkCurrent(entry, '[[Shared]] then [[Shared|alias]]')).toBe(true);
+    await fs.writeFile('/source.md', 'a\n[[/Shared]]');
+    await service.updateDocument('/source.md');
+    expect(service.getBacklinks('/target.md')).toEqual([]);
+    expect(service.getBacklinks('/Shared.md')[0]?.lineNumber).toBe(2);
+    expect(service.isBacklinkCurrent(entry, 'a\n[[/Shared]]')).toBe(false);
+    service.removeDocument('/source.md');
+    expect(service.getBacklinks('/Shared.md')).toEqual([]);
+    expect(service.resolveWikiLink('../Shared')).toBeUndefined();
   });
 });

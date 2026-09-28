@@ -1,6 +1,11 @@
 import type { MessageSchema } from './zh-CN';
 
 export const messages = {
+  navigation: {
+    referenceLine: 'Ligne {line}',
+    showMore: 'Afficher plus',
+    referenceMoved: 'La référence a changé de position. La note source est ouverte.',
+  },
   common: {
     appName: 'JotLuck',
     close: 'Fermer',

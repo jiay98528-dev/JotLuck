@@ -22,6 +22,7 @@ export type ContinuationKind =
   | 'unorderedListItem'
   | 'orderedListItem'
   | 'taskListItem'
+  | 'textListItem'
   | 'blockquoteLine'
   | 'tableRow';
 
@@ -32,6 +33,8 @@ export interface ContinuationContext {
   isEmptyBlock: boolean;
   atLineEnd: boolean;
   nextMarker: string;
+  linePrefix?: string;
+  canContinue?: boolean;
   markerFrom: number;
   markerTo: number;
   tableColumnCount: number;
@@ -43,7 +46,7 @@ export interface ContinuationContext {
 
 export function detectContinuationContext(state: EditorState): ContinuationContext | null {
   const sel = state.selection.main;
-  if (!sel.empty) return null;
+  if (state.readOnly || state.selection.ranges.length !== 1 || !sel.empty) return null;
   const cursor = sel.head;
   const line = state.doc.lineAt(cursor);
   const lineFrom = line.from;
@@ -60,68 +63,25 @@ export function detectContinuationContext(state: EditorState): ContinuationConte
   const rest = rawLine.slice(cursorInLine);
   const atLineEnd = rest.trim() === '';
 
+  const hint = ast.lineMap[lineNumber]?.continuation;
+  if (hint)
+    return {
+      kind: hint.kind,
+      lineFrom,
+      lineTo,
+      isEmptyBlock: hint.isEmpty,
+      atLineEnd,
+      nextMarker: hint.nextMarker ?? '',
+      canContinue: hint.nextMarker !== null,
+      linePrefix: hint.prefix,
+      markerFrom: hint.markerRange.from,
+      markerTo: hint.markerRange.to,
+      tableColumnCount: 0,
+      isTableSeparator: false,
+      isTableHeader: false,
+    };
+
   switch (block.type) {
-    case 'listItem': {
-      const node = block;
-      let kind: ContinuationKind;
-      let nextMarker: string;
-      if (node.kind === 'ordered') {
-        kind = 'orderedListItem';
-        // 一律半角：number/delimiter 来自归一化后的 AST 字段（R4-9②）
-        nextMarker = `${(node.number ?? 0) + 1}${node.delimiter ?? '.'} `;
-      } else if (node.kind === 'task') {
-        kind = 'taskListItem';
-        nextMarker = `${node.marker} [ ] `;
-      } else {
-        kind = 'unorderedListItem';
-        nextMarker = `${node.marker} `;
-      }
-      // R4-9①：markerFrom/markerTo 为源码精确偏移。行为底线中列表「标记」
-      // 含标记与内容间的分隔空白：无序/有序取 contentRange.from（分隔空白
-      // 全保留、含全角）；任务项 `]` 后至多一个空白（与旧 TASK_RE 分组一致）。
-      let markerTo: number;
-      if (node.kind === 'task') {
-        const afterMarker = docText[node.markerRange.to] ?? '';
-        markerTo = node.markerRange.to + (/\s/.test(afterMarker) ? 1 : 0);
-      } else {
-        markerTo = node.contentRange.from;
-      }
-      return {
-        kind,
-        lineFrom,
-        lineTo,
-        isEmptyBlock: node.isEmpty,
-        atLineEnd,
-        nextMarker,
-        markerFrom: node.markerRange.from,
-        markerTo,
-        tableColumnCount: 0,
-        isTableSeparator: false,
-        isTableHeader: false,
-      };
-    }
-
-    case 'blockquote': {
-      const lineInfo = block.lines.find((info) => info.lineNumber === lineNumber);
-      if (!lineInfo) return null;
-      // 延续标记一律半角：normalizedMarker 在归一化行上取得（＞→>），
-      // 再兜底替换全角；保留 `>> ` 紧凑层级结构（R4-9②）
-      const nextMarker = lineInfo.normalizedMarker.replace(/＞/g, '>');
-      return {
-        kind: 'blockquoteLine',
-        lineFrom,
-        lineTo,
-        isEmptyBlock: lineInfo.isEmpty,
-        atLineEnd,
-        nextMarker,
-        markerFrom: lineInfo.markerRange.from,
-        markerTo: lineInfo.markerRange.to,
-        tableColumnCount: 0,
-        isTableSeparator: false,
-        isTableHeader: false,
-      };
-    }
-
     case 'table': {
       const node = block;
       // 表格成立前提：组内存在分隔行（GFM 语义——无分隔行的孤管道行只是
@@ -227,6 +187,8 @@ export const smartContinueOnEnter: Command = (view) => {
   if (view.composing || view.compositionStarted) return false;
   const context = detectContinuationContext(view.state);
   if (!context) return false;
+  if (context.kind !== 'tableRow' && view.state.selection.main.head < context.markerTo)
+    return false;
 
   // E2: 空格式块 → 退出结构；内容恒为空白，随标记一并删除至行尾
   if (context.isEmptyBlock) {
@@ -238,6 +200,8 @@ export const smartContinueOnEnter: Command = (view) => {
     });
     return true;
   }
+
+  if (context.canContinue === false) return false;
 
   // E6: 表格行 → 下方插入同列数空行
   if (context.kind === 'tableRow') {
@@ -274,7 +238,7 @@ export const smartContinueOnEnter: Command = (view) => {
   if (cursor < context.markerTo) return false;
   const rawLine = view.state.doc.sliceString(context.lineFrom, context.lineTo);
   const indentMatch = /^(\s*)/.exec(rawLine);
-  const indent = indentMatch?.[1] ?? '';
+  const indent = context.linePrefix ?? indentMatch?.[1] ?? '';
 
   if (context.atLineEnd) {
     const insertText = `\n${indent}${context.nextMarker}`;

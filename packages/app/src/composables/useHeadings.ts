@@ -10,12 +10,15 @@
  * @see migration-map.md §5
  */
 import { ref, getCurrentScope, onScopeDispose } from 'vue';
+import type { ChangeDesc, Text } from '@codemirror/state';
 import type { DocumentAnalysis } from '@/services/document-analysis';
 import type { HeadingItem } from '@/types';
 import { parseDocument, type DocumentAst, type HeadingNode } from '@jotluck/renderer';
 
 export function useHeadings(analysis?: DocumentAnalysis) {
   const headings = ref<HeadingItem[]>([]);
+  const ordered = ref<HeadingItem[]>([]);
+  let revision = -1;
 
   /**
    * 把 parseDocument 的 heading 节点映射为树形 HeadingItem。
@@ -36,6 +39,8 @@ export function useHeadings(analysis?: DocumentAnalysis) {
         // ATX 与 setext 都用文本行的 1 基行号；AST 的 lineFrom 即文本行 0 基
         lineNumber: node.lineFrom + 1,
         children: [],
+        from: node.range.from,
+        to: node.range.to,
       };
       flat.push(item);
     }
@@ -67,27 +72,65 @@ export function useHeadings(analysis?: DocumentAnalysis) {
       return;
     }
     headings.value = buildTree(content);
+    ordered.value = flatten(headings.value);
   }
 
   if (analysis) {
-    const unsubscribe = analysis.subscribe(({ ast }) => {
+    const unsubscribe = analysis.subscribe(({ ast, revision: version }) => {
+      revision = version;
       headings.value = buildTree(ast.source, ast);
+      ordered.value = flatten(headings.value);
     });
     if (getCurrentScope()) onScopeDispose(unsubscribe);
   }
 
-  function getActiveHeadingId(cursorLine: number): string | null {
-    function findClosest(items: HeadingItem[], best: HeadingItem | null): HeadingItem | null {
-      for (const item of items) {
-        if (item.lineNumber <= cursorLine) {
-          if (!best || item.lineNumber > best.lineNumber) best = item;
-        }
-        best = findClosest(item.children, best);
-      }
-      return best;
-    }
-    return findClosest(headings.value, null)?.id ?? null;
+  function flatten(items: HeadingItem[]): HeadingItem[] {
+    return items.flatMap((item) => [item, ...flatten(item.children)]);
   }
-
-  return { headings, parseHeadings, update, getActiveHeadingId };
+  function atPosition(position: number): HeadingItem | null {
+    const items = ordered.value;
+    let low = 0,
+      high = items.length;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      if ((items[mid]!.from ?? 0) <= position) low = mid + 1;
+      else high = mid;
+    }
+    return items[low - 1] ?? null;
+  }
+  function getActiveHeadingId(cursorLine: number): string | null {
+    const items = ordered.value.length ? ordered.value : flatten(headings.value);
+    let low = 0,
+      high = items.length;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      if (items[mid]!.lineNumber <= cursorLine) low = mid + 1;
+      else high = mid;
+    }
+    return items[low - 1]?.id ?? null;
+  }
+  function mapChanges(changes: ChangeDesc, doc: Text, version: number): void {
+    if (revision !== version - 1) return;
+    for (const item of ordered.value) {
+      item.from = changes.mapPos(item.from ?? 0, 1);
+      item.to = Math.max(item.from, changes.mapPos(item.to ?? item.from, -1));
+      item.lineNumber = doc.lineAt(Math.min(doc.length, item.from)).number;
+    }
+    revision = version;
+  }
+  function clear(): void {
+    headings.value = [];
+    ordered.value = [];
+    revision = -1;
+  }
+  return {
+    headings,
+    ordered,
+    parseHeadings,
+    update,
+    getActiveHeadingId,
+    atPosition,
+    mapChanges,
+    clear,
+  };
 }

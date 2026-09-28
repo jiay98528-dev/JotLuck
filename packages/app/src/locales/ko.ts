@@ -1,6 +1,11 @@
 import type { MessageSchema } from './zh-CN';
 
 export const messages = {
+  navigation: {
+    referenceLine: '{line}행',
+    showMore: '더 보기',
+    referenceMoved: '참조 위치가 변경되었습니다. 원본 노트를 열었습니다.',
+  },
   common: {
     appName: 'JotLuck',
     close: '닫기',

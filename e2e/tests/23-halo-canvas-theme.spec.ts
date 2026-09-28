@@ -848,6 +848,7 @@ test.describe('Halo Canvas official theme', () => {
     await expect(editButton).toBeFocused();
     await expect(editButton).not.toHaveAttribute('aria-pressed');
     await expect(editButton).toHaveAttribute('title', /当前为只读渲染/);
+    await expect(readerWorkbench.locator('.reader-preview h1')).toBeVisible();
     const readerBarTop = await readerBar.evaluate((element) => element.getBoundingClientRect().top);
     const scrollRange = await readerWorkbench.evaluate(
       (element) => element.scrollHeight - element.clientHeight,

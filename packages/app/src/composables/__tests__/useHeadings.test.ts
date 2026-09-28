@@ -6,6 +6,34 @@
  */
 import { describe, expect, it } from 'vitest';
 import { useHeadings } from '../useHeadings';
+import { effectScope } from 'vue';
+import { EditorState } from '@codemirror/state';
+import type { DocumentAnalysis, DocumentAnalysisResult } from '@/services/document-analysis';
+import { parseDocument } from '@jotluck/renderer';
+
+it('maps pending heading locations through edits without rescanning on cursor moves', () => {
+  let publish!: (result: DocumentAnalysisResult) => void;
+  const analysis = {
+    subscribe: (listener: typeof publish) => {
+      publish = listener;
+      return () => {};
+    },
+  } as DocumentAnalysis;
+  const scope = effectScope();
+  const headings = scope.run(() => useHeadings(analysis))!;
+  const source = '# One\n\ntext\n\n## Two\n\nend';
+  publish({ revision: 1, ast: parseDocument(source), wordCount: 6 });
+  const state = EditorState.create({ doc: source });
+  const change = state.update({ changes: { from: 0, insert: 'intro\n\n' } });
+  headings.mapChanges(change.changes, change.state.doc, 2);
+  expect(headings.atPosition(0)).toBeNull();
+  expect(headings.atPosition(source.indexOf('end') + 7)?.id).toBe('heading-two');
+  const items = headings.ordered.value;
+  headings.atPosition(7);
+  headings.atPosition(20);
+  expect(headings.ordered.value).toBe(items);
+  scope.stop();
+});
 
 function flatten(items: ReturnType<typeof useHeadings>['headings']['value']): Array<{
   id: string;

@@ -8,6 +8,8 @@ const parser = new Marked({ gfm: true, breaks: false });
 parser.use({ extensions: jotluckExtensions });
 
 export interface PreviewFragment {
+  /** Temporary source-aligned gap while a requested remote range is prepared first. */
+  placeholder?: boolean;
   from: number;
   to: number;
   html: string;

@@ -1,6 +1,7 @@
-import { EditorState } from '@codemirror/state';
+import { EditorSelection, EditorState } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { history, undo } from '@codemirror/commands';
+import { jotluckExtensions } from '../cm6-extensions';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   detectContinuationContext,
@@ -12,6 +13,93 @@ import {
 
 const mountedViews: EditorView[] = [];
 
+describe('E7 combined and text-format continuation', () => {
+  it.each([
+    ['> - 内容', '> - '],
+    ['> 2. 内容', '> 3. '],
+    ['> - [x] 内容', '> - [ ] '],
+    ['2. [x] 内容', '3. [ ] '],
+    ['> > 一、内容', '> > 二、'],
+    ['（００９）内容', '（０１０）'],
+    ['⑲内容', '⑳'],
+    ['a. 甲\nb. 乙', 'c. '],
+    ['I) 甲\nII) 乙', 'III) '],
+    ['- 父项\n  - 子项', '  - '],
+    ['> - 父项\n>   - 子项', '>   - '],
+    ['•  内容', '•  '],
+  ])('continues %s with one-step undo', (source, prefix) => {
+    const view = mountSmartEditor(source!);
+    expect(smartContinueOnEnter(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(`${source}\n${prefix}`);
+    expect(view.state.selection.main.head).toBe(view.state.doc.length);
+    expect(undo(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(source);
+  });
+
+  it.each([smartContinueOnEnter, smartCancelOnBackspace, smartCancelOnEscape])(
+    'cancels only the inner empty marker (%#)',
+    (command) => {
+      const view = mountSmartEditor('> - ');
+      expect(command(view)).toBe(true);
+      expect(view.state.doc.toString()).toBe('> ');
+      expect(view.state.selection.main.head).toBe(2);
+      expect(command(view)).toBe(true);
+      expect(view.state.doc.toString()).toBe('');
+      undo(view);
+      expect(view.state.doc.toString()).toBe('> ');
+      undo(view);
+      expect(view.state.doc.toString()).toBe('> - ');
+    },
+  );
+
+  it('splits Chinese and emoji text without changing the rest of the source', () => {
+    const source = '> （九）甲👩‍💻乙';
+    const view = mountSmartEditor(source, source.indexOf('乙'));
+    expect(smartContinueOnEnter(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe('> （九）甲👩‍💻\n> （十）乙');
+    expect(view.state.doc.sliceString(view.state.selection.main.head)).toBe('乙');
+  });
+
+  it('does not cancel an empty inner marker when Enter is pressed inside its prefix', () => {
+    const view = mountSmartEditor('> （九）', 4);
+    expect(smartContinueOnEnter(view)).toBe(false);
+    expect(view.state.doc.toString()).toBe('> （九）');
+  });
+
+  it.each(['⑳内容', '九千九百九十九、内容', 'y. 甲\nz. 乙', 'a. 正文', '> ```\n> - code', '1.23'])(
+    'leaves Enter to the editor for %s',
+    (source) => {
+      const view = mountSmartEditor(source);
+      expect(smartContinueOnEnter(view)).toBe(false);
+      expect(view.state.doc.toString()).toBe(source);
+    },
+  );
+
+  it('does not continue inside markers or when read-only, selected, composing or multi-cursor', () => {
+    const view = mountSmartEditor('> （九）内容', 4);
+    expect(smartContinueOnEnter(view)).toBe(false);
+    view.dispatch({ selection: { anchor: 0, head: 7 } });
+    expect(smartContinueOnEnter(view)).toBe(false);
+    view.setState(
+      EditorState.create({ doc: '一、内容', extensions: [EditorState.readOnly.of(true)] }),
+    );
+    expect(smartContinueOnEnter(view)).toBe(false);
+    expect(smartCancelOnBackspace(view)).toBe(false);
+    view.setState(
+      EditorState.create({
+        doc: '一、甲\n二、乙',
+        extensions: [EditorState.allowMultipleSelections.of(true)],
+        selection: EditorSelection.create([EditorSelection.cursor(3), EditorSelection.cursor(7)]),
+      }),
+    );
+    expect(smartContinueOnEnter(view)).toBe(false);
+    view.setState(EditorState.create({ doc: '一、内容', selection: { anchor: 4 } }));
+    startIme(view);
+    expect(smartContinueOnEnter(view)).toBe(false);
+    endIme(view);
+  });
+});
+
 function mountSmartEditor(doc: string, cursor = doc.length) {
   const host = document.createElement('div');
   document.body.append(host);
@@ -19,7 +107,9 @@ function mountSmartEditor(doc: string, cursor = doc.length) {
     state: EditorState.create({
       doc,
       selection: { anchor: cursor },
-      extensions: [history(), keymap.of(smartContinueKeymap)],
+      // Include the actual host language/keymap: a competing language Enter binding
+      // must not silently win while isolated command tests remain green.
+      extensions: [history(), keymap.of(smartContinueKeymap), ...jotluckExtensions()],
     }),
     parent: host,
   });
@@ -52,6 +142,8 @@ describe('detectContinuationContext', () => {
     const view = mountSmartEditor('- foo');
     expect(detectContinuationContext(view.state)).toEqual({
       kind: 'unorderedListItem',
+      canContinue: true,
+      linePrefix: '',
       lineFrom: 0,
       lineTo: 5,
       isEmptyBlock: false,

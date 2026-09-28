@@ -135,17 +135,21 @@ export async function setLocale(
 ): Promise<SupportedLocale> {
   const request = ++localeRequest;
   let resolved = locale;
+  let loaded = true;
   try {
     await loadLocale(locale);
   } catch {
     resolved = DEFAULT_LOCALE;
+    loaded = false;
   }
   if (request !== localeRequest) return getCurrentLocale();
 
   i18n.global.locale.value = resolved;
   currentLocaleState.value = resolved;
   applyDocumentLocale(resolved);
-  if (options.persist !== false) persistLocale(resolved);
+  // A transient/aborted chunk load may use the fallback for this page, but must
+  // not replace the user's saved preference before the next startup can retry.
+  if (loaded && options.persist !== false) persistLocale(resolved);
   localeListeners.forEach((listener) => listener(resolved));
   return resolved;
 }

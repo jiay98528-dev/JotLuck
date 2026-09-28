@@ -57,6 +57,7 @@ test.describe('Official theme scroll ownership', () => {
     await expect(editButton).toBeVisible();
     await expect(editButton).toBeFocused();
 
+    await expect(reader.locator('.reader-preview')).toContainText('第20节');
     const barTop = await readerBar.evaluate((element) => element.getBoundingClientRect().top);
     const scrollRange = await reader.evaluate(
       (element) => element.scrollHeight - element.clientHeight,
@@ -155,6 +156,7 @@ test.describe('Official theme scroll ownership', () => {
       if (themeId === 'jotluck.super-workbench') {
         await expect(reader.locator('.reader-preview')).toHaveCSS('flex-shrink', '0');
       }
+      await expect(reader).toContainText('合同段落 20');
       const barTop = await readerBar.evaluate((element) => element.getBoundingClientRect().top);
       const scrollRange = await reader.evaluate(
         (element) => element.scrollHeight - element.clientHeight,

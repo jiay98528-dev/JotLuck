@@ -48,6 +48,9 @@ export interface JotLuckE2EEditorBridge {
 }
 
 export interface JotLuckE2EMockNotebookConfig {
+  /** Test fixtures can bypass the browser storage quota while exercising normal file I/O. */
+  initialFiles?: Record<string, string>;
+  persist?: boolean;
   forceGate?: boolean;
   recentRoots?: string[];
   pickerOutcome?: 'success' | 'cancel' | 'error';

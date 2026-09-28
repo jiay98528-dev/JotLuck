@@ -19,6 +19,7 @@ export const useIndexStore = defineStore('index', () => {
   const status = ref<IndexStatus>('idle');
   const error = ref<string | null>(null);
   const documentCount = ref(0);
+  const revision = ref(0);
 
   let indexService: IndexService | null = null;
   let initializeGeneration = 0;
@@ -28,6 +29,7 @@ export const useIndexStore = defineStore('index', () => {
   const isReady = computed(() => status.value === 'ready');
 
   function reset(): void {
+    revision.value++;
     initializeGeneration++;
     useSearchStore().resetWorkspaceState();
     indexService = null;
@@ -53,6 +55,7 @@ export const useIndexStore = defineStore('index', () => {
       const idx = await candidate.buildFullIndex();
       if (generation !== initializeGeneration) return;
       indexService = candidate;
+      revision.value++;
       documentCount.value = Object.keys(idx.documents).length;
       tags.value = candidate.getAllTags();
       recentNotes.value = candidate.getRecentNotes(20);
@@ -68,8 +71,11 @@ export const useIndexStore = defineStore('index', () => {
 
   async function refreshDocument(_fs: IFileSystemService, path: string): Promise<void> {
     if (!indexService) return;
+    const service = indexService;
     try {
-      await indexService.updateDocument(path);
+      await service.updateDocument(path);
+      if (service !== indexService) return;
+      revision.value++;
       tags.value = indexService.getAllTags();
       recentNotes.value = indexService.getRecentNotes(20);
     } catch (e) {
@@ -81,6 +87,7 @@ export const useIndexStore = defineStore('index', () => {
   function removeDocument(path: string): void {
     if (!indexService) return;
     indexService.removeDocument(path);
+    revision.value++;
     tags.value = indexService.getAllTags();
     recentNotes.value = indexService.getRecentNotes(20);
     documentCount.value = Object.keys(indexService.getAllDocuments()).length;
@@ -89,12 +96,14 @@ export const useIndexStore = defineStore('index', () => {
   function synchronizeFromFileTree(filePaths: string[]): void {
     if (!indexService) return;
     indexService.synchronizeFromFileTree(filePaths);
+    revision.value++;
     tags.value = indexService.getAllTags();
     recentNotes.value = indexService.getRecentNotes(20);
     documentCount.value = Object.keys(indexService.getAllDocuments()).length;
   }
 
   function getBacklinks(notePath: string) {
+    void revision.value;
     return indexService?.getBacklinks(notePath) ?? [];
   }
 
@@ -112,6 +121,7 @@ export const useIndexStore = defineStore('index', () => {
   }
 
   return {
+    revision,
     status,
     error,
     documentCount,

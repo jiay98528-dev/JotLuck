@@ -31,7 +31,7 @@ function createEngine(id: string): EngineStub {
   return { id, dispose: vi.fn().mockResolvedValue(undefined) };
 }
 
-function buildHarness(): Harness {
+function buildHarness(isAvailable = () => true): Harness {
   const canonicalFactory = vi.fn<() => Promise<EngineStub | null>>(async () => null);
   const flaggedFactory = vi.fn<() => Promise<EngineStub | null>>(async () => null);
   const install = vi.fn<(engine: EngineStub) => Promise<boolean>>(async () => true);
@@ -46,6 +46,7 @@ function buildHarness(): Harness {
             installPublicEngineForEvaluation: install,
             getPublicEngineDiagnostics: getHealth,
           } as unknown as Parameters<typeof usePublicDecoderSetup>[0]['predictor'],
+          isAvailable,
           isUnmounted: () => unmounted,
           // Engines are stubbed; the composable only calls .dispose() on them.
           createCanonicalEngine: canonicalFactory as unknown as () => Promise<never>,
@@ -79,6 +80,22 @@ afterEach(() => {
 describe('usePublicDecoderSetup', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+  });
+
+  it('does not construct or retry desktop engines in a browser-only workspace', async () => {
+    let available = false;
+    const h = buildHarness(() => available);
+    await h.setup();
+    await h.retry();
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(h.canonicalFactory).not.toHaveBeenCalled();
+    expect(h.flaggedFactory).not.toHaveBeenCalled();
+    expect(h.install).not.toHaveBeenCalled();
+    available = true;
+    h.canonicalFactory.mockResolvedValueOnce(createEngine('desktop'));
+    await h.setup();
+    expect(h.install).toHaveBeenCalledOnce();
+    h.unmount();
   });
 
   it('does not cache a factory(null) failure and allows the next attempt to install', async () => {

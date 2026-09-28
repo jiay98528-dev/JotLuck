@@ -108,13 +108,33 @@ test.describe('five-language localization', () => {
 
       await page.locator('.modal-close').click();
       await page.reload({ waitUntil: 'domcontentloaded' });
-      await waitForAppReady(page);
+      // Wait on this reload; waitForAppReady would navigate a second time and
+      // interrupt the asynchronous language import we are trying to verify.
       await expect(page.locator('html')).toHaveAttribute('data-locale', locale.code);
       expect(await page.evaluate(() => localStorage.getItem('jotluck:locale:v1'))).toBe(
         locale.code,
       );
     });
   }
+
+  test('a failed language download preserves the saved preference for the next startup', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const seeded = 'jotluck:e2e:language-seeded';
+      if (sessionStorage.getItem(seeded)) return;
+      localStorage.setItem('jotluck:locale:v1', 'ko');
+      sessionStorage.setItem(seeded, '1');
+    });
+    await page.route('**/assets/ko-*.js', (route) => route.abort());
+    await waitForAppReady(page);
+    await expect(page.locator('html')).toHaveAttribute('data-locale', 'zh-CN');
+    expect(await page.evaluate(() => localStorage.getItem('jotluck:locale:v1'))).toBe('ko');
+    await page.unroute('**/assets/ko-*.js');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('html')).toHaveAttribute('data-locale', 'ko');
+    expect(await page.evaluate(() => localStorage.getItem('jotluck:locale:v1'))).toBe('ko');
+  });
 
   test('language switching leaves completion settings, providers, candidates and ranking unchanged', async ({
     page,

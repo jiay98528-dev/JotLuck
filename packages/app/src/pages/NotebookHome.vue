@@ -77,17 +77,25 @@
                   ref="progressivePreviewRef"
                   :key="`${activeNotebookRoot}:${shellActivePath}:${externalFilePath}`"
                   class="markdown-body external-preview"
-                  :source="currentContent"
+                  :source="displayContent"
                   :analysis="documentAnalysis"
                   :options="progressivePreviewOptions"
                   :revision="`${wikiLinkRevision}:${previewImages.imageRevision.value}:${remoteImages.revision.value}:${currentLocale}`"
+                  @position-change="onPreviewPosition"
+                  @interaction="onDocumentInteraction('preview')"
                   @click="onPreviewClick"
                   @load.capture="onRemoteImageLoad"
                   @error.capture="onRemoteImageError"
                 />
                 <article
                   v-else-if="!loading && !externalError"
+                  ref="staticPreviewRef"
                   class="markdown-body external-preview"
+                  tabindex="0"
+                  @scroll.passive="onStaticPreviewScroll"
+                  @wheel.passive="onDocumentInteraction('preview')"
+                  @pointerdown="onDocumentInteraction('preview')"
+                  @keydown="onDocumentInteraction('preview')"
                   @click="onPreviewClick"
                   @load.capture="onRemoteImageLoad"
                   @error.capture="onRemoteImageError"
@@ -234,8 +242,13 @@
 
                     <div
                       v-else-if="viewMode === 'read'"
+                      ref="readerWorkbenchRef"
                       class="reader-workbench"
                       data-view-mode="read"
+                      @scroll.passive="onStaticPreviewScroll"
+                      @pointerdown="onDocumentInteraction('preview')"
+                      @wheel.passive="onDocumentInteraction('preview')"
+                      @keydown="onDocumentInteraction('preview')"
                     >
                       <div class="reader-workbench__bar">
                         <span class="reader-workbench__label">{{ t('notebook.view.read') }}</span>
@@ -255,17 +268,26 @@
                         ref="progressivePreviewRef"
                         :key="`${activeNotebookRoot}:${shellActivePath}:${externalFilePath}`"
                         class="markdown-body reader-preview"
-                        :source="currentContent"
+                        :scroll-parent="readerWorkbenchRef"
+                        :source="displayContent"
                         :analysis="documentAnalysis"
                         :options="progressivePreviewOptions"
                         :revision="`${wikiLinkRevision}:${previewImages.imageRevision.value}:${remoteImages.revision.value}:${currentLocale}`"
+                        @position-change="onPreviewPosition"
+                        @interaction="onDocumentInteraction('preview')"
                         @click="onPreviewClick"
                         @load.capture="onRemoteImageLoad"
                         @error.capture="onRemoteImageError"
                       />
                       <article
                         v-else
+                        ref="staticPreviewRef"
                         class="markdown-body reader-preview"
+                        tabindex="0"
+                        @scroll.passive="onStaticPreviewScroll"
+                        @wheel.passive="onDocumentInteraction('preview')"
+                        @pointerdown="onDocumentInteraction('preview')"
+                        @keydown="onDocumentInteraction('preview')"
                         @click="onPreviewClick"
                         @load.capture="onRemoteImageLoad"
                         @error.capture="onRemoteImageError"
@@ -279,6 +301,8 @@
                       <FormatBubble
                         :visible="bubbleVisible"
                         :position="bubblePosition"
+                        :anchor="bubbleAnchor"
+                        :editor="() => editorRef?.getEditorView()?.dom ?? null"
                         @format="onBubbleFormat"
                       />
                       <!-- Split Mode: left editor + right preview -->
@@ -288,7 +312,7 @@
                             v-if="!deferSplitEditorMount"
                             ref="editorRef"
                             :key="`split-${isScratchSession ? 'draft' : shellActivePath}`"
-                            :model-value="currentContent"
+                            :model-value="displayContent"
                             :analysis="documentAnalysis"
                             :read-only="isInteractionLocked"
                             :placeholder="
@@ -325,6 +349,8 @@
                                 ? undefined
                                 : imageUpload.handlePaste
                             "
+                            @position-change="onEditorPosition"
+                            @interaction="onDocumentInteraction('editor')"
                             @update:model-value="onEditorContentUpdate"
                             @selection-change="onSelectionChange"
                             @pending-format-ended="pendingFormatAction = null"
@@ -336,7 +362,7 @@
                         <div
                           class="split-divider"
                           :style="{ left: `${splitRatio}%` }"
-                          @mousedown="onSplitDragStart"
+                          @pointerdown="onSplitDragStart"
                         />
                         <div class="split-right" :style="{ flex: `0 0 ${100 - splitRatio}%` }">
                           <!-- eslint-disable vue/no-v-html -->
@@ -345,17 +371,25 @@
                             ref="progressivePreviewRef"
                             :key="`${activeNotebookRoot}:${shellActivePath}:${externalFilePath}`"
                             class="markdown-body split-preview"
-                            :source="currentContent"
+                            :source="displayContent"
                             :analysis="documentAnalysis"
                             :options="progressivePreviewOptions"
                             :revision="`${wikiLinkRevision}:${previewImages.imageRevision.value}:${remoteImages.revision.value}:${currentLocale}`"
+                            @position-change="onPreviewPosition"
+                            @interaction="onDocumentInteraction('preview')"
                             @click="onPreviewClick"
                             @load.capture="onRemoteImageLoad"
                             @error.capture="onRemoteImageError"
                           />
                           <div
                             v-else
+                            ref="staticPreviewRef"
                             class="markdown-body split-preview"
+                            tabindex="0"
+                            @scroll.passive="onStaticPreviewScroll"
+                            @wheel.passive="onDocumentInteraction('preview')"
+                            @pointerdown="onDocumentInteraction('preview')"
+                            @keydown="onDocumentInteraction('preview')"
                             @click="onPreviewClick"
                             @load.capture="onRemoteImageLoad"
                             @error.capture="onRemoteImageError"
@@ -369,7 +403,7 @@
                         v-if="viewMode === 'live'"
                         ref="editorRef"
                         :key="`live-${isScratchSession ? 'draft' : shellActivePath}`"
-                        :model-value="currentContent"
+                        :model-value="displayContent"
                         :analysis="documentAnalysis"
                         :read-only="isInteractionLocked"
                         :placeholder="
@@ -408,6 +442,8 @@
                             ? undefined
                             : imageUpload.handlePaste
                         "
+                        @position-change="onEditorPosition"
+                        @interaction="onDocumentInteraction('editor')"
                         @update:model-value="onEditorContentUpdate"
                         @selection-change="onSelectionChange"
                         @pending-format-ended="pendingFormatAction = null"
@@ -897,6 +933,9 @@ import {
   isLargeDocument as shouldUseProgressiveRendering,
 } from '@/services/document-analysis';
 import { useHeadings } from '@/composables/useHeadings';
+import { editorSource } from '@/utils/editor-source';
+import { relocateBacklink, type DocumentLocation } from '@/utils/document-location';
+import type { DocumentAnalysisResult } from '@/services/document-analysis';
 import { renderMarkdown, highlightCodeBlocks } from '@jotluck/renderer';
 import type {
   DirEntry,
@@ -916,6 +955,11 @@ import type {
   SaveExternalNoteAsRequest,
 } from '@/types';
 import { EditorView } from '@codemirror/view';
+import { isolateHistory } from '@codemirror/commands';
+import {
+  getInteractionSelection,
+  clearInteractionSelection,
+} from '@/utils/cm6-interaction-selection';
 import { useVersionCheck } from '@/composables/useVersionCheck';
 import { useImageUpload } from '@/composables/useImageUpload';
 import { usePreviewImageResolver } from '@/composables/usePreviewImageResolver';
@@ -1001,7 +1045,8 @@ function createFileSystem(): IFileSystemService {
   if (isDesktopRuntime()) return new TauriIPCService();
   const mockNotebook = peekJotLuckE2EBridge()?.mockNotebook;
   return new MockFSService(50, {
-    persist: shouldPersistMockFs(),
+    persist: mockNotebook?.persist ?? shouldPersistMockFs(),
+    initialFiles: mockNotebook?.initialFiles,
     recentNotebooks: mockNotebook?.recentRoots,
     pickerResult:
       mockNotebook?.pickerOutcome === 'cancel'
@@ -1067,6 +1112,7 @@ interface NotebookOpenGateExposed {
 
 const files = ref<DirEntry[]>([]);
 const currentContent = ref('');
+const displayContent = computed(() => editorSource(currentContent.value));
 const activePath = ref('');
 const loading = ref(true);
 const startupRouteResolved = ref(false);
@@ -1085,7 +1131,13 @@ const isSinglePageLayout = computed(
 const indexStore = useIndexStore();
 const searchStore = useSearchStore();
 const documentAnalysis = new DocumentAnalysis();
-const { headings, update: updateHeadings, getActiveHeadingId } = useHeadings(documentAnalysis);
+const headingIndex = useHeadings(documentAnalysis);
+const { headings } = headingIndex;
+function updateHeadings(content: string): void {
+  headingIndex.update(editorSource(content));
+}
+const activeDocumentPosition = ref(0);
+let activeLocationPane: 'editor' | 'preview' = 'editor';
 
 // --- UI State ---
 type ViewMode = ThemeViewMode | string;
@@ -1131,6 +1183,7 @@ const completionPredictor = new MarkdownPredictor(4);
 const completionEngineHealth = ref<PublicEngineDiagnostics | null>(null);
 const publicDecoderSetup = usePublicDecoderSetup({
   predictor: completionPredictor,
+  isAvailable: isDesktopRuntime,
   isUnmounted: () => componentUnmounted,
   createCanonicalEngine: () => createCanonicalPublicFreeDecoderEngine(),
   createFlaggedEngine: () => createFlaggedPublicFreeDecoderEngine(),
@@ -1646,6 +1699,9 @@ const themeHostUi = computed(() => ({
 // --- Format Bubble ---
 const bubbleVisible = ref(false);
 const bubblePosition = ref({ x: 0, y: 0 });
+watch([activePath, currentContent, isInteractionLocked], () => {
+  bubbleVisible.value = false;
+});
 const activeParagraphPreset = ref<ParagraphPreset>('paragraph');
 const pendingFormatAction = ref<FormatAction | null>(null);
 interface MarkdownEditorExposed {
@@ -1883,34 +1939,41 @@ function onSplitContentUpdate(content: string): void {
   splitDebounceTimer = setTimeout(() => updateSplitPreview(), 300);
 }
 
-let splitDragActive = false;
 let splitDragCleanup: (() => void) | null = null;
-
-function onSplitDragStart(e: MouseEvent): void {
-  e.preventDefault();
-  splitDragActive = true;
-  const onMove = (ev: MouseEvent) => {
-    if (!splitDragActive) return;
-    const container = (e.target as HTMLElement).parentElement;
-    if (!container) return;
+function onSplitDragStart(event: PointerEvent): void {
+  if (!event.isPrimary || event.button !== 0) return;
+  splitDragCleanup?.();
+  const divider = event.currentTarget as HTMLElement;
+  const container = divider.parentElement;
+  if (!container) return;
+  event.preventDefault();
+  divider.setPointerCapture(event.pointerId);
+  const move = (next: PointerEvent) => {
+    if (next.pointerId !== event.pointerId) return;
     const rect = container.getBoundingClientRect();
-    const pct = ((ev.clientX - rect.left) / rect.width) * 100;
-    splitRatio.value = Math.max(30, Math.min(70, pct));
+    if (rect.width > 0)
+      splitRatio.value = Math.max(
+        30,
+        Math.min(70, ((next.clientX - rect.left) / rect.width) * 100),
+      );
   };
-  const onUp = () => {
-    splitDragActive = false;
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
+  const finish = (next?: PointerEvent) => {
+    if (next && next.pointerId !== event.pointerId) return;
+    divider.removeEventListener('pointermove', move);
+    divider.removeEventListener('pointerup', finish);
+    divider.removeEventListener('pointercancel', finish);
+    divider.removeEventListener('lostpointercapture', finish);
+    window.removeEventListener('blur', blur);
+    if (divider.hasPointerCapture(event.pointerId)) divider.releasePointerCapture(event.pointerId);
     splitDragCleanup = null;
   };
-  // Clean up any stale listeners first
-  if (splitDragCleanup) splitDragCleanup();
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('mouseup', onUp);
-  splitDragCleanup = () => {
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
-  };
+  const blur = () => finish();
+  divider.addEventListener('pointermove', move);
+  divider.addEventListener('pointerup', finish);
+  divider.addEventListener('pointercancel', finish);
+  divider.addEventListener('lostpointercapture', finish);
+  window.addEventListener('blur', blur);
+  splitDragCleanup = blur;
 }
 
 // --- Save State ---
@@ -1980,7 +2043,9 @@ documentAnalysis.subscribe(({ wordCount }) => {
   editorStats.wordCount = wordCount;
 });
 
-const activeHeadingId = computed(() => getActiveHeadingId(editorStats.cursorLine ?? 0));
+const activeHeadingId = computed(
+  () => headingIndex.atPosition(activeDocumentPosition.value)?.id ?? null,
+);
 const currentBacklinks = computed((): BacklinkEntry[] => {
   if (!activePath.value) return [];
   return indexStore.getBacklinks(activePath.value);
@@ -4098,11 +4163,7 @@ function wikiLinkExists(noteTitle: string): boolean {
     return filename === target;
   });
   if (existsInTree) return true;
-  const docs = Object.values(indexStore.getIndexService()?.getAllDocuments() ?? {});
-  return docs.some((doc) => {
-    const filename = stripSupportedNoteExtension(doc.path.split('/').pop() ?? '');
-    return doc.title === target || filename === target;
-  });
+  return !!indexStore.getIndexService()?.resolveWikiLink(target);
 }
 
 /**
@@ -4114,7 +4175,7 @@ function wikiLinkExists(noteTitle: string): boolean {
 function updateSplitPreview(): void {
   if (previewRenderTimer) clearTimeout(previewRenderTimer);
   if (isLargeDocument.value) return;
-  const content = currentContent.value;
+  const content = displayContent.value;
   const renderDelay = 50;
   previewRenderTimer = setTimeout(() => {
     try {
@@ -4123,6 +4184,7 @@ function updateSplitPreview(): void {
         resolveImageSrc: previewImages.resolveImageSrc,
         remoteImages: remoteImagePolicy.value,
       });
+      renderedPreviewSource.value = content;
       if (
         splitPreviewHtml.value &&
         performance.getEntriesByName('jotluck:preview-1st-paint').length === 0
@@ -4153,9 +4215,10 @@ function updateSplitPreview(): void {
 function updateExternalPreview(): void {
   if (isLargeDocument.value) return;
   try {
-    externalPreviewHtml.value = renderMarkdown(currentContent.value, {
+    externalPreviewHtml.value = renderMarkdown(displayContent.value, {
       remoteImages: remoteImagePolicy.value,
     });
+    renderedPreviewSource.value = displayContent.value;
     void nextTick(() => {
       const previewEl = document.querySelector<HTMLElement>('.external-preview');
       if (previewEl) highlightCodeBlocks(previewEl);
@@ -4597,7 +4660,7 @@ function onSelectionChange(sel: { from: number; to: number } | null): void {
 
   // Use CodeMirror 6 API to get pixel coordinates — window.getSelection() is unreliable inside CM6
   if (view) {
-    const headCoords = view.coordsAtPos(sel.from);
+    const headCoords = bubbleAnchor() ?? view.coordsAtPos(sel.from);
     if (headCoords) {
       bubblePosition.value = {
         x:
@@ -4629,7 +4692,28 @@ function isParagraphPreset(action: FormatAction): action is ParagraphPreset {
   return PARAGRAPH_PRESETS.includes(action as ParagraphPreset);
 }
 
+function bubbleAnchor() {
+  const view = editorRef.value?.getEditorView();
+  if (!view) return null;
+  const selection = getInteractionSelection(view);
+  if (!selection) return null;
+  const native = document.getSelection();
+  if (selection.native && native?.rangeCount && view.contentDOM.contains(native.anchorNode))
+    return native.getRangeAt(0).getBoundingClientRect();
+  const start = view.coordsAtPos(selection.from);
+  const end = view.coordsAtPos(selection.to);
+  return start && end
+    ? { left: start.left, right: end.right, top: start.top, bottom: end.bottom }
+    : start;
+}
+
 function onToolbarFormat(action: FormatAction): void {
+  const view = editorRef.value?.getEditorView();
+  const selection = view && getInteractionSelection(view);
+  if (selection && selection.from !== selection.to) {
+    onBubbleFormat(action);
+    return;
+  }
   pendingFormatAction.value =
     action === 'clear' || pendingFormatAction.value === action ? null : action;
   bubbleVisible.value = false;
@@ -4637,8 +4721,12 @@ function onToolbarFormat(action: FormatAction): void {
 
 function onBubbleFormat(action: FormatAction): void {
   const view = editorRef.value?.getEditorView();
-  if (!view) return;
-  const { from, to } = view.state.selection.main;
+  if (!view || view.state.readOnly || view.composing || view.compositionStarted) return;
+  const selection = getInteractionSelection(view);
+  if (!selection || selection.from === selection.to) return;
+  const { from, to } = selection;
+  clearInteractionSelection(view);
+  if (selection.native) document.getSelection()?.removeAllRanges();
   const doc = view.state.doc.toString();
   const edit = isParagraphPreset(action)
     ? applyParagraphPreset(doc, from, to, action)
@@ -4648,6 +4736,7 @@ function onBubbleFormat(action: FormatAction): void {
 
   view.dispatch({
     changes: edit.changes,
+    annotations: isolateHistory.of('full'),
     selection: edit.selection,
     scrollIntoView: true,
   });
@@ -4779,35 +4868,295 @@ function onQuickAction(action: 'new-note' | 'export' | 'settings'): void {
 watch(
   () => `${activeNotebookRoot.value}:${activePath.value}:${externalFilePath.value}`,
   () => {
+    if (
+      navigationRequest &&
+      normalizePath(activePath.value) !== normalizePath(navigationRequest.path)
+    )
+      cancelDocumentNavigation();
+    activeDocumentPosition.value = 0;
+    headingIndex.clear();
     documentAnalysis.reset();
   },
   { flush: 'sync' },
 );
 
 const progressivePreviewRef = ref<InstanceType<typeof ProgressivePreview> | null>(null);
+const readerWorkbenchRef = ref<HTMLElement | null>(null);
+const staticPreviewRef = ref<HTMLElement | null>(null);
+const renderedPreviewSource = ref<string | null>(null);
+let staticPositionFrame: number | null = null;
+let staticNavigationScroll = false;
+let staticNavigationTimer: ReturnType<typeof setTimeout> | null = null;
+function staticPreviewViewport(root: HTMLElement) {
+  const owner = root.closest<HTMLElement>('.reader-workbench') ?? root;
+  const bounds = owner.getBoundingClientRect();
+  const barHeight =
+    owner === root
+      ? 0
+      : (owner.querySelector('.reader-workbench__bar')?.getBoundingClientRect().height ?? 0);
+  return { owner, top: bounds.top + barHeight, bottom: bounds.bottom };
+}
+function onStaticPreviewScroll(): void {
+  if (staticPositionFrame !== null || activeLocationPane !== 'preview' || staticNavigationScroll)
+    return;
+  staticPositionFrame = requestAnimationFrame(() => {
+    staticPositionFrame = null;
+    const root = staticPreviewRef.value;
+    if (!root || staticNavigationScroll || renderedPreviewSource.value !== displayContent.value)
+      return;
+    const top = staticPreviewViewport(root).top + 24;
+    const items = headingIndex.ordered.value;
+    let low = 0,
+      high = items.length;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      const element = root.querySelector<HTMLElement>(`[id="${CSS.escape(items[mid]!.id)}"]`);
+      if (element && element.getBoundingClientRect().top <= top) low = mid + 1;
+      else high = mid;
+    }
+    onPreviewPosition({
+      analysis: documentAnalysis,
+      revision: documentAnalysis.version,
+      reason: 'scroll',
+      position: items[low - 1]?.from ?? 0,
+    });
+  });
+}
+async function navigateStaticPreview(
+  request: NavigationRequest,
+  from: number,
+  to: number,
+  headingId?: string,
+): Promise<void> {
+  if (renderedPreviewSource.value !== request.source || !staticPreviewRef.value) {
+    await new Promise<void>((resolve) => {
+      const stop = watch([renderedPreviewSource, staticPreviewRef], () => {
+        if (renderedPreviewSource.value === request.source && staticPreviewRef.value) done();
+      });
+      const done = () => {
+        stop();
+        clearTimeout(timeout);
+        request.controller.signal.removeEventListener('abort', done);
+        resolve();
+      };
+      const timeout = setTimeout(done, 5000);
+      request.controller.signal.addEventListener('abort', done, { once: true });
+    });
+  }
+  await nextTick();
+  if (!currentNavigation(request) || renderedPreviewSource.value !== displayContent.value) return;
+  const root = staticPreviewRef.value;
+  if (!root) return;
+  let target: HTMLElement | null = null;
+  if (headingId) target = root.querySelector<HTMLElement>(`[id="${CSS.escape(headingId)}"]`);
+  else {
+    const occurrences = documentAnalysis.result?.wikiLinks ?? [];
+    const index = occurrences.findIndex((item) => item.from === from && item.to === to);
+    const anchors = root.querySelectorAll<HTMLElement>('a[data-note]');
+    if (anchors.length === occurrences.length) target = anchors[index] ?? null;
+  }
+  if (target) {
+    staticNavigationScroll = true;
+    const viewport = staticPreviewViewport(root);
+    const rect = target.getBoundingClientRect();
+    const top = headingId ? viewport.top + 24 : (viewport.top + viewport.bottom - rect.height) / 2;
+    viewport.owner.scrollTop += rect.top - top;
+    if (!headingId) {
+      target.classList.add('preview-navigation-target');
+      staticNavigationTimer = setTimeout(() => {
+        target?.classList.remove('preview-navigation-target');
+        staticNavigationTimer = null;
+      }, 1600);
+    }
+  } else staticPreviewViewport(root).owner.scrollTop = 0;
+}
+
 const progressivePreviewOptions = computed(() => ({
   wikiLinkExists,
   resolveImageSrc: previewImages.resolveImageSrc,
   remoteImages: remoteImagePolicy.value,
 }));
 
-// --- Navigation ---
-function onNavTreeNavigate(_headingId: string, lineNumber: number): void {
-  if (viewMode.value === 'read' && progressivePreviewRef.value) {
-    progressivePreviewRef.value.scrollToHeading(_headingId);
+// --- Document position and navigation ---
+interface NavigationRequest {
+  controller: AbortController;
+  path: string;
+  workspace: string | null;
+  generation: number;
+  source?: string;
+}
+let navigationRequest: NavigationRequest | null = null;
+function cancelDocumentNavigation(): void {
+  navigationRequest?.controller.abort();
+  navigationRequest = null;
+  progressivePreviewRef.value?.cancelNavigation();
+  if (staticNavigationTimer) clearTimeout(staticNavigationTimer);
+  staticPreviewRef.value
+    ?.querySelectorAll('.preview-navigation-target')
+    .forEach((node) => node.classList.remove('preview-navigation-target'));
+}
+function onDocumentInteraction(pane: 'editor' | 'preview'): void {
+  if (pane === 'preview') staticNavigationScroll = false;
+  activeLocationPane = pane;
+  cancelDocumentNavigation();
+  document.dispatchEvent(new Event('jotluck-document-activity'));
+}
+function onEditorPosition(location: DocumentLocation): void {
+  if (location.analysis !== documentAnalysis || location.revision !== documentAnalysis.version)
     return;
+  if (location.changes && location.doc)
+    headingIndex.mapChanges(location.changes, location.doc, location.revision);
+  if (location.line !== undefined) {
+    editorStats.cursorLine = location.line;
+    editorStats.cursorCol = location.column ?? 1;
   }
-  const view = editorRef.value?.getEditorView();
-  if (!view || lineNumber <= 0) return;
-  const line = view.state.doc.line(Math.min(lineNumber, view.state.doc.lines));
-  view.dispatch({
-    selection: { anchor: line.from, head: line.from },
-    scrollIntoView: true,
+  if (location.reason === 'cursor' && editorRef.value?.getEditorView()?.hasFocus)
+    activeLocationPane = 'editor';
+  if (activeLocationPane === 'editor') activeDocumentPosition.value = location.position;
+}
+function onPreviewPosition(location: DocumentLocation): void {
+  if (
+    location.analysis === documentAnalysis &&
+    location.revision === documentAnalysis.version &&
+    activeLocationPane === 'preview'
+  )
+    activeDocumentPosition.value = location.position;
+}
+watch(viewMode, (mode) => {
+  activeLocationPane = mode === 'read' ? 'preview' : 'editor';
+  cancelDocumentNavigation();
+});
+watch(currentContent, (content) => {
+  if (navigationRequest?.source !== undefined && navigationRequest.source !== editorSource(content))
+    cancelDocumentNavigation();
+});
+function currentNavigation(request: NavigationRequest): boolean {
+  return (
+    navigationRequest === request &&
+    !request.controller.signal.aborted &&
+    request.workspace === activeNotebookRoot.value &&
+    request.generation === notebookDataGeneration &&
+    normalizePath(request.path) === normalizePath(activePath.value)
+  );
+}
+function awaitNavigationAnalysis(
+  request: NavigationRequest,
+): Promise<DocumentAnalysisResult | null> {
+  const ready = documentAnalysis.result;
+  if (ready?.ast.source === displayContent.value) return Promise.resolve(ready);
+  return new Promise((resolve) => {
+    const finish = (result: DocumentAnalysisResult | null) => {
+      unsubscribe();
+      clearTimeout(timeout);
+      request.controller.signal.removeEventListener('abort', aborted);
+      resolve(result);
+    };
+    const aborted = () => finish(null);
+    const unsubscribe = documentAnalysis.subscribe((result) => {
+      if (currentNavigation(request) && result.ast.source === displayContent.value) finish(result);
+    });
+    const timeout = setTimeout(() => finish(null), 5000);
+    request.controller.signal.addEventListener('abort', aborted, { once: true });
+    documentAnalysis.update(displayContent.value);
+    if (!currentNavigation(request)) finish(null);
   });
-  view.focus();
+}
+async function navigateDocument(target: {
+  path: string;
+  headingId?: string;
+  headingFrom?: number;
+  anchor?: string;
+  backlink?: BacklinkEntry;
+}): Promise<void> {
+  const editing = editorRef.value?.getEditorView();
+  if (editing?.composing || editing?.compositionStarted) return;
+  cancelDocumentNavigation();
+  const request: NavigationRequest = {
+    controller: new AbortController(),
+    path: target.path,
+    workspace: activeNotebookRoot.value,
+    generation: notebookDataGeneration,
+  };
+  navigationRequest = request;
+  if (normalizePath(activePath.value) !== normalizePath(target.path))
+    await onShellSelectNote(target.path);
+  await nextTick();
+  if (!currentNavigation(request)) return;
+  request.source = displayContent.value;
+  const result = await awaitNavigationAnalysis(request);
+  if (!result || !currentNavigation(request)) return;
+  let from = 0,
+    to = 0,
+    headingId: string | undefined;
+  if (target.backlink) {
+    const entry = target.backlink;
+    const occurrences = result.wikiLinks ?? [];
+    const exact =
+      entry.location && indexStore.getIndexService()?.isBacklinkCurrent(entry, currentContent.value)
+        ? occurrences.find(
+            (item) =>
+              item.from === entry.location!.from &&
+              item.to === entry.location!.to &&
+              item.raw === entry.location!.raw,
+          )
+        : null;
+    const occurrence = exact ?? relocateBacklink(entry, occurrences);
+    if (!occurrence) {
+      toast.show(t('navigation.referenceMoved'), 'info', 3500);
+      return;
+    }
+    from = occurrence.from;
+    to = occurrence.to;
+  } else if (target.headingId || target.anchor) {
+    const items = result.ast.blocks.filter((block) => block.type === 'heading');
+    const heading =
+      target.headingFrom !== undefined
+        ? items.find((item) => item.range.from === target.headingFrom)
+        : (items.find((item) => item.id === (target.headingId ?? target.anchor)) ??
+          items.find((item) => item.text.trim() === target.anchor?.trim()));
+    if (!heading) return;
+    from = to = heading.range.from;
+    headingId = heading.id;
+  }
+  if (!currentNavigation(request)) return;
+  activeDocumentPosition.value = from;
+  if (viewMode.value !== 'read') {
+    const view = editorRef.value?.getEditorView();
+    if (!view || view.composing || view.compositionStarted) return;
+    revealLivePreviewSourceAt(view, from);
+    view.dispatch({
+      selection: { anchor: from, head: to },
+      effects: EditorView.scrollIntoView(from, { y: 'center' }),
+    });
+    view.focus();
+    activeLocationPane = 'editor';
+  } else activeLocationPane = 'preview';
+  if (viewMode.value !== 'live') {
+    if (progressivePreviewRef.value) {
+      if (headingId) progressivePreviewRef.value.scrollToHeading(headingId);
+      else progressivePreviewRef.value.navigateToRange(from, to);
+    } else await navigateStaticPreview(request, from, to, headingId);
+  }
+}
+function onNavTreeNavigate(headingId: string, lineNumber: number): void {
+  const item = headingIndex.ordered.value.find((heading) => heading.id === headingId);
+  const view = editorRef.value?.getEditorView();
+  const from =
+    item?.from ??
+    (view && lineNumber > 0
+      ? view.state.doc.line(Math.min(lineNumber, view.state.doc.lines)).from
+      : undefined);
+  void navigateDocument({ path: activePath.value, headingId, headingFrom: from });
 }
 function onBacklinkNavigate(entry: BacklinkEntry): void {
-  void onShellSelectNote(entry.notePath);
+  const indexed = entry.location
+    ? entry
+    : (currentBacklinks.value.find(
+        (candidate) =>
+          candidate.notePath === entry.notePath &&
+          (!entry.lineNumber || candidate.lineNumber === entry.lineNumber),
+      ) ?? entry);
+  void navigateDocument({ path: indexed.notePath, backlink: indexed });
 }
 function onTagSelect(tagName: string): void {
   if (isExternalEditing.value) {
@@ -4837,29 +5186,15 @@ async function onLivePreviewWikiLinkClick(noteTitle: string, anchor: null | stri
       toast.show(t('notebook.error.noteNotFound', { title: noteTitle }), 'warning', 3000);
       return;
     }
-    await onShellSelectNote(guided.path);
-    if (!anchor) return;
-    const targetHeading = headings.value.find((heading) => heading.text.trim() === anchor.trim());
-    if (targetHeading) onNavTreeNavigate(targetHeading.id, targetHeading.lineNumber);
+    await navigateDocument({ path: guided.path, anchor: anchor ?? undefined });
     return;
   }
-  const docs = Object.values(indexStore.getIndexService()?.getAllDocuments() ?? {});
-  const exact =
-    docs.find((doc) => doc.title === noteTitle) ??
-    docs.find((doc) => stripSupportedNoteExtension(doc.path.split('/').pop() ?? '') === noteTitle);
-
+  const exact = indexStore.getIndexService()?.resolveWikiLink(noteTitle);
   if (!exact) {
     toast.show(t('notebook.error.noteNotFound', { title: noteTitle }), 'warning', 3000);
     return;
   }
-
-  await onShellSelectNote(exact.path);
-  if (!anchor) return;
-
-  const targetHeading = headings.value.find((heading) => heading.text.trim() === anchor.trim());
-  if (targetHeading) {
-    onNavTreeNavigate(targetHeading.id, targetHeading.lineNumber);
-  }
+  await navigateDocument({ path: exact.path, anchor: anchor ?? undefined });
 }
 
 // --- Templates ---
@@ -5439,6 +5774,8 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  cancelDocumentNavigation();
+  if (staticPositionFrame !== null) cancelAnimationFrame(staticPositionFrame);
   documentAnalysis.destroy();
   componentUnmounted = true;
   externalSessionGeneration++;
@@ -5913,11 +6250,13 @@ function onDismissVersion(version: string) {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  overflow: hidden auto;
+  overflow: auto;
+  overflow-anchor: none;
   background: color-mix(in oklch, var(--paper-bg) 72%, var(--paper-surface));
 }
 
 .reader-workbench__bar {
+  flex-shrink: 0;
   position: sticky;
   top: 0;
   z-index: var(--z-wing);
@@ -5943,6 +6282,10 @@ function onDismissVersion(version: string) {
 }
 
 .reader-preview {
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: visible;
+  box-sizing: border-box;
   width: min(760px, calc(100% - var(--space-48)));
   margin: 0 auto;
   padding: var(--space-48) 0 var(--space-64);
@@ -5996,6 +6339,7 @@ function onDismissVersion(version: string) {
   width: 3px;
   background: var(--rule);
   cursor: col-resize;
+  touch-action: none;
   flex-shrink: 0;
   transition: background var(--dur-micro) var(--ease-fade);
   position: relative;
@@ -6004,6 +6348,12 @@ function onDismissVersion(version: string) {
 .split-divider:hover,
 .split-divider:active {
   background: var(--accent);
+}
+
+.markdown-body :deep(.preview-navigation-target) {
+  background: var(--accent-soft);
+  outline: var(--border-thin) solid var(--accent);
+  outline-offset: 2px;
 }
 
 .split-preview {

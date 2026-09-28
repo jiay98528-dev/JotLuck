@@ -155,8 +155,12 @@ const STRUCTURED_PROBES = [
   { input: '#', expected: '标题' },
   { input: '##', expected: '标题' },
   { input: '###', expected: '标题' },
-  { input: '-', expected: '[ ] ' },
-  { input: '*', expected: '[ ] ' },
+  { input: '-', expected: ' [ ] ' },
+  { input: '*', expected: ' [ ] ' },
+  { input: '+', expected: ' [ ] ' },
+  { input: '- ', expected: '[ ] ' },
+  { input: '* ', expected: '[ ] ' },
+  { input: '+ ', expected: '[ ] ' },
   { input: '>', expected: '引用' },
   { input: '**粗', expected: '**' },
   { input: '*斜', expected: '*' },
@@ -534,6 +538,33 @@ test.describe('autocomplete quality score', () => {
         suite: 'legacy-fixed-probes',
         p90: legacyP90,
       });
+    }
+  });
+
+  test('accepts task suggestions with exactly one separator and undoes the completion', async ({
+    page,
+  }) => {
+    if (!(await page.locator('.split-pane').isVisible()))
+      await page.locator('.view-mode-toggle').click();
+    for (const prefix of ['-', '*', '+', '- ', '* ', '+ ']) {
+      await page.locator('.cm-content').focus();
+      await page.keyboard.press('Control+a');
+      await page.keyboard.insertText(prefix);
+      const suggestion = prefix.endsWith(' ') ? '[ ] ' : ' [ ] ';
+      await expect(page.locator('.cm-ghost-text')).toHaveText(suggestion);
+      await page.keyboard.press('Tab');
+      await expect
+        .poll(() => page.evaluate(() => window.__jotluck_e2e?.editor?.getContent()))
+        .toBe(prefix + suggestion);
+      await page.keyboard.press('Control+z');
+      await expect
+        .poll(() => page.evaluate(() => window.__jotluck_e2e?.editor?.getContent()))
+        .toBe(prefix);
+      // Reaccept and render the resulting task via the normal preview path.
+      await page.keyboard.press('Control+y');
+      await page.keyboard.insertText('任务内容');
+      await expect(page.locator('.split-preview input[type="checkbox"]')).toHaveCount(1);
+      await expect(page.locator('.split-preview')).toContainText('任务内容');
     }
   });
 

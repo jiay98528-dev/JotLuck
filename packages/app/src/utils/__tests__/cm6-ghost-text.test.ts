@@ -141,6 +141,141 @@ describe('cm6 ghost text focus and Tab contract', () => {
     );
   });
 
+  it.each(['Tab', 'Escape'])(
+    'keeps native input at its declared target after %s removes a ghost',
+    async (key) => {
+      const { view, doc } = mountGhostEditor();
+      await waitForGhost(view);
+      view.contentDOM.dispatchEvent(
+        new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+      );
+      const before = key === 'Tab' ? doc + ' because' : doc;
+      const cursor = before.length;
+      const point = view.domAtPos(cursor);
+      const event = new InputEvent('beforeinput', {
+        inputType: 'insertText',
+        data: ' next',
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperty(event, 'getTargetRanges', {
+        value: () => [
+          {
+            startContainer: point.node,
+            startOffset: point.offset,
+            endContainer: point.node,
+            endOffset: point.offset,
+          },
+        ],
+      });
+      view.contentDOM.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      const handled = view.state
+        .facet(EditorView.inputHandler)
+        .some((handler) =>
+          handler(view, 0, 0, ' next', () =>
+            view.state.update({ changes: { from: 0, insert: ' next' } }),
+          ),
+        );
+      expect(handled).toBe(true);
+      expect(view.state.doc.toString()).toBe(before + ' next');
+      expect(view.state.selection.main.head).toBe(cursor + 5);
+      expect(undo(view)).toBe(true);
+      expect(view.state.doc.toString()).toBe(before);
+    },
+  );
+
+  it.each(['correct target', 'composition', 'changed document', 'changed text'])(
+    'does not redirect %s input after completion',
+    async (reason) => {
+      const { view } = mountGhostEditor();
+      await waitForGhost(view);
+      view.contentDOM.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+      );
+      const cursor = view.state.selection.main.head;
+      const point = view.domAtPos(cursor);
+      const event = new InputEvent('beforeinput', {
+        inputType: 'insertText',
+        data: ' next',
+        isComposing: reason === 'composition',
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperty(event, 'getTargetRanges', {
+        value: () => [
+          {
+            startContainer: point.node,
+            startOffset: point.offset,
+            endContainer: point.node,
+            endOffset: point.offset,
+          },
+        ],
+      });
+      view.contentDOM.dispatchEvent(event);
+      if (reason === 'changed document') view.dispatch({ changes: { from: 0, insert: 'x' } });
+      const from = reason === 'correct target' ? cursor : 0;
+      const before = view.state.doc;
+      expect(
+        view.state
+          .facet(EditorView.inputHandler)
+          .some((handler) =>
+            handler(view, from, from, reason === 'changed text' ? ' other' : ' next', () =>
+              view.state.update({}),
+            ),
+          ),
+      ).toBe(false);
+      expect(view.state.doc).toBe(before);
+    },
+  );
+
+  it('keeps a new composition separate from acceptance while grouping its own updates', async () => {
+    const { view, doc } = mountGhostEditor();
+    await waitForGhost(view);
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+    );
+    const accepted = view.state.doc.toString();
+    const cursor = accepted.length;
+    expect(
+      view.state.facet(EditorView.inputHandler).some((handler) =>
+        handler(view, cursor, cursor, '中', () =>
+          view.state.update({
+            changes: { from: cursor, insert: '中' },
+            selection: { anchor: cursor + 1 },
+            userEvent: 'input.type.compose',
+          }),
+        ),
+      ),
+    ).toBe(true);
+    view.dispatch({
+      changes: { from: cursor, to: cursor + 1, insert: '中文' },
+      selection: { anchor: cursor + 2 },
+      userEvent: 'input.type.compose',
+    });
+    expect(view.state.doc.toString()).toBe(accepted + '中文');
+    expect(undo(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(accepted);
+    expect(undo(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(doc);
+  });
+
+  it('leaves flagged IME keys to the input method even after CM composition state clears', async () => {
+    const { view, predictor, doc } = mountGhostEditor();
+    await waitForGhost(view);
+    const key = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      keyCode: 229,
+      isComposing: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    view.contentDOM.dispatchEvent(key);
+    expect(key.defaultPrevented).toBe(false);
+    expect(view.state.doc.toString()).toBe(doc);
+    expect(predictor.acceptCompletion).not.toHaveBeenCalled();
+  });
+
   it('uses the exact text edit as the sole mutation for structured completion', async () => {
     const retainCompletion = vi.fn();
     const { view, predictor } = mountGhostEditor({

@@ -96,7 +96,11 @@ test.describe('offline autocomplete user journeys', () => {
     expect(suggestion.length).toBeGreaterThan(0);
 
     await page.keyboard.press('Tab');
-    await expect.poll(() => getEditorContent(page)).toContain(`${probe}${suggestion}`);
+    await expect.poll(() => getEditorContentFromBridge(page)).toBe(`${probe}${suggestion}`);
+    await page.keyboard.insertText('继续输入');
+    await expect.poll(() => getEditorContentFromBridge(page)).toBe(`${probe}${suggestion}继续输入`);
+    await page.keyboard.press(`${MOD_KEY}+z`);
+    await expect.poll(() => getEditorContentFromBridge(page)).toBe(`${probe}${suggestion}`);
     await waitForAutoSave(page);
 
     await page.reload();

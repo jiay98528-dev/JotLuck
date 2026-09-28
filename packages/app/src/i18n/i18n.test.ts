@@ -1,4 +1,5 @@
 import { createApp } from 'vue';
+import type { I18n } from 'vue-i18n';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_LOCALE,
@@ -48,6 +49,21 @@ describe('locale manager', () => {
     expect(normalizeLocale('de-DE')).toBeNull();
     expect(detectPreferredLocale(['de-DE', 'ko-KR'])).toBe('ko');
     expect(detectPreferredLocale(['de-DE'])).toBe(DEFAULT_LOCALE);
+  });
+
+  it('preserves the saved language when loading it fails and retries on the next initialization', async () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'ko');
+    const install = vi
+      .spyOn((getI18nPlugin() as I18n).global, 'setLocaleMessage')
+      .mockImplementationOnce(() => {
+        throw new Error('locale module temporarily unavailable');
+      });
+    await expect(initializeLocale()).resolves.toBe(DEFAULT_LOCALE);
+    expect(localStorage.getItem(LOCALE_STORAGE_KEY)).toBe('ko');
+    install.mockRestore();
+    await expect(initializeLocale()).resolves.toBe('ko');
+    expect(document.documentElement.dataset.locale).toBe('ko');
+    expect(localStorage.getItem(LOCALE_STORAGE_KEY)).toBe('ko');
   });
 
   it('prefers a persisted locale and synchronizes document language attributes', async () => {

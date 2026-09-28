@@ -1,5 +1,6 @@
 <template>
   <div
+    ref="toolbarRef"
     class="format-toolbar"
     :class="`format-toolbar--${density}`"
     :data-density="density"
@@ -62,7 +63,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
+import { guardPointerClicks } from '@/utils/editor-pointer';
+const toolbarRef = ref<HTMLElement | null>(null);
+let removeGuard: (() => void) | undefined;
+onMounted(() => {
+  if (toolbarRef.value) removeGuard = guardPointerClicks(toolbarRef.value);
+});
+onUnmounted(() => removeGuard?.());
 import { useI18n } from 'vue-i18n';
 import Button from '@/components/common/Button.vue';
 import type { FormatAction, ParagraphPreset } from '@/types';

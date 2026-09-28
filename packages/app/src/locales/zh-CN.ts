@@ -1,4 +1,9 @@
 export const messages = {
+  navigation: {
+    referenceLine: '第 {line} 行',
+    showMore: '显示更多',
+    referenceMoved: '引用位置已变化，已打开来源笔记。',
+  },
   common: {
     appName: 'JotLuck',
     close: '关闭',

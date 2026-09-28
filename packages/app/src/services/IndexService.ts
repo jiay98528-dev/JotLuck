@@ -11,8 +11,15 @@ import {
   stripSupportedNoteExtension,
 } from '@/utils/note-files';
 import { SearchEngine } from './SearchEngine';
+import { editorSource } from '@/utils/editor-source';
 import { parseFrontmatter, extractTitle } from './YAMLParser';
-import { extractIndexFacts, parseDocument } from '@jotluck/renderer';
+import {
+  extractIndexFacts,
+  extractWikiLinkOccurrences,
+  stripToPlainText,
+  parseDocument,
+  type WikiLinkOccurrence,
+} from '@jotluck/renderer';
 
 const MAX_INDEXED_NOTE_FILES = 2000;
 const INDEX_LIMIT_ERROR = 'JOTLUCK_INDEX_LIMIT_EXCEEDED';
@@ -42,6 +49,46 @@ export class IndexService {
   private tagIndex: Map<string, string[]> = new Map();
   private allDocuments: Record<string, DocumentEntry> = {};
   private documentContents: Map<string, string> = new Map();
+  private occurrences = new Map<string, WikiLinkOccurrence[]>();
+  private contentRevisions = new Map<string, number>();
+  private targetLookup: Map<string, string> | null = null;
+  private backlinks: Map<string, BacklinkEntry[]> | null = null;
+
+  private invalidateReferences(): void {
+    this.targetLookup = null;
+    this.backlinks = null;
+  }
+
+  /** Forward navigation and backlinks resolve a target using exactly the same rules. */
+  resolveWikiLink(target: string): DocumentEntry | undefined {
+    target = target.trim().replace(/\\/g, '/');
+    if (!this.targetLookup) {
+      const lookup = new Map<string, string>();
+      const documents = Object.values(this.allDocuments);
+      for (const doc of documents)
+        if (doc.title && !lookup.has(doc.title)) lookup.set(doc.title, doc.path);
+      for (const doc of documents) {
+        const name = stripSupportedNoteExtension(doc.path.split('/').pop() ?? '');
+        if (!lookup.has(name)) lookup.set(name, doc.path);
+        lookup.set(`path:${stripSupportedNoteExtension(this.normalizePath(doc.path))}`, doc.path);
+      }
+      this.targetLookup = lookup;
+    }
+    let key = target;
+    if (target.includes('/')) {
+      const parts: string[] = [];
+      for (const part of target.split('/')) {
+        if (!part || part === '.') continue;
+        if (part === '..') {
+          if (!parts.length) return undefined;
+          parts.pop();
+        } else parts.push(part);
+      }
+      key = `path:${stripSupportedNoteExtension('/' + parts.join('/'))}`;
+    }
+    const path = this.targetLookup.get(key);
+    return path ? this.allDocuments[path] : undefined;
+  }
   /**
    * Monotonic per-path operation revisions. Any async read must still own the
    * latest revision before it is allowed to mutate an index.
@@ -71,6 +118,11 @@ export class IndexService {
     if (pathsToRemove.length === 0) return;
 
     const removeSet = new Set(pathsToRemove.map((p) => this.normalizePath(p)));
+    this.invalidateReferences();
+    for (const path of removeSet) {
+      this.occurrences.delete(path);
+      this.contentRevisions.delete(path);
+    }
     const searchIndexPaths = new Set<string>(removeSet);
 
     for (const path of Object.keys(this.allDocuments)) {
@@ -164,6 +216,9 @@ export class IndexService {
     this.tagIndex.clear();
     this.recentNotesList = [];
     this.documentContents.clear();
+    this.occurrences.clear();
+    this.contentRevisions.clear();
+    this.invalidateReferences();
     this.indexedNoteCount = 0;
 
     const documents: Record<string, DocumentEntry> = {};
@@ -246,6 +301,8 @@ export class IndexService {
     try {
       const content = await this.fs.readFile(path);
       if (!this.ownsPathMutation(path, revision)) return null;
+      if (this.documentContents.get(path) === content && this.allDocuments[path]) return content;
+      if (this.documentContents.get(path) !== content) this.contentRevisions.set(path, revision);
       this.documentContents.set(path, content);
       const fm = parseFrontmatter(content);
       const title =
@@ -263,7 +320,10 @@ export class IndexService {
       // Inline #tag 与 wiki-link 提取统一消费 AST（@jotluck/renderer）：
       // 天然跳过 frontmatter / codeFence / 裸 JSON，并先剥行内 code 与
       // 行首 heading/blockquote 前缀，避免 ATX `#` 误判为 tag。
-      const facts = extractIndexFacts(parseDocument(content));
+      const ast = parseDocument(editorSource(content));
+      const occurrences = extractWikiLinkOccurrences(ast);
+      this.occurrences.set(path, occurrences);
+      const facts = extractIndexFacts(ast, occurrences);
       const inlineTags = facts.tags;
 
       // Merge & deduplicate
@@ -289,6 +349,7 @@ export class IndexService {
 
       const entry: DocumentEntry = { path, title, tags: allTags, created, folder };
       this.allDocuments[path] = entry;
+      this.invalidateReferences();
 
       // Clear old tag associations for this path (idempotent re-index)
       for (const [tag, paths] of this.tagIndex) {
@@ -312,12 +373,13 @@ export class IndexService {
 
   async updateDocument(path: string): Promise<void> {
     const normalizedPath = this.normalizePath(path);
+    const previousContent = this.documentContents.get(normalizedPath);
     const revision = this.beginPathMutation(normalizedPath);
     const content = await this.indexFile(normalizedPath, revision);
     if (!this.ownsPathMutation(normalizedPath, revision) || content === null) return;
     // Sync updated content into the search engine
     const entry = this.allDocuments[normalizedPath];
-    if (entry) {
+    if (entry && previousContent !== content) {
       this.engine.updateDocument(normalizedPath, entry, content);
     }
     // 更新 recentNotesList（新建/编辑笔记后书签圆点需要显示）
@@ -366,19 +428,42 @@ export class IndexService {
   }
 
   getBacklinks(notePath: string): BacklinkEntry[] {
-    const noteName = stripSupportedNoteExtension(notePath.split('/').pop() ?? '');
-    const incoming = this.wikiIncoming.get(noteName) ?? [];
-    const alsoByName = this.wikiIncoming.get(stripSupportedNoteExtension(notePath)) ?? [];
-    const allSources = [...new Set([...incoming, ...alsoByName])];
+    if (!this.backlinks) {
+      this.backlinks = new Map();
+      for (const [source, occurrences] of this.occurrences) {
+        for (const occurrence of occurrences) {
+          const target = this.resolveWikiLink(occurrence.target);
+          if (!target) continue;
+          const entries = this.backlinks.get(target.path) ?? [];
+          entries.push({
+            notePath: source,
+            noteTitle:
+              this.allDocuments[source]?.title ??
+              stripSupportedNoteExtension(source.split('/').pop() ?? ''),
+            context: stripToPlainText(
+              occurrence.before + (occurrence.alias ?? occurrence.target) + occurrence.after,
+            )
+              .replace(/\s+/g, ' ')
+              .trim(),
+            lineNumber: occurrence.lineNumber,
+            location: { ...occurrence, revision: this.contentRevisions.get(source) ?? 0 },
+          });
+          this.backlinks.set(target.path, entries);
+        }
+      }
+      for (const entries of this.backlinks.values())
+        entries.sort(
+          (a, b) => a.notePath.localeCompare(b.notePath) || a.location!.from - b.location!.from,
+        );
+    }
+    return this.backlinks.get(this.normalizePath(notePath)) ?? [];
+  }
 
-    return allSources.map((source) => ({
-      notePath: source,
-      noteTitle:
-        this.allDocuments[source]?.title ??
-        stripSupportedNoteExtension(source.split('/').pop() ?? ''),
-      context: '',
-      lineNumber: 0,
-    }));
+  isBacklinkCurrent(entry: BacklinkEntry, source: string): boolean {
+    return (
+      entry.location?.revision === this.contentRevisions.get(entry.notePath) &&
+      this.documentContents.get(entry.notePath) === source
+    );
   }
 
   getRecentNotes(limit = 20) {

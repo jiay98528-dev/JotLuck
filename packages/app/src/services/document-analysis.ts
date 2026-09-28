@@ -1,4 +1,10 @@
-import { parseDocument, updateDocumentAsync, type DocumentAst } from '@jotluck/renderer/analysis';
+import {
+  parseDocument,
+  updateDocumentAsync,
+  extractWikiLinkOccurrences,
+  type WikiLinkOccurrence,
+  type DocumentAst,
+} from '@jotluck/renderer/analysis';
 import { preparePreviewFragments, type PreviewFragment } from '@jotluck/renderer/progressive';
 
 export function isLargeDocument(source: string, lines?: number): boolean {
@@ -24,10 +30,14 @@ export interface DocumentAnalysisResult {
   revision: number;
   ast: DocumentAst;
   wordCount: number;
+  wikiLinks?: WikiLinkOccurrence[];
 }
 
 /** One owner per open document. Never writes source or participates in saving. */
 export class DocumentAnalysis {
+  get version(): number {
+    return this.revision;
+  }
   source = '';
   result: DocumentAnalysisResult | null = null;
   error: Error | null = null;
@@ -36,6 +46,100 @@ export class DocumentAnalysis {
   private previewWanted = false;
   private previewRequestRevision = -1;
   private previewListeners = new Set<(fragments: PreviewFragment[]) => void>();
+  priorityFragments: PreviewFragment[] = [];
+  private priorityListeners = new Set<(fragments: PreviewFragment[]) => void>();
+  private priorityWorker: Worker | null = null;
+  private priorityJob = 0;
+  private definitions = '';
+  private requestedPriorityPosition: number | null = null;
+
+  subscribePriority(listener: (fragments: PreviewFragment[]) => void): () => void {
+    this.priorityListeners.add(listener);
+    return () => this.priorityListeners.delete(listener);
+  }
+  cancelPriority(): void {
+    this.requestedPriorityPosition = null;
+    this.priorityWorker?.postMessage({ job: ++this.priorityJob });
+  }
+  /** A bounded, separate worker can prepare the target while the full-document lexer is busy. */
+  requestRange(position: number): void {
+    const result = this.result;
+    if (
+      this.destroyed ||
+      !result ||
+      result.ast.source !== this.source ||
+      typeof Worker === 'undefined'
+    )
+      return;
+    if (this.fragments?.some((part) => position >= part.from && position < part.to)) return;
+    if (this.requestedPriorityPosition === position) return;
+    this.requestedPriorityPosition = position;
+    const blocks = result.ast.blocks;
+    let low = 0,
+      high = blocks.length;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      if (blocks[mid]!.range.to < position) low = mid + 1;
+      else high = mid;
+    }
+    const start = blocks[low];
+    if (!start) return;
+    let last = low;
+    while (
+      last + 1 < blocks.length &&
+      last < low + 40 &&
+      blocks[last + 1]!.range.to - start.range.from <= 16_384
+    )
+      last++;
+    const end = blocks[last]!.range.to;
+    const worker = this.preparePriorityWorker();
+    if (!worker) return;
+    worker.postMessage({
+      job: ++this.priorityJob,
+      revision: this.revision,
+      from: start.range.from,
+      source: this.source.slice(start.range.from, end),
+      definitions: this.definitions,
+      headings: blocks
+        .slice(low, last + 1)
+        .flatMap((block) => (block.type === 'heading' ? [block.id] : [])),
+    });
+  }
+  private preparePriorityWorker(): Worker | null {
+    if (this.destroyed || typeof Worker === 'undefined') return null;
+    if (!this.priorityWorker) {
+      try {
+        this.priorityWorker = new Worker(
+          new URL('./document-priority.worker.ts', import.meta.url),
+          { type: 'module' },
+        );
+      } catch {
+        this.requestedPriorityPosition = null;
+        return null;
+      }
+      const worker = this.priorityWorker;
+      worker.onerror = () => {
+        if (this.priorityWorker !== worker) return;
+        worker.terminate();
+        this.priorityWorker = null;
+        this.requestedPriorityPosition = null;
+      };
+      worker.onmessage = ({
+        data,
+      }: MessageEvent<{ job: number; revision: number; fragments: PreviewFragment[] }>) => {
+        if (
+          this.destroyed ||
+          this.priorityWorker !== worker ||
+          data.job !== this.priorityJob ||
+          data.revision !== this.revision
+        )
+          return;
+        this.priorityFragments = data.fragments;
+        for (const listener of this.priorityListeners) listener(data.fragments);
+      };
+    }
+    return this.priorityWorker;
+  }
   private revision = 0;
   private worker: Worker | null = null;
   private destroyed = false;
@@ -57,6 +161,7 @@ export class DocumentAnalysis {
 
   requestPreview(): void {
     if (this.destroyed) return;
+    if (isLargeDocument(this.source)) this.preparePriorityWorker();
     if (this.fragments) {
       for (const listener of this.previewListeners) listener(this.fragments);
       if (this.previewComplete) return;
@@ -70,6 +175,8 @@ export class DocumentAnalysis {
 
   update(source: string): void {
     if (this.destroyed || (source === this.source && (this.result || this.revision > 0))) return;
+    this.cancelPriority();
+    this.priorityFragments = [];
     this.source = source;
     this.fragments = null;
     this.previewComplete = false;
@@ -78,7 +185,13 @@ export class DocumentAnalysis {
     this.previewRequestRevision = this.previewWanted ? revision : -1;
     if (!isLargeDocument(source)) {
       this.worker?.postMessage({ revision, cancel: true });
-      this.accept({ revision, ast: parseDocument(source), wordCount: countWords(source) });
+      const ast = parseDocument(source);
+      this.accept({
+        revision,
+        ast,
+        wordCount: countWords(source),
+        wikiLinks: extractWikiLinkOccurrences(ast),
+      });
       if (this.previewWanted) void this.prepareLocally(source, revision);
       return;
     }
@@ -134,6 +247,10 @@ export class DocumentAnalysis {
   }
 
   reset(): void {
+    this.cancelPriority();
+    this.priorityWorker?.terminate();
+    this.priorityWorker = null;
+    this.priorityFragments = [];
     this.revision++;
     this.worker?.postMessage({ revision: this.revision, cancel: true });
     this.source = '\0';
@@ -148,7 +265,12 @@ export class DocumentAnalysis {
     if (this.result?.ast.source === source) return this.result.ast;
     const ast = parseDocument(source);
     if (source === this.source)
-      this.result = { revision: this.revision, ast, wordCount: countWords(source) };
+      this.result = {
+        revision: this.revision,
+        ast,
+        wordCount: countWords(source),
+        wikiLinks: extractWikiLinkOccurrences(ast),
+      };
     return ast;
   }
 
@@ -156,6 +278,10 @@ export class DocumentAnalysis {
     this.destroyed = true;
     this.revision++;
     this.worker?.terminate();
+    this.priorityWorker?.terminate();
+    this.priorityWorker = null;
+    this.priorityListeners.clear();
+    this.priorityFragments = [];
     this.worker = null;
     this.listeners.clear();
     this.previewListeners.clear();
@@ -171,7 +297,12 @@ export class DocumentAnalysis {
         source,
         () => this.destroyed || revision !== this.revision,
       );
-      this.accept({ revision, ast, wordCount: countWords(source) });
+      this.accept({
+        revision,
+        ast,
+        wordCount: countWords(source),
+        wikiLinks: extractWikiLinkOccurrences(ast),
+      });
       if (this.previewWanted) void this.prepareLocally(source, revision);
     } catch (error) {
       if (!this.destroyed && revision === this.revision)
@@ -207,6 +338,10 @@ export class DocumentAnalysis {
     if (this.destroyed || result.revision !== this.revision || result.ast.source !== this.source)
       return;
     this.result = result;
+    this.definitions = result.ast.blocks
+      .filter((block) => block.type === 'refDefinition')
+      .map((block) => result.ast.source.slice(block.range.from, block.range.to))
+      .join('\n');
     this.error = null;
     for (const listener of this.listeners) listener(result);
   }

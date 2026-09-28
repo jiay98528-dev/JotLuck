@@ -72,6 +72,7 @@ export async function createPublicFreeDecoderEvaluationEngine(
 export async function createCanonicalPublicFreeDecoderEngine(
   options: CreateCanonicalPublicFreeDecoderEngineOptions = {},
 ): Promise<PublicFreeDecoderEngine | null> {
+  if (!options.adapter && !isDesktopRuntime()) return null;
   const fetcher = options.fetcher ?? globalThis.fetch;
   if (typeof fetcher !== 'function') return null;
   try {

@@ -5,7 +5,60 @@
  */
 
 import type { DocumentAst } from './ast';
-import { TAG_GLOBAL_RE, WIKI_LINK_GLOBAL_RE, parseWikiLinkTarget } from './syntax';
+import {
+  TAG_GLOBAL_RE,
+  WIKI_LINK_GLOBAL_RE,
+  parseWikiLinkTarget,
+  isMarkdownEscaped,
+} from './syntax';
+import { findCodeSpans } from './inline-tokens';
+
+export interface WikiLinkOccurrence {
+  target: string;
+  alias: string | null;
+  anchor: string | null;
+  from: number;
+  to: number;
+  lineNumber: number;
+  raw: string;
+  before: string;
+  after: string;
+}
+
+/** Preserve original offsets; never locate a reference in text with syntax stripped out. */
+export function extractWikiLinkOccurrences(ast: DocumentAst): WikiLinkOccurrence[] {
+  const occurrences: WikiLinkOccurrence[] = [];
+  for (const block of ast.blocks) {
+    if (['frontmatter', 'codeFence', 'jsonBlock', 'refDefinition'].includes(block.type)) continue;
+    const source = ast.source.slice(block.range.from, block.range.to);
+    if (!source.includes('[[')) continue;
+    const code = findCodeSpans(source);
+    let scanned = 0;
+    let lineNumber = block.lineFrom + 1;
+    for (const match of source.matchAll(WIKI_LINK_GLOBAL_RE)) {
+      if (isMarkdownEscaped(source, match.index)) continue;
+      if (code.some((range) => match.index >= range.start && match.index < range.end)) continue;
+      while (scanned < match.index) {
+        if (source[scanned++] === '\n') lineNumber++;
+      }
+      const parsed = parseWikiLinkTarget(match[1] ?? '');
+      const from = block.range.from + match.index;
+      const to = from + match[0].length;
+      occurrences.push({
+        target: parsed.note,
+        alias: parsed.alias,
+        anchor: parsed.anchor,
+        from,
+        to,
+        lineNumber,
+        raw: match[0],
+        before: ast.source.slice(Math.max(block.range.from, from - 40), from),
+        after: ast.source.slice(to, Math.min(block.range.to, to + 40)),
+      });
+    }
+  }
+  return occurrences;
+}
 
 export interface IndexFacts {
   /** wiki-link 目标 note，按出现顺序、不去重 */
@@ -52,8 +105,11 @@ function stripLinePrefixes(text: string): string {
  * 先去行内 code，再剥行首 heading/blockquote 前缀（否则 ATX 标记 `#`
  * 会被误扫为 tag），最后扫 WIKI_LINK_GLOBAL_RE 与 TAG_GLOBAL_RE。
  */
-export function extractIndexFacts(ast: DocumentAst): IndexFacts {
-  const wikiLinkTargets: string[] = [];
+export function extractIndexFacts(
+  ast: DocumentAst,
+  occurrences = extractWikiLinkOccurrences(ast),
+): IndexFacts {
+  const wikiLinkTargets = occurrences.map((item) => item.target);
   const tags: string[] = [];
   for (const block of ast.blocks) {
     if (
@@ -67,9 +123,6 @@ export function extractIndexFacts(ast: DocumentAst): IndexFacts {
     const text = stripLinePrefixes(
       stripInlineCode(ast.source.slice(block.range.from, block.range.to)),
     );
-    for (const match of text.matchAll(WIKI_LINK_GLOBAL_RE)) {
-      wikiLinkTargets.push(parseWikiLinkTarget(match[1] ?? '').note);
-    }
     tags.push(...extractTags(text));
   }
   return { wikiLinkTargets, tags };

@@ -13,6 +13,8 @@ export interface PublicDecoderInstallResult {
 
 export interface UsePublicDecoderSetupOptions {
   predictor: MarkdownPredictor;
+  /** A browser preview has no desktop decoder; absence of that capability is not a failure. */
+  isAvailable?: () => boolean;
   isUnmounted: () => boolean;
   createCanonicalEngine: () => Promise<PublicFreeDecoderEngine | null>;
   createFlaggedEngine: () => Promise<PublicFreeDecoderEngine | null>;
@@ -133,7 +135,7 @@ export function usePublicDecoderSetup(
   }
 
   async function runOnce(): Promise<void> {
-    if (cancelled || isUnmounted()) return;
+    if (cancelled || isUnmounted() || options.isAvailable?.() === false) return;
     if (inFlight) {
       return inFlight;
     }

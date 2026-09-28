@@ -10,7 +10,7 @@
  * @see TAD.md §4
  */
 
-import { marked } from 'marked';
+import { marked, Lexer, type Token } from 'marked';
 import { jotluckExtensions, setWikiLinkExistsResolver } from './marked-extensions';
 import { sanitize } from './sanitize';
 import { highlightCodeBlocks } from './highlight';
@@ -60,10 +60,23 @@ export type {
   TableNode,
   TableRowNode,
 } from './ast';
-export { extractIndexFacts, extractTags, stripToPlainText } from './inline';
+export {
+  extractIndexFacts,
+  extractWikiLinkOccurrences,
+  extractTags,
+  stripToPlainText,
+} from './inline';
+export type { WikiLinkOccurrence } from './inline';
 export type { IndexFacts, StripToPlainTextOptions } from './inline';
 export { lexInlineTokens } from './inline-tokens';
 export type { InlineToken } from './inline-tokens';
+
+/** Editor hit testing uses the very same configured lexer as rendering, retaining token.raw. */
+export function inlineSourceTokens(source: string, definitions = ''): Token[] {
+  const lexer = new Lexer(marked.defaults);
+  if (definitions) lexer.tokens.links = marked.lexer(definitions).links;
+  return lexer.inlineTokens(source);
+}
 
 const DEFAULT_REMOTE_IMAGE_LABELS: RemoteImageLabels = {
   blocked: 'Remote image blocked',

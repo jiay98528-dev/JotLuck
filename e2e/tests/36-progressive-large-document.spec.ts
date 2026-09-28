@@ -46,10 +46,14 @@ async function openBook(page: Page, characters: number, variant = 'book') {
           mtime: Date.now() - 1,
         },
       };
-      localStorage.setItem(
-        'jotluck-mockfs',
-        JSON.stringify({ version: 4, files, dirs: { '/': ['book.md', 'small.md'] } }),
-      );
+      window.__jotluck_e2e = {
+        mockNotebook: {
+          persist: false,
+          initialFiles: Object.fromEntries(
+            Object.entries(files).map(([path, file]) => [path, file.content]),
+          ),
+        },
+      };
       localStorage.setItem('jotluck:welcome:completed', '1');
     },
     { size: characters, variant },
@@ -160,12 +164,20 @@ for (const characters of [1_000_000, 3_000_000]) {
           'data-preview-complete',
           'true',
         );
-        await page.locator('.progressive-preview').evaluate((element) => {
+        await page
+          .locator('.preview-fragment')
+          .first()
+          .dispatchEvent('pointerdown', { pointerType: 'touch', pointerId: 4 });
+        await page
+          .locator('.progressive-preview')
+          .dispatchEvent('pointercancel', { pointerType: 'touch', pointerId: 4 });
+        await page.locator('.reader-workbench').evaluate((element) => {
           element.scrollTop = element.scrollHeight;
         });
         await expect(page.locator('.progressive-preview')).toContainText('E4-END', {
           timeout: 5000,
         });
+        expect(await page.locator('.preview-fragment').count()).toBeLessThan(200);
       }
     }
     expect(Math.max(...switches)).toBeLessThanOrEqual(1000);

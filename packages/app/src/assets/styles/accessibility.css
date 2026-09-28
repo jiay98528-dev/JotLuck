@@ -33,6 +33,22 @@
 }
 
 /* --- Touch Targets --- */
+:root[data-editor-pointer='touch']
+  :is(.format-toolbar, .format-bubble, .editor-control-strip, .studio-rail)
+  :is(button, select),
+:root[data-editor-pointer='touch']
+  :is(.cm-jotluck-table-toolbar__btn, .cm-jotluck-slash-menu__item) {
+  min-width: var(--touch-target-min, 44px);
+  min-height: var(--touch-target-min, 44px);
+}
+
+:root[data-editor-pointer='touch'] .split-divider::after {
+  content: '';
+  position: absolute;
+  inset: 0 -20.5px;
+  z-index: 2;
+}
+
 @media (pointer: coarse) {
   .wing-bookmark-dot {
     min-width: 44px;

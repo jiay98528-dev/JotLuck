@@ -38,6 +38,8 @@ interface MockFSData {
 
 export interface MockFSServiceOptions {
   persist?: boolean;
+  /** Explicit test seed. Normal previews still use the localized sample notebook. */
+  initialFiles?: Record<string, string>;
   /** Test-only recent notebook roots. Defaults to the sample notebook. */
   recentNotebooks?: readonly string[];
   /** Test-only picker result. Null models an explicit user cancellation. */
@@ -73,8 +75,14 @@ async function textRevision(content: string): Promise<string> {
 }
 
 function createLocalizedSampleNotebook(): MockFSData {
-  const now = Date.now();
   const seed = createSampleNotebookSeed();
+  return createNotebookData(
+    Object.fromEntries(seed.files.map((file) => [file.path, file.content])),
+  );
+}
+
+function createNotebookData(contents: Record<string, string>): MockFSData {
+  const now = Date.now();
   const files: Record<string, StoredFile> = {};
   const directoryEntries = new Map<string, Set<string>>([['/', new Set()]]);
 
@@ -87,11 +95,10 @@ function createLocalizedSampleNotebook(): MockFSData {
     directoryEntries.get(parent)?.add(normalized.split('/').pop() ?? '');
   };
 
-  seed.files.forEach((seedFile, index) => {
-    const path = normalizePath(seedFile.path);
+  Object.entries(contents).forEach(([filePath, content], index) => {
+    const path = normalizePath(filePath);
     const parent = path.slice(0, path.lastIndexOf('/')) || '/';
     ensureDirectory(parent);
-    const content = seedFile.content;
     files[path] = {
       content,
       mtime: now - index * 60_000,
@@ -129,7 +136,7 @@ export class MockFSService implements IFileSystemService {
         : options.pickerResult;
     this.pickerError = options.pickerError ?? null;
     this.unavailableNotebookPaths = new Set(options.unavailableNotebookPaths ?? []);
-    this.data = this.load();
+    this.data = options.initialFiles ? createNotebookData(options.initialFiles) : this.load();
   }
 
   private load(): MockFSData {

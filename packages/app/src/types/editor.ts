@@ -24,6 +24,8 @@ export interface HeadingItem {
   text: string;
   lineNumber: number;
   children: HeadingItem[];
+  from?: number;
+  to?: number;
 }
 
 /** 编辑器标签页条目 */
@@ -61,6 +63,15 @@ export interface BacklinkEntry {
   noteTitle: string;
   context: string;
   lineNumber: number;
+  location?: {
+    from: number;
+    to: number;
+    target: string;
+    raw: string;
+    before: string;
+    after: string;
+    revision: number;
+  };
 }
 
 /** 标签条目（在标签云/过滤中展示） */

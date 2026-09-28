@@ -11,6 +11,9 @@
  */
 
 import { scanBareJsonBlockLineRanges } from './bare-json';
+import { ContinuationScanner, readMarkdownListMarker, type ContinuationLine } from './continuation';
+export { extractWikiLinkOccurrences } from './inline';
+export type { WikiLinkOccurrence } from './inline';
 import {
   headingIdFromText,
   isTableRowCandidate,
@@ -29,6 +32,8 @@ export interface SourceRange {
 export interface LineInfo {
   blockIndex: number;
   rowIndex?: number;
+  /** Source-exact editing hint; absent on ordinary prose and code. */
+  continuation?: ContinuationLine;
 }
 
 interface BlockBase {
@@ -231,17 +236,11 @@ const FENCE_CLOSE_RE = /^(\s{0,3})(`{3,}|~{3,})\s*$/;
 const HR_RE = /^(-{3,}|\*{3,}|_{3,})\s*$/;
 const ATX_RE = /^(#{1,6})\s+(.+)$/;
 const SETEXT_RULE_RE = /^(=+|-+)\s*$/;
-const TASK_RE = /^(\s*)([*+\-])(\s+\[)([ xX])(\]\s?)([\s\S]*)$/;
-const ORDERED_RE = /^(\s*)(\d+)([.)])(\s+)([\s\S]*)$/;
-const UNORDERED_RE = /^(\s*)([*+\-])(\s+)([\s\S]*)$/;
 
 // ─── 源码空间切分正则（字符类含全角等价物） ──────────────────────
 
 const SRC_ATX_RE = /^(\s{0,3})([＃#]{1,6})([ \t\u3000]+)([\s\S]*)$/;
 const SRC_BLOCKQUOTE_RE = /^(\s*)((?:[>＞][ \u3000]?)+)([\s\S]*)$/;
-const SRC_TASK_RE = /^(\s*)([*+\-＊＋－])([\s\u3000]+\[)([ xX])(\][\s\u3000]?)([\s\S]*)$/;
-const SRC_ORDERED_RE = /^(\s*)(\d+)([.)])([\s\u3000]+)([\s\S]*)$/;
-const SRC_UNORDERED_RE = /^(\s*)([*+\-＊＋－])([\s\u3000]+)([\s\S]*)$/;
 
 /** 分隔行判定（归一化行）：全角 `－` 格归一后按 `-` 判定，修复既有缺陷。 */
 function isSeparatorDetectLine(detectLine: string): boolean {
@@ -309,24 +308,7 @@ interface ListDetect {
 
 /** 行是否匹配某种列表项（用归一化行判定）。 */
 function detectListItem(detectLine: string): ListDetect | null {
-  if (TASK_RE.test(detectLine)) return { kind: 'task', family: 'unordered' };
-  if (ORDERED_RE.test(detectLine)) return { kind: 'ordered', family: 'ordered' };
-  if (UNORDERED_RE.test(detectLine)) return { kind: 'unordered', family: 'unordered' };
-  return null;
-}
-
-/** bullet 字符的全角 → 半角规范形。 */
-function normalizeBulletChar(raw: string): string {
-  switch (raw) {
-    case '－':
-      return '-';
-    case '＊':
-      return '*';
-    case '＋':
-      return '+';
-    default:
-      return raw;
-  }
+  return readMarkdownListMarker(detectLine);
 }
 
 /**
@@ -391,7 +373,12 @@ export async function updateDocumentAsync(
     (block) => block.range.from < from && block.range.to > oldEnd,
   );
   const changed = previous.blocks[index];
-  if (!changed || changed.type !== 'paragraph' || changed.lineFrom !== changed.lineTo)
+  if (
+    !changed ||
+    changed.type !== 'paragraph' ||
+    changed.lineFrom !== changed.lineTo ||
+    previous.lineMap[changed.lineFrom]?.continuation
+  )
     return parseDocumentAsync(source, cancelled);
   const delta = source.length - before.length;
   const local = source.slice(changed.range.from, changed.range.to + delta);
@@ -428,7 +415,12 @@ export async function updateDocumentAsync(
       deadline = performance.now() + 8;
     }
   }
-  return { source, blocks, lineMap: previous.lineMap, frontmatter: previous.frontmatter };
+  const lineMap = previous.lineMap.map((info, line) =>
+    line > changed.lineTo && info.continuation
+      ? { ...info, continuation: shift(info.continuation) as ContinuationLine }
+      : info,
+  );
+  return { source, blocks, lineMap, frontmatter: previous.frontmatter };
 }
 
 function* scanDocument(source: string): Generator<void, DocumentAst> {
@@ -464,6 +456,7 @@ function* scanDocument(source: string): Generator<void, DocumentAst> {
   const blocks: BlockNode[] = [];
   const lineMap: LineInfo[] = new Array<LineInfo>(lineCount);
   const headingOccurrences = new Map<string, number>();
+  const continuationScanner = new ContinuationScanner();
   let frontmatter: FrontmatterNode | null = null;
 
   /** 登记块并把其覆盖行写入 lineMap。 */
@@ -472,7 +465,12 @@ function* scanDocument(source: string): Generator<void, DocumentAst> {
     blocks.push(block);
     for (let k = block.lineFrom; k <= block.lineTo && k < lineCount; k++) {
       const rowIndex = rowIndexByLine?.get(k);
-      lineMap[k] = rowIndex === undefined ? { blockIndex } : { blockIndex, rowIndex };
+      const continuation = continuationScanner.scan(sourceLines[k]!, lineStarts[k]!, block.type);
+      lineMap[k] = {
+        blockIndex,
+        ...(rowIndex === undefined ? {} : { rowIndex }),
+        ...(continuation ? { continuation } : {}),
+      };
     }
   };
 
@@ -725,59 +723,11 @@ function* scanDocument(source: string): Generator<void, DocumentAst> {
         if (k % 128 === 0) yield;
         const srcLine = sourceLines[k] ?? '';
         const base = lineRange(k);
-        let kind: ListItemKind = 'unordered';
-        let marker = '';
-        let delimiter: string | undefined;
-        let number: number | undefined;
-        let checked: boolean | undefined;
-        let indent = 0;
-        let markerRange: SourceRange = { from: base.from, to: base.from };
-        let contentRange: SourceRange = base;
-
-        const taskMatch = SRC_TASK_RE.exec(srcLine);
-        const orderedMatch = SRC_ORDERED_RE.exec(srcLine);
-        const unorderedMatch = SRC_UNORDERED_RE.exec(srcLine);
-        if (taskMatch) {
-          kind = 'task';
-          marker = normalizeBulletChar(taskMatch[2] ?? '-');
-          indent = (taskMatch[1] ?? '').length;
-          // markerEnd 含闭合 `]` 不含尾随空白；contentStart 必须完整跳过 g4+g5
-          //（g5 = `]` + 至多一个空白，不得把 `]` 再算一遍——R1-C1 修复）
-          const markerEnd =
-            indent +
-            (taskMatch[2] ?? '').length +
-            (taskMatch[3] ?? '').length +
-            (taskMatch[4] ?? '').length +
-            1;
-          markerRange = { from: base.from + indent, to: base.from + markerEnd };
-          const contentStart =
-            indent +
-            (taskMatch[2] ?? '').length +
-            (taskMatch[3] ?? '').length +
-            (taskMatch[4] ?? '').length +
-            (taskMatch[5] ?? '').length;
-          contentRange = { from: base.from + contentStart, to: base.to };
-          checked = taskMatch[4] === 'x' || taskMatch[4] === 'X';
-        } else if (orderedMatch) {
-          kind = 'ordered';
-          marker = orderedMatch[2] ?? '';
-          delimiter = orderedMatch[3] ?? '';
-          number = Number.parseInt(marker, 10);
-          indent = (orderedMatch[1] ?? '').length;
-          const markerEnd = indent + marker.length + (delimiter ?? '').length;
-          markerRange = { from: base.from + indent, to: base.from + markerEnd };
-          const contentStart = markerEnd + (orderedMatch[4] ?? '').length;
-          contentRange = { from: base.from + contentStart, to: base.to };
-        } else if (unorderedMatch) {
-          kind = 'unordered';
-          const rawBullet = unorderedMatch[2] ?? '-';
-          marker = normalizeBulletChar(rawBullet);
-          indent = (unorderedMatch[1] ?? '').length;
-          const markerEnd = indent + rawBullet.length;
-          markerRange = { from: base.from + indent, to: base.from + markerEnd };
-          const contentStart = markerEnd + (unorderedMatch[3] ?? '').length;
-          contentRange = { from: base.from + contentStart, to: base.to };
-        }
+        const parsed = readMarkdownListMarker(srcLine)!;
+        const { kind, marker, delimiter, number, checked } = parsed;
+        const indent = parsed.indent.length;
+        const markerRange = { from: base.from + indent, to: base.from + parsed.markerEnd };
+        const contentRange = { from: base.from + parsed.contentStart, to: base.to };
 
         const node: ListItemNode = {
           type: 'listItem',

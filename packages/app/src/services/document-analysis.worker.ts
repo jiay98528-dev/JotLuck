@@ -1,4 +1,8 @@
-import { updateDocumentAsync, type DocumentAst } from '@jotluck/renderer/analysis';
+import {
+  updateDocumentAsync,
+  extractWikiLinkOccurrences,
+  type DocumentAst,
+} from '@jotluck/renderer/analysis';
 import { preparePreviewFragments } from '@jotluck/renderer/progressive';
 
 let revision = 0;
@@ -48,7 +52,12 @@ async function analyze(
     let wordCount = 0;
     const words = /\S+/g;
     while (words.exec(source)) wordCount++;
-    scope.postMessage({ revision: request, ast, wordCount });
+    scope.postMessage({
+      revision: request,
+      ast,
+      wordCount,
+      wikiLinks: extractWikiLinkOccurrences(ast),
+    });
     if (preview) {
       await preparePreviewFragments(
         source,

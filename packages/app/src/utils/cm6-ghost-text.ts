@@ -15,7 +15,14 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view';
-import { Prec, StateEffect, StateField, type Extension } from '@codemirror/state';
+import {
+  Prec,
+  StateEffect,
+  StateField,
+  Transaction,
+  type Extension,
+  type Text,
+} from '@codemirror/state';
 import { isolateHistory } from '@codemirror/commands';
 import type { MarkdownPredictor } from '@/services/MarkdownPredictor';
 import type { CompletionSettings } from '@/services/CompletionSettings';
@@ -138,6 +145,9 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
       > = null;
       private predictionScheduledAt: number | null = null;
       private acceptingGhost = false;
+      private afterGhostEdit: { doc: Text; cursor: number } | null = null;
+      private nativeInsertion: { doc: Text; cursor: number; text: string } | null = null;
+      private completionHistoryDoc: Text | null = null;
       /** E2E forensics: which post-response guard dropped the latest prediction. */
       private lastGuardDrop: string | null = null;
       private editorInteractionActive = false;
@@ -242,6 +252,10 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         this.__editorPointerdown = onEditorPointerDown;
 
         const onKeyDown = (event: KeyboardEvent) => {
+          if (event.isComposing || event.keyCode === 229) {
+            event.stopImmediatePropagation();
+            return;
+          }
           if (view.composing || view.compositionStarted || event.defaultPrevented) return;
           if (
             event.key === 'Tab' &&
@@ -274,6 +288,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
 
         const onRootKeyDown = (event: Event) => {
           if (!(event instanceof KeyboardEvent)) return;
+          if (event.isComposing || event.keyCode === 229) return;
           if (view.composing || view.compositionStarted || event.defaultPrevented) return;
           if (
             event.key === 'Tab' &&
@@ -297,6 +312,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
       }
 
       update(update: ViewUpdate) {
+        if (update.docChanged) this.completionHistoryDoc = null;
         if (this.acceptingGhost && update.docChanged) {
           this.clearPendingTimers();
           this.clearGhost(update.view, false);
@@ -639,6 +655,91 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
         return this.isComposing || view.composing || view.compositionStarted;
       }
 
+      observeNativeInsertion(view: EditorView, event: InputEvent): void {
+        this.nativeInsertion = null;
+        const previous = this.afterGhostEdit;
+        this.afterGhostEdit = null;
+        if (
+          !previous ||
+          previous.doc !== view.state.doc ||
+          previous.cursor !== view.state.selection.main.head ||
+          view.state.selection.ranges.length !== 1 ||
+          !view.state.selection.main.empty ||
+          view.state.readOnly ||
+          this.isImeActive(view) ||
+          event.isComposing ||
+          event.inputType !== 'insertText' ||
+          !event.data ||
+          !view.hasFocus
+        )
+          return;
+        const range = event.getTargetRanges?.()[0];
+        if (
+          !range ||
+          !view.contentDOM.contains(range.startContainer) ||
+          !view.contentDOM.contains(range.endContainer)
+        )
+          return;
+        try {
+          if (
+            view.posAtDOM(range.startContainer, range.startOffset) !== previous.cursor ||
+            view.posAtDOM(range.endContainer, range.endOffset) !== previous.cursor
+          )
+            return;
+          this.nativeInsertion = { ...previous, text: event.data };
+        } catch {
+          /* A detached native range is not an authoritative input target. */
+        }
+      }
+
+      handleNativeInsertion(
+        view: EditorView,
+        from: number,
+        to: number,
+        text: string,
+        insert: () => Transaction,
+      ): boolean {
+        const input = this.nativeInsertion;
+        this.nativeInsertion = null;
+        if (
+          input &&
+          input.doc === view.state.doc &&
+          input.text === text &&
+          !view.state.readOnly &&
+          !this.isImeActive(view) &&
+          view.state.selection.ranges.length === 1 &&
+          view.state.selection.main.empty &&
+          view.state.selection.main.head === input.cursor &&
+          from === to &&
+          from !== input.cursor
+        ) {
+          // WebKit can insert at offset zero after an inline ghost is removed
+          // despite a matching native target and editor selection. Correct only
+          // that misplaced insertion; normal input and IME keep CM's path.
+          view.dispatch({
+            changes: { from: input.cursor, insert: text },
+            selection: { anchor: input.cursor + text.length },
+            userEvent: 'input.type',
+            scrollIntoView: true,
+          });
+          return true;
+        }
+        if (this.completionHistoryDoc === view.state.doc && !view.state.readOnly) {
+          const transaction = insert();
+          if (transaction.annotation(Transaction.userEvent) === 'input.type.compose') {
+            // Firefox may report a fresh committed string as a composition
+            // continuation. CM always merges that label with the previous undo
+            // event, even across isolateHistory('full'). Start a new input group
+            // after an explicit completion; subsequent IME updates still coalesce.
+            view.dispatch(
+              view.state.update({ userEvent: 'input.type.compose.start' }, transaction),
+            );
+            return true;
+          }
+        }
+        return false;
+      }
+
       canAcceptGhost(view: EditorView, eventTarget?: EventTarget | null): boolean {
         if (!this.currentGhostText) return false;
         if (this.isImeActive(view)) return false;
@@ -754,6 +855,8 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           effects: setGhostDecorations.of(Decoration.none),
         });
         this.acceptingGhost = false;
+        this.completionHistoryDoc = view.state.doc;
+        this.afterGhostEdit = { doc: view.state.doc, cursor: view.state.selection.main.head };
 
         // Structured completions are deterministic editor assistance, not user prose.
         // Feeding them into N-gram creates loops such as `**` -> `********`.
@@ -794,6 +897,7 @@ function createGhostTextPlugin(predictor: MarkdownPredictor, settings: Completio
           feedbackToken: feedbackToken ?? undefined,
         });
         this.clearGhost(view);
+        this.afterGhostEdit = { doc: view.state.doc, cursor: view.state.selection.main.head };
         return true;
       }
 
@@ -907,11 +1011,19 @@ export function ghostTextPlugin(
     ghostDecorationField,
     plugin,
     ghostTextKeymap(plugin),
+    EditorView.inputHandler.of(
+      (view, from, to, text, insert) =>
+        view.plugin(plugin)?.handleNativeInsertion(view, from, to, text, insert) ?? false,
+    ),
     // DOM-level Tab/Escape intercept as belt-and-suspenders:
     // keymap priority is registration-order dependent and can be defeated
     // by indentWithTab from defaultKeymap in some CM6 configurations.
     // domEventHandlers fires BEFORE any keymap.
     EditorView.domEventHandlers({
+      beforeinput: (event, view) => {
+        view.plugin(plugin)?.observeNativeInsertion(view, event);
+        return false;
+      },
       keydown: (event, view) => {
         const p = view.plugin(plugin);
         if (!p) return false;

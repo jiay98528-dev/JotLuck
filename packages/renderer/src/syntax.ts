@@ -10,6 +10,13 @@
  * 从 index.ts 搬移的函数保持行为字节不变；表格工具从 cm6-live-preview 移植。
  */
 
+/** Whether punctuation is preceded by an unmatched Markdown escape. */
+export function isMarkdownEscaped(source: string, position: number): boolean {
+  let slashes = 0;
+  while (position > 0 && source[--position] === '\\') slashes++;
+  return slashes % 2 === 1;
+}
+
 /** 将中文输入法常见全角 Markdown 定界符规范化为等长半角字符。 */
 export function normalizeFullwidthMarkdownSyntax(source: string): string {
   return source
@@ -53,7 +60,8 @@ export function normalizeFullwidthMarkdownSyntaxForRender(source: string): strin
 
   const flushPending = () => {
     if (pending.length === 0) return;
-    output.push(...normalizeFullwidthMarkdownSyntax(pending.join('\n')).split('\n'));
+    for (const line of normalizeFullwidthMarkdownSyntax(pending.join('\n')).split('\n'))
+      output.push(line);
     pending.length = 0;
   };
 

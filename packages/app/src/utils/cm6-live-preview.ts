@@ -47,6 +47,9 @@ import type { RendererOptions } from '@jotluck/renderer';
 import DOMPurify from 'dompurify';
 import { translate } from '@/i18n';
 import { openExternalUrl } from '@/utils/urlUtils';
+import { TapGesture, isTouchInput } from './editor-pointer';
+import { caretAtPoint, inlineSourceMap, mapDomText, snapSourceBoundary } from './editor-source-map';
+import { registerSourceHitReader, nativeEditorSelection } from './cm6-interaction-selection';
 
 // ---- HTML 转义 ----
 
@@ -937,6 +940,7 @@ function wrapBlockHtml(html: string, block: LiveBlock): string {
  * 渲染块 Widget：将安全 HTML 插入 CM6 editor DOM。
  * XSS 防护：通过 DOMPurify.sanitize + RETURN_DOM_FRAGMENT 创建 DOM。
  */
+const renderedWidgetKeys = new WeakMap<HTMLElement, string>();
 class RenderedBlockWidget extends WidgetType {
   private html: string;
   private key: string;
@@ -958,6 +962,7 @@ class RenderedBlockWidget extends WidgetType {
       const child = frag.firstChild as HTMLElement;
       if (child.classList?.contains('cm-live-block')) {
         child.tabIndex = -1;
+        renderedWidgetKeys.set(child, this.key);
         this.attachTaskToggleBridge(child);
         return child;
       }
@@ -982,6 +987,7 @@ class RenderedBlockWidget extends WidgetType {
       }
     }
     span.appendChild(frag);
+    renderedWidgetKeys.set(span, this.key);
     this.attachTaskToggleBridge(span);
     return span;
   }
@@ -1000,6 +1006,8 @@ class RenderedBlockWidget extends WidgetType {
 
   /** 允许点击穿透 → CM6 将光标移到此处 → 源码切换 */
   override ignoreEvent(event: Event): boolean {
+    if (event.type.startsWith('touch') || ('pointerType' in event && event.pointerType === 'touch'))
+      return true;
     const target = event.target as HTMLElement | null;
     if (
       target?.closest(
@@ -1138,6 +1146,11 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
       renderBytes = 0;
       lastAst: DocumentAst | null = null;
       currentBlocks: LiveBlock[] = [];
+      touchPending = false;
+      touchDoc: Text | null = null;
+      suppressClickUntil = 0;
+      interactionCleanup: Array<() => void> = [];
+      hitMaps = new WeakMap<HTMLElement, { doc: Text; nodes: WeakMap<Node, number[]> }>();
       renderMore(view: EditorView): void {
         if (this.renderFrame !== null) return;
         this.renderFrame = requestAnimationFrame(() => {
@@ -1208,8 +1221,14 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         // Click handler — map rendered widget clicks back to source positions.
         // Relying on CM6's default DOM mapping for replaced widgets can move the
         // cursor to a wrong line, which is especially disruptive for IME input.
-        const onClick = (e: MouseEvent) => {
-          const target = e.target as HTMLElement;
+        const onClick = (e: MouseEvent, tapTarget?: HTMLElement) => {
+          if (!tapTarget && performance.now() < this.suppressClickUntil) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
+          if (this.isImeActive(view)) return;
+          const target = tapTarget ?? (e.target as HTMLElement);
           if (target.closest('[data-remote-image-action]') && options.onRemoteImageClick?.(e)) {
             return;
           }
@@ -1219,6 +1238,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
             if (!widget) return;
             e.stopPropagation();
             e.preventDefault();
+            if (!view.state.readOnly) toggleTaskListItemAtWidget(view, widget);
             view.focus();
             return;
           }
@@ -1239,7 +1259,13 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           e.preventDefault();
 
           if (!e.ctrlKey && !e.metaKey) {
-            view.dispatch({ selection: { anchor: block.from }, scrollIntoView: true });
+            const hit = tapTarget ? caretAtPoint(e.clientX, e.clientY) : null;
+            const position = hit ? this.sourcePosition(view, hit.node, hit.offset) : null;
+            view.dispatch({
+              selection: { anchor: position ?? block.from },
+              effects: revealSourceAtPositionEffect.of(position ?? block.from),
+              scrollIntoView: true,
+            });
             view.focus();
             return;
           }
@@ -1257,7 +1283,107 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           view.focus();
         };
         this.onClick = onClick;
-        view.dom.addEventListener('click', onClick);
+        view.dom.addEventListener('click', onClick, true);
+
+        const gesture = new TapGesture();
+        let touchTarget: HTMLElement | null = null;
+        const touchDown = (event: PointerEvent) => {
+          if (event.pointerType !== 'touch') return;
+          if (this.touchPending) {
+            gesture.cancel();
+            return;
+          }
+          const target = event.target as HTMLElement;
+          if (!view.contentDOM.contains(target)) return;
+          this.touchDoc = view.state.doc;
+          this.touchPending = true;
+          view.dom.dataset.touchGesture = 'true';
+          touchTarget = target.closest('.cm-live-block') ? target : null;
+          gesture.begin(event);
+        };
+        const touchMove = (event: PointerEvent) => {
+          if (this.touchPending) gesture.move(event);
+        };
+        const cancelTouch = () => {
+          gesture.cancel();
+        };
+        const finishTouch = (event?: PointerEvent) => {
+          if (!this.touchPending) return;
+          const valid = event && gesture.end(event) && this.touchDoc === view.state.doc;
+          this.touchPending = false;
+          gesture.reset();
+          if (touchTarget) {
+            this.suppressClickUntil = performance.now() + 800;
+            if (valid && !this.isImeActive(view)) onClick(event, touchTarget);
+          }
+          touchTarget = null;
+          delete view.dom.dataset.touchGesture;
+          view.dom.dispatchEvent(new Event('editor-touch-finished'));
+        };
+        const cancelled = () => {
+          cancelTouch();
+          finishTouch();
+        };
+        const mouseDown = (event: MouseEvent) => {
+          if (this.touchPending || performance.now() < this.suppressClickUntil) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        };
+        document.addEventListener('pointerdown', touchDown, true);
+        document.addEventListener('pointermove', touchMove, true);
+        document.addEventListener('pointerup', finishTouch, true);
+        document.addEventListener('pointercancel', cancelled, true);
+        document.addEventListener('scroll', cancelTouch, true);
+        view.dom.addEventListener('contextmenu', cancelTouch, true);
+        view.dom.addEventListener('mousedown', mouseDown, true);
+        window.addEventListener('blur', cancelled);
+        const nativeSelectionChange = (event: Event) => {
+          if (!isTouchInput() || this.destroyed || this.isImeActive(view)) return;
+          const selection = document.getSelection();
+          if (!selection || selection.isCollapsed) return;
+          const inWidget = (node: Node | null) =>
+            node &&
+            view.contentDOM.contains(node) &&
+            (node instanceof Element ? node : node.parentElement)?.closest('.cm-live-block');
+          if (!inWidget(selection.anchorNode) && !inWidget(selection.focusNode)) return;
+          // CM maps replacement widgets to block edges. Keep native handles on the rendered
+          // text until a command explicitly restores the source selection.
+          event.stopImmediatePropagation();
+          if (view.hasFocus) {
+            // WebKit may collapse a native selection when its contenteditable loses focus.
+            // Retain both endpoints (including direction) before handing focus away.
+            const { anchorNode, anchorOffset, focusNode, focusOffset } = selection;
+            const doc = view.state.doc;
+            view.contentDOM.blur();
+            if (
+              view.state.doc === doc &&
+              anchorNode?.isConnected &&
+              focusNode?.isConnected &&
+              (selection.anchorNode !== anchorNode ||
+                selection.anchorOffset !== anchorOffset ||
+                selection.focusNode !== focusNode ||
+                selection.focusOffset !== focusOffset)
+            )
+              selection.setBaseAndExtent(anchorNode, anchorOffset, focusNode, focusOffset);
+          }
+          document.dispatchEvent(new Event('editor-native-selection-change'));
+        };
+        document.addEventListener('selectionchange', nativeSelectionChange, true);
+        this.interactionCleanup.push(
+          registerSourceHitReader(view, (node, offset) => this.sourcePosition(view, node, offset)),
+          () => {
+            document.removeEventListener('pointerdown', touchDown, true);
+            document.removeEventListener('pointermove', touchMove, true);
+            document.removeEventListener('pointerup', finishTouch, true);
+            document.removeEventListener('pointercancel', cancelled, true);
+            document.removeEventListener('scroll', cancelTouch, true);
+            view.dom.removeEventListener('contextmenu', cancelTouch, true);
+            view.dom.removeEventListener('mousedown', mouseDown, true);
+            window.removeEventListener('blur', cancelled);
+            document.removeEventListener('selectionchange', nativeSelectionChange, true);
+          },
+        );
         const onRemoteImageLoad = (event: Event) => {
           options.onRemoteImageLoad?.(event);
         };
@@ -1304,7 +1430,9 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         // and can prevent the cursor move for checkbox/link interactions.
         const onPointerDownCapture = (e: PointerEvent) => {
           if (this.destroyed) return;
+          if (e.pointerType === 'mouse') this.suppressClickUntil = 0;
           const target = e.target as HTMLElement;
+          if (e.pointerType === 'touch') return;
 
           if (target.closest('[data-remote-image-action]')) {
             e.stopPropagation();
@@ -1318,8 +1446,6 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
             if (!widget) return;
             e.stopPropagation();
             e.preventDefault();
-            toggleTaskListItemAtWidget(view, widget);
-            view.focus();
             return;
           }
 
@@ -1340,7 +1466,13 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         view.dom.addEventListener('pointerdown', onPointerDownCapture, true);
 
         const onChangeCapture = (e: Event) => {
-          if (this.destroyed) return;
+          if (
+            this.destroyed ||
+            view.state.readOnly ||
+            this.isImeActive(view) ||
+            performance.now() < this.suppressClickUntil
+          )
+            return;
           const target = e.target as HTMLElement;
           const checkbox = target.closest('input[type="checkbox"], .cm-task-toggle');
           if (!checkbox) return;
@@ -1356,6 +1488,16 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
       }
 
       update(update: ViewUpdate) {
+        if (
+          !update.docChanged &&
+          !update.transactions.some((tr) =>
+            tr.effects.some((effect) => effect.is(revealSourceAtPositionEffect)),
+          ) &&
+          isTouchInput() &&
+          (this.touchPending || nativeEditorSelection(update.view))
+        )
+          return;
+        if (update.docChanged) this.hitMaps = new WeakMap();
         let revealedPosition: number | null = null;
         for (const transaction of update.transactions) {
           for (const effect of transaction.effects) {
@@ -1441,9 +1583,88 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
       }
 
       findBlockForWidget(_view: EditorView, widget: HTMLElement): LiveBlock | null {
-        const blockKey = widget.getAttribute('data-block-key');
+        const blockKey = renderedWidgetKeys.get(widget);
         if (!blockKey) return null;
         return this.currentBlocks.find((block) => block.key === blockKey) ?? null;
+      }
+
+      sourcePosition(view: EditorView, node: Node, offset: number): number | null {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          const after = node.childNodes[offset];
+          let boundary = after ?? node.childNodes[offset - 1];
+          while (boundary?.hasChildNodes())
+            boundary = after ? boundary.firstChild! : boundary.lastChild!;
+          if (boundary?.nodeType === Node.TEXT_NODE) {
+            node = boundary;
+            offset = after ? 0 : (boundary.textContent?.length ?? 0);
+          }
+        }
+        let widget = (node instanceof Element ? node : node.parentElement)?.closest<HTMLElement>(
+          '.cm-live-block',
+        );
+        while (widget && !renderedWidgetKeys.has(widget))
+          widget = widget.parentElement?.closest('.cm-live-block');
+        if (!widget) return null;
+        const block = this.findBlockForWidget(view, widget);
+        if (!block) return null;
+        let cached = this.hitMaps.get(widget);
+        if (!cached || cached.doc !== view.state.doc) {
+          const ast = peekDocumentAst(view.state);
+          if (!ast) return null;
+          const line = view.state.doc.lineAt(block.from).number - 1;
+          const structure = ast.blocks[ast.lineMap[line]?.blockIndex ?? -1];
+          let from = block.markerRange?.to ?? block.from;
+          let to = block.to;
+          if (structure?.type === 'listItem' || structure?.type === 'heading') {
+            from = structure.contentRange.from;
+            to = Math.min(to, structure.contentRange.to);
+          } else if (structure?.type === 'blockquote') {
+            from =
+              structure.lines.find((item) => item.lineNumber === line)?.contentRange.from ?? from;
+          }
+          const literal = ['codeFenceLine', 'jsonBlockLine', 'frontmatterLine'].includes(
+            block.type,
+          );
+          const definitions = [...documentLines(ast).refs.values()].join('\n');
+          let nodes: WeakMap<Node, number[]>;
+          if (structure?.type === 'table') {
+            nodes = new WeakMap();
+            const row = structure.rows.find((item) => item.lineNumber === line);
+            const cells = widget.querySelectorAll<HTMLElement>('.ml-table-cell');
+            cells.forEach((cell, i) => {
+              const range = row?.cells[i]?.range;
+              if (!range) return;
+              const mapping = mapDomText(
+                cell,
+                inlineSourceMap(
+                  view.state.doc.sliceString(range.from, range.to),
+                  range.from,
+                  false,
+                  definitions,
+                ),
+              );
+              const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+              while (walker.nextNode()) {
+                const value = mapping.get(walker.currentNode);
+                if (value) nodes.set(walker.currentNode, value);
+              }
+            });
+          } else
+            nodes = mapDomText(
+              widget,
+              inlineSourceMap(view.state.doc.sliceString(from, to), from, literal, definitions),
+            );
+          cached = { doc: view.state.doc, nodes };
+          this.hitMaps.set(widget, cached);
+        }
+        const position = cached.nodes.get(node)?.[offset] ?? block.markerRange?.to ?? block.from;
+        return (
+          block.from +
+          snapSourceBoundary(
+            view.state.doc.sliceString(block.from, block.to),
+            position - block.from,
+          )
+        );
       }
 
       clearPendingCompositionRebuild(): void {
@@ -1772,6 +1993,8 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
       }
 
       destroy() {
+        if (this.touchPending && this.editorView) delete this.editorView.dom.dataset.touchGesture;
+        this.interactionCleanup.forEach((cleanup) => cleanup());
         this.destroyed = true;
         if (this.renderFrame !== null) cancelAnimationFrame(this.renderFrame);
         this.renderCache.clear();
@@ -1789,7 +2012,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           if (this.onCompEnd) cd.removeEventListener('compositionend', this.onCompEnd);
           // Remove click/pointerdown listeners from dom
           const dom = this.editorView.dom;
-          if (this.onClick) dom.removeEventListener('click', this.onClick);
+          if (this.onClick) dom.removeEventListener('click', this.onClick, true);
           if (this.onRemoteImageLoad) dom.removeEventListener('load', this.onRemoteImageLoad, true);
           if (this.onRemoteImageError)
             dom.removeEventListener('error', this.onRemoteImageError, true);

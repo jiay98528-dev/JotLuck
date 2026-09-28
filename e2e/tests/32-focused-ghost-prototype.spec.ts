@@ -214,15 +214,42 @@ test.describe('32 聚焦行幽灵语法 kill/keep 原型', () => {
     const composed = '聚焦行幽灵语法与坐标稳定性验证场景'.repeat(20).slice(0, 200);
     await setContent(page, `${prefix}\n尾段`);
     await setCursor(page, prefix.length); // 行尾，紧跟第二段 **
-    await expect(page.locator('.cm-live-focused-source .cm-live-ghost-mark')).toHaveCount(2);
+    await expect(page.locator('.cm-live-focused-source .cm-live-ghost-mark')).toHaveText([
+      '**',
+      '**',
+    ]);
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
 
-    // 组合前基线：前缀各位置坐标（含两段幽灵符号与内容字符）
-    const baseline: Array<{ p: number; c: CoordsRect }> = [];
-    for (const p of [0, 1, 2, 3, 5, 6]) {
-      const c = await coordsAtPos(page, p);
-      expect(c, `baseline pos ${p}`).not.toBeNull();
-      baseline.push({ p, c: c! });
-    }
+    // Measure all positions in the same frame after initial painting settles.
+    // A count of two spans alone does not guarantee complete marker ranges/layout.
+    let baseline: Array<{ p: number; c: CoordsRect }> = [];
+    await expect
+      .poll(
+        async () => {
+          const next = await page.evaluate(
+            async (positions) => {
+              await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+              return positions.map((p) => ({
+                p,
+                c: window.__jotluck_e2e!.editor!.getCoordsAtPos(p),
+              }));
+            },
+            [0, 1, 2, 3, 5, 6],
+          );
+          const stable =
+            next.length === baseline.length &&
+            next.every(
+              (item, i) =>
+                item.c &&
+                Math.abs(item.c.left - baseline[i]!.c.left) < 0.01 &&
+                Math.abs(item.c.top - baseline[i]!.c.top) < 0.01,
+            );
+          if (next.every((item) => item.c)) baseline = next as Array<{ p: number; c: CoordsRect }>;
+          return stable;
+        },
+        { timeout: 2000, intervals: [16] },
+      )
+      .toBe(true);
 
     const editor = page.locator('.cm-content');
     await editor.dispatchEvent('compositionstart', { data: '' });

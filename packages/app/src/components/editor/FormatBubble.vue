@@ -116,10 +116,17 @@
  * @see MarkdownEditor.vue — 父组件通过 selection-change 事件驱动 position
  * @see spec/frontend/migration-map.md §1.2
  */
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Button from '@/components/common/Button.vue';
 import type { FormatAction } from '@/types';
+import { guardPointerClicks, isTouchInput } from '@/utils/editor-pointer';
+import {
+  observeEditorViewport,
+  placeEditorOverlay,
+  visibleEditorRect,
+  type ScreenRect,
+} from '@/utils/editor-overlay';
 
 const { t } = useI18n();
 
@@ -128,7 +135,6 @@ const { t } = useI18n();
 // ============================================================
 const SHOW_DELAY = 150;
 const INACTIVITY_DELAY = 3000;
-const BUBBLE_OFFSET_Y = 48;
 
 // ============================================================
 // Props & Emits
@@ -137,10 +143,14 @@ const props = withDefaults(
   defineProps<{
     visible?: boolean;
     position?: { x: number; y: number };
+    anchor?: () => ScreenRect | null;
+    editor?: () => HTMLElement | null;
   }>(),
   {
     visible: false,
     position: () => ({ x: 0, y: 0 }),
+    anchor: () => null,
+    editor: () => null,
   },
 );
 
@@ -156,18 +166,67 @@ const bubbleRef = ref<HTMLElement | null>(null);
 
 let showTimer: ReturnType<typeof setTimeout> | null = null;
 let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+let adjustingSelection = false;
 
 // ============================================================
 // Computed Styles
 // ============================================================
-const bubbleStyle = computed(() => {
-  const top = Math.max(8, props.position.y - BUBBLE_OFFSET_Y);
-  const left = props.position.x;
-  return {
-    top: `${top}px`,
-    left: `${left}px`,
+const bubbleStyle = ref<Record<string, string>>({});
+let removeGuard: (() => void) | undefined;
+const viewport = observeEditorViewport(() => {
+  const root = bubbleRef.value;
+  if (!root || !isShown.value) return;
+  const bounds = visibleEditorRect(props.editor?.()?.getBoundingClientRect());
+  const width = Math.max(0, bounds.right - bounds.left);
+  root.style.maxWidth = `${width}px`;
+  const size = root.getBoundingClientRect();
+  const anchor = props.anchor?.() ?? {
+    left: props.position.x,
+    right: props.position.x,
+    top: props.position.y,
+    bottom: props.position.y + 20,
+  };
+  const placed = placeEditorOverlay(
+    {
+      top: anchor.top,
+      bottom: anchor.bottom,
+      right: anchor.right,
+      left: (anchor.left + anchor.right - size.width) / 2,
+    },
+    size.width,
+    size.height,
+    bounds,
+  );
+  bubbleStyle.value = {
+    left: `${placed.left}px`,
+    top: `${placed.top}px`,
+    maxWidth: `${width}px`,
+    maxHeight: `${placed.maxHeight}px`,
   };
 });
+watch(bubbleRef, (root) => {
+  removeGuard?.();
+  if (root) removeGuard = guardPointerClicks(root);
+  viewport.schedule();
+});
+watch(() => props.position, viewport.schedule);
+function selectionAdjusted(): void {
+  if (bubbleRef.value?.dataset.pointerActive === 'true') return;
+  if (!isTouchInput() || !props.visible) return;
+  if (adjustingSelection) {
+    hide();
+    return;
+  }
+  const selection = document.getSelection();
+  if (selection?.isCollapsed) {
+    hide();
+    return;
+  }
+  if (selection?.anchorNode && props.editor?.()?.contains(selection.anchorNode)) {
+    hide();
+    show();
+  }
+}
 
 // ============================================================
 // Show / Hide Helpers
@@ -177,6 +236,7 @@ function show(): void {
   showTimer = setTimeout(() => {
     isShown.value = true;
     resetInactivityTimer();
+    void nextTick(viewport.schedule);
   }, SHOW_DELAY);
 }
 
@@ -189,6 +249,7 @@ function hide(): void {
 
 function resetInactivityTimer(): void {
   if (inactivityTimer) clearTimeout(inactivityTimer);
+  if (isTouchInput()) return;
   inactivityTimer = setTimeout(() => {
     isShown.value = false;
   }, INACTIVITY_DELAY);
@@ -216,11 +277,26 @@ function onKeydown(e: KeyboardEvent): void {
 }
 
 function onClickOutside(e: PointerEvent): void {
+  if (
+    e.pointerType === 'touch' &&
+    props.editor?.()?.contains(e.target as Node) &&
+    !document.getSelection()?.isCollapsed
+  ) {
+    adjustingSelection = true;
+    hide();
+    return;
+  }
   if (!isShown.value || !bubbleRef.value) return;
   const target = e.target as HTMLElement;
   if (!bubbleRef.value.contains(target)) {
     isShown.value = false;
   }
+}
+
+function onSelectionPointerEnd(): void {
+  if (!adjustingSelection) return;
+  adjustingSelection = false;
+  if (props.visible && !document.getSelection()?.isCollapsed) show();
 }
 
 // ============================================================
@@ -240,13 +316,25 @@ watch(
 // ============================================================
 onMounted(() => {
   document.addEventListener('keydown', onKeydown);
+  document.addEventListener('selectionchange', selectionAdjusted);
+  document.addEventListener('editor-native-selection-change', selectionAdjusted);
+  document.addEventListener('editor-pointer-change', resetInactivityTimer);
   document.addEventListener('pointerdown', onClickOutside);
+  document.addEventListener('pointerup', onSelectionPointerEnd);
+  document.addEventListener('pointercancel', onSelectionPointerEnd);
 });
 
 onUnmounted(() => {
   hide();
+  viewport.destroy();
+  removeGuard?.();
+  document.removeEventListener('selectionchange', selectionAdjusted);
+  document.removeEventListener('editor-native-selection-change', selectionAdjusted);
+  document.removeEventListener('editor-pointer-change', resetInactivityTimer);
   document.removeEventListener('keydown', onKeydown);
   document.removeEventListener('pointerdown', onClickOutside);
+  document.removeEventListener('pointerup', onSelectionPointerEnd);
+  document.removeEventListener('pointercancel', onSelectionPointerEnd);
 });
 </script>
 
@@ -258,6 +346,9 @@ onUnmounted(() => {
   position: fixed;
   z-index: var(--z-dropdown, 900);
   display: flex;
+  flex-wrap: wrap;
+  box-sizing: border-box;
+  overflow-y: auto;
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-4);
@@ -265,7 +356,6 @@ onUnmounted(() => {
   border: var(--border-thin) solid var(--rule);
   border-radius: var(--radius, 2px);
   box-shadow: var(--shadow-stack);
-  transform: translateX(-50%);
   will-change: transform, opacity;
   user-select: none;
 }
@@ -296,24 +386,24 @@ onUnmounted(() => {
 @keyframes bubble-in {
   from {
     opacity: 0;
-    transform: translateX(-50%) scale(0.9);
+    transform: scale(0.9);
   }
 
   to {
     opacity: 1;
-    transform: translateX(-50%) scale(1);
+    transform: scale(1);
   }
 }
 
 @keyframes bubble-out {
   from {
     opacity: 1;
-    transform: translateX(-50%) scale(1);
+    transform: scale(1);
   }
 
   to {
     opacity: 0;
-    transform: translateX(-50%) scale(0.95);
+    transform: scale(0.95);
   }
 }
 
@@ -336,8 +426,8 @@ onUnmounted(() => {
  * ============================================================ */
 @media (pointer: coarse) {
   .bubble-btn {
-    width: 36px;
-    height: 36px;
+    min-width: var(--touch-target-min);
+    min-height: var(--touch-target-min);
   }
 }
 </style>

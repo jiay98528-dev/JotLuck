@@ -1,6 +1,11 @@
 import type { MessageSchema } from './zh-CN';
 
 export const messages = {
+  navigation: {
+    referenceLine: '{line} 行目',
+    showMore: 'さらに表示',
+    referenceMoved: '参照位置が変わりました。参照元のノートを開きました。',
+  },
   common: {
     appName: 'JotLuck',
     close: '閉じる',

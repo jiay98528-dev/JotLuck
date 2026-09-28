@@ -91,6 +91,22 @@ describe('MockFSService sample notebook', () => {
     );
   });
 
+  it('seeds large test files in memory with directories and isolated save state', async () => {
+    const content = '中文资料'.repeat(800_000);
+    const seed = { '/book/large.md': content, '/other.md': '# Other' };
+    const fs = new MockFSService(0, { initialFiles: seed, persist: false });
+    expect((await fs.listDirectory('/')).map((entry) => entry.name)).toEqual(['book', 'other.md']);
+    expect((await fs.statFile('/book/large.md')).size).toBe(
+      new TextEncoder().encode(content).length,
+    );
+    await fs.writeFile('/book/large.md', content + '\n保存');
+    expect(await fs.readFile('/book/large.md')).toBe(content + '\n保存');
+    expect(localStorage.getItem('jotluck-mockfs')).toBeNull();
+    expect(await new MockFSService(0, { initialFiles: seed }).readFile('/book/large.md')).toBe(
+      content,
+    );
+  });
+
   it('rejects a conditional save after an external-style write changed the revision', async () => {
     const fs = new MockFSService(0);
     await fs.writeFile('/draft.md', '# Original');

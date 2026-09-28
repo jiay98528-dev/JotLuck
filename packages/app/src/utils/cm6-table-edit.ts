@@ -1,3 +1,6 @@
+import { guardPointerClicks } from './editor-pointer';
+import { observeEditorViewport, positionEditorOverlay } from './editor-overlay';
+import { rememberEditorSelection, getInteractionSelection } from './cm6-interaction-selection';
 import {
   getDocumentAst,
   peekDocumentAst,
@@ -639,6 +642,7 @@ class TableToolbarPlugin implements PluginValue {
   private toolbarAria: string;
   private compTimer: ReturnType<typeof setTimeout> | null = null;
   private detachFns: Array<() => void> = [];
+  private overlay: ReturnType<typeof observeEditorViewport>;
 
   constructor(view: EditorView) {
     this.view = view;
@@ -646,6 +650,13 @@ class TableToolbarPlugin implements PluginValue {
     this.root = this.buildRoot();
     this.state = { visible: false, context: null, composing: false };
     view.dom.appendChild(this.root);
+    this.overlay = observeEditorViewport(() => {
+      if (this.root.isConnected) this.position(this.view.state.selection.main.head);
+    });
+    this.detachFns.push(
+      this.overlay.destroy,
+      guardPointerClicks(this.root, () => rememberEditorSelection(this.view)),
+    );
 
     const onCompStart = () => {
       this.state.composing = true;
@@ -670,6 +681,8 @@ class TableToolbarPlugin implements PluginValue {
       this.closeToolbar();
       return;
     }
+    if (this.root.dataset.pointerActive === 'true') return;
+    if (update.focusChanged && this.root.contains(document.activeElement)) return;
     if (update.focusChanged && !update.view.hasFocus) {
       this.closeToolbar();
       return;
@@ -790,15 +803,29 @@ class TableToolbarPlugin implements PluginValue {
     } else {
       btn.setAttribute('aria-disabled', 'false');
     }
-    btn.addEventListener('mousedown', (event) => {
-      // @mousedown.prevent 保焦点（BUG-052 纪律，spec §4）
-      event.preventDefault();
-      if (this.view.composing || this.view.compositionStarted) return;
+    const commandDoc = this.view.state.doc;
+    const commandSelection = this.view.state.selection;
+    btn.addEventListener('mousedown', (event) => event.preventDefault());
+    btn.addEventListener('click', () => {
+      if (
+        this.view.state.readOnly ||
+        this.view.state.doc !== commandDoc ||
+        this.view.composing ||
+        this.view.compositionStarted
+      )
+        return;
+      const saved = getInteractionSelection(this.view);
+      this.view.dispatch({
+        selection: saved ? { anchor: saved.from, head: saved.to } : commandSelection,
+      });
       const ctxNow = resolveTableContext(this.view.state);
       if (!ctxNow) return;
       if (computeDisabled(item.id, ctxNow)) return;
       const ok = applyTableAction(this.view, item.id);
-      if (ok) this.recomputeFromState();
+      if (ok) {
+        this.view.focus();
+        this.recomputeFromState();
+      }
     });
     return btn;
   }
@@ -806,8 +833,7 @@ class TableToolbarPlugin implements PluginValue {
   private schedulePosition(): void {
     const ctx = this.state.context;
     if (!ctx) return;
-    const anchorPos = ctx.block.range.from;
-    requestAnimationFrame(() => this.position(anchorPos));
+    this.overlay.schedule();
   }
 
   private position(anchorPos: number): void {
@@ -822,34 +848,7 @@ class TableToolbarPlugin implements PluginValue {
       this.root.style.visibility = 'hidden';
       return;
     }
-    const viewRect = this.view.dom.getBoundingClientRect();
-    const rootRect = this.root.getBoundingClientRect();
-    const height = rootRect.height || 32;
-    const width = rootRect.width || 280;
-    let left = coords.left - viewRect.left;
-    if (left + width > viewRect.width) left = Math.max(0, viewRect.width - width);
-    if (left < 0) left = 0;
-    const anchorTop = coords.top - viewRect.top;
-    const spaceAbove = anchorTop;
-    const spaceBelow = viewRect.height - (coords.bottom - viewRect.top);
-    const lastRow = this.state.context?.block.rows[this.state.context.block.rows.length - 1];
-    let top: number;
-    if (spaceAbove >= height + 4 || lastRow === undefined) {
-      top = Math.max(0, anchorTop - height - 2);
-    } else {
-      const lastCoords = (() => {
-        try {
-          return this.view.coordsAtPos(lastRow.range.to);
-        } catch {
-          return null;
-        }
-      })();
-      const lastBottom = lastCoords ? lastCoords.bottom - viewRect.top : anchorTop;
-      top = spaceBelow >= height + 4 ? lastBottom : Math.max(0, anchorTop - height - 2);
-    }
-    this.root.style.left = `${left}px`;
-    this.root.style.top = `${top}px`;
-    this.root.style.visibility = 'visible';
+    positionEditorOverlay(this.root, this.view.dom, coords);
   }
 }
 
@@ -873,6 +872,7 @@ const tableEditTheme = EditorView.theme(
   {
     [`& .${TABLE_TOOLBAR_DOM_CLASS}`]: {
       display: 'inline-flex',
+      flexWrap: 'wrap',
       alignItems: 'center',
       gap: 'var(--space-8)',
       fontFamily: 'var(--ff-body)',

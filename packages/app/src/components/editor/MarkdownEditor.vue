@@ -12,8 +12,16 @@
  * @see migration-map.md §1.2
  */
 import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { trackEditorPointer, isTouchInput } from '@/utils/editor-pointer';
+import { observeEditorViewport, visibleEditorRect } from '@/utils/editor-overlay';
+import {
+  rememberEditorSelection,
+  nativeEditorSelection,
+  clearInteractionSelection,
+} from '@/utils/cm6-interaction-selection';
 import { DocumentAnalysis } from '@/services/document-analysis';
 import { documentAnalysisExtension } from '@/utils/cm6-document-analysis';
+import type { DocumentLocation } from '@/utils/document-location';
 import { EditorView, lineNumbers, keymap } from '@codemirror/view';
 import { EditorState, Compartment } from '@codemirror/state';
 import { isolateHistory } from '@codemirror/commands';
@@ -122,6 +130,8 @@ const emit = defineEmits<{
   'update:modelValue': [value: string];
   'selection-change': [sel: { from: number; to: number } | null];
   'pending-format-ended': [];
+  'position-change': [location: DocumentLocation];
+  interaction: [];
 }>();
 
 const editorHost = ref<HTMLDivElement | null>(null);
@@ -131,6 +141,46 @@ const internallyEmittedValues = new Set<string>();
 let activePendingAction: FormatAction | null = null;
 let pendingInlineMarkers: readonly [string, string] | null = null;
 let deferredPendingAction: FormatAction | null = null;
+let locationFrame: number | null = null;
+let userScrolling = false;
+
+function notifyCursor(v: EditorView, changes?: DocumentLocation['changes']): void {
+  const native = isTouchInput() && !v.hasFocus ? nativeEditorSelection(v) : null;
+  const position = native?.head ?? v.state.selection.main.head;
+  const line = v.state.doc.lineAt(position);
+  userScrolling = false;
+  emit('position-change', {
+    analysis,
+    revision: analysis.version,
+    position,
+    reason: 'cursor',
+    line: line.number,
+    column: position - line.from + 1,
+    changes,
+    doc: v.state.doc,
+  });
+}
+
+function onDocumentScroll(): void {
+  if (locationFrame !== null || !userScrolling) return;
+  locationFrame = requestAnimationFrame(() => {
+    locationFrame = null;
+    if (!view) return;
+    const rect = visibleEditorRect(view.scrollDOM.getBoundingClientRect());
+    const position = view.posAtCoords(
+      { x: rect.left + 24, y: Math.min(rect.bottom - 1, rect.top + 24) },
+      false,
+    );
+    if (position !== null)
+      emit('position-change', { analysis, revision: analysis.version, position, reason: 'scroll' });
+  });
+}
+
+function onDocumentInteraction(event: Event): void {
+  if (!view) return;
+  if (event.type === 'wheel' || event.type === 'pointerdown') userScrolling = true;
+  emit('interaction');
+}
 
 function currentCompletionSettings(): CompletionSettings {
   return props.completionSettings ?? getCompletionSettings();
@@ -340,6 +390,8 @@ function createState(doc: string) {
         },
       ]),
       EditorView.updateListener.of((update) => {
+        if (update.docChanged || update.selectionSet)
+          notifyCursor(update.view, update.docChanged ? update.changes : undefined);
         if (update.docChanged && isAutocompleteScanEnabled()) {
           const change = createOpenedDocumentParagraphChange(
             update.startState.doc,
@@ -347,6 +399,10 @@ function createState(doc: string) {
             update.changes,
           );
           if (change) predictor.applyOpenedDocumentParagraphChange(change);
+        }
+        if (update.docChanged) {
+          clearInteractionSelection(update.view);
+          emit('selection-change', null);
         }
         if (update.docChanged && !suppressSync) {
           const value = update.state.doc.toString();
@@ -467,6 +523,10 @@ watch(
   () => props.readOnly,
   (readOnly) => {
     if (!view) return;
+    if (readOnly) {
+      clearInteractionSelection(view);
+      emit('selection-change', null);
+    }
     view.dispatch({
       effects: readOnlyCompartment.reconfigure([
         EditorState.readOnly.of(readOnly),
@@ -490,36 +550,48 @@ function onEditorHostPaste(event: ClipboardEvent): void {
   if (props.onEditorPaste?.(event) === true) event.preventDefault();
 }
 
-// Dynamic live preview toggle
+// Delay display-only refreshes while native handles or IME own the current DOM.
+let previewRefreshPending = false;
+function refreshLivePreview(): void {
+  if (!view) return;
+  if (
+    props.livePreview &&
+    (view.dom.dataset.touchGesture === 'true' ||
+      view.composing ||
+      view.compositionStarted ||
+      (isTouchInput() && nativeEditorSelection(view)))
+  ) {
+    previewRefreshPending = true;
+    return;
+  }
+  previewRefreshPending = false;
+  view.dispatch({
+    effects: livePreviewCompartment.reconfigure(
+      props.livePreview
+        ? livePreviewExtension({
+            onExternalLinkClick: props.onLivePreviewExternalLinkClick,
+            onTagClick: props.onLivePreviewTagClick,
+            onWikiLinkClick: props.onLivePreviewWikiLinkClick,
+            wikiLinkExists: props.wikiLinkExists,
+            resolveImageSrc: props.resolveImageSrc,
+            remoteImages: props.remoteImages,
+            onRemoteImageClick: props.onLivePreviewRemoteImageClick,
+            onRemoteImageLoad: props.onLivePreviewRemoteImageLoad,
+            onRemoteImageError: props.onLivePreviewRemoteImageError,
+          })
+        : [],
+    ),
+  });
+}
 watch(
-  () =>
-    [
-      props.livePreview,
-      props.wikiLinkRevision,
-      props.imageRevision,
-      props.remoteImageRevision,
-      currentLocale.value,
-    ] as const,
-  ([active]) => {
-    if (!view) return;
-    view.dispatch({
-      effects: livePreviewCompartment.reconfigure(
-        active
-          ? livePreviewExtension({
-              onExternalLinkClick: props.onLivePreviewExternalLinkClick,
-              onTagClick: props.onLivePreviewTagClick,
-              onWikiLinkClick: props.onLivePreviewWikiLinkClick,
-              wikiLinkExists: props.wikiLinkExists,
-              resolveImageSrc: props.resolveImageSrc,
-              remoteImages: props.remoteImages,
-              onRemoteImageClick: props.onLivePreviewRemoteImageClick,
-              onRemoteImageLoad: props.onLivePreviewRemoteImageLoad,
-              onRemoteImageError: props.onLivePreviewRemoteImageError,
-            })
-          : [],
-      ),
-    });
-  },
+  () => [
+    props.livePreview,
+    props.wikiLinkRevision,
+    props.imageRevision,
+    props.remoteImageRevision,
+    currentLocale.value,
+  ],
+  refreshLivePreview,
 );
 
 // Dynamic autocomplete toggle
@@ -547,7 +619,10 @@ watch([() => props.placeholder, currentLocale], ([placeholder]) => {
   });
 });
 
+let stopPointerTracking: (() => void) | undefined;
+let stopViewportTracking: (() => void) | undefined;
 onMounted(() => {
+  stopPointerTracking = trackEditorPointer();
   if (!editorHost.value) return;
 
   const settings = currentCompletionSettings();
@@ -573,6 +648,19 @@ onMounted(() => {
     state: createState(props.modelValue),
     parent: editorHost.value,
   });
+  const viewport = observeEditorViewport(() => {
+    if (!view?.hasFocus || view.composing || view.compositionStarted) return;
+    const caret = view.coordsAtPos(view.state.selection.main.head);
+    if (!caret) return;
+    const bounds = visibleEditorRect(view.scrollDOM.getBoundingClientRect());
+    if (caret.bottom > bounds.bottom) view.scrollDOM.scrollTop += caret.bottom - bounds.bottom + 48;
+    else if (caret.top < bounds.top) view.scrollDOM.scrollTop -= bounds.top - caret.top + 48;
+  }, false);
+  stopViewportTracking = viewport.destroy;
+  view.scrollDOM.addEventListener('scroll', onDocumentScroll, { passive: true });
+  for (const event of ['wheel', 'pointerdown', 'keydown', 'beforeinput', 'compositionstart'])
+    view.scrollDOM.addEventListener(event, onDocumentInteraction, { passive: true, capture: true });
+  notifyCursor(view);
   if (performance.getEntriesByName('jotluck:editor-ready').length === 0) {
     performance.mark('jotluck:editor-ready');
     if (performance.getEntriesByName('jotluck:bootstrap-start').length > 0) {
@@ -603,23 +691,41 @@ onMounted(() => {
 
   // Selection tracking
   document.addEventListener('selectionchange', onSelectionChange);
+  document.addEventListener('editor-native-selection-change', onSelectionChange);
+  view.dom.addEventListener('editor-touch-finished', flushPreviewRefresh);
+  document.addEventListener('pointerdown', onInteractionPointerDown, true);
+  document.addEventListener('keydown', onInteractionKeyDown);
 
   // BUG-052: when format is clicked during IME composition, defer
   // marker insertion until after compositionend so the dispatch
   // doesn't corrupt CM6's composition transaction.
   view.contentDOM.addEventListener('compositionend', onCompositionEndApplyDeferred);
+  view.contentDOM.addEventListener('keydown', onComposingKeyDown, true);
 });
 
 onUnmounted(() => {
+  stopPointerTracking?.();
+  stopViewportTracking?.();
+  if (locationFrame !== null) cancelAnimationFrame(locationFrame);
+  if (view) {
+    view.scrollDOM.removeEventListener('scroll', onDocumentScroll);
+    for (const event of ['wheel', 'pointerdown', 'keydown', 'beforeinput', 'compositionstart'])
+      view.scrollDOM.removeEventListener(event, onDocumentInteraction, true);
+  }
   if (ownsAnalysis) analysis.destroy();
   const e2eBridge = getJotLuckE2EBridge();
   if (e2eBridge?.editor?.id === INSTANCE_ID) delete e2eBridge.editor;
   document.removeEventListener('selectionchange', onSelectionChange);
+  document.removeEventListener('editor-native-selection-change', onSelectionChange);
+  view?.dom.removeEventListener('editor-touch-finished', flushPreviewRefresh);
+  document.removeEventListener('pointerdown', onInteractionPointerDown, true);
+  document.removeEventListener('keydown', onInteractionKeyDown);
   editorHost.value?.removeEventListener('drop', onEditorHostDrop);
   editorHost.value?.removeEventListener('dragover', onEditorHostDragOver);
   editorHost.value?.removeEventListener('paste', onEditorHostPaste);
   if (view) {
     view.contentDOM.removeEventListener('compositionend', onCompositionEndApplyDeferred);
+    view.contentDOM.removeEventListener('keydown', onComposingKeyDown, true);
     view.dom.removeEventListener('mousedown', registerE2EEditorBridge);
     view.contentDOM.removeEventListener('focus', registerE2EEditorBridge);
     suppressSync = true;
@@ -650,13 +756,50 @@ watch(
   },
 );
 
+function onInteractionPointerDown(event: PointerEvent): void {
+  if (!view) return;
+  const target = event.target as HTMLElement;
+  if (
+    target.closest(
+      '.format-toolbar, .format-bubble, .cm-jotluck-table-toolbar, .cm-jotluck-slash-menu',
+    )
+  )
+    return;
+  if (!view.contentDOM.contains(target)) {
+    clearInteractionSelection(view);
+    emit('selection-change', null);
+  }
+}
+
+function onComposingKeyDown(event: KeyboardEvent): void {
+  // A confirming IME key can arrive after the browser has cleared CM's composition
+  // state. Leave its default action to the IME, but do not run editor keymaps.
+  if (event.isComposing || event.keyCode === 229) event.stopImmediatePropagation();
+}
+
+function onInteractionKeyDown(event: KeyboardEvent): void {
+  if (event.key !== 'Escape' || !view) return;
+  clearInteractionSelection(view);
+  emit('selection-change', null);
+}
+
+function flushPreviewRefresh(): void {
+  if (previewRefreshPending) queueMicrotask(refreshLivePreview);
+}
 function onSelectionChange(): void {
-  if (!view || !view.hasFocus) return;
-  const sel = view.state.selection.main;
+  if (previewRefreshPending) queueMicrotask(refreshLivePreview);
+  if (
+    !view ||
+    (!view.hasFocus && !view.contentDOM.contains(document.getSelection()?.anchorNode ?? null))
+  )
+    return;
+  const sel = rememberEditorSelection(view);
+  if (sel.native) notifyCursor(view);
   emit('selection-change', { from: sel.from, to: sel.to });
 }
 
 function onCompositionEndApplyDeferred(): void {
+  if (previewRefreshPending) queueMicrotask(refreshLivePreview);
   if (deferredPendingAction === null || !view) return;
   // CM6 may not have cleared view.composing yet when compositionend fires.
   // Defer by one macrotask so the composition transaction fully settles

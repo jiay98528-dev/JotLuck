@@ -144,11 +144,10 @@
             class="section-body section-body--outline"
             data-theme-part="inspector-section-body"
           >
-            <component
-              :is="HeadingTreeNode"
+            <OutlineList
               :nodes="headings"
               :active-id="activeHeadingId"
-              @navigate-heading="onNavigateHeading"
+              @navigate="onNavigateHeading"
             />
             <p v-if="headings.length === 0" class="empty-hint">{{ t('shell.noHeadings') }}</p>
           </div>
@@ -158,18 +157,11 @@
             class="section-body section-body--backlinks"
             data-theme-part="inspector-section-body"
           >
-            <template v-if="backlinks.length > 0">
-              <button
-                v-for="entry in backlinks"
-                :key="entry.notePath + ':' + entry.lineNumber"
-                class="backlink-item"
-                @click="emit('navigate-backlink', entry)"
-              >
-                <span class="backlink-title">{{ entry.noteTitle }}</span>
-                <span class="backlink-context">{{ entry.context }}</span>
-              </button>
-            </template>
-            <p v-else class="empty-hint">{{ resolvedBacklinksEmptyText }}</p>
+            <BacklinkList
+              :entries="backlinks"
+              :empty-text="resolvedBacklinksEmptyText"
+              @navigate="emit('navigate-backlink', $event)"
+            />
           </div>
 
           <div
@@ -200,78 +192,6 @@
   </aside>
 </template>
 
-<script lang="ts">
-/**
- * HeadingTreeNode — 递归标题树节点 (inline, no separate file)
- *
- * 使用 h() 渲染函数实现自引用递归。
- * 自身调用自身：当 node.children 非空时递归渲染子树。
- */
-import { defineComponent, h, type PropType } from 'vue';
-import type { HeadingItem } from '@/types';
-import { translate } from '@/i18n';
-
-export const HeadingTreeNode: ReturnType<typeof defineComponent> = defineComponent({
-  name: 'HeadingTreeNode',
-  props: {
-    nodes: {
-      type: Array as PropType<HeadingItem[]>,
-      required: true,
-    },
-    activeId: {
-      type: String as PropType<string | null>,
-      default: null,
-    },
-    depth: {
-      type: Number,
-      default: 0,
-    },
-  },
-  emits: {
-    'navigate-heading': (_headingId: string, _lineNumber: number) => true,
-  },
-  setup(props, { emit }) {
-    return () =>
-      h(
-        'ul',
-        { class: 'heading-tree', role: 'list' },
-        props.nodes.map((node) =>
-          h(
-            'li',
-            {
-              key: node.id,
-              class: ['heading-node', { active: node.id === props.activeId }],
-            },
-            [
-              h(
-                'button',
-                {
-                  class: 'heading-link',
-                  style: { paddingInlineStart: `${props.depth * 14 + 8}px` },
-                  type: 'button',
-                  onClick: () => emit('navigate-heading', node.id, node.lineNumber),
-                },
-                [
-                  h('span', { class: 'heading-accent' }),
-                  h('span', { class: 'heading-text' }, node.text || translate('shell.untitled')),
-                ],
-              ),
-              node.children.length > 0
-                ? h(HeadingTreeNode, {
-                    nodes: node.children,
-                    activeId: props.activeId,
-                    depth: props.depth + 1,
-                    onNavigateHeading: (id: string, ln: number) => emit('navigate-heading', id, ln),
-                  })
-                : null,
-            ],
-          ),
-        ),
-      );
-  },
-});
-</script>
-
 <script setup lang="ts">
 /**
  * RightWing.vue — 240px 右侧参考面板
@@ -282,8 +202,10 @@ export const HeadingTreeNode: ReturnType<typeof defineComponent> = defineCompone
  * @see spec/frontend/components.md — RightWing 组件规格
  */
 import { ref, computed, onUnmounted, watch } from 'vue';
+import OutlineList from '@/components/editor/OutlineList.vue';
+import BacklinkList from '@/components/editor/BacklinkList.vue';
 import { useI18n } from 'vue-i18n';
-import type { BacklinkEntry, TagEntry } from '@/types';
+import type { HeadingItem, BacklinkEntry, TagEntry } from '@/types';
 import type {
   RightWingRegion,
   ThemeReferenceSection,

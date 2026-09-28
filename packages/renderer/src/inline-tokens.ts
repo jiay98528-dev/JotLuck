@@ -21,7 +21,12 @@
 
 import { Lexer } from 'marked';
 import type { Token } from 'marked';
-import { TAG_GLOBAL_RE, WIKI_LINK_GLOBAL_RE, parseWikiLinkTarget } from './syntax';
+import {
+  TAG_GLOBAL_RE,
+  WIKI_LINK_GLOBAL_RE,
+  parseWikiLinkTarget,
+  isMarkdownEscaped,
+} from './syntax';
 
 /** renderer 统一行内 token 联合（Exporter 消费面）。 */
 export type InlineToken =
@@ -57,18 +62,20 @@ interface CodeSpanRange {
  * 与 CommonMark code span 规则同口径（内容规范化不归本函数管，codespan token
  * 的 text 由 marked 产出行内代码时给出）。
  */
-function findCodeSpans(src: string): CodeSpanRange[] {
+export function findCodeSpans(src: string): CodeSpanRange[] {
   interface Run {
     pos: number;
     len: number;
+    marker: string;
   }
   const runs: Run[] = [];
   let i = 0;
   while (i < src.length) {
-    if (src.charAt(i) === '`') {
+    if (src.charAt(i) === '`' || src.charAt(i) === '｀') {
+      const marker = src.charAt(i);
       let j = i;
-      while (j < src.length && src.charAt(j) === '`') j++;
-      runs.push({ pos: i, len: j - i });
+      while (j < src.length && src.charAt(j) === marker) j++;
+      runs.push({ pos: i, len: j - i, marker });
       i = j;
     } else {
       i++;
@@ -77,10 +84,10 @@ function findCodeSpans(src: string): CodeSpanRange[] {
   const spans: CodeSpanRange[] = [];
   const consumed = new Array<boolean>(runs.length).fill(false);
   for (let a = 0; a < runs.length; a++) {
-    if (consumed[a]) continue;
+    if (consumed[a] || isMarkdownEscaped(src, runs[a]!.pos)) continue;
     for (let b = a + 1; b < runs.length; b++) {
       if (consumed[b]) continue;
-      if (runs[b]!.len === runs[a]!.len) {
+      if (runs[b]!.len === runs[a]!.len && runs[b]!.marker === runs[a]!.marker) {
         spans.push({ start: runs[a]!.pos, end: runs[b]!.pos + runs[b]!.len });
         consumed[a] = true;
         consumed[b] = true;
@@ -195,7 +202,7 @@ export function lexInlineTokens(slice: string): InlineToken[] {
     codeSpans.some((span) => from >= span.start && to <= span.end);
 
   const wikiMatches = Array.from(slice.matchAll(WIKI_LINK_GLOBAL_RE)).filter(
-    (m) => !insideCode(m.index, m.index + m[0].length),
+    (m) => !insideCode(m.index, m.index + m[0].length) && !isMarkdownEscaped(slice, m.index),
   );
   const wikiRanges = wikiMatches.map((m) => ({ from: m.index, to: m.index + m[0].length }));
   const tagMatches = Array.from(slice.matchAll(TAG_GLOBAL_RE)).filter((m) => {
