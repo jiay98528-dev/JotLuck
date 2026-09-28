@@ -205,11 +205,22 @@ export function lexInlineTokens(slice: string): InlineToken[] {
     (m) => !insideCode(m.index, m.index + m[0].length) && !isMarkdownEscaped(slice, m.index),
   );
   const wikiRanges = wikiMatches.map((m) => ({ from: m.index, to: m.index + m[0].length }));
+  // markdown 链接目的地（`[文本](地址)` 的地址段）中的 `#fragment` 不是标签：
+  // DOCX 路径 convertWikiLinks 产物 `[别名](目标#章节)` 与真实 md 链接 `(#锚点)`
+  // 都会撞 TAG_GLOBAL_RE（JS `\w` 不含中文，词边界挡不住中文地址里的 #）。
+  const linkDestRanges = Array.from(slice.matchAll(/\[[^\][]*\]\(([^()\s]*)\)/g), (m) => {
+    const dest = m[1] ?? '';
+    const destStart = m.index! + m[0].lastIndexOf('(' + dest) + 1;
+    return { from: destStart, to: destStart + dest.length };
+  });
   const tagMatches = Array.from(slice.matchAll(TAG_GLOBAL_RE)).filter((m) => {
     const from = m.index;
     const to = from + m[0].length;
     if (insideCode(from, to)) return false;
-    return !wikiRanges.some((r) => from < r.to && to > r.from);
+    if (wikiRanges.some((r) => from < r.to && to > r.from)) return false;
+    // 标签匹配对 CJK 标点贪婪（`#章节)。` 会整段命中），起点落在链接
+    // 地址段内即视为 URL fragment，无论贪婪匹配延伸多远。
+    return !linkDestRanges.some((r) => from >= r.from && from < r.to);
   });
 
   const synthetics: InlineToken[] = [];

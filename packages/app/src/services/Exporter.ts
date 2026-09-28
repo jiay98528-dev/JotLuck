@@ -555,26 +555,33 @@ export function buildDocxChildren(
 
       // ── Blockquote ──
       case 'blockquote': {
-        // 现行行为固化（等价快照）：引用块段落 runs 恒为空 run（旧实现从 docx v9
-        // 内部取不到 children 回退 [TextRun({text:''})] 的工件）。多行按连续同
-        // depth 分组，每组一个带左边框段落。
+        // 引用文本必须落 DOCX（验收 D-01 无漏文）：每行内容经行内词法成
+        // runs，连续同 depth 行合并为一个带左边框段落（软换行分隔）。
         const border = {
           left: { style: BorderStyle.SINGLE, size: 6, color: '999999' },
         };
         let groupStart = 0;
+        const flushGroup = (end: number): void => {
+          const runs: TextRun[] = [];
+          for (let li = groupStart; li < end; li++) {
+            if (li > groupStart) runs.push(new TextRun({ break: 1 }));
+            runs.push(...buildSliceRuns(slice(block.lines[li]!.contentRange)));
+          }
+          children.push(
+            new Paragraph({
+              spacing: { after: 120 },
+              indent: { left: 480 },
+              border,
+              children: runs.length > 0 ? runs : [new TextRun({ text: '' })],
+            }),
+          );
+        };
         for (let li = 1; li <= block.lines.length; li++) {
           if (
             li === block.lines.length ||
             block.lines[li]!.depth !== block.lines[groupStart]!.depth
           ) {
-            children.push(
-              new Paragraph({
-                spacing: { after: 120 },
-                indent: { left: 480 },
-                border,
-                children: [new TextRun({ text: '' })],
-              }),
-            );
+            flushGroup(li);
             groupStart = li;
           }
         }
@@ -583,23 +590,25 @@ export function buildDocxChildren(
 
       // ── List ──
       case 'listItem': {
-        // 现行行为固化（等价快照）：
-        //   - 任务项整体不落 DOCX（旧 marked v18 任务项 tokens 为空的等价行为）；
-        //   - 嵌套项随父项内层 list token 被忽略而丢弃（level > 0 跳过）。
-        if (block.kind === 'task' || block.level > 0) break;
-
+        // 任务项与嵌套项必须落 DOCX（验收 D-01 无漏文）：
+        //   - 任务项以 ☑/☐ 前缀 + 正文渲染；
+        //   - 嵌套项按 level 缩进、保留源码标记前缀。
         const itemRuns: TextRun[] = [];
-        if (block.kind === 'ordered') {
+        if (block.kind === 'task') {
+          itemRuns.push(new TextRun({ text: block.checked ? '☑ ' : '☐ ' }));
+        } else if (block.kind === 'ordered') {
           // 旧实现使用组内序数而非源码数字
           itemRuns.push(new TextRun({ text: `${block.itemIndex}. ` }));
+        } else if (block.level > 0) {
+          itemRuns.push(new TextRun({ text: `${slice(block.markerRange)} ` }));
         }
         itemRuns.push(...buildSliceRuns(slice(block.contentRange)));
 
         children.push(
           new Paragraph({
             spacing: { before: 40, after: 40 },
-            indent: { left: 480, hanging: 240 },
-            bullet: block.kind === 'unordered' ? { level: 0 } : undefined,
+            indent: { left: 480 + block.level * 240, hanging: 240 },
+            bullet: block.kind === 'unordered' && block.level === 0 ? { level: 0 } : undefined,
             children: itemRuns,
           }),
         );

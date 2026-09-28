@@ -158,7 +158,7 @@ exports[`exporter characterization baseline (slice D) > docx: buildDocxChildren 
     "kind": "paragraph",
     "runs": [
       {
-        "text": "",
+        "text": "单行引用内容",
       },
     ],
     "spacing": {
@@ -180,7 +180,13 @@ exports[`exporter characterization baseline (slice D) > docx: buildDocxChildren 
     "kind": "paragraph",
     "runs": [
       {
-        "text": "",
+        "text": "第一行引用",
+      },
+      {
+        "break": 1,
+      },
+      {
+        "text": "第二行引用",
       },
     ],
     "spacing": {
@@ -204,6 +210,25 @@ exports[`exporter characterization baseline (slice D) > docx: buildDocxChildren 
       "w:before": 40,
     },
     "style": "ListParagraph",
+  },
+  {
+    "indent": {
+      "w:hanging": 240,
+      "w:left": 720,
+    },
+    "kind": "paragraph",
+    "runs": [
+      {
+        "text": "- ",
+      },
+      {
+        "text": "二级无序",
+      },
+    ],
+    "spacing": {
+      "w:after": 40,
+      "w:before": 40,
+    },
   },
   {
     "bulletLevel": 0,
@@ -254,6 +279,44 @@ exports[`exporter characterization baseline (slice D) > docx: buildDocxChildren 
       },
       {
         "text": "有序第二项",
+      },
+    ],
+    "spacing": {
+      "w:after": 40,
+      "w:before": 40,
+    },
+  },
+  {
+    "indent": {
+      "w:hanging": 240,
+      "w:left": 480,
+    },
+    "kind": "paragraph",
+    "runs": [
+      {
+        "text": "☑ ",
+      },
+      {
+        "text": "已完成任务",
+      },
+    ],
+    "spacing": {
+      "w:after": 40,
+      "w:before": 40,
+    },
+  },
+  {
+    "indent": {
+      "w:hanging": 240,
+      "w:left": 480,
+    },
+    "kind": "paragraph",
+    "runs": [
+      {
+        "text": "☐ ",
+      },
+      {
+        "text": "未完成任务",
       },
     ],
     "spacing": {
