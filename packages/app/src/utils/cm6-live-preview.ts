@@ -2060,6 +2060,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         this.onCompStart = null;
         this.onCompEnd = null;
         this.onClick = null;
+        this.onContextMenu = null;
         this.onRemoteImageLoad = null;
         this.onRemoteImageError = null;
         this.onKeydown = null;
