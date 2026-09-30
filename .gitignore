@@ -139,3 +139,4 @@ local-archive/
 # Agent 工作区与切片互审产物（本地过程材料，不入库）
 .agentteam/
 docs/wip/
+scripts/release/linux-preview-last-receipt.json

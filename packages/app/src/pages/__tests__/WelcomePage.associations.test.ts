@@ -8,6 +8,15 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke,
   isTauri: () => true,
 }));
+vi.mock('@/utils/platform', () => ({
+  isWindows: () => true,
+  isMac: () => false,
+  isLinux: () => false,
+  getPlatformOS: async () => 'windows',
+  initializePlatform: async () => 'windows',
+  getPlatformOSSync: () => 'windows',
+  formatShortcut: (label: string) => label,
+}));
 
 describe('WelcomePage Windows default-app decision', () => {
   let markdownApplied = false;
@@ -18,6 +27,7 @@ describe('WelcomePage Windows default-app decision', () => {
     markdownApplied = false;
     invoke.mockReset();
     invoke.mockImplementation(async (command: string) => {
+      if (command === 'platform_os') return 'windows';
       if (command === 'open_jotluck_default_apps_settings') return undefined;
       if (command === 'get_windows_association_status') {
         return {

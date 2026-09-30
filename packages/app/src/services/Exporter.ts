@@ -14,6 +14,7 @@ import { isLargeDocument } from './document-analysis';
  * @see doc/PRD.md §F-09
  */
 import type { ExportOptions, ExportResult } from '@/types';
+import { isLinux } from '@/utils/platform';
 import { ExportFormat } from '@/types';
 import {
   renderMarkdown,
@@ -317,6 +318,11 @@ function printPreparedDocument(
         return;
       }
 
+      if (isLinux()) {
+        // WebKitGTK 未实现 window.print() 且不抛异常——静默 no-op 会假成功。
+        fail(translate('export.pdfUnavailable'));
+        return;
+      }
       try {
         // e2e 可观测锚点（E4-03 自动验收）：打印准备完成——print() 阻塞
         // 期间不可写，故在调用前置位；htmlLength 证明全文（含未挂载片段）已整备。

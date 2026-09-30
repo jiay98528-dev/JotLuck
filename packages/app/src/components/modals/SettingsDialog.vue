@@ -64,7 +64,7 @@
                 <p class="setting-help">{{ t('settings.general.languageHelp') }}</p>
               </div>
 
-              <div class="setting-row association-settings">
+              <div v-if="isWindows()" class="setting-row association-settings">
                 <div class="setting-info">
                   <span class="setting-label">{{ t('settings.general.fileOpeningTitle') }}</span>
                 </div>
@@ -106,6 +106,12 @@
                     {{ t('settings.general.associationRefresh') }}
                   </button>
                 </div>
+              </div>
+              <div v-else class="setting-row association-settings">
+                <div class="setting-info">
+                  <span class="setting-label">{{ t('settings.general.fileOpeningTitle') }}</span>
+                </div>
+                <p class="setting-help">{{ t('settings.general.fileOpeningBodyNonWindows') }}</p>
               </div>
             </section>
 
@@ -418,6 +424,7 @@ import { useLocale } from '@/composables/useLocale';
 import type { AssociationGroupStatus, WindowsAssociationStatus } from '@/types';
 import type { SupportedLocale } from '@/types/i18n';
 import { isDesktopRuntime } from '@/utils/runtime';
+import { isWindows } from '@/utils/platform';
 import type { PublicEngineDiagnostics } from '@/services/completion/public-engine-types';
 
 const { t } = useI18n();
@@ -621,6 +628,7 @@ function onLocaleSelect(event: Event): void {
 }
 
 async function refreshAssociationStatus(): Promise<void> {
+  if (!isWindows()) return;
   if (!props.visible || activeTab.value !== 'general') return;
   associationError.value = false;
 

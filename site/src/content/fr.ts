@@ -101,24 +101,25 @@ export const fr: SiteContent = {
   download: {
     eyebrow: 'Téléchargement',
     title: 'La Preview est en ligne.',
-    lead: 'La Preview Windows x64 est prête à télécharger dès maintenant. macOS et Linux suivront — le texte brut ne choisit jamais sa plateforme, et vos notes restent des fichiers locaux sur tous les systèmes.',
+    lead: 'Les Previews Windows x64 et Linux x86_64 sont prêtes à télécharger dès maintenant. macOS suivra — le texte brut ne choisit jamais sa plateforme, et vos notes restent des fichiers locaux sur tous les systèmes.',
     statusLabel: 'Première plateforme',
     statusValue: 'Windows x64',
     platformTitle: 'Plateformes',
     platforms: [
       { name: 'Windows x64', state: 'Preview en ligne' },
       { name: 'macOS', state: 'Suivra' },
-      { name: 'Linux', state: 'Suivra' },
+      { name: 'Linux x86_64', state: 'Preview en ligne' },
     ],
     honestyTitle: "La Preview d'abord.",
     honestyBody:
       "L'installateur Preview est déjà sur GitHub Releases — téléchargeable, vérifiable, réversible.",
     previewTitle: 'v0.14.0 Preview',
     downloadBtn: 'Télécharger la Preview (Windows x64)',
+    downloadBtnLinux: 'Télécharger la Preview (Linux .deb)',
     githubBtn: 'GitHub',
     releaseBtn: 'Notes de version et checksum',
     signNote:
-      "Cette Preview n'est pas signée : Windows SmartScreen peut afficher un avertissement. Vérifiez que le SHA-256 correspond à la page Release avant d'installer.",
+      "Cette Preview n'est pas signée. Windows SmartScreen peut avertir ; sous Linux, installez avec dpkg et vérifiez le SHA-256 sur la page Release.",
     signPolicyLink: 'Politique de signature de code',
     notesTitle: 'À savoir',
     notes: [

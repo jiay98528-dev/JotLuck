@@ -52,10 +52,14 @@
 
               <div v-else-if="currentStep === 4" class="welcome-step-body">
                 <h2 class="welcome-step-title">{{ t('welcome.defaultEditorTitle') }}</h2>
-                <p class="welcome-step-text">{{ t('welcome.defaultEditorBody') }}</p>
+                <p class="welcome-step-text">{{ defaultEditorBodyText }}</p>
                 <fieldset class="welcome-association-summary">
                   <legend class="welcome-association-legend">
-                    {{ t('welcome.associationSelectionLegend') }}
+                    {{
+                      isWindows()
+                        ? t('welcome.associationSelectionLegend')
+                        : t('welcome.associationLegendNonWindows')
+                    }}
                   </legend>
                   <div
                     class="welcome-association-list"
@@ -71,6 +75,7 @@
                       }"
                     >
                       <input
+                        v-if="isWindows()"
                         v-model="selectedAssociationGroups[group.id]"
                         class="welcome-association-checkbox"
                         type="checkbox"
@@ -172,9 +177,14 @@ import { invoke } from '@tauri-apps/api/core';
 import Button from '@/components/common/Button.vue';
 import { useDialogFocus } from '@/composables/useDialogFocus';
 import { isDesktopRuntime } from '@/utils/runtime';
+import { isWindows } from '@/utils/platform';
 import { hasCompletedWelcome, markWelcomeCompleted } from '@/utils/welcome';
 import { useI18n } from 'vue-i18n';
-import type { AssociationGroupStatus, WindowsAssociationStatus } from '@/types';
+import type {
+  AssociationApplicationState,
+  AssociationGroupStatus,
+  WindowsAssociationStatus,
+} from '@/types';
 
 const props = defineProps<{ visible: boolean }>();
 const emit = defineEmits<{ 'update:visible': [boolean]; complete: [] }>();
@@ -216,12 +226,13 @@ const selectedAssociationGroups = ref<Record<AssociationGroupId, boolean>>(
   defaultAssociationSelections(),
 );
 const associationGroups = computed<AssociationGroupStatus[]>(() => {
+  const fallbackState: AssociationApplicationState = isWindows() ? 'unsupported' : 'registered';
   const realGroups = new Map(associationStatus.value?.groups.map((group) => [group.id, group]));
   return associationGroupDefinitions.map(
     (definition) =>
       realGroups.get(definition.id) ?? {
         ...definition,
-        state: 'unsupported',
+        state: fallbackState,
         activeProgIds: [],
       },
   );
@@ -232,6 +243,7 @@ const hasIncompleteSelectedAssociations = computed(() => {
   );
 });
 const associationActionLabel = computed(() => {
+  if (!isWindows()) return t('welcome.associationNonWindowsAction');
   if (
     defaultEditorNoticeKind.value === 'settingsOpened' &&
     hasIncompleteSelectedAssociations.value
@@ -240,6 +252,9 @@ const associationActionLabel = computed(() => {
   }
   return t('welcome.openSystemSettings');
 });
+const defaultEditorBodyText = computed(() =>
+  t(isWindows() ? 'welcome.defaultEditorBody' : 'welcome.defaultEditorBodyNonWindows'),
+);
 const defaultEditorNotice = computed(() => {
   switch (defaultEditorNoticeKind.value) {
     case 'webPreview':
@@ -318,6 +333,11 @@ async function onSetDefaultEditor(): Promise<void> {
     return;
   }
 
+  if (!isWindows()) {
+    nextStep();
+    return;
+  }
+
   try {
     associationPending.value = true;
     await invoke('open_jotluck_default_apps_settings');
@@ -331,6 +351,10 @@ async function onSetDefaultEditor(): Promise<void> {
 
 async function refreshAssociationStatus(): Promise<void> {
   if (!props.visible || currentStep.value !== 4) return;
+  if (!isWindows()) {
+    associationStatus.value = null;
+    return;
+  }
   associationStatusError.value = false;
 
   if (!isDesktopRuntime()) {

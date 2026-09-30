@@ -4,9 +4,11 @@ import App from './App.vue';
 import { router } from './router';
 import { initializeLocale, installI18n } from './i18n';
 import { installDesktopContextMenuGuard } from './utils/contextMenuGuard';
+import { initializePlatform } from './utils/platform';
 import './assets/styles/main.css';
 
 performance.mark('jotluck:bootstrap-start');
+await initializePlatform();
 await initializeLocale();
 installDesktopContextMenuGuard();
 const app = createApp(App);

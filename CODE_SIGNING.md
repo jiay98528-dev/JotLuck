@@ -18,7 +18,7 @@
 - Windows NSIS `.exe` 安装包
 - 安装包内的 Windows `.exe` 可执行文件
 
-macOS 与 Linux 版本尚未进入正式打包与签名范围。
+macOS 尚未进入正式打包与签名范围。Linux x86_64 预览 `.deb` 已随 `v0.14.0-preview` 上架，同样未签名；校验以 SHA-256 为准。
 
 ## 团队职责
 

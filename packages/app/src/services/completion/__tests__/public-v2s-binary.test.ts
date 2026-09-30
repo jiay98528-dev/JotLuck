@@ -1,3 +1,7 @@
+// @vitest-environment node
+// 纯二进制数据测试：happy-dom 的 vm realm 与 Node webcrypto 互相不认对方的
+// TypedArray，统一用 node 环境消除跨 realm（与 CI ubuntu 行为一致）。
+
 import { describe, expect, it } from 'vitest';
 import type { PublicEngineGenerateRequest } from '../public-engine-types';
 import { PUBLIC_V2S_GATE_FEATURE_SCHEMA, parsePublicV2sModel } from '../public-v2s-binary';
@@ -319,7 +323,7 @@ function jsonBytes(value: unknown): Uint8Array {
 
 async function sha256(bytes: Uint8Array): Promise<string> {
   const input = Uint8Array.from(bytes);
-  const digest = await crypto.subtle.digest('SHA-256', input.buffer);
+  const digest = await crypto.subtle.digest('SHA-256', input);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 

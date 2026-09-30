@@ -13,6 +13,11 @@ export const RELEASE = {
       'https://github.com/jiay98528-dev/JotLuck/releases/download/v0.14.0-preview/JotLuck_0.14.0_x64-setup.exe',
     tagUrl: 'https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.14.0-preview',
     sha256: 'd78a8a0e601154c3f9c79021ffe853c1f4925866fba2f4119cbf64adef08b8f4',
+    linuxDeb: {
+      downloadUrl:
+        'https://github.com/jiay98528-dev/JotLuck/releases/download/v0.14.0-preview/JotLuck_0.14.0_amd64.deb',
+      sha256: '3d5f7b709c0eaf9fea2877593696c30cbc15f0a640733d208a040d8fc3a3ed77',
+    },
   },
 };
 

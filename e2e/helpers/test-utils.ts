@@ -15,6 +15,9 @@ import { expect, test } from '@playwright/test';
  * OS 文本惯例修饰键：macOS 为 Cmd（Meta），其余平台为 Ctrl。
  * 仅用于全选/撤销/重做等操作系统级文本惯例；应用内自定义快捷键（如 Ctrl+K）不适用。
  */
+/** 测试宿主平台：'win32' | 'darwin' | 'linux'。快捷键按 darwin→Meta、其余→Control 二分，linux 与 win32 同键位。 */
+export const HOST_PLATFORM = process.platform;
+
 export const MOD_KEY = process.platform === 'darwin' ? 'Meta' : 'Control';
 
 /** 跳到文档开头：macOS 为 Cmd+ArrowUp，其余平台为 Control+Home。 */
