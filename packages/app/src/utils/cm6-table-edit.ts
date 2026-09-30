@@ -1,6 +1,7 @@
 import { guardPointerClicks } from './editor-pointer';
 import { observeEditorViewport, positionEditorOverlay } from './editor-overlay';
 import { rememberEditorSelection, getInteractionSelection } from './cm6-interaction-selection';
+import { getSlashMenuController } from './cm6-slash-commands';
 import {
   getDocumentAst,
   peekDocumentAst,
@@ -17,7 +18,9 @@ import {
  *     解析；行列区间全部来自源码 UTF-16 偏移，全角 `｜` / `\|` 转义天然保真。
  *   - 每个操作 = 单次 view.dispatch + isolateHistory.of('full')（E2 实测教训，
  *     500ms 邻组合并需用 history 隔离把表格操作与快速键入拆开）。
- *   - 不注册任何 keymap —— 纯状态驱动 UI + 按钮操作（与 E2 本质区别）。
+ *   - R4 增量：表格内 Tab / Shift+Tab 单元格导航（moveTabInCell*）。注册为
+ *     普通优先级 keymap（位于 ghost Prec.highest 之后、slashCommandsExtension
+ *     默认优先级之后）；守卫 = readOnly、IME 组合期、不在表格内、斜杠菜单打开。
  *   - 工具条 = CM6 内部浮层（挂 view.dom）；位置 = coordsAtPos 转换为
  *     view.dom 相对坐标，上方空间不足翻转到表尾下沿，横向夹紧编辑器视口。
  *   - IME 守卫：组合期间按钮 mousedown.prevent 返回 + 工具条隐藏。
@@ -25,8 +28,8 @@ import {
  */
 import type { EditorState, Extension } from '@codemirror/state';
 import { isolateHistory } from '@codemirror/commands';
-import { EditorView, ViewPlugin } from '@codemirror/view';
-import type { PluginValue, ViewUpdate } from '@codemirror/view';
+import { EditorView, keymap, ViewPlugin } from '@codemirror/view';
+import type { Command, KeyBinding, PluginValue, ViewUpdate } from '@codemirror/view';
 import { blockAtLine, type TableNode, type TableRowNode } from '@jotluck/renderer';
 import { translate } from '@/i18n';
 
@@ -256,6 +259,150 @@ export function applyTableAction(view: EditorView, id: TableActionId): boolean {
       return false;
   }
 }
+
+// ─── 公共 API：Tab 单元格导航（V0.2 R4 增量）───────────────────────────
+
+/**
+ * 把表格里可导航的 cell（跳过分隔行）展平成线性序列：顺序 = 行序 × 列序。
+ * 行序按 `block.rows` 顺序，列序按 `row.cells` 顺序。
+ */
+function flattenNavigableCells(block: TableNode): Array<{
+  rowIndex: number;
+  cellIndex: number;
+  rangeFrom: number;
+}> {
+  const out: Array<{ rowIndex: number; cellIndex: number; rangeFrom: number }> = [];
+  for (let rowIndex = 0; rowIndex < block.rows.length; rowIndex++) {
+    const row = block.rows[rowIndex]!;
+    if (row.isSeparator) continue; // 分隔行非内容单元，跳过
+    for (let cellIndex = 0; cellIndex < row.cells.length; cellIndex++) {
+      const cell = row.cells[cellIndex]!;
+      out.push({ rowIndex, cellIndex, rangeFrom: cell.range.from });
+    }
+  }
+  return out;
+}
+
+/**
+ * 给定光标 cell 在 block.rows 中的位置，求其展平序列里的下标（-1 = 未命中）。
+ */
+function indexInFlatCells(
+  flat: Array<{ rowIndex: number; cellIndex: number; rangeFrom: number }>,
+  rowIndex: number,
+  cellIndex: number,
+): number {
+  for (let i = 0; i < flat.length; i++) {
+    const c = flat[i]!;
+    if (c.rowIndex === rowIndex && c.cellIndex === cellIndex) return i;
+  }
+  return -1;
+}
+
+/**
+ * 表尾追加空行（末格 Tab 触发）。复用 doInsertRow 的尾行插行路径语义：
+ *   - 全角 / 半角 delim 按表头行探测
+ *   - 末行带换行 → 插在换行之后；末行无换行 → 补前导 `\n` 让新行独占
+ *   - 单事务 + isolateHistory.of('full')（与现有行列操作撤销合同一致）
+ *   - 光标落新行首格内容起点
+ */
+function appendEmptyRowAtTableEnd(view: EditorView, ctx: TableContext): boolean {
+  const { block } = ctx;
+  const doc = view.state.doc;
+  const lastRow = block.rows[block.rows.length - 1]!;
+  const headerSource = doc.sliceString(block.rows[0]!.range.from, block.rows[0]!.range.to);
+  const delim = headerSource.includes('｜') ? '｜' : '|';
+  const columnCount = block.columnCount;
+  // 与 doInsertRow 同款行模板：`|  |  |  |`（columnCount 格）
+  let insertText = `${delim} ${` ${delim} `.repeat(Math.max(0, columnCount - 1))} ${delim}\n`;
+  let anchor: number;
+  const hasTrailingNewline =
+    lastRow.range.to < doc.length &&
+    doc.sliceString(lastRow.range.to, lastRow.range.to + 1) === '\n';
+  if (hasTrailingNewline) {
+    anchor = lastRow.range.to + 1;
+  } else {
+    // 文档末无换行：先补换行再插，新行不带尾换行（与 doInsertRow 等价口径）
+    anchor = lastRow.range.to;
+    insertText = `\n${insertText.slice(0, -1)}`;
+  }
+  view.dispatch({
+    changes: { from: anchor, to: anchor, insert: insertText },
+    // 光标落新行首格 = `<delim> ` 之后；insertText 可能带 `\n` 前缀，
+    // indexOf 不受影响（互审 F1 同款口径）。
+    selection: { anchor: anchor + insertText.indexOf(`${delim} `) + 2 },
+    annotations: isolateHistory.of('full'),
+  });
+  return true;
+}
+
+/**
+ * Tab 单元格导航的通用前置守卫：
+ *   - readOnly：不劫持
+ *   - IME 组合期：不劫持（沿用 :226-229 的 view.composing/compositionStarted）
+ *   - 不在合法表格单元格内：返回 null（让默认 Tab / 缩进处理）
+ *   - 斜杠菜单打开：返回 null（让斜杠菜单的 Tab 确认优先消费）
+ *   - 光标在分隔行：返回 null（默认 Tab 仍为缩进）
+ *
+ * 命中后返回 { ctx, flat, currentIndex }；否则返回 null。
+ *
+ * ghost 文本的 Tab 仲裁：在 Prec.highest 注册，命中即消费，与本命令独立——
+ * 不需要本守卫额外查 ghost 状态（命中后 ghost 先抢走事件）。
+ */
+function prepareTabCellNavigation(view: EditorView): {
+  ctx: TableContext;
+  flat: Array<{ rowIndex: number; cellIndex: number; rangeFrom: number }>;
+  currentIndex: number;
+} | null {
+  if (view.state.readOnly) return null;
+  if (view.composing || view.compositionStarted) return null;
+  // 斜杠菜单打开 → 放行（slashCommandsExtension 的 Tab binding 在后注册，
+  // 默认优先级下后注册 = 先调用；为了让 slash 先被命中，本守卫必须放行）。
+  if (getSlashMenuController(view)?.isOpen()) return null;
+  const ctx = resolveTableContext(view.state);
+  if (!ctx) return null;
+  if (ctx.rowRole === 'separator') return null;
+  const flat = flattenNavigableCells(ctx.block);
+  const currentIndex = indexInFlatCells(flat, ctx.rowIndex, ctx.columnIndex);
+  if (currentIndex === -1) return null;
+  return { ctx, flat, currentIndex };
+}
+
+/** Tab：前进一格；末格 → 在表尾插新空行。 */
+export const moveTabInCellForward: Command = (view) => {
+  const prepared = prepareTabCellNavigation(view);
+  if (!prepared) return false;
+  const { ctx, flat, currentIndex } = prepared;
+  if (currentIndex + 1 < flat.length) {
+    const next = flat[currentIndex + 1]!;
+    view.dispatch({
+      selection: { anchor: next.rangeFrom },
+      annotations: isolateHistory.of('full'),
+    });
+    return true;
+  }
+  // 末格：在表尾追加空行
+  return appendEmptyRowAtTableEnd(view, ctx);
+};
+
+/** Shift+Tab：后退一格；首格 → 不动作（返回 false 让默认 Tab 缩进处理）。 */
+export const moveTabInCellBackward: Command = (view) => {
+  const prepared = prepareTabCellNavigation(view);
+  if (!prepared) return false;
+  const { flat, currentIndex } = prepared;
+  if (currentIndex === 0) return false;
+  const prev = flat[currentIndex - 1]!;
+  view.dispatch({
+    selection: { anchor: prev.rangeFrom },
+    annotations: isolateHistory.of('full'),
+  });
+  return true;
+};
+
+/** 单元格导航 keymap（V0.2 R4）。普通优先级，依赖 ghost Prec.highest 兜底。 */
+export const tableNavigationKeymap: readonly KeyBinding[] = [
+  { key: 'Tab', run: moveTabInCellForward },
+  { key: 'Shift-Tab', run: moveTabInCellBackward },
+];
 
 // ─── 内部：插行 ────────────────────────────────────────────────────────
 
@@ -921,8 +1068,10 @@ const tableEditTheme = EditorView.theme(
 
 /**
  * 装配用扩展。MarkdownEditor.vue 把数组展开插入到 readOnlyCompartment 之后、
- * slashCommandsExtension() 之后。本扩展不注册 keymap（spec §6）。
+ * slashCommandsExtension() 之后。V0.2 R4 增量：注册单元格导航 keymap（Tab /
+ * Shift+Tab），依赖 ghost 文本的 Prec.highest 兜底、slashCommandsExtension 的
+ * Tab 绑定兜底（守卫矩阵详见 moveTabInCellForward / moveTabInCellBackward）。
  */
 export function tableEditExtension(): Extension[] {
-  return [tableEditTheme, tableToolbarPlugin];
+  return [tableEditTheme, tableToolbarPlugin, keymap.of([...tableNavigationKeymap])];
 }

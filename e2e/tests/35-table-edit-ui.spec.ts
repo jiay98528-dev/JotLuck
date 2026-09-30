@@ -364,4 +364,79 @@ test.describe('35 E3 切片 表格编辑 UI', () => {
 
     await dismissToolbarSafely(page);
   });
+
+  // ==========================================================
+  // 用例 13：V0.2 R4 Tab / Shift+Tab 单元格导航
+  //   - 光标入表 → Tab×3 在 cell 间前进（h1 → h2 → d1 → d2）
+  //   - 末格 Tab 出现新空行（单事务 + isolateHistory）
+  //   - Ctrl+Z 一步回退
+  //   - Shift+Tab 后退核对（d2 → d1 → h2 → h1 → 首格不再动）
+  // ==========================================================
+  test('13-Tab/Shift+Tab 单元格导航 + 末格建行单步撤销', async ({ page }) => {
+    const doc = '| h1 | h2 |\n| --- | --- |\n| d1 | d2 |';
+    await setContent(page, doc);
+    // 光标落点 = 单元格内容起点（cell.range.from，trim 后）
+    const h1Pos = doc.indexOf('h1');
+    const h2Pos = doc.indexOf('h2');
+    const d1Pos = doc.indexOf('d1');
+    const d2Pos = doc.indexOf('d2');
+    await setCursor(page, h1Pos);
+    await expect(page.locator(TABLE_TOOLBAR)).toBeVisible({ timeout: 3000 });
+
+    // Tab 1：h1 → h2
+    await page.keyboard.press('Tab');
+    let sel = await getSelection(page);
+    expect(sel.head).toBe(h2Pos);
+
+    // Tab 2：h2 → d1（跨分隔行）
+    await page.keyboard.press('Tab');
+    sel = await getSelection(page);
+    expect(sel.head).toBe(d1Pos);
+
+    // Tab 3：d1 → d2（末格）
+    await page.keyboard.press('Tab');
+    sel = await getSelection(page);
+    expect(sel.head).toBe(d2Pos);
+
+    // 末格 Tab：表尾插新空行 `|  |  |`，光标落新行首格
+    // 新行首格 = 原 doc.length + 1 (换行) + 2 ('| ')
+    const expectedNewRowCursor = doc.length + 1 + 2;
+    await page.keyboard.press('Tab');
+    sel = await getSelection(page);
+    expect(sel.head).toBe(expectedNewRowCursor);
+    let after = await getEditorContentFromBridge(page);
+    expect(after).toBe('| h1 | h2 |\n| --- | --- |\n| d1 | d2 |\n|  |  |');
+
+    // 单步 Ctrl+Z 回退（isolateHistory.of('full') 合同）
+    await page.keyboard.press(`${MOD_KEY}+z`);
+    after = await getEditorContentFromBridge(page);
+    expect(after).toBe(doc);
+    // 撤销后光标回到末格 d2
+    sel = await getSelection(page);
+    expect(sel.head).toBe(d2Pos);
+
+    // Shift+Tab 后退：d2 → d1
+    await page.keyboard.press('Shift+Tab');
+    sel = await getSelection(page);
+    expect(sel.head).toBe(d1Pos);
+
+    // 继续 Shift+Tab：d1 → h2（跨分隔行）
+    await page.keyboard.press('Shift+Tab');
+    sel = await getSelection(page);
+    expect(sel.head).toBe(h2Pos);
+
+    // Shift+Tab：h2 → h1
+    await page.keyboard.press('Shift+Tab');
+    sel = await getSelection(page);
+    expect(sel.head).toBe(h1Pos);
+
+    // 首格 Shift+Tab：h1 → 不动（默认 Tab/缩进兜底），本断言仅确保 cell 内容不动
+    await page.keyboard.press('Shift+Tab');
+    sel = await getSelection(page);
+    expect(sel.head).toBe(h1Pos);
+    after = await getEditorContentFromBridge(page);
+    expect(after).toBe(doc);
+
+    await dismissToolbarSafely(page);
+  });
 });
