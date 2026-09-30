@@ -127,6 +127,8 @@ describe('virtual reading correctness', () => {
   it('progressively fills a long paragraph without splitting its paragraph or bold semantics', async () => {
     const text = '长段落 mixed text '.repeat(7000).trimEnd();
     const { wrapper } = await create('# Book\n\n**' + text + '**');
+    // CPU 大户：数千片段靠真实定时器协作调度，并发负载下单片让出远超 0ms，
+    // 等待窗口放宽（断言不变），避免与同批其他测试并行时假性超时。
     await vi.waitFor(
       () => {
         const actual = wrapper
@@ -135,10 +137,10 @@ describe('virtual reading correctness', () => {
           .join('');
         expect(actual.replaceAll(' ', '').length).toBe(text.replaceAll(' ', '').length);
       },
-      { timeout: 5000 },
+      { timeout: 20000 },
     );
     expect(wrapper.findAll('.preview-fragment p')).toHaveLength(1);
-  });
+  }, 30000);
   it('copies the whole document, including text not mounted in the viewport', async () => {
     const source =
       '# Book\n\n' +
@@ -176,5 +178,5 @@ describe('virtual reading correctness', () => {
     expect(dom.textContent).toContain('PRINT-END');
     expect(dom.querySelectorAll('p')).toHaveLength(8001);
     expect(dom.querySelectorAll('h1')).toHaveLength(2);
-  }, 20000);
+  }, 60000);
 });

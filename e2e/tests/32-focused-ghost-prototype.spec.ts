@@ -113,20 +113,29 @@ test.describe('32 聚焦行幽灵语法 kill/keep 原型', () => {
     await setContent(page, line);
     await setCursor(page, 2); // 光标进入加粗词 → 该块聚焦
     await expect(page.locator('.cm-line.cm-live-focused-source')).toHaveCount(1);
+    // 聚焦装饰 rAF 延迟一拍重建（cm6-live-preview __initRAF），Firefox 节拍
+    // 更易落在 token span 未分片的中间态——先等幽灵标记就绪再取值（:102 同款判据）。
+    await expect(page.locator('.cm-line.cm-live-focused-source .cm-live-ghost-mark')).toHaveCount(
+      2,
+      { timeout: 5000 },
+    );
 
     // 取首段加粗 token（CM6 HighlightStyle 派生类名因版本而异：用 computed fontWeight 判定粗体保持）
+    // 600/bold 在不同解析下可能是 600 或 700，任一即视为粗体保持；poll 兜中间态。
     const focusedLine = page.locator('.cm-line.cm-live-focused-source');
-    const focusedLineWeight = await focusedLine.evaluate((line) => {
-      // 找到行内"加粗词"三个字的位置（** 加粗词 ** 中 index 2-4），取该段文本节点的 computed fontWeight
-      // 行结构：<span>*, *</span><span>加, 粗, 词</span><span>*, *</span>——中间节点就是加粗段
-      const spans = [...line.querySelectorAll('span')];
-      const boldSpan = spans.find((s) => s.textContent === '加粗词');
-      return boldSpan ? Number(getComputedStyle(boldSpan).fontWeight) : 0;
-    });
-    // 600/bold 在不同解析下可能是 600 或 700，任一即视为粗体保持
-    expect(focusedLineWeight, `tok-strong fontWeight=${focusedLineWeight}`).toBeGreaterThanOrEqual(
-      600,
-    );
+    await expect
+      .poll(
+        () =>
+          focusedLine.evaluate((line) => {
+            // 找到行内"加粗词"三个字的位置（** 加粗词 ** 中 index 2-4），取该段文本节点的 computed fontWeight
+            // 行结构：<span>*, *</span><span>加, 粗, 词</span><span>*, *</span>——中间节点就是加粗段
+            const spans = [...line.querySelectorAll('span')];
+            const boldSpan = spans.find((s) => s.textContent === '加粗词');
+            return boldSpan ? Number(getComputedStyle(boldSpan).fontWeight) : 0;
+          }),
+        { timeout: 5000 },
+      )
+      .toBeGreaterThanOrEqual(600);
   });
 
   // ==========================================================

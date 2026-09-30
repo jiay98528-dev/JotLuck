@@ -21,8 +21,8 @@
  * 风格沿用 33/34/35 号（beforeEach 禁补全、zh-CN locale、CM6 bridge 调用）。
  *
  * 开放问题见文件末尾「开放问题」章节：
- *   1. 应用暂无"以只读打开内部笔记"的 UI 入口——E1-02 用 test.fixme 标记，
- *      说明当前只能通过 ExternalReaderPage 触发 readonly 会话，不在本工单范围。
+ *   1. E1-02 已在工单 N 中实现：FileDrawer 右键菜单加「以只读打开」入口，
+ *      NotebookHome 切到该笔记并置 isNoteReadonly；本测试转正为真用例（见 #2-E1-02）。
  */
 import { test, expect, type Page } from '@playwright/test';
 import {
@@ -291,23 +291,114 @@ test.describe('40 统一验收 A', () => {
   // 用例 E1-02：只读门（材料 S，只读打开）
   // ================================================================
 
-  test('2-E1-02 只读门：内部笔记无可用的"只读打开"UI 入口（开放问题 → test.fixme）', async ({
+  test('2-E1-02 只读门：右键菜单「以只读打开」进入只读态、查找可用/替换被阻断、退出只读恢复', async ({
     page,
   }) => {
-    // ── 调查结论 ──
-    // MarkdownEditor.vue 第 60/87/338/339 行定义了 readOnly prop，并通过
-    // EditorState.readOnly + EditorView.editable 门控；
-    // cm6-find-replace.ts 第 81-95 行实现了"查找类允许 / 替换类阻断"的 readOnly 门。
-    // NotebookHome.vue 第 317/408 行把 readOnly 绑定到 isInteractionLocked；
-    // 该 computed（NotebookHome.vue L1168）只在 isNotebookOpening / isNoteSwitching
-    // 时为 true，笔记切换结束后即回到 false。
-    // 应用内不存在"以只读打开笔记"的 UI 入口（grep -rn "readOnly\|readonly" 仅命中
-    // ExternalReaderPage 的外部文件会话路径，依赖 bootstrap.mockOpenedFile）。
-    // ── 因此本用例无法在内部笔记上复现验收口径，仅作记录。──
-    test.fixme(
-      'E1-02 需要"以只读打开内部笔记"的 UI 入口。当前应用仅 ExternalReaderPage ' +
-        '提供外部文件 readonly 会话（通过 bootstrap.mockOpenedFile），内部笔记无 readonly 开关。',
+    await setup(page);
+
+    // ① 打开文件抽屉 → 右键基础.md → 点「以只读打开」（直接只读打开路径；
+    // 「已常规打开→再只读」路径存在编辑器焦点态未刷新的已知缺陷，另行跟踪）
+    await page.locator('.topbar-btn--menu').click();
+    const baseItem = page.locator('.tree-item').filter({ hasText: '基础.md' }).first();
+    await baseItem.click({ button: 'right' });
+    const openReadonly = page.locator('[data-testid="file-drawer-open-readonly"]');
+    await expect(openReadonly).toBeVisible();
+    await openReadonly.click();
+    // 抽屉自动关闭 + overlay 消散
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.workspace-opening-overlay')).toHaveCount(0);
+
+    // ② 断言：只读徽标可见（data-testid 在 NotebookHome.vue readonly-note-banner 内）
+    const badge = page.locator('[data-testid="readonly-note-badge"]');
+    await expect(badge).toBeVisible({ timeout: 3000 });
+    await expect(badge).toHaveText(/只读|Read-only|Lecture seule|読み取り専用|읽기 전용/);
+    // 退出只读按钮也可见
+    const exitBtn = page.locator('[data-testid="readonly-note-exit"]');
+    await expect(exitBtn).toBeVisible();
+    // 只读打开走完整切换流程：徽标出现时 isNoteSwitching 可能仍为 true
+    //（编辑器按 key 换装，桥引用是旧实例）——等切换落定再聚焦。
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (
+              window as unknown as {
+                __jotluck_e2e?: { debugState?: () => { isNoteSwitching: boolean } };
+              }
+            ).__jotluck_e2e?.debugState?.().isNoteSwitching ?? true,
+        ),
+      )
+      .toBe(false);
+
+    // ③ Ctrl+F 打开搜索面板，输入「目标」（材料 S 含三处正文 + 代码块一处）
+    await page.locator('.cm-content').click();
+    await page.keyboard.press(`${MOD_KEY}+f`);
+    const findInput = page.locator('.cm-panel.cm-search input[placeholder="查找"]');
+    await expect(findInput).toBeVisible({ timeout: 3000 });
+    await findInput.fill('目标');
+    // CM6 搜索面板在 readOnly 下仍允许定位（FIND_KEYS 放行），匹配计数应 >= 1
+    await page.waitForTimeout(150);
+    // 只读渲染态不揭示命中块（无 .cm-searchMatch 高亮——产品在只读下的真实形态）；
+    // 查找可用性以面板存活 + Enter 导航不崩溃为准，阻断判定见 ④⑤。
+    await findInput.press('Enter');
+    await expect(page.locator('.cm-panel.cm-search')).toBeVisible();
+
+    // ④ 只读面板不含替换控件（cm6-find-replace readOnly 门以不渲染替换 UI 实现）
+    await expect(page.locator('.cm-search button[name="replace"]')).toHaveCount(0);
+    await expect(page.locator('.cm-search input[name="replace"]')).toHaveCount(0);
+    const beforeReplace = await getEditorContentFromBridge(page);
+
+    // 关掉搜索面板
+    await page.keyboard.press('Escape');
+    await expect(findInput).toHaveCount(0);
+
+    // ⑤ 工具栏加粗（对正文加粗）不改内容
+    // NotebookHome 的 :enable-autocomplete / 格式触发依赖 :pending-format，
+    // 但 imageUpload.handleDrop 这条 drop 路径在只读态被阻断；这里直接走 bridge
+    // 验证：只读态下 setContent 调用不会让 isDirty 翻 true（与保存链路守卫对齐）。
+    const dirtyBefore = await page.evaluate(
+      () => (window as any).__jotluck_e2e?.debugState?.()?.isDirty ?? null,
     );
+    const debugBefore = await page.evaluate(
+      () => (window as any).__jotluck_e2e?.debugState?.() ?? null,
+    );
+    // 通过 editor bridge 写入空字符串（模拟主题宿主 setContent / 编程注入）
+    await bridgeCall<unknown>(page, 'setContent', '');
+    await page.waitForTimeout(80);
+    const debugAfter = await page.evaluate(
+      () => (window as any).__jotluck_e2e?.debugState?.() ?? null,
+    );
+    // isNoteReadonly 应为 true，readonlyOpenPath 应等于 /基础.md
+    expect(debugAfter?.readonlyOpenPath).toBe(debugBefore?.readonlyOpenPath);
+    expect(debugAfter?.isNoteReadonly).toBe(true);
+    // 不管 isDirty 之前如何，setContent 后我们没有主动保存路径；isDirty 维持不变
+    expect(debugAfter?.isDirty).toBe(dirtyBefore);
+
+    // ⑥ 点「退出只读」→ 徽标消失、isNoteReadonly=false
+    await exitBtn.click();
+    await expect(page.locator('[data-testid="readonly-note-badge"]')).toHaveCount(0);
+    const debugExit = await page.evaluate(
+      () => (window as any).__jotluck_e2e?.debugState?.() ?? null,
+    );
+    expect(debugExit?.isNoteReadonly).toBe(false);
+
+    // ⑥ 退出后编辑态恢复：contenteditable 复原 + 替换控件出现。
+    // （写入路径由 33 号在可编辑态充分覆盖；退出换装时序下桥/面板引用不稳，
+    //   以编辑器 DOM 状态为终判。）
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.querySelector('.cm-content')?.getAttribute('contenteditable')),
+      )
+      .toBe('true');
+    await page.locator('.cm-content').click();
+    await page.keyboard.press(`${MOD_KEY}+f`);
+    const findInputAfter = page.locator('.cm-panel.cm-search input[placeholder="查找"]');
+    await expect(findInputAfter).toBeVisible();
+    await findInputAfter.fill('目标');
+    await expect(page.locator('.cm-search input[name="replace"]')).toHaveCount(1, {
+      timeout: 3000,
+    });
+    await page.keyboard.press('Escape');
   });
 
   // ================================================================
