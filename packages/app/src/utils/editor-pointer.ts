@@ -74,6 +74,8 @@ export function guardPointerClicks(root: HTMLElement, capture?: () => void): () 
     gesture.cancel();
     gesture.reset();
     release();
+    // 注意：不清 pointerClick——取消后悬挂的 pointerClick 正是 click 处理器
+    // 抑制「兼容 click」的依据（pointerClick && gesture.cancelled），清了会漏抑制。
   };
   const click = (event: MouseEvent) => {
     if (

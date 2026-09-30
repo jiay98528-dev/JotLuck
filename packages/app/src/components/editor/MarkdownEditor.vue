@@ -337,6 +337,10 @@ function createState(doc: string) {
       readOnlyCompartment.of([
         EditorState.readOnly.of(props.readOnly),
         EditorView.editable.of(!props.readOnly),
+        // 只读态 contenteditable=false 会让内容区不可聚焦，键盘入口
+        // （Ctrl+F 查找面板等 readOnly 放行键）整体不可达——tabindex
+        // 保持聚焦能力，可编辑态下无副作用。
+        EditorView.contentAttributes.of({ tabindex: '0' }),
       ]),
       ...slashCommandsExtension(),
       ...tableEditExtension(),

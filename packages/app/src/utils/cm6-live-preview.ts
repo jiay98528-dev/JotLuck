@@ -1149,6 +1149,10 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
       touchPending = false;
       touchDoc: Text | null = null;
       suppressClickUntil = 0;
+      // 取消/完成手势后的兼容 click 抑制：状态位 + 下一个 pointerdown 才解除。
+      // 单靠 suppressClickUntil 的 800ms 墙钟窗在负载下会漏抑制（click 迟到
+      // 即误勾选任务——37 号共享指针用例实证），改为事件序语义。
+      suppressNextClick = false;
       interactionCleanup: Array<() => void> = [];
       hitMaps = new WeakMap<HTMLElement, { doc: Text; nodes: WeakMap<Node, number[]> }>();
       renderMore(view: EditorView): void {
@@ -1222,7 +1226,11 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         // Relying on CM6's default DOM mapping for replaced widgets can move the
         // cursor to a wrong line, which is especially disruptive for IME input.
         const onClick = (e: MouseEvent, tapTarget?: HTMLElement) => {
-          if (!tapTarget && performance.now() < this.suppressClickUntil) {
+          if (
+            !tapTarget &&
+            (this.suppressNextClick || performance.now() < this.suppressClickUntil)
+          ) {
+            this.suppressNextClick = false;
             e.preventDefault();
             e.stopPropagation();
             return;
@@ -1289,6 +1297,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         let touchTarget: HTMLElement | null = null;
         const touchDown = (event: PointerEvent) => {
           if (event.pointerType !== 'touch') return;
+          this.suppressNextClick = false;
           if (this.touchPending) {
             gesture.cancel();
             return;
@@ -1314,6 +1323,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           gesture.reset();
           if (touchTarget) {
             this.suppressClickUntil = performance.now() + 800;
+            this.suppressNextClick = true;
             if (valid && !this.isImeActive(view)) onClick(event, touchTarget);
           }
           touchTarget = null;
@@ -1323,6 +1333,10 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         const cancelled = () => {
           cancelTouch();
           finishTouch();
+          // 硬防御：pointercancel 时若手势未被跟踪（如目标已瞬时脱离
+          // contentDOM），finishTouch 不会置位——任何 pointercancel 后的
+          // 兼容 click 一律抑制，鼠标 pointerdown 会解除。
+          this.suppressNextClick = true;
         };
         const mouseDown = (event: MouseEvent) => {
           if (this.touchPending || performance.now() < this.suppressClickUntil) {
@@ -1430,7 +1444,10 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         // and can prevent the cursor move for checkbox/link interactions.
         const onPointerDownCapture = (e: PointerEvent) => {
           if (this.destroyed) return;
-          if (e.pointerType === 'mouse') this.suppressClickUntil = 0;
+          if (e.pointerType === 'mouse') {
+            this.suppressClickUntil = 0;
+            this.suppressNextClick = false;
+          }
           const target = e.target as HTMLElement;
           if (e.pointerType === 'touch') return;
 
@@ -1470,6 +1487,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
             this.destroyed ||
             view.state.readOnly ||
             this.isImeActive(view) ||
+            this.suppressNextClick ||
             performance.now() < this.suppressClickUntil
           )
             return;
