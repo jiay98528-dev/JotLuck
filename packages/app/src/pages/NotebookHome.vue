@@ -3656,6 +3656,8 @@ function joinPath(dir: string, name: string): string {
 
 function clearActiveNoteState(): void {
   activePath.value = '';
+  // 清理只读打开残留（删除活跃只读笔记等路径），防同名新笔记被误置只读
+  readonlyOpenPath.value = null;
   contentRevision++;
   currentContent.value = '';
   currentDiskRevision.value = null;
@@ -4153,6 +4155,13 @@ async function onRenameFile(oldPath: string, newName: string): Promise<void> {
   await fs.renameFile(oldPath, newPath);
   completionTrainer?.renamePath(oldPath, newPath);
   if (renamingActivePath) activePath.value = newPath;
+  // 只读打开状态随重命名迁移，避免残留旧路径把后续同名新笔记误置只读
+  if (
+    readonlyOpenPath.value !== null &&
+    normalizePath(readonlyOpenPath.value) === normalizePath(oldPath)
+  ) {
+    readonlyOpenPath.value = newPath;
+  }
   // 更新索引：移除旧路径，索引新路径
   indexStore.removeDocument(oldPath);
   await indexStore.refreshDocument(fs, newPath);

@@ -164,6 +164,10 @@ test('shared pointer cancellation, IME guards and compatibility clicks preserve 
       clientY: 1,
     });
     await control.dispatchEvent('pointercancel', { pointerType: 'touch', pointerId: 6 });
+    // 合成事件间给挂起的 rAF 重渲染一个落定窗口：pointercancel 后的兼容
+    // click 若赶在 live 块重建中间态派发，目标节点瞬时脱离会使抑制链失效
+    // （真实浏览器的兼容 click 与手势同帧，不存在此窗口——纯合成事件暴露）。
+    await page.waitForTimeout(80);
     await control.dispatchEvent('click', { detail: 1 });
   }
   expect(popups).toBe(0);

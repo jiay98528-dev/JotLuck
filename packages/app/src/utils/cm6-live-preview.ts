@@ -1483,14 +1483,15 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         view.dom.addEventListener('pointerdown', onPointerDownCapture, true);
 
         const onChangeCapture = (e: Event) => {
-          if (
-            this.destroyed ||
-            view.state.readOnly ||
-            this.isImeActive(view) ||
-            this.suppressNextClick ||
-            performance.now() < this.suppressClickUntil
-          )
+          if (this.destroyed || view.state.readOnly || this.isImeActive(view)) return;
+          if (this.suppressNextClick) {
+            // 键盘路径（Tab 聚焦复选框 + Space）触发 change 而无 click 可消耗
+            // 标志——命中即清除，避免触摸点按后标志残留把键盘勾选永久误抑制。
+            // 真实兼容 click 先于 change，不会因此漏抑制（click 阶段已自行消耗）。
+            this.suppressNextClick = false;
             return;
+          }
+          if (performance.now() < this.suppressClickUntil) return;
           const target = e.target as HTMLElement;
           const checkbox = target.closest('input[type="checkbox"], .cm-task-toggle');
           if (!checkbox) return;

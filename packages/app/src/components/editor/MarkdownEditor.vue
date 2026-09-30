@@ -337,11 +337,12 @@ function createState(doc: string) {
       readOnlyCompartment.of([
         EditorState.readOnly.of(props.readOnly),
         EditorView.editable.of(!props.readOnly),
-        // 只读态 contenteditable=false 会让内容区不可聚焦，键盘入口
-        // （Ctrl+F 查找面板等 readOnly 放行键）整体不可达——tabindex
-        // 保持聚焦能力，可编辑态下无副作用。
-        EditorView.contentAttributes.of({ tabindex: '0' }),
       ]),
+      // 只读态 contenteditable=false 会让内容区不可聚焦，键盘入口（Ctrl+F 等
+      // readOnly 放行键）整体不可达——tabindex 保持聚焦能力。注册在
+      // compartment 之外：watcher reconfigure 会整组替换 compartment 内容，
+      // 放里面会在同实例只读翻转时被静默丢弃。
+      EditorView.contentAttributes.of({ tabindex: '0' }),
       ...slashCommandsExtension(),
       ...tableEditExtension(),
       // 续格式仲裁：Enter 先走 pendingFormat 再走智能续格式；Backspace/Escape

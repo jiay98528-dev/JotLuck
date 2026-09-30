@@ -22,6 +22,7 @@ import {
   parseWikiLinkTarget,
   splitTableCells,
   isTableSeparatorLine,
+  normalizeFullwidthMarkdownSyntax,
   stripToPlainText,
   WIKI_LINK_GLOBAL_RE,
 } from '@jotluck/renderer';
@@ -596,9 +597,15 @@ export function buildDocxChildren(
           return marks.charAt(0) === openChar && marks.length >= minLength;
         };
 
-        // 表格候选行判定（与 syntax.ts isTableRowCandidate 一致）
-        const isTableCandidate = (text: string): boolean =>
-          text.trim() !== '' && text.includes('|');
+        // 表格候选行判定（与 syntax.ts isTableRowCandidate 一致；判定前全角归一，
+        // 与 ast.ts 顶层表格口径对齐——全角 ｜ / － 分隔行同样成表）
+        const isTableCandidate = (text: string): boolean => {
+          const normalized = normalizeFullwidthMarkdownSyntax(text);
+          return normalized.trim() !== '' && normalized.includes('|');
+        };
+        // 分隔行判定同样走归一化（isTableSeparatorLine 仅认半角）
+        const isQuoteSeparatorLine = (text: string): boolean =>
+          isTableSeparatorLine(normalizeFullwidthMarkdownSyntax(text));
 
         // 推送普通行段（同 depth 连续非表格/非围栏行 → 单段多行）
         const pushNormalGroup = (start: number, end: number, depth: number): void => {
@@ -645,7 +652,11 @@ export function buildDocxChildren(
         // 推送表格子块：与既有 table case 同一构造
         const pushTableGroup = (headerLi: number, endLi: number, depth: number): void => {
           const headerCells = splitTableCells(lineContent(headerLi));
-          const columnCount = headerCells.length;
+          // 列数口径与 AST TableNode 对齐：非分隔行最大格数（锯齿表不丢超宽单元格）
+          let columnCount = headerCells.length;
+          for (let li = headerLi + 2; li < endLi; li++) {
+            columnCount = Math.max(columnCount, splitTableCells(lineContent(li)).length);
+          }
           const padRow = (cells: string[]): string[] => {
             const out = cells.slice(0, columnCount);
             while (out.length < columnCount) out.push('');
@@ -722,14 +733,14 @@ export function buildDocxChildren(
               if (
                 isTableCandidate(text) &&
                 innerStart + 1 < groupEnd &&
-                isTableSeparatorLine(lineContent(innerStart + 1))
+                isQuoteSeparatorLine(lineContent(innerStart + 1))
               ) {
                 // 收集 header + separator + 连续数据行（到非候选行止）
                 let tableEnd = innerStart + 2;
                 while (
                   tableEnd < groupEnd &&
                   isTableCandidate(lineContent(tableEnd)) &&
-                  !isTableSeparatorLine(lineContent(tableEnd))
+                  !isQuoteSeparatorLine(lineContent(tableEnd))
                 ) {
                   tableEnd++;
                 }
@@ -745,7 +756,7 @@ export function buildDocxChildren(
                 if (
                   isTableCandidate(t) &&
                   normalEnd + 1 < groupEnd &&
-                  isTableSeparatorLine(lineContent(normalEnd + 1))
+                  isQuoteSeparatorLine(lineContent(normalEnd + 1))
                 )
                   break;
                 normalEnd++;
