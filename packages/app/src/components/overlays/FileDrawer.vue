@@ -470,6 +470,30 @@
               <span>{{ t('fileDrawer.rename') }}</span>
             </button>
             <button
+              class="context-menu-item"
+              role="menuitem"
+              data-testid="file-drawer-open-readonly"
+              @click="handleContextMenuOpenReadonly"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <path
+                  d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              <span>{{ t('fileDrawer.openReadonly') }}</span>
+            </button>
+            <button
               class="context-menu-item context-menu-item--danger"
               role="menuitem"
               @click="handleContextMenuDelete"
@@ -554,6 +578,7 @@ const emit = defineEmits<{
   'create-file': [];
   'delete-file': [path: string];
   'rename-file': [oldPath: string, newName: string];
+  'open-readonly': [path: string];
   retry: [];
 }>();
 
@@ -963,6 +988,18 @@ function handleContextMenuRename(): void {
   closeContextMenu();
   if (node && !node.entry.isDirectory && isSupportedNoteFile(node.entry.name)) {
     startRename(node.entry.path, node.entry.name);
+  } else {
+    // 关闭右键菜单后 DOM 移除 → 焦点丢失 → 重新聚焦 overlay 恢复键盘事件可达性
+    nextTick().then(() => overlayRef.value?.focus());
+  }
+}
+
+function handleContextMenuOpenReadonly(): void {
+  const node = contextMenu.value.node;
+  closeContextMenu();
+  if (node && !node.entry.isDirectory && isSupportedNoteFile(node.entry.name)) {
+    emit('open-readonly', node.entry.path);
+    close();
   } else {
     // 关闭右键菜单后 DOM 移除 → 焦点丢失 → 重新聚焦 overlay 恢复键盘事件可达性
     nextTick().then(() => overlayRef.value?.focus());

@@ -335,6 +335,7 @@ export const messages = {
     noMatchHint: 'Try another search',
     fileActions: 'File actions',
     rename: 'Rename',
+    openReadonly: 'Open read-only',
     delete: 'Delete',
   },
   cheatSheet: {
@@ -902,6 +903,10 @@ export const messages = {
         'Delete “{name}”? It will be moved to the system recycle bin or removed from this notebook.',
       blankName: 'Note-{date}.md',
       blankContent: '# New note\n\n',
+    },
+    readonly: {
+      badge: 'Read-only',
+      exit: 'Exit read-only',
     },
     external: {
       readonlyKicker: 'External file · Read-only preview',

@@ -338,6 +338,7 @@ export const messages = {
     noMatchHint: 'Essayez un autre mot-clé',
     fileActions: 'Actions du fichier',
     rename: 'Renommer',
+    openReadonly: 'Ouvrir en lecture seule',
     delete: 'Supprimer',
   },
   cheatSheet: {
@@ -917,6 +918,10 @@ export const messages = {
         'Supprimer « {name} » ? Elle sera placée dans la corbeille du système ou retirée du carnet actuel.',
       blankName: 'Note-{date}.md',
       blankContent: '# Nouvelle note\n\n',
+    },
+    readonly: {
+      badge: 'Lecture seule',
+      exit: 'Quitter la lecture seule',
     },
     external: {
       readonlyKicker: 'Fichier externe · Aperçu en lecture seule',

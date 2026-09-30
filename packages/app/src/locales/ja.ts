@@ -332,6 +332,7 @@ export const messages = {
     noMatchHint: '別のキーワードをお試しください',
     fileActions: 'ファイル操作',
     rename: '名前を変更',
+    openReadonly: '読み取り専用で開く',
     delete: '削除',
   },
   cheatSheet: {
@@ -888,6 +889,10 @@ export const messages = {
         '「{name}」を削除しますか？システムのごみ箱へ移動するか、現在のノートブックから取り除かれます。',
       blankName: 'ノート-{date}.md',
       blankContent: '# 新しいノート\n\n',
+    },
+    readonly: {
+      badge: '読み取り専用',
+      exit: '読み取り専用を終了',
     },
     external: {
       readonlyKicker: '外部ファイル · 読み取り専用プレビュー',

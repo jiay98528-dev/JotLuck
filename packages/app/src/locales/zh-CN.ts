@@ -334,6 +334,7 @@ export const messages = {
     noMatchHint: '尝试其他关键词',
     fileActions: '文件操作',
     rename: '重命名',
+    openReadonly: '以只读打开',
     delete: '删除',
   },
   cheatSheet: {
@@ -745,6 +746,10 @@ export const messages = {
       deleteConfirm: '确定删除「{name}」？此操作会移动到系统回收站或从当前笔记本移除。',
       blankName: '笔记-{date}.md',
       blankContent: '# 新笔记\n\n',
+    },
+    readonly: {
+      badge: '只读',
+      exit: '退出只读',
     },
     external: {
       readonlyKicker: '外部文件 · 只读预览',

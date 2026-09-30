@@ -331,6 +331,7 @@ export const messages = {
     noMatchHint: '다른 검색어를 사용해 보세요',
     fileActions: '파일 작업',
     rename: '이름 바꾸기',
+    openReadonly: '읽기 전용으로 열기',
     delete: '삭제',
   },
   cheatSheet: {
@@ -887,6 +888,10 @@ export const messages = {
         '“{name}”을(를) 삭제할까요? 시스템 휴지통으로 이동하거나 현재 노트북에서 제거합니다.',
       blankName: '노트-{date}.md',
       blankContent: '# 새 노트\n\n',
+    },
+    readonly: {
+      badge: '읽기 전용',
+      exit: '읽기 전용 종료',
     },
     external: {
       readonlyKicker: '외부 파일 · 읽기 전용 미리 보기',

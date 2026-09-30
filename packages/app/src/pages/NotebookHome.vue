@@ -126,6 +126,25 @@
             {{ t('externalReader.addToNotes') }}
           </button>
         </div>
+        <!-- E1-02 只读徽标（顶栏替代位置：与 external-edit-banner 平级，仅在内部笔记 readonlyOpenPath 命中当前 active 笔记时显示） -->
+        <div
+          v-if="isNoteReadonly"
+          class="readonly-note-banner"
+          role="status"
+          data-testid="readonly-note-banner"
+        >
+          <span class="readonly-note-badge" data-testid="readonly-note-badge">
+            {{ t('notebook.readonly.badge') }}
+          </span>
+          <button
+            class="btn btn--secondary"
+            type="button"
+            data-testid="readonly-note-exit"
+            @click="exitReadonlyMode"
+          >
+            {{ t('notebook.readonly.exit') }}
+          </button>
+        </div>
         <AppShell
           :recent-notes="shellRecentNotesWithColors"
           :active-path="shellActivePath"
@@ -314,7 +333,7 @@
                             :key="`split-${isScratchSession ? 'draft' : shellActivePath}`"
                             :model-value="displayContent"
                             :analysis="documentAnalysis"
-                            :read-only="isInteractionLocked"
+                            :read-only="isInteractionLocked || isNoteReadonly"
                             :placeholder="
                               isScratchSession ? t('notebook.status.scratchPlaceholder') : undefined
                             "
@@ -335,17 +354,26 @@
                             :predictor="completionPredictor"
                             :enable-autocomplete="!isExternalEditing && !isLargeDocument"
                             :on-editor-drop="
-                              isExternalEditing || isInteractionLocked || isGuidedSampleSession
+                              isExternalEditing ||
+                              isInteractionLocked ||
+                              isGuidedSampleSession ||
+                              isNoteReadonly
                                 ? undefined
                                 : imageUpload.handleDrop
                             "
                             :on-editor-drag-over="
-                              isExternalEditing || isInteractionLocked || isGuidedSampleSession
+                              isExternalEditing ||
+                              isInteractionLocked ||
+                              isGuidedSampleSession ||
+                              isNoteReadonly
                                 ? undefined
                                 : imageUpload.handleDragOver
                             "
                             :on-editor-paste="
-                              isExternalEditing || isInteractionLocked || isGuidedSampleSession
+                              isExternalEditing ||
+                              isInteractionLocked ||
+                              isGuidedSampleSession ||
+                              isNoteReadonly
                                 ? undefined
                                 : imageUpload.handlePaste
                             "
@@ -405,7 +433,7 @@
                         :key="`live-${isScratchSession ? 'draft' : shellActivePath}`"
                         :model-value="displayContent"
                         :analysis="documentAnalysis"
-                        :read-only="isInteractionLocked"
+                        :read-only="isInteractionLocked || isNoteReadonly"
                         :placeholder="
                           isScratchSession ? t('notebook.status.scratchPlaceholder') : undefined
                         "
@@ -428,17 +456,26 @@
                         :predictor="completionPredictor"
                         :enable-autocomplete="!isExternalEditing && !isLargeDocument"
                         :on-editor-drop="
-                          isExternalEditing || isInteractionLocked || isGuidedSampleSession
+                          isExternalEditing ||
+                          isInteractionLocked ||
+                          isGuidedSampleSession ||
+                          isNoteReadonly
                             ? undefined
                             : imageUpload.handleDrop
                         "
                         :on-editor-drag-over="
-                          isExternalEditing || isInteractionLocked || isGuidedSampleSession
+                          isExternalEditing ||
+                          isInteractionLocked ||
+                          isGuidedSampleSession ||
+                          isNoteReadonly
                             ? undefined
                             : imageUpload.handleDragOver
                         "
                         :on-editor-paste="
-                          isExternalEditing || isInteractionLocked || isGuidedSampleSession
+                          isExternalEditing ||
+                          isInteractionLocked ||
+                          isGuidedSampleSession ||
+                          isNoteReadonly
                             ? undefined
                             : imageUpload.handlePaste
                         "
@@ -509,6 +546,7 @@
       @create-file="onShellCreateFile"
       @delete-file="requestShellDeleteFile"
       @rename-file="onShellRenameFile"
+      @open-readonly="onShellOpenReadonly"
       @open-notebook="requestOpenNotebook"
       @retry="onShellDrawerRetry"
     />
@@ -1235,6 +1273,13 @@ const externalOpenedFileMap = ref<Record<string, OpenedFilePayload>>({});
 const isExternalSession = computed(() => externalSessionMode.value !== 'none');
 const isExternalReadonly = computed(() => externalSessionMode.value === 'readonly');
 const isExternalEditing = computed(() => externalSessionMode.value === 'edit-shell');
+// 只读打开入口（E1-02）：右键菜单触发后置位，离开/切换笔记/退出只读时清空。
+// 仅当当前 active 笔记路径 == readonlyOpenPath 时才进入只读态；其他笔记不受影响。
+const readonlyOpenPath = ref<string | null>(null);
+const isNoteReadonly = computed(() => {
+  const readonlyPath = readonlyOpenPath.value;
+  return readonlyPath !== null && normalizePath(readonlyPath) === normalizePath(activePath.value);
+});
 const canSaveCurrentAsTemplate = computed(
   () =>
     Boolean(activeNotebookRoot.value) &&
@@ -1268,6 +1313,8 @@ if (e2eBridge) {
     isGuidedSampleSession: isGuidedSampleSession.value,
     isNotebookOpening: isNotebookOpening.value,
     isNoteSwitching: isNoteSwitching.value,
+    readonlyOpenPath: readonlyOpenPath.value,
+    isNoteReadonly: isNoteReadonly.value,
     saveIssueKind: saveIssue.value?.kind ?? null,
   });
   e2eBridge.listNotePaths = () =>
@@ -3006,7 +3053,10 @@ function syncCurrentContentFromEditor(): void {
   } else if (isScratchSession.value) {
     isDirty.value = content.trim().length > 0;
   } else if (activePath.value || isExternalEditing.value) {
-    isDirty.value = true;
+    // E1-02 只读笔记：在同步编辑器内部状态时也不置位 dirty，避免任何路径意外触发保存。
+    if (!isNoteReadonly.value) {
+      isDirty.value = true;
+    }
   }
 }
 
@@ -3953,7 +4003,28 @@ async function onShellSelectNote(path: string): Promise<void> {
     await onSelectExternalNote(path);
     return;
   }
+  // E1-02：常规点击走可编辑路径 → 清掉对其它笔记的 readonly 标记；
+  // 切回 readonlyOpenPath 同一笔记时保留只读态（用户重新聚焦仍为只读）。
+  const normalized = normalizePath(path);
+  if (readonlyOpenPath.value && normalizePath(readonlyOpenPath.value) !== normalized) {
+    readonlyOpenPath.value = null;
+  }
   await onSelectNote(path);
+}
+
+/**
+ * E1-02：右键菜单「以只读打开」入口。
+ * 切到目标笔记并标记 readonlyOpenPath，编辑器 readOnly 由此计算并下传。
+ * 复用 onSelectNote 打开流程，避免重复 selectNoteNow 逻辑。
+ */
+async function onShellOpenReadonly(path: string): Promise<void> {
+  const normalized = normalizePath(path);
+  readonlyOpenPath.value = normalized;
+  await onSelectNote(normalized);
+}
+
+function exitReadonlyMode(): void {
+  readonlyOpenPath.value = null;
 }
 
 async function onToggleLeftDrawer(): Promise<void> {
@@ -4390,6 +4461,17 @@ function onContentUpdate(content: string): void {
     return;
   }
   if (activePath.value) {
+    // E1-02 只读笔记：编辑路径在 CM6 readOnly facet 处已被阻断，这里再补一层
+    // 防御：拒绝把内容更新当作可保存 dirty，也拒绝排程自动保存定时器。
+    // （覆盖主题宿主 UI setContent 等可能绕过 EditorState.readOnly 的入口。）
+    if (isNoteReadonly.value) {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+      isDirty.value = false;
+      return;
+    }
     isDirty.value = true;
     clearTransientSaveIssueOnEdit();
     if (saveTimer) {
@@ -5867,6 +5949,34 @@ function onDismissVersion(version: string) {
   background: var(--paper-raised);
   color: var(--ink-secondary);
   font-size: var(--text-sm);
+}
+
+/* ===== E1-02 Read-only Note Banner ===== */
+.readonly-note-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--space-12);
+  border-bottom: var(--border-thin) solid var(--rule);
+  background: var(--accent-soft);
+  color: var(--ink-secondary);
+  font-size: var(--text-sm);
+}
+
+.readonly-note-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 2px var(--space-8);
+  border: var(--border-thin) solid var(--accent);
+  border-radius: var(--radius-full);
+  background: var(--paper-raised);
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
 }
 
 /* ===== External Reader Session ===== */

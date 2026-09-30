@@ -78,6 +78,8 @@ export interface JotLuckE2EBridge {
     isGuidedSampleSession?: boolean;
     isNotebookOpening: boolean;
     isNoteSwitching: boolean;
+    readonlyOpenPath: string | null;
+    isNoteReadonly: boolean;
     saveIssueKind: 'io' | 'conflict' | 'missing' | null;
   };
   listNotePaths?: () => string[];
@@ -88,6 +90,9 @@ export interface JotLuckE2EBridge {
   failNextSave?: (message?: string) => void;
   requestClose?: () => Promise<void>;
   emitFileChange?: (event: FileChangeEvent | FileChangeEvent[]) => void;
+  /** 打印准备可观测锚点（E4-03 自动验收）：printPreparedDocument 在
+   * print() 阻塞前置位写入；htmlLength 为整备后的完整可打印 HTML 长度。 */
+  printPrepared?: { time: number; htmlLength: number } | null;
 }
 
 export function isJotLuckE2EBridgeEnabled(): boolean {
