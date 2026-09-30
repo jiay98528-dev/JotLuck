@@ -28,3 +28,7 @@
 - 安装包 SHA：`e2e/test-results/installer-sha-0930.txt`
 - 冒烟证据：`e2e/test-results/installed-smoke-evidence-0930b.json` + `.webdriver.ndjson`
 - 冒烟日志：`e2e/test-results/installed-smoke-0930b.log`
+
+## 附记：版本号调整为 0.2.0（同日）
+
+按产品决定，安装版本号自 0.14.0 改为 **0.2.0**（对齐 V0.2 代际命名），四处落点同改（app package.json / tauri.conf.json / Cargo.toml / 根 package.json）。重建产物 `JotLuck_0.2.0_x64-setup.exe`（21.9 MB），SHA-256：`a65dd2cdb479d6a255f462b070ba3f68c8615e6dd08339e48e41dd12984bdbe7`。点验：静默安装注册表 DisplayVersion=0.2.0 ✅、启动 exe ProductVersion=0.2.0 ✅、静默卸载清理 ✅（同前述已知残留口径）。功能与上方验收的 0.14.0 构建同源同码，仅版本字段差异。
