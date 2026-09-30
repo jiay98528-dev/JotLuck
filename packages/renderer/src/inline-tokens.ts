@@ -98,6 +98,124 @@ export function findCodeSpans(src: string): CodeSpanRange[] {
   return spans;
 }
 
+// ─── 链接地址区间（[文本](地址) 的 address 段，含 <> 包裹与 "标题"） ────
+
+/**
+ * 手写扫描 markdown 链接的「地址」段区间（`[文本](地址)` 中 `(` 与 `)` 之间，
+ * 或 `<…>` 包裹的地址内部），供 tag 抑制使用。
+ *
+ * 旧正则 `/\[[^\][]*\]\(([^()\s]*)\)/g` 漏三种形态（R1-C8 修复）：
+ *   ① 嵌套方括号文本（如 `[a [b] c](笔记#锚点)`、徽章 `[![alt](img#f)](note#x)`）；
+ *   ② 尖括号含空格地址（`[t](<my note#sec>)`）；
+ *   ③ 带 title（`[t](url "标题")`）。
+ *
+ * 规则（与 CommonMark 同口径，含转义跳过）：
+ *   - 起点：未配对 `[` 位置；
+ *   - 文本结束：层数回到 0 的 `]`（允许内嵌 `[![]()` 一层 `[`/`]` 配对）；
+ *   - 紧跟 `(`，否则放弃；
+ *   - 地址段：若以 `<` 起头则找最近的 `>`（不计 `<>` 嵌套，仅跳过反斜杠转义），
+ *     否则按字符扫到匹配的 `)`（字符串字面量 `"…"`/`'…'` 跳过，平衡 `()` 计层）；
+ *     dest 区间为地址内容本体（去掉 `<>` 包裹后）。
+ */
+export function findLinkDestinations(src: string): Array<{ from: number; to: number }> {
+  const ranges: Array<{ from: number; to: number }> = [];
+  let i = 0;
+  while (i < src.length) {
+    const ch = src.charAt(i);
+    if (ch !== '[') {
+      i++;
+      continue;
+    }
+    // `\[` 是转义左方括号，CommonMark 视为字面 `[`，不开链接
+    if (isMarkdownEscaped(src, i)) {
+      i++;
+      continue;
+    }
+    // 配对 `]`（允许内嵌 `[]` 一层）
+    let j = i + 1;
+    let textDepth = 1;
+    while (j < src.length && textDepth > 0) {
+      const c = src.charAt(j);
+      if (c === '\\' && j + 1 < src.length) {
+        j += 2;
+        continue;
+      }
+      if (c === '[') textDepth++;
+      else if (c === ']') textDepth--;
+      if (textDepth > 0) j++;
+    }
+    if (textDepth !== 0) {
+      i++;
+      continue;
+    }
+    // src[j] === ']'
+    const afterText = j + 1;
+    if (src.charAt(afterText) !== '(') {
+      i = afterText;
+      continue;
+    }
+    const parenStart = afterText + 1;
+    if (parenStart >= src.length) break;
+    // 地址段：<…> 或普通
+    if (src.charAt(parenStart) === '<') {
+      let k = parenStart + 1;
+      while (k < src.length && src.charAt(k) !== '>') {
+        if (src.charAt(k) === '\\' && k + 1 < src.length) {
+          k += 2;
+          continue;
+        }
+        k++;
+      }
+      if (k >= src.length || src.charAt(k) !== '>') {
+        i = afterText + 1;
+        continue;
+      }
+      const destStart = parenStart + 1;
+      const destEnd = k;
+      if (src.charAt(k + 1) !== ')') {
+        i = afterText + 1;
+        continue;
+      }
+      ranges.push({ from: destStart, to: destEnd });
+      i = k + 2;
+      continue;
+    }
+    // 普通形：扫到匹配的 `)`（跳过 "..." / '...' / 平衡 (...)）
+    let k = parenStart;
+    let parenDepth = 0;
+    let matched = false;
+    while (k < src.length) {
+      const c = src.charAt(k);
+      if (c === '\\' && k + 1 < src.length) {
+        k += 2;
+        continue;
+      }
+      if (c === '"' || c === "'") {
+        const quote = c;
+        k++;
+        while (k < src.length && src.charAt(k) !== quote) {
+          if (src.charAt(k) === '\\' && k + 1 < src.length) k++;
+          k++;
+        }
+        if (k < src.length) k++;
+        continue;
+      }
+      if (c === '(') parenDepth++;
+      else if (c === ')') {
+        if (parenDepth === 0) {
+          ranges.push({ from: parenStart, to: k });
+          matched = true;
+          break;
+        }
+        parenDepth--;
+      }
+      k++;
+    }
+    i = matched ? k + 1 : afterText + 1;
+  }
+  return ranges;
+}
+
 // ─── 占位符回切 ───────────────────────────────────────────────────
 
 // 纯 ASCII 字母数字占位符：marked 视作普通单词字符，不会吞并/转义，也不影响
@@ -208,11 +326,8 @@ export function lexInlineTokens(slice: string): InlineToken[] {
   // markdown 链接目的地（`[文本](地址)` 的地址段）中的 `#fragment` 不是标签：
   // DOCX 路径 convertWikiLinks 产物 `[别名](目标#章节)` 与真实 md 链接 `(#锚点)`
   // 都会撞 TAG_GLOBAL_RE（JS `\w` 不含中文，词边界挡不住中文地址里的 #）。
-  const linkDestRanges = Array.from(slice.matchAll(/\[[^\][]*\]\(([^()\s]*)\)/g), (m) => {
-    const dest = m[1] ?? '';
-    const destStart = m.index! + m[0].lastIndexOf('(' + dest) + 1;
-    return { from: destStart, to: destStart + dest.length };
-  });
+  // 手写扫描：覆盖嵌套文本 / `<地址>` / 带 title 三种形态（findLinkDestinations 同文件）。
+  const linkDestRanges = findLinkDestinations(slice);
   const tagMatches = Array.from(slice.matchAll(TAG_GLOBAL_RE)).filter((m) => {
     const from = m.index;
     const to = from + m[0].length;

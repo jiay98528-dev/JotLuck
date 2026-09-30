@@ -42,6 +42,11 @@ describe('source-positioned continuation hints', () => {
     ['2. [x] 内容', '3. [ ] '],
     ['> 2. [x] 内容', '3. [ ] '],
     ['> ＞ －　内容', '- '],
+    // R1-C7 有序任务（GFM `1. [x] foo`）补：起手 1 也算有序任务
+    ['1. [x] 甲', '2. [ ] '],
+    ['1. [ ] 甲', '2. [ ] '],
+    ['> 1. [x] 甲', '2. [ ] '],
+    ['9) [x] 甲', '10) [ ] '],
   ])('%s produces %s', (source, next) => {
     if (source === '１）内容') expect(hint(source!)).toBeUndefined();
     else expect(hint(source!)?.nextMarker).toBe(next);

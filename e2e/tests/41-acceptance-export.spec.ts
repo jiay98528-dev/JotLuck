@@ -36,6 +36,7 @@ import {
 // ============================================================
 // 材料 S：doc/editor-increment-acceptance.md 第 31-67 行原文
 // （中文与管道等元字符逐字保留；本文件复制自验收手册，未做改写）
+// 2026-09-28 扩展：增引用内表格/围栏与有序任务条目（缺陷 1/2a/2b 验收补）
 // ============================================================
 const FIXTURE_MD = `# 第一章
 
@@ -45,10 +46,23 @@ const FIXTURE_MD = `# 第一章
 - [x] 已完成
 
 1. 第一项
+1. [x] 有序任务
 
 > 引用
 >
 > - 引用里的项目
+>
+> | 引用表头 | 数量 |
+> | -------: | ---: |
+> | 甲 |    2 |
+> | 乙 |    3 |
+>
+> 引用里的话：
+>
+> \`\`\`text
+> 引用内代码
+> 再一行
+> \`\`\`
 
 | 名称   | 数量 |
 | ------ | ---: |
@@ -339,12 +353,14 @@ test.describe('41 统一验收 导出产物核对', () => {
     expect(txt).toContain('链接');
     // 注意：stripToPlainText（inline.ts:147）会把 `[t](u)` 整段剥成 `t`，
     // URL 不进入 TXT 产物（与等价基线 Exporter.equivalence.test.ts 行 868 一致）。
-    // 任务项：Exporter.ts:944 任务复选标记清涂（[x] 整段被剥），仅剩正文
+    // 任务项：Exporter.ts 顶层任务项保留方括号勾选状态（R1-C9 修复，推翻变化⑥）
     expect(txt).toContain('已完成');
-    expect(txt).not.toContain('[x] 已完成');
-    // 普通项 / 有序项：顶层级 marker 剥除（Exporter.ts:941）
+    expect(txt).toContain('[x] 已完成');
+    // R1-C7 有序任务（GFM `1. [x] foo`）→ TXT 保留 `[x]` 前缀
+    expect(txt).toContain('[x] 有序任务');
+    // 普通项 / 有序项：顶层级 marker 剥除（Exporter.ts:941）/ 有序项保留 `1. ` 编号
     expect(txt).toContain('普通项');
-    expect(txt).toContain('第一项');
+    expect(txt).toContain('1. 第一项');
     // 引用块：行间用 '\n' 连接
     expect(txt).toContain('引用');
     expect(txt).toContain('引用里的项目');
@@ -467,9 +483,26 @@ test.describe('41 统一验收 导出产物核对', () => {
     // 普通项 / 第一项（顶级有序项保留 `1. ` 前缀）
     expect(allText).toContain('普通项');
     expect(allText).toContain('1. 第一项');
+    // R1-C7 有序任务：1. [x] 有序任务 → kind=task + checked=true → ☑ 前缀 + 正文
+    expect(allText).toContain('☑ 有序任务');
     // ── 引用块（验收 D-01 无漏文：2026-09-28 修复后引用文字必须落 DOCX）──
     expect(allText).toContain('引用');
     expect(allText).toContain('引用里的项目');
+    expect(allText).toContain('引用里的话');
+    // ── 引用内表格（R1-C6 修复：行被识为表格子块，落 <w:tbl>）──
+    const blockquoteTables = tables.filter((rows) => rows[0]?.[0] === '引用表头');
+    expect(blockquoteTables.length).toBeGreaterThan(0);
+    expect(blockquoteTables[0]).toEqual([
+      ['引用表头', '数量'],
+      ['甲', '2'],
+      ['乙', '3'],
+    ]);
+    // ── 引用内代码段（Consolas + 底纹，与 codeFence case 一致）──
+    expect(allText).toContain('引用内代码');
+    expect(allText).toContain('再一行');
+    expect(documentXml).toMatch(
+      /<w:t[^>]*>[^<]*引用内代码[^<]*<\/w:t>[\s\S]*?<w:rFonts[^>]*w:ascii="Consolas"/,
+    );
     // 但围栏代码不受此影响（不走 buildTextRuns，直接 slice + 单 TextRun）
     // 围栏代码：Exporter.ts:531-553 按行拆为独立 paragraph，每行一个 TextRun，
     // 文字走 `lines[li]` 原始切片，无 lexInlineTokens 调用 → 保留 [[目标]] 字面
@@ -490,13 +523,14 @@ test.describe('41 统一验收 导出产物核对', () => {
 
     // ── 表格契约（Exporter.ts:610-660 + Exporter.equivalence.test.ts:308）──
     // DOCX 表格内 \| 被 lexInlineTokens 解析为 escape token → 单元文本为单 `|`（与 CSV/XLSX 不同）
-    expect(tables.length).toBeGreaterThan(0);
-    const tableRows = tables[0]!;
+    // 2026-09-28 增引用内表格后 `tables[0]` 不再定是顶层表；按表头定位
+    expect(tables.length).toBeGreaterThan(1);
+    const topTable = tables.find((rows) => rows[0]?.[0] === '名称')!;
     // 表头
-    expect(tableRows[0]).toEqual(['名称', '数量']);
+    expect(topTable[0]).toEqual(['名称', '数量']);
     // 数据行：甲|乙（单管道，转义已解）/ 2 / 丙 / 3
-    expect(tableRows[1]).toEqual(['甲|乙', '2']);
-    expect(tableRows[2]).toEqual(['丙', '3']);
+    expect(topTable[1]).toEqual(['甲|乙', '2']);
+    expect(topTable[2]).toEqual(['丙', '3']);
     // 整篇段落流不重复出现被表格隔离的内容（仅在 table 内出现甲|乙）
     const outsideTableText = documentXml
       .replace(/<w:tbl\b[^>]*>[\s\S]*?<\/w:tbl>/g, '')

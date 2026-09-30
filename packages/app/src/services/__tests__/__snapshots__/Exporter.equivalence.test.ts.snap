@@ -153,7 +153,7 @@ exports[`exporter characterization baseline (slice D) > docx: buildDocxChildren 
       },
     ],
     "indent": {
-      "w:left": 480,
+      "w:left": 720,
     },
     "kind": "paragraph",
     "runs": [
@@ -175,7 +175,7 @@ exports[`exporter characterization baseline (slice D) > docx: buildDocxChildren 
       },
     ],
     "indent": {
-      "w:left": 480,
+      "w:left": 720,
     },
     "kind": "paragraph",
     "runs": [
@@ -939,11 +939,11 @@ Setext 二级标题
   - 二级无序
 另一个一级
 
-有序第一项
-有序第二项
+1. 有序第一项
+2. 有序第二项
 
-已完成任务
-未完成任务
+[x] 已完成任务
+[ ] 未完成任务
 
 \`ts
 const a = 1;
@@ -981,11 +981,11 @@ Setext 二级标题
   - 二级无序
 另一个一级
 
-有序第一项
-有序第二项
+1. 有序第一项
+2. 有序第二项
 
-已完成任务
-未完成任务
+[x] 已完成任务
+[ ] 未完成任务
 
 \`ts
 const a = 1;

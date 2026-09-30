@@ -5,7 +5,7 @@
  * 行内代码优先、wiki 锚点单列、混合嵌套位置。
  */
 import { describe, expect, it } from 'vitest';
-import { lexInlineTokens } from '../inline-tokens';
+import { findLinkDestinations, lexInlineTokens } from '../inline-tokens';
 import type { InlineToken } from '../inline-tokens';
 
 describe('lexInlineTokens：marked 段（无 wiki/tag）', () => {
@@ -161,5 +161,80 @@ describe('lexInlineTokens：token 形状', () => {
       'text',
       'codespan',
     ]);
+  });
+});
+
+describe('lexInlineTokens：链接地址保护三种新形态（R1-C8 修复）', () => {
+  // ① 嵌套方括号文本：`[a [b] c](笔记#锚点)` 内的 `#锚点` 不应被识别为标签
+  it('suppresses #fragment in link destination when text contains nested brackets', () => {
+    const tokens = lexInlineTokens('前缀 [a [b] c](笔记#锚点) 后续');
+    expect(tokens.map((t) => t.type)).toEqual(['text', 'link', 'text']);
+    const link = tokens[1] as Extract<InlineToken, { type: 'link' }>;
+    expect(link.href).toBe('笔记#锚点');
+    expect(tokens.every((t) => t.type !== 'tag')).toBe(true);
+  });
+
+  // ① 徽章图：`[![alt](img#f)](note#x)` 外层链接 dest 是 `note#x`，`#x` 不应是 tag
+  it('suppresses #fragment for badge image link (nested brackets with image text)', () => {
+    const tokens = lexInlineTokens('[![alt](img)](note#x)');
+    expect(tokens.map((t) => t.type)).toEqual(['link']);
+    const link = tokens[0] as Extract<InlineToken, { type: 'link' }>;
+    expect(link.href).toBe('note#x');
+  });
+
+  // ② 尖括号含空格地址：`[t](<my note#sec>)` 的 `#sec` 不是 tag
+  it('suppresses #fragment in angle-bracket destination with spaces', () => {
+    const tokens = lexInlineTokens('前缀 [标题](<my note#sec>) 后续');
+    expect(tokens.map((t) => t.type)).toEqual(['text', 'link', 'text']);
+    const link = tokens[1] as Extract<InlineToken, { type: 'link' }>;
+    expect(link.href).toBe('my note#sec');
+    expect(tokens.every((t) => t.type !== 'tag')).toBe(true);
+  });
+
+  // ③ 带 title：`[t](url "标题")` 的 `#章节`（若在 url 内）不是 tag
+  it('suppresses #fragment when link carries a quoted title', () => {
+    const tokens = lexInlineTokens('前缀 [标题](url#章节 "悬停文本") 后续');
+    expect(tokens.map((t) => t.type)).toEqual(['text', 'link', 'text']);
+    const link = tokens[1] as Extract<InlineToken, { type: 'link' }>;
+    expect(link.href).toBe('url#章节');
+    expect(tokens.every((t) => t.type !== 'tag')).toBe(true);
+  });
+});
+
+describe('findLinkDestinations（手写扫描）', () => {
+  it('普通链接', () => {
+    const ranges = findLinkDestinations('[t](https://u)');
+    expect(ranges).toEqual([{ from: 4, to: 13 }]);
+  });
+
+  it('嵌套方括号文本', () => {
+    const ranges = findLinkDestinations('[a [b] c](笔记#锚点)');
+    expect(ranges).toEqual([{ from: 10, to: 15 }]);
+  });
+
+  it('尖括号地址', () => {
+    const ranges = findLinkDestinations('[t](<my note#sec>)');
+    expect(ranges).toEqual([{ from: 5, to: 16 }]);
+  });
+
+  it('带 title 的链接', () => {
+    // dest 范围 = `url ` 含尾随空格（与抑制目的无关——只要覆盖 URL 内 # 即可）
+    const ranges = findLinkDestinations('[t](url "标题")');
+    expect(ranges).toEqual([{ from: 4, to: 12 }]);
+  });
+
+  it('无链接场景返回空', () => {
+    expect(findLinkDestinations('普通文本 #标签')).toEqual([]);
+  });
+
+  it('徽章图 + 嵌套文本', () => {
+    const ranges = findLinkDestinations('[![alt](img)](note#x)');
+    expect(ranges).toEqual([{ from: 14, to: 20 }]);
+  });
+
+  it('转义左方括号不开链接（`\\[text](url#x)` 不是链接）', () => {
+    // 转义后 `[text](url#x)` 视为字面文本，#x 不应在抑制区
+    const ranges = findLinkDestinations('\\[text](url#x)');
+    expect(ranges).toEqual([]);
   });
 });

@@ -20,6 +20,8 @@ import {
   parseDocument,
   lexInlineTokens,
   parseWikiLinkTarget,
+  splitTableCells,
+  isTableSeparatorLine,
   stripToPlainText,
   WIKI_LINK_GLOBAL_RE,
 } from '@jotluck/renderer';
@@ -38,6 +40,7 @@ import {
 } from 'docx';
 import writeXlsxFile, { type Sheet, type SheetData } from 'write-excel-file/browser';
 import { getCurrentLocale, getLocaleDocumentFont, getLocaleFontStack, translate } from '@/i18n';
+import { peekJotLuckE2EBridge } from '@/utils/e2e-bridge';
 import { buildExportModel } from './export-model';
 import type { ExportModel } from './export-model';
 
@@ -314,6 +317,12 @@ function printPreparedDocument(
       }
 
       try {
+        // e2e 可观测锚点（E4-03 自动验收）：打印准备完成——print() 阻塞
+        // 期间不可写，故在调用前置位；htmlLength 证明全文（含未挂载片段）已整备。
+        const e2eBridge = peekJotLuckE2EBridge();
+        if (e2eBridge) {
+          e2eBridge.printPrepared = { time: Date.now(), htmlLength: printableHtml.length };
+        }
         // print() blocks while the native dialog is open. Guard preparation,
         // not the time the user spends interacting with that dialog.
         printWindow.print();
@@ -557,32 +566,194 @@ export function buildDocxChildren(
       case 'blockquote': {
         // 引用文本必须落 DOCX（验收 D-01 无漏文）：每行内容经行内词法成
         // runs，连续同 depth 行合并为一个带左边框段落（软换行分隔）。
+        // 同一 depth 组内若出现 `| … |` 表格行或 ` ``` ` 围栏行，按行识别为子块：
+        //   - 表格子块走既有 table case（TableRow/TableCell），整体置于同段后；
+        //   - 围栏子块内容行走既有 codeFence case（Consolas + 底纹），与普通引用段交错。
+        // 行内容已剥 `>` 前缀（见 ast.ts blockquote 解析），故直接用 contentRange 切片判定。
         const border = {
           left: { style: BorderStyle.SINGLE, size: 6, color: '999999' },
         };
-        let groupStart = 0;
-        const flushGroup = (end: number): void => {
+
+        // 行内容切片（剥 > 前缀）
+        const lineContent = (li: number): string =>
+          source.slice(block.lines[li]!.contentRange.from, block.lines[li]!.contentRange.to);
+
+        // 围栏开放判定：行首三连反引号或波浪号（含全角等价），与 ast.ts FENCE_OPEN_RE 一致
+        const fenceOpenMatch = (text: string): { char: string; length: number } | null => {
+          const m = /^(\s{0,3})([`~｀～]{3,})(.*)$/.exec(text);
+          if (!m) return null;
+          const marks = m[2]!.normalize('NFKC');
+          if (!/^(`+|~+)$/.test(marks) || marks.length < 3) return null;
+          // 复用 ast.ts 同款排除：开反引号围栏若 info string 内含反引号则不视为围栏
+          if (marks[0] === '`' && /[`｀]/.test(m[3]!)) return null;
+          return { char: marks[0]!, length: marks.length };
+        };
+
+        const fenceCloseMatch = (text: string, openChar: string, minLength: number): boolean => {
+          const m = /^(\s{0,3})([`~｀～]{3,})\s*$/.exec(text);
+          if (!m) return false;
+          const marks = m[2]!.normalize('NFKC');
+          return marks.charAt(0) === openChar && marks.length >= minLength;
+        };
+
+        // 表格候选行判定（与 syntax.ts isTableRowCandidate 一致）
+        const isTableCandidate = (text: string): boolean =>
+          text.trim() !== '' && text.includes('|');
+
+        // 推送普通行段（同 depth 连续非表格/非围栏行 → 单段多行）
+        const pushNormalGroup = (start: number, end: number, depth: number): void => {
           const runs: TextRun[] = [];
-          for (let li = groupStart; li < end; li++) {
-            if (li > groupStart) runs.push(new TextRun({ break: 1 }));
+          for (let li = start; li < end; li++) {
+            if (li > start) runs.push(new TextRun({ break: 1 }));
             runs.push(...buildSliceRuns(slice(block.lines[li]!.contentRange)));
           }
           children.push(
             new Paragraph({
               spacing: { after: 120 },
-              indent: { left: 480 },
+              indent: { left: 480 + depth * 240 },
               border,
               children: runs.length > 0 ? runs : [new TextRun({ text: '' })],
             }),
           );
         };
+
+        // 推送围栏子块：行内容按 Consolas + 底纹逐行输出，行间不并段
+        const pushFenceGroup = (openLi: number, closeLi: number, depth: number): void => {
+          for (let li = openLi + 1; li < closeLi; li++) {
+            const lineText = lineContent(li);
+            children.push(
+              new Paragraph({
+                spacing: { before: 0, after: 0 },
+                indent: { left: 480 + depth * 240 + 240 },
+                shading: {
+                  type: ShadingType.SOLID,
+                  color: 'F0F0F0',
+                  fill: 'F0F0F0',
+                },
+                children: [
+                  new TextRun({
+                    text: lineText,
+                    font: 'Consolas',
+                    size: 20,
+                  }),
+                ],
+              }),
+            );
+          }
+        };
+
+        // 推送表格子块：与既有 table case 同一构造
+        const pushTableGroup = (headerLi: number, endLi: number, depth: number): void => {
+          const headerCells = splitTableCells(lineContent(headerLi));
+          const columnCount = headerCells.length;
+          const padRow = (cells: string[]): string[] => {
+            const out = cells.slice(0, columnCount);
+            while (out.length < columnCount) out.push('');
+            return out;
+          };
+          const rows: TableRow[] = [];
+          rows.push(
+            new TableRow({
+              children: headerCells.map(
+                (h) =>
+                  new TableCell({
+                    shading: {
+                      type: ShadingType.SOLID,
+                      color: DOCX_COLORS.TABLE_HEADER_BG,
+                      fill: DOCX_COLORS.TABLE_HEADER_BG,
+                    },
+                    children: [new Paragraph({ children: buildSliceRuns(h) })],
+                  }),
+              ),
+            }),
+          );
+          for (let li = headerLi + 2; li < endLi; li++) {
+            const rowCells = padRow(splitTableCells(lineContent(li)));
+            rows.push(
+              new TableRow({
+                children: rowCells.map(
+                  (c) =>
+                    new TableCell({
+                      children: [new Paragraph({ children: buildSliceRuns(c) })],
+                    }),
+                ),
+              }),
+            );
+          }
+          children.push(
+            new Table({
+              rows,
+              indent: { size: 480 + depth * 240, type: 'dxa' as const },
+              width: { size: 100, type: 'pct' as const },
+            }),
+          );
+          // 表格后留白（同既有 table case）
+          children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+        };
+
+        // 顶层循环：先按 depth 切组，每组内部细分 normal / fence / table
+        let depthGroupStart = 0;
         for (let li = 1; li <= block.lines.length; li++) {
           if (
             li === block.lines.length ||
-            block.lines[li]!.depth !== block.lines[groupStart]!.depth
+            block.lines[li]!.depth !== block.lines[depthGroupStart]!.depth
           ) {
-            flushGroup(li);
-            groupStart = li;
+            const depth = block.lines[depthGroupStart]!.depth;
+            const groupEnd = li;
+            // 组内细分
+            let innerStart = depthGroupStart;
+            while (innerStart < groupEnd) {
+              const text = lineContent(innerStart);
+              // 围栏子块
+              const fence = fenceOpenMatch(text);
+              if (fence) {
+                let closeLi = groupEnd;
+                for (let j = innerStart + 1; j < groupEnd; j++) {
+                  if (fenceCloseMatch(lineContent(j), fence.char, fence.length)) {
+                    closeLi = j;
+                    break;
+                  }
+                }
+                pushFenceGroup(innerStart, closeLi, depth);
+                innerStart = closeLi + 1;
+                continue;
+              }
+              // 表格子块（首行 + 次行分隔行 = header+separator）
+              if (
+                isTableCandidate(text) &&
+                innerStart + 1 < groupEnd &&
+                isTableSeparatorLine(lineContent(innerStart + 1))
+              ) {
+                // 收集 header + separator + 连续数据行（到非候选行止）
+                let tableEnd = innerStart + 2;
+                while (
+                  tableEnd < groupEnd &&
+                  isTableCandidate(lineContent(tableEnd)) &&
+                  !isTableSeparatorLine(lineContent(tableEnd))
+                ) {
+                  tableEnd++;
+                }
+                pushTableGroup(innerStart, tableEnd, depth);
+                innerStart = tableEnd;
+                continue;
+              }
+              // 普通行：找连续非子块边界
+              let normalEnd = innerStart + 1;
+              while (normalEnd < groupEnd) {
+                const t = lineContent(normalEnd);
+                if (fenceOpenMatch(t)) break;
+                if (
+                  isTableCandidate(t) &&
+                  normalEnd + 1 < groupEnd &&
+                  isTableSeparatorLine(lineContent(normalEnd + 1))
+                )
+                  break;
+                normalEnd++;
+              }
+              pushNormalGroup(innerStart, normalEnd, depth);
+              innerStart = normalEnd;
+            }
+            depthGroupStart = li;
           }
         }
         break;
@@ -949,9 +1120,14 @@ export function markdownToTxt(md: string, options?: MarkdownToTxtOptions): strin
         if (block.indent > 0) {
           // 嵌套项：旧链行首正则表示够不到缩进行，标记与缩进原样保留
           lineText = `${' '.repeat(block.indent)}${slice(block.markerRange)} ${text}`;
+        } else if (block.kind === 'task') {
+          // 顶层任务项：保留方括号勾选状态（明示变化⑥ 被推翻，新口径与源码近）
+          lineText = `${block.checked ? '[x] ' : '[ ] '}${text}`;
+        } else if (block.kind === 'ordered') {
+          // 顶层有序项：保留有序编号（明示变化⑥ 同步修订）
+          lineText = `${block.itemIndex}. ${text}`;
         } else {
-          // 顶层项：bullet / 有序编号剥除；任务复选标记一并清涂（明示变化⑥，
-          // 旧链残留 [x] 为正则事故产物，Leader 裁决为改进型漂移）
+          // 顶层 bullet 项：剥除前缀
           lineText = text;
         }
         if (block.groupId === lastListGroup && segments.length > 0) {

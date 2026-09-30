@@ -19,6 +19,7 @@ describe('E7 combined and text-format continuation', () => {
     ['> 2. 内容', '> 3. '],
     ['> - [x] 内容', '> - [ ] '],
     ['2. [x] 内容', '3. [ ] '],
+    ['> 2. [x] 内容', '> 3. [ ] '],
     ['> > 一、内容', '> > 二、'],
     ['（００９）内容', '（０１０）'],
     ['⑲内容', '⑳'],
@@ -27,6 +28,10 @@ describe('E7 combined and text-format continuation', () => {
     ['- 父项\n  - 子项', '  - '],
     ['> - 父项\n>   - 子项', '>   - '],
     ['•  内容', '•  '],
+    // R1-C7 有序任务（GFM `1. [x] foo`）补：起手 1 也算有序任务，续编号+1
+    ['1. [x] 甲', '2. [ ] '],
+    ['1. [ ] 甲', '2. [ ] '],
+    ['> 1. [x] 甲', '> 2. [ ] '],
   ])('continues %s with one-step undo', (source, prefix) => {
     const view = mountSmartEditor(source!);
     expect(smartContinueOnEnter(view)).toBe(true);
@@ -201,6 +206,22 @@ describe('detectContinuationContext', () => {
       isEmptyBlock: true,
       markerTo: 6,
     });
+    // R1-C7 有序任务：GFM `1. [x] foo` Enter → `2. [ ] `，起点 1 也算；
+    // markerTo 与无序任务同约定（contentStart，含 `]` 后一个空格）
+    const orderedDone = mountSmartEditor('1. [x] 有序任务');
+    expect(detectContinuationContext(orderedDone.state)).toMatchObject({
+      kind: 'taskListItem',
+      nextMarker: '2. [ ] ',
+      markerFrom: 0,
+      markerTo: 7,
+      isEmptyBlock: false,
+    });
+    const orderedEmpty = mountSmartEditor('1. [ ] ');
+    expect(detectContinuationContext(orderedEmpty.state)).toMatchObject({
+      kind: 'taskListItem',
+      nextMarker: '2. [ ] ',
+      markerTo: 7,
+    });
   });
 
   it('detects blockquotes at any depth', () => {
@@ -368,6 +389,14 @@ describe('smartContinueOnEnter', () => {
     expect(smartContinueOnEnter(view)).toBe(true);
     expect(view.state.doc.toString()).toBe('- [x] done\n- [ ] ');
     expect(view.state.selection.main.head).toBe(17);
+  });
+
+  it('continues an ordered task as unchecked with the next number (R1-C7)', () => {
+    const view = mountSmartEditor('1. [x] 甲');
+    expect(smartContinueOnEnter(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe('1. [x] 甲\n2. [ ] ');
+    expect(undo(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe('1. [x] 甲');
   });
 
   it('continues blockquotes at the same depth', () => {

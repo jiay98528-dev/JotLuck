@@ -26,6 +26,33 @@ export function readMarkdownListMarker(line: string): MarkdownListMarker | null 
       contentStart: task[0].length,
     };
   }
+  // GFM 有序任务（`1. [x] foo`）：必须在普通 ordered 之前识别，避免被吞为有序项
+  // （R1-C7 修复：旧路径在 ContinuationScanner 内 post-hoc 补 `[x]` 检测，但 AST 与
+  // Exporter 拿不到 task kind，DOCX 输出 `1. [x] foo` 字面；TXT 残留事故同理）。
+  const orderedTask = /^([ \t\u3000]*)(\d+)([.)])([ \t\u3000]+)\[([ xX])\][ \t\u3000]?/.exec(line);
+  if (orderedTask) {
+    const marker = orderedTask[2]!;
+    const delimiter = orderedTask[3]!;
+    // markerEnd 不计末尾可选空白，与有序项同口径（`markerRange` 含 `[x]` 不含尾空）
+    const markerEnd =
+      orderedTask[0].length -
+      (orderedTask[0].endsWith(' ') ||
+      orderedTask[0].endsWith('\t') ||
+      orderedTask[0].endsWith('\u3000')
+        ? 1
+        : 0);
+    return {
+      kind: 'task',
+      family: 'ordered',
+      indent: orderedTask[1]!,
+      marker,
+      delimiter,
+      number: Number.parseInt(marker, 10),
+      checked: /x/i.test(orderedTask[5]!),
+      markerEnd,
+      contentStart: orderedTask[0].length,
+    };
+  }
   const ordered = /^([ \t\u3000]*)(\d+)([.)])([ \t\u3000]+)/.exec(line);
   if (ordered)
     return {
@@ -289,10 +316,29 @@ export class ContinuationScanner {
     const parentIndent = this.lists[this.lists.length - 1]?.content ?? 0;
     if (width >= parentIndent + 4) return; // Indented code, including code inside a list/quote.
     const markdown = readMarkdownListMarker(body);
+    // 有序项后跟 `[x]` 已被 readMarkdownListMarker 直接识别为 task；
+    // 此处仅对「普通有序项（非 task）」保留 post-hoc 探测以维持非空哨兵（保持行为兼容）。
     const task =
       markdown?.kind === 'ordered'
         ? /^\[[ xX]\][ \t\u3000]?/.exec(body.slice(markdown.contentStart))
         : null;
+    // 有序任务的 contentStart 含 `[x] `，而围栏锚点与列表栈沿用「标记后内容列」
+    // （旧有序路径语义）——否则围栏 dedent 退出与嵌套缩进判断会漂移
+    // （回归：`2. [x] ``` ` 的围栏锚点从列 3 变 7，缩进行误判为离开围栏）。
+    const markerContentCol =
+      markdown?.kind === 'task' && markdown.family === 'ordered'
+        ? columns(
+            body.slice(
+              0,
+              markdown.indent.length +
+                markdown.marker.length +
+                (markdown.delimiter ?? '.').length +
+                1,
+            ),
+          )
+        : undefined;
+    const markerCol =
+      markerContentCol ?? (markdown ? columns(body.slice(0, markdown.contentStart)) : 0);
     const fenceBody = markdown
       ? body.slice(markdown.contentStart + (task?.[0].length ?? 0))
       : content;
@@ -304,18 +350,27 @@ export class ContinuationScanner {
           char: marks[0]!,
           length: marks.length,
           depth,
-          indent: markdown ? columns(body.slice(0, markdown.contentStart)) : parentIndent,
+          indent: markdown ? markerCol : parentIndent,
         };
         return;
       }
     }
     if (markdown) {
       const contentStart = markdown.contentStart + (task?.[0].length ?? 0);
-      const next =
-        markdown.kind === 'ordered'
-          ? `${BigInt(markdown.marker) + 1n}${markdown.delimiter} ` + (task ? '[ ] ' : '')
-          : `${markdown.marker} ` + (markdown.kind === 'task' ? '[ ] ' : '');
-      this.lists.push({ indent: width, content: columns(body.slice(0, markdown.contentStart)) });
+      // 有序任务（readMarkdownListMarker 已吞 `[x]`）续行 = number+1 + `[ ] `；
+      // 普通有序项（无 `[x]`）续行 = number+1；有序项 post-hoc 命中 `[x]` = number+1 + `[ ] `；
+      // 无序任务续行 = bullet + `[ ] `；普通无序续行 = bullet。
+      let next: string;
+      if (markdown.kind === 'task' && markdown.number !== undefined) {
+        next = `${BigInt(markdown.marker) + 1n}${markdown.delimiter} [ ] `;
+      } else if (markdown.kind === 'ordered') {
+        next = `${BigInt(markdown.marker) + 1n}${markdown.delimiter} ` + (task ? '[ ] ' : '');
+      } else if (markdown.kind === 'task') {
+        next = `${markdown.marker} [ ] `;
+      } else {
+        next = `${markdown.marker} `;
+      }
+      this.lists.push({ indent: width, content: markerCol });
       return {
         kind:
           markdown.kind === 'task' || task

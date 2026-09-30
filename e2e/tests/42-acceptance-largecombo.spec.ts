@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
   getEditorContentFromBridge,
+  openExportDialog,
   waitForAppReady,
   waitForMockFileContent,
 } from '../helpers/test-utils';
@@ -391,4 +392,53 @@ test('E4-06 图片与布局稳定：图片加载、视口切换、主题切换�
   await expect(themedPreview).toContainText('长正文');
 
   expect(errors).toEqual([]);
+});
+
+// ---------------------------------------------------------------
+// E4-03p 打印准备完成可观测（大文档全文整备 → print() 前置钩子）
+// 分页观感仍留实机；本用例验证「全文准备完成」这一可自动部分。
+// ---------------------------------------------------------------
+
+test('E4-03p 大文档导出 PDF 的全文打印准备完成（printPrepared 钩子）', async ({ page }) => {
+  test.setTimeout(120_000);
+  test.skip(test.info().project.name !== 'chromium', '沿用 36/38/39 的 Chromium 限定');
+
+  const unit = '这是打印准备验收的连续正文，用于确认全文整备。'.repeat(2);
+  let book = '# 打印准备';
+  let chapter = 0;
+  while (book.length < 1_000_000) {
+    book += `\n\n## 章 ${chapter}\n\n${unit}\n\n`;
+    chapter += 1;
+  }
+  book += '\n\nPRINT-END';
+
+  await page.addInitScript((content) => {
+    window.__jotluck_e2e = {
+      mockNotebook: { persist: false, initialFiles: { '/print-book.md': content } },
+    };
+    localStorage.setItem('jotluck:welcome:completed', '1');
+    localStorage.setItem('jotluck:autocomplete:settings', JSON.stringify({ enabled: false }));
+  }, book);
+  await waitForAppReady(page);
+  await openNote(page, 'print-book.md');
+  await expect(page.locator('.cm-content')).toContainText('打印准备');
+
+  // 导出 PDF：对话框 → PDF 卡（默认选中）→ 导出
+  await openExportDialog(page);
+  await expect(page.locator('.format-card.selected')).toContainText('PDF');
+  await page.locator('.modal-footer button', { hasText: '导出' }).click();
+
+  // printPrepared 钩子在 print() 前置位写入；htmlLength 证明全文（含
+  // 未挂载片段）已整备——大文档经 prepareDocumentHtml 等待分析完成。
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            (window as unknown as { __jotluck_e2e?: { printPrepared?: { htmlLength: number } } })
+              .__jotluck_e2e?.printPrepared?.htmlLength ?? 0,
+        ),
+      { timeout: 60_000 },
+    )
+    .toBeGreaterThan(900_000);
 });
