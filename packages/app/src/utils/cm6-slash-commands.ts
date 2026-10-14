@@ -357,9 +357,12 @@ class SlashMenuPlugin implements PluginValue {
       filtered: [],
       composing: false,
     };
-    view.dom.appendChild(this.root);
+    // 关闭态不预挂根节点（「菜单关闭 = 元素不存在」合同，openOrUpdateMenu
+    // 打开时负责挂回）；v0.2 起构造期预挂 + 滚动/resize 经 positionEditorOverlay
+    // 置 visible，会让从未打开过的空壳容器显示成聚焦行上方的空药丸条
     this.overlay = observeEditorViewport(() => {
-      if (this.root.isConnected) positionMenu(this.root, this.view, this.state.slashPos);
+      if (this.state.open && this.root.isConnected)
+        positionMenu(this.root, this.view, this.state.slashPos);
     });
     this.detachFns.push(
       this.overlay.destroy,

@@ -525,3 +525,31 @@ describe('undo restores pre-trigger text in one step', () => {
     expect(view.state.doc.toString()).toBe('  /h1');
   });
 });
+
+// ─── 8. 关闭态根节点驻留合同（回归：聚焦行上方空药丸条） ───────────────
+// v0.2 起构造器把空壳根节点预挂进编辑器 DOM 且从未打开时不会被摘除；
+// 滚动/resize 经 positionEditorOverlay 置 visibility:visible 后，
+// 空容器显示为聚焦行上方的空药丸条（v0.3.1 用户截图报告）。合同：
+// 菜单关闭 = 根元素不存在于 DOM。
+
+describe('closed menu root mounting contract (regression: empty pill above focused line)', () => {
+  it('never-opened menu leaves no root element in the editor DOM', () => {
+    const view = mountSlashEditor('');
+    expect(view.state.doc.toString()).toBe('');
+    expect(getSlashMenuController(view)?.isOpen()).toBe(false);
+    expect(view.dom.querySelector('.cm-jotluck-slash-menu')).toBeNull();
+  });
+
+  it('root mounts on open and is removed again after close', () => {
+    const view = mountSlashEditor('');
+    view.dispatch({
+      changes: { from: 0, to: 0, insert: '/' },
+      selection: { anchor: 1 },
+    });
+    expect(getSlashMenuController(view)?.isOpen()).toBe(true);
+    expect(view.dom.querySelector('.cm-jotluck-slash-menu')).not.toBeNull();
+    expect(getSlashMenuController(view)?.dismiss()).toBe(true);
+    expect(getSlashMenuController(view)?.isOpen()).toBe(false);
+    expect(view.dom.querySelector('.cm-jotluck-slash-menu')).toBeNull();
+  });
+});
