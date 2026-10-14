@@ -1,3 +1,76 @@
+# JotLuck v0.3.0-preview — Preview Release Notes
+
+> Date: 2026-10-07
+> The complete V0.2 editor generation. Version numbering now tracks the app
+> generation (0.14.0 → 0.2.0 → 0.3.0), not the old preview counter.
+> Windows x64 round; Linux packages are unchanged from v0.14.0-preview.
+
+## What's new in 0.3.0 — the editor generation
+
+- **Smart format continuation.** Enter continues lists, ordered lists,
+  tasks, quotes, and table rows with the correct marker — Chinese
+  numbering included (一、（一）① up to 九十九), plus letters, roman
+  numerals, and full-width ＃－ forms. Empty items exit cleanly with
+  Enter / Backspace / Esc; every continuation is a single Ctrl+Z.
+- **Focused-line ghost syntax.** Markers (\*\*, #, | …) on the cursor's
+  line stay visible but dimmed and fully editable, with precise click
+  positioning; they fade back to clean rendering when the cursor leaves.
+- **Find & replace inside the editor.** Ctrl+F opens a five-language
+  search panel (regex / case / whole-word). Read-only notes stay
+  searchable while editing stays blocked.
+- **Slash commands.** Typing / on an empty line opens a ten-item block
+  menu — headings, lists, task list, quote, code block, table template,
+  divider — filterable in Chinese or ASCII (h1, table), keyboard and
+  mouse driven, with full IME guards.
+- **Tables that behave like a spreadsheet.** A floating toolbar appears
+  when the cursor enters a table: insert/delete rows and columns, column
+  alignment, delete table. Tab and Shift+Tab move between cells; Tab at
+  the last cell appends a new row. Escaped pipes (\\|) and full-width ｜
+  are preserved everywhere.
+- **Million-character notebooks stay fluid.** 1M–3M character notes are
+  editable the moment they open, render progressively while scrolling,
+  and copy & print the complete text — never just the visible part.
+- **Navigate by structure.** The outline follows the current chapter;
+  the backlinks panel groups every reference and jumps to the exact spot
+  in all three view modes, including deep jumps into unrendered regions
+  of large documents.
+- **Open as read-only.** Right-click a note in the drawer → “Open
+  read-only”. A badge marks the state, find still works, editing is
+  blocked, and one click exits.
+- **Touch editing on Windows.** Precise tap positioning, swipe that only
+  scrolls, native selection handles, and a finger-draggable split divider
+  (30–70%).
+- **New official theme: Constellation** — a frosted star-field deck.
+
+## Fixed since 0.14.0
+
+- DOCX export no longer loses content: blockquote text, task items (now
+  ☑ / ☐), and nested list items are preserved; tables and code fences
+  inside quotes keep their structure.
+- Wiki-links with aliases ([[note#section|alias]]) and Markdown anchor
+  links no longer export as broken literal text.
+- Ordered task items (1. [x] …) are recognized end-to-end; TXT export
+  keeps [x] / [ ] markers.
+- Parser quirks: # comments inside code fences no longer pollute the
+  outline; wiki-links and tags inside fences stay out of the index; a#b
+  is no longer misread as a tag; ~~~ fences and setext headings follow
+  CommonMark.
+- Cancelled touch gestures no longer toggle checkboxes by accident.
+- Dependency security upgrades across the workspace.
+
+## Important — Unsigned Preview
+
+The official Windows installer for v0.3.0-preview is published on GitHub
+Releases. Verify the SHA-256 before installing:
+342df185d2024b3c5bdd119f382ce0cb19b880d8dabe3423bdcc67369251ba18
+Code signing follows the pipeline documented in
+[CODE_SIGNING.md](./CODE_SIGNING.md).
+
+Linux x86_64 packages are unchanged in this round and remain available at
+v0.14.0-preview.
+
+---
+
 # JotLuck v0.14.0-preview — Preview Release Notes
 
 > Date: 2026-09-08

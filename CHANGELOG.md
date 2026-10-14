@@ -1,5 +1,62 @@
 # Changelog
 
+## [0.3.0-preview] - 2026-10-07
+
+The V0.2 editor generation, complete. This release ships the whole editor
+wave developed from 2026-09-13 to 2026-09-30 and re-based onto generation
+numbering (0.14.0 → 0.2.0 → 0.3.0; the number now tracks the app
+generation, not the old 0.x preview counter).
+
+### Added
+
+- Smart format continuation: Enter continues lists, ordered lists, tasks,
+  quotes, and tables with correct markers — including Chinese numbering
+  (一、（一）①九十九), letters, roman numerals, and full-width ＃－ forms.
+  Empty item Enter / Backspace / Esc exits cleanly; every continuation is
+  one-step undoable.
+- Focused-line ghost syntax: markers (\*\*, #, | …) on the cursor's line stay
+  visible but dimmed and remain editable, with precise click positioning;
+  they fade back to pure rendering when the cursor leaves.
+- In-editor find & replace (Ctrl+F) with a five-language panel; read-only
+  notes stay searchable with editing disabled.
+- Slash commands: typing / on an empty line opens a 10-item block insert
+  menu (headings, lists, task, quote, code, table, divider) with Chinese
+  and ASCII filtering, keyboard + mouse operation, and IME guards.
+- Table editing: a floating toolbar (insert/delete rows & columns, column
+  alignment, delete table) plus Tab / Shift+Tab cell navigation — Tab at
+  the last cell appends a new row; every operation is one-step undoable.
+- Large-document fluency: 1M–3M character notes open editable immediately,
+  render progressively while scrolling, and keep copy & print complete.
+- Outline following & per-reference backlinks: the outline tracks the
+  current chapter; every reference to a note is grouped and jumps to the
+  exact spot in all three view modes.
+- Open as read-only: a drawer right-click action with a read-only badge
+  and one-click exit; read-only notes can be searched but not modified.
+- Touch editing on Windows touchscreens: precise tap positioning, swipe
+  guards, native selection handles, and finger-draggable split panes.
+- New official theme: Constellation (starry deck layout).
+
+### Fixed
+
+- DOCX export no longer drops content: blockquote text, task items
+  (exported as ☑/☐), and nested list items are all preserved; tables and
+  code blocks inside quotes keep their structure.
+- Wiki-links with aliases ([[note#section|alias]]) and Markdown anchor
+  links no longer export as broken literal text.
+- Ordered task items (1. [x] …) are recognized end-to-end; TXT export
+  keeps [x]/[ ] markers.
+- Parser quirks: # comments inside code fences no longer pollute the
+  outline; wiki-links and #tags inside fences are excluded from the index;
+  a#b is no longer misread as a tag; ~~~ fences and setext headings
+  handled per CommonMark.
+- Dependency security upgrades across the workspace.
+
+### Notes
+
+- Version numbering switched to generation numbering (V0.2 editor
+  generation). Linux packages for this release are unchanged from
+  v0.14.0-preview (Windows-only build round).
+
 ## [0.14.0-preview] - 2026-09-08
 
 ### Added
