@@ -148,6 +148,12 @@ interface LivePreviewOptions {
   onRemoteImageClick?: (event: MouseEvent) => boolean;
   onRemoteImageLoad?: (event: Event) => boolean;
   onRemoteImageError?: (event: Event) => boolean;
+  /**
+   * 改稿模式钩子：非聚焦块的渲染 widget DOM 构建完成后调用，
+   * 把 widget 覆盖的源码区间与构建出的 DOM 交给调用方做内嵌批注
+   * （如绿马克笔 / 整块底色）。区间为文档 UTF-16 偏移，与 from/to 同空间。
+   */
+  annotateRenderedBlock?: (range: { from: number; to: number }, dom: HTMLElement) => void;
 }
 
 const SOURCE_PRESERVING_BLOCK_TYPES = new Set<BlockType>([
@@ -944,18 +950,36 @@ const renderedWidgetKeys = new WeakMap<HTMLElement, string>();
 class RenderedBlockWidget extends WidgetType {
   private html: string;
   private key: string;
+  /** widget 覆盖的源码区间（UTF-16 偏移），供 annotateRenderedBlock 钩子消费 */
+  private range: { from: number; to: number };
+  private annotate?: (range: { from: number; to: number }, dom: HTMLElement) => void;
 
-  constructor(html: string, key: string) {
+  constructor(
+    html: string,
+    key: string,
+    range: { from: number; to: number },
+    annotate?: (range: { from: number; to: number }, dom: HTMLElement) => void,
+  ) {
     super();
     this.html = html;
     this.key = key;
+    this.range = range;
+    this.annotate = annotate;
   }
 
   override eq(other: RenderedBlockWidget): boolean {
-    return this.html === other.html && this.key === other.key;
+    // 钩子身份参与比较：调用方随批注集合更换闭包即可让受影响 widget 重建
+    // 并重新标注；未启用钩子时 undefined === undefined，复用语义与旧版一致。
+    return this.html === other.html && this.key === other.key && this.annotate === other.annotate;
   }
 
   toDOM(): HTMLElement {
+    const dom = this.buildDom();
+    this.annotate?.(this.range, dom);
+    return dom;
+  }
+
+  private buildDom(): HTMLElement {
     const frag = DOMPurify.sanitize(this.html, { RETURN_DOM_FRAGMENT: true }) as DocumentFragment;
     // If sanitization produced a fragment, wrap it; otherwise return the existing span
     if (frag.childNodes.length === 1) {
@@ -1866,7 +1890,12 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           if (block.from === block.to) {
             decos.push(
               Decoration.widget({
-                widget: new RenderedBlockWidget(block.html, block.key),
+                widget: new RenderedBlockWidget(
+                  block.html,
+                  block.key,
+                  { from: block.from, to: block.to },
+                  options.annotateRenderedBlock,
+                ),
                 side: 1,
               }).range(block.from),
             );
@@ -1879,7 +1908,12 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           }
           decos.push(
             Decoration.replace({
-              widget: new RenderedBlockWidget(block.html, block.key),
+              widget: new RenderedBlockWidget(
+                block.html,
+                block.key,
+                { from: block.from, to: block.to },
+                options.annotateRenderedBlock,
+              ),
             }).range(block.from, block.to),
           );
         }

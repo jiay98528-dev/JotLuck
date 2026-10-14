@@ -16,6 +16,7 @@ import type {
 } from './public-engine-types';
 import {
   PUBLIC_ENGINE_CONTEXT_MAX_UTF8_BYTES,
+  PUBLIC_ENGINE_EXTENDED_CONTEXT_MAX_UTF8_BYTES,
   PUBLIC_ENGINE_MAX_CANDIDATES,
   PUBLIC_ENGINE_MAX_OUTPUT_CODE_POINTS,
   PUBLIC_ENGINE_PROTOCOL_VERSION,
@@ -274,6 +275,17 @@ export class CompletionEngineRouter {
     await safeDisposePublicEngine(previous);
   }
 
+  /**
+   * Removes the installed engine only when it still owns the public slot
+   * (engine-id match). Used by dev-seam installers (e.g. the Reink setup
+   * composable) to detach their engine without touching a successor.
+   */
+  async removePublicEngineById(engineId: string): Promise<boolean> {
+    if (this.publicEngine?.id !== engineId) return false;
+    await this.removePublicEngine();
+    return true;
+  }
+
   async generatePublic(
     request: PublicCompletionGenerateOptions,
     requestRouterEpoch: number,
@@ -311,6 +323,16 @@ export class CompletionEngineRouter {
         engineEpoch,
         contextTail,
         contextTailUtf8Bytes: utf8ByteLength(contextTail),
+        // 大上下文 L3 引擎（Reink）用：与 contextTail 同源、同一截断逻辑，
+        // 上限 24000 字节；contextTail 本身保持 256 字节兜底不变，旧引擎忽略。
+        ...(request.extendedContextTail === undefined
+          ? {}
+          : {
+              extendedContextTail: takeLastUtf8Bytes(
+                request.extendedContextTail,
+                PUBLIC_ENGINE_EXTENDED_CONTEXT_MAX_UTF8_BYTES,
+              ),
+            }),
         ...(request.contextSuffix === undefined
           ? {}
           : {

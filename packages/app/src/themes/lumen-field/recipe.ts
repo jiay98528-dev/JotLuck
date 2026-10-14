@@ -53,5 +53,6 @@ export const recipe: ShellRecipe = {
     theme: 'status-right',
     settings: 'status-right',
     'view-toggle': 'editor-control',
+    review: 'editor-control',
   },
 };

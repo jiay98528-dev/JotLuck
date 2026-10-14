@@ -33,5 +33,6 @@ export const recipe: ShellRecipe = {
     theme: 'topbar-right',
     settings: 'left-wing',
     'view-toggle': 'editor-control',
+    review: 'editor-control',
   },
 };

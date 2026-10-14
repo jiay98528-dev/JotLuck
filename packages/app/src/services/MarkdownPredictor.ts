@@ -111,6 +111,7 @@ import type {
 } from './completion/hybrid-retrieval-types';
 import {
   PUBLIC_ENGINE_CONTEXT_MAX_UTF8_BYTES,
+  PUBLIC_ENGINE_EXTENDED_CONTEXT_MAX_UTF8_BYTES,
   PUBLIC_ENGINE_MAX_CANDIDATES,
   type CompletionPublicEngine,
   type PublicCompletionCandidate,
@@ -575,6 +576,15 @@ export class MarkdownPredictor {
     return this.engineRouter.installPublicEngine(engine);
   }
 
+  /**
+   * Dev-seam detach: removes a previously installed engine when it still owns
+   * the public slot (engine-id match). Successor engines are left untouched.
+   */
+  async removePublicEngineForEvaluation(engineId: string): Promise<boolean> {
+    this.publicEngineWarmup = null;
+    return this.engineRouter.removePublicEngineById(engineId);
+  }
+
   private async installInitialPublicEngine(): Promise<boolean> {
     const engine = this.initialPublicEngine;
     return engine ? this.engineRouter.installPublicEngine(engine) : false;
@@ -869,6 +879,12 @@ export class MarkdownPredictor {
             contextTail: takeLastUtf8Bytes(
               context.doc.slice(0, context.localCursorPos),
               PUBLIC_ENGINE_CONTEXT_MAX_UTF8_BYTES,
+            ),
+            // 与 contextTail 同源的大上下文后缀（≤24000 字节），大上下文 L3
+            // 引擎（Reink）消费；旧引擎忽略，contextTail 兜底不变。
+            extendedContextTail: takeLastUtf8Bytes(
+              context.doc.slice(0, context.localCursorPos),
+              PUBLIC_ENGINE_EXTENDED_CONTEXT_MAX_UTF8_BYTES,
             ),
             contextSuffix: context.line ? context.line.text.slice(context.line.cursorColumn) : '',
             contextCapsule: createPublicFreeContextCapsule(publicContext, undefined, {

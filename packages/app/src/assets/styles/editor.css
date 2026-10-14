@@ -633,3 +633,77 @@
     transition: none;
   }
 }
+
+/* ===== Review Mode Marks (改稿模式马克笔) =====
+ *
+ * 两套同构类名，token 见 themes/paper.css :root：
+ *   .review-mark-* / .review-block-*      — 渲染态 DOM 内嵌标注（review-dom-annotator）
+ *   .cm-review-mark-* / .cm-review-line-* — CM6 源码态 Decoration（review-marks）
+ * active 态（当前定位 hunk）叠加 *-active 类，以描边增强存在感。
+ */
+
+/* ---- 行内马克笔：del=源稿红笔 / add=工作稿绿笔 ---- */
+.review-mark-del,
+.cm-review-mark-del {
+  background: var(--review-mark-del, oklch(0.94 0.04 25 / 0.5));
+  border-radius: var(--radius-xs, 2px);
+  /* 小 padding 让底色在字侧显色，负 margin 补偿避免影响排版 */
+  padding: 0.05em 0.1em;
+  margin: -0.05em -0.1em;
+}
+
+.review-mark-add,
+.cm-review-mark-add {
+  background: var(--review-mark-add, oklch(0.92 0.04 158 / 0.5));
+  border-radius: var(--radius-xs, 2px);
+  padding: 0.05em 0.1em;
+  margin: -0.05em -0.1em;
+}
+
+/* ---- active 态：中性描边环，叠加在 del/add 之上 ---- */
+.review-mark-active,
+.cm-review-mark-active {
+  box-shadow: 0 0 0 1px oklch(from var(--ink-primary) l c h / 0.45);
+}
+
+/* ---- 整块底色：更淡底色 + 左侧 2px 色条（inset 阴影，不占布局） ---- */
+.review-block-del,
+.cm-review-line-del {
+  background: var(--review-block-del-bg, oklch(0.96 0.02 25 / 0.35));
+  box-shadow: inset 2px 0 0 var(--signal-error);
+}
+
+.review-block-add,
+.cm-review-line-add {
+  background: var(--review-block-add-bg, oklch(0.96 0.02 158 / 0.35));
+  box-shadow: inset 2px 0 0 var(--signal-success);
+}
+
+@media (prefers-contrast: more) {
+  .review-mark-del,
+  .cm-review-mark-del {
+    background: oklch(from var(--signal-error) l c h / 0.45);
+    text-decoration: underline solid oklch(from var(--signal-error) l c h / 0.85);
+  }
+
+  .review-mark-add,
+  .cm-review-mark-add {
+    background: oklch(from var(--signal-success) l c h / 0.45);
+    text-decoration: underline solid oklch(from var(--signal-success) l c h / 0.85);
+  }
+
+  .review-mark-active,
+  .cm-review-mark-active {
+    box-shadow: 0 0 0 2px oklch(from var(--ink-primary) l c h / 0.8);
+  }
+
+  .review-block-del,
+  .cm-review-line-del {
+    box-shadow: inset 3px 0 0 var(--signal-error);
+  }
+
+  .review-block-add,
+  .cm-review-line-add {
+    box-shadow: inset 3px 0 0 var(--signal-success);
+  }
+}

@@ -259,6 +259,19 @@
                       @open-notebook="requestOpenNotebook"
                     />
 
+                    <ReviewWorkbench
+                      v-else-if="reviewSession"
+                      :key="`${activeNotebookRoot}:${reviewSession.path}`"
+                      :fs="fs"
+                      :root="activeNotebookRoot"
+                      :path="reviewSession.path"
+                      :initial-snapshot="reviewSession.snapshot"
+                      :predictor="completionPredictor"
+                      :completion-settings="completionSettings"
+                      @exit="onExitReviewMode"
+                      @source-adopted="onReviewSourceAdopted"
+                    />
+
                     <div
                       v-else-if="viewMode === 'read'"
                       ref="readerWorkbenchRef"
@@ -604,6 +617,8 @@
       :completion-settings="completionSettings"
       :completion-training-meta="completionTrainingMeta"
       :completion-engine-health="completionEngineHealth"
+      :reink-setup-status="reinkEngineSetup.status.value"
+      :reink-setup-error="reinkEngineSetup.error.value"
       @update:visible="onSettingsVisibilityChange"
       @update-completion-settings="onUpdateCompletionSettings"
       @clear-completion-data="onClearCompletionData"
@@ -939,6 +954,7 @@ import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import AppShell from '@/components/layout/AppShell.vue';
 import ShellActionButton from '@/components/layout/ShellActionButton.vue';
+import ReviewWorkbench from '@/components/review/ReviewWorkbench.vue';
 import FormatBubble from '@/components/editor/FormatBubble.vue';
 import EditorControlStrip from '@/components/editor/EditorControlStrip.vue';
 import StudioRail from '@/components/editor/StudioRail.vue';
@@ -1026,6 +1042,8 @@ import {
 } from '@/services/completion/public-free-decoder-factory';
 import type { PublicEngineDiagnostics } from '@/services/completion/public-engine-types';
 import { usePublicDecoderSetup } from '@/composables/usePublicDecoderSetup';
+// 工单 S5：Reink-1.0 本地神经补全引擎（与 public-free-decoder 同槽位互斥，后装胜出）。
+import { useReinkEngineSetup } from '@/composables/useReinkEngineSetup';
 import {
   applyParagraphPreset,
   clearMarkdownFormatting,
@@ -1213,6 +1231,50 @@ const toast = useToast();
 const notebookName = ref('');
 const activeNotebookRoot = ref('');
 const completionSettings = ref<CompletionSettings>(getCompletionSettings());
+
+// ── 改稿（审批/批注）模式 ─────────────────────────────────────────
+/** 活动改稿会话；非 null 时编辑面被 ReviewWorkbench 整面接管 */
+const reviewSession = ref<{
+  path: string;
+  snapshot: { content: string; revision: string };
+} | null>(null);
+
+async function onEnterReviewMode(): Promise<void> {
+  const path = shellActivePath.value;
+  if (!path || reviewSession.value !== null) return;
+  // 冲刷挂起保存并取磁盘快照作为源稿基线，保证「批准」写回时 revision 可用
+  syncCurrentContentFromEditor();
+  if (!(await flushPendingCurrentSave())) return;
+  try {
+    const snapshot = await fs.readFileSnapshot(path);
+    reviewSession.value = {
+      path,
+      snapshot: { content: snapshot.content, revision: snapshot.revision },
+    };
+  } catch (error) {
+    toast.show(
+      t('review.ioError', { message: String((error as Error | undefined)?.message ?? error) }),
+      'warning',
+      4000,
+    );
+  }
+}
+
+function onExitReviewMode(): void {
+  reviewSession.value = null;
+}
+
+/** 「批准」写入源稿文件后：同步内存态并把该写入标记为本地写（watcher 免误报冲突） */
+function onReviewSourceAdopted(content: string, revision: string): void {
+  currentContent.value = content;
+  currentDiskRevision.value = revision;
+  isDirty.value = false;
+  localWriteEpoch++;
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+}
 const completionTrainingMeta = ref<CompletionTrainingMeta>(loadTrainingMeta());
 const completionPredictor = new MarkdownPredictor(4);
 // Engine health snapshot surfaced via the Settings dialog (工单 B / B2).
@@ -1225,6 +1287,15 @@ const publicDecoderSetup = usePublicDecoderSetup({
   isUnmounted: () => componentUnmounted,
   createCanonicalEngine: () => createCanonicalPublicFreeDecoderEngine(),
   createFlaggedEngine: () => createFlaggedPublicFreeDecoderEngine(),
+});
+// Reink 安装在默认公共引擎链之后（setupCanonicalPublicDecoderOnce 完成后再
+// setupNow），保证同槽位「后装胜出」的确定性；禁用/失败时 teardown 会回调
+// retryNow 恢复默认链。状态 ref 供后续 SettingsDialog 工单展示。
+const reinkEngineSetup = useReinkEngineSetup({
+  predictor: completionPredictor,
+  isAvailable: isDesktopRuntime,
+  isUnmounted: () => componentUnmounted,
+  restoreDefaultEngine: () => publicDecoderSetup.retryNow(),
 });
 
 function refreshCompletionEngineHealth(): void {
@@ -1426,6 +1497,26 @@ const shellActions = computed<ShellAction[]>(() => [
     },
     active: showExport.value,
     disabled: isWorkspaceUnbound.value || isGuidedSampleSession.value || isNotebookOpening.value,
+  },
+  {
+    id: 'review',
+    region: actionRegion('review'),
+    label: t('review.title'),
+    shortLabel: t('review.title'),
+    title: t('review.title'),
+    icon: 'review',
+    run: () => {
+      void onEnterReviewMode();
+    },
+    active: reviewSession.value !== null,
+    disabled:
+      isWorkspaceUnbound.value ||
+      isGuidedSampleSession.value ||
+      isNotebookOpening.value ||
+      isScratchSession.value ||
+      isExternalEditing.value ||
+      isNoteReadonly.value ||
+      !shellActivePath.value,
   },
   {
     id: 'share',
@@ -5842,7 +5933,7 @@ onMounted(async () => {
   // preferred; when its manifest is absent the workspace falls back to the
   // dev/E2E evaluation engine, then to no public engine at all. Both factories
   // are invoked at most once per workspace page.
-  void setupCanonicalPublicDecoderOnce();
+  void setupCanonicalPublicDecoderOnce().then(() => reinkEngineSetup.setupNow());
   unsubscribeCompletionSettings = subscribeCompletionSettings((settings) => {
     completionSettings.value = settings;
     completionPredictor.configure(settings);

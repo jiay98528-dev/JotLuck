@@ -71,4 +71,10 @@
   --dot-5: oklch(0.48 0.18 255);
   --dot-6: oklch(0.5 0.15 300);
   --dot-7: oklch(0.55 0.15 340);
+
+  /* 改稿模式马克笔：del=源稿红笔 / add=工作稿绿笔（自 signal 色派生的低透明度） */
+  --review-mark-del: oklch(from var(--signal-error) l c h / 0.22);
+  --review-mark-add: oklch(from var(--signal-success) l c h / 0.22);
+  --review-block-del-bg: oklch(from var(--signal-error) l c h / 0.08);
+  --review-block-add-bg: oklch(from var(--signal-success) l c h / 0.08);
 }

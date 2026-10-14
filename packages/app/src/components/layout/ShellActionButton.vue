@@ -88,6 +88,24 @@
         <line x1="12" y1="15" x2="12" y2="3" />
       </svg>
       <svg
+        v-else-if="action.icon === 'review'"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        data-theme-part="shell-action-icon"
+        aria-hidden="true"
+      >
+        <rect x="3.5" y="5" width="17" height="14" rx="2.5" />
+        <path d="M12 5v14" />
+        <path d="M6 9.5h3.5" />
+        <path d="M6 13h2.5" />
+        <path d="M14.5 9.5H18" />
+        <path d="M14.5 13H18" />
+      </svg>
+      <svg
         v-else-if="action.icon === 'share'"
         viewBox="0 0 24 24"
         fill="none"
@@ -194,6 +212,7 @@ const legacyActionClass = computed(() => {
   if (props.action.id === 'file-drawer') return 'topbar-btn--menu';
   if (props.action.id === 'search') return 'topbar-search-hint';
   if (props.action.id === 'export') return 'topbar-btn--export';
+  if (props.action.id === 'review') return 'topbar-btn--review';
   if (props.action.id === 'share') return 'topbar-btn--share';
   if (props.action.id === 'theme') return 'topbar-btn--theme';
   if (props.action.id === 'settings') return 'wing-settings-btn';

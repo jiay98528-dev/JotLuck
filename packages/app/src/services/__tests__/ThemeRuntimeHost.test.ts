@@ -40,6 +40,7 @@ const recipe: ShellRecipe = {
     theme: 'topbar-right',
     settings: 'topbar-right',
     'view-toggle': 'reader-bar',
+    review: 'editor-control',
   },
 };
 

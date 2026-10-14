@@ -304,6 +304,103 @@
               </div>
 
               <div class="autocomplete-meta engine-meta">
+                <h4 class="engine-meta-title">{{ t('settings.autocomplete.reink.title') }}</h4>
+                <div class="setting-row reink-row">
+                  <span class="setting-label">{{ t('settings.autocomplete.reink.enabled') }}</span>
+                  <span
+                    class="toggle-track"
+                    :class="{ active: reinkSettings.enabled }"
+                    role="switch"
+                    tabindex="0"
+                    :aria-label="t('settings.autocomplete.reink.enabled')"
+                    :aria-checked="reinkSettings.enabled"
+                    @click="updateReink({ enabled: !reinkSettings.enabled })"
+                    @keydown.enter.prevent="updateReink({ enabled: !reinkSettings.enabled })"
+                    @keydown.space.prevent="updateReink({ enabled: !reinkSettings.enabled })"
+                  >
+                    <span class="toggle-thumb"></span>
+                  </span>
+                </div>
+                <template v-if="reinkSettings.enabled">
+                  <div class="setting-row reink-row">
+                    <span class="setting-label">{{ t('settings.autocomplete.reink.tier') }}</span>
+                    <div class="segmented">
+                      <button
+                        class="segment-btn"
+                        :class="{ active: reinkSettings.tier === '32m' }"
+                        @click="updateReink({ tier: '32m' })"
+                      >
+                        {{ t('settings.autocomplete.reink.tier32m') }}
+                      </button>
+                      <button
+                        class="segment-btn"
+                        :class="{ active: reinkSettings.tier === '64m' }"
+                        @click="updateReink({ tier: '64m' })"
+                      >
+                        {{ t('settings.autocomplete.reink.tier64m') }}
+                      </button>
+                    </div>
+                  </div>
+                  <div class="setting-row reink-row">
+                    <span class="setting-label">{{ t('settings.autocomplete.reink.mode') }}</span>
+                    <div class="segmented">
+                      <button
+                        class="segment-btn"
+                        :class="{ active: reinkSettings.mode === 'fast' }"
+                        @click="updateReink({ mode: 'fast' })"
+                      >
+                        {{ t('settings.autocomplete.reink.modeFast') }}
+                      </button>
+                      <button
+                        class="segment-btn"
+                        :class="{ active: reinkSettings.mode === 'quality' }"
+                        @click="updateReink({ mode: 'quality' })"
+                      >
+                        {{ t('settings.autocomplete.reink.modeQuality') }}
+                      </button>
+                    </div>
+                  </div>
+                  <div class="setting-row reink-row reink-path-row">
+                    <span class="setting-label">{{
+                      t('settings.autocomplete.reink.pythonPath')
+                    }}</span>
+                    <input
+                      class="reink-input"
+                      type="text"
+                      :value="reinkSettings.pythonPath"
+                      spellcheck="false"
+                      @change="onReinkInput($event, 'pythonPath')"
+                    />
+                  </div>
+                  <div class="setting-row reink-row reink-path-row">
+                    <span class="setting-label">{{
+                      t('settings.autocomplete.reink.runtimeDir')
+                    }}</span>
+                    <input
+                      class="reink-input"
+                      type="text"
+                      :value="reinkSettings.runtimeDir"
+                      spellcheck="false"
+                      @change="onReinkInput($event, 'runtimeDir')"
+                    />
+                  </div>
+                </template>
+                <div class="meta-row">
+                  <span>{{ t('settings.autocomplete.engine.status') }}</span>
+                  <strong>{{ reinkStatusLabel }}</strong>
+                </div>
+                <div v-if="reinkLatencyMs !== null" class="meta-row">
+                  <span>{{
+                    t('settings.autocomplete.reink.latency', { ms: reinkLatencyMs })
+                  }}</span>
+                </div>
+                <p v-if="reinkSetupError" class="engine-error" role="alert">
+                  {{ reinkSetupError }}
+                </p>
+                <p class="local-note">{{ t('settings.autocomplete.reink.requirements') }}</p>
+              </div>
+
+              <div class="autocomplete-meta engine-meta">
                 <h4 class="engine-meta-title">{{ t('settings.autocomplete.engine.title') }}</h4>
                 <div class="meta-row">
                   <span>{{ t('settings.autocomplete.engine.status') }}</span>
@@ -426,6 +523,13 @@ import type { SupportedLocale } from '@/types/i18n';
 import { isDesktopRuntime } from '@/utils/runtime';
 import { isWindows } from '@/utils/platform';
 import type { PublicEngineDiagnostics } from '@/services/completion/public-engine-types';
+import {
+  getReinkSettings,
+  subscribeReinkSettings,
+  updateReinkSettings,
+  type ReinkSettings,
+} from '@/services/completion/reink-settings';
+import type { ReinkSetupStatus } from '@/composables/useReinkEngineSetup';
 
 const { t } = useI18n();
 const { locale, localeDefinitions, setLocale } = useLocale();
@@ -436,11 +540,15 @@ const props = withDefaults(
     completionSettings?: CompletionSettings;
     completionTrainingMeta?: CompletionTrainingMeta;
     completionEngineHealth?: PublicEngineDiagnostics | null;
+    reinkSetupStatus?: ReinkSetupStatus;
+    reinkSetupError?: string | null;
   }>(),
   {
     completionSettings: () => ({ ...DEFAULT_COMPLETION_SETTINGS }),
     completionTrainingMeta: undefined,
     completionEngineHealth: null,
+    reinkSetupStatus: 'idle',
+    reinkSetupError: null,
   },
 );
 
@@ -554,6 +662,49 @@ const engineStatusLabel = computed(() => {
 
 const engineRequests = computed(() => engineSnapshot.value?.generateRequests ?? 0);
 const engineCandidates = computed(() => engineSnapshot.value?.generatedCandidates ?? 0);
+
+// ── Reink-1.0 本地引擎设置 ──────────────────────────────────────────
+const reinkSettings = ref<ReinkSettings>(getReinkSettings());
+const unsubscribeReink = subscribeReinkSettings((next) => {
+  reinkSettings.value = { ...next };
+});
+onBeforeUnmount(() => unsubscribeReink());
+
+function updateReink(partial: Partial<ReinkSettings>): void {
+  reinkSettings.value = { ...updateReinkSettings(partial) };
+}
+
+function onReinkInput(event: Event, key: 'pythonPath' | 'runtimeDir'): void {
+  const value = (event.target as HTMLInputElement).value.trim();
+  updateReink({ [key]: value });
+}
+
+const reinkStatusLabel = computed(() => {
+  switch (props.reinkSetupStatus) {
+    case 'configuring':
+      return t('settings.autocomplete.reink.status.configuring');
+    case 'installing':
+      return t('settings.autocomplete.reink.status.installing');
+    case 'installed':
+      return t('settings.autocomplete.reink.status.installed');
+    case 'ready':
+      return t('settings.autocomplete.reink.status.ready');
+    case 'error':
+      return t('settings.autocomplete.reink.status.error');
+    case 'disabled':
+      return t('settings.autocomplete.reink.status.disabled');
+    case 'idle':
+    default:
+      return t('settings.autocomplete.reink.status.idle');
+  }
+});
+
+/** Reink 装入公共槽位后，从引擎诊断取最近一次推理延迟 */
+const reinkLatencyMs = computed(() => {
+  const snap = engineSnapshot.value;
+  if (!snap || !snap.engineId.startsWith('public-v2.5-reink')) return null;
+  return snap.lastInferenceDurationMs > 0 ? snap.lastInferenceDurationMs : null;
+});
 
 const engineP90Label = computed(() => {
   const snap = engineSnapshot.value;
@@ -974,6 +1125,36 @@ function close(): void {
 }
 
 .language-select:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Reink 本地引擎区块 */
+.reink-row {
+  margin: var(--space-6, 6px) 0;
+}
+
+.reink-path-row {
+  display: block;
+}
+
+.reink-path-row .setting-label {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.reink-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0 var(--space-12);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  color: var(--ink-primary);
+  font: inherit;
+}
+
+.reink-input:focus-visible {
   outline: var(--focus-ring-width) solid var(--accent);
   outline-offset: var(--focus-ring-offset);
 }

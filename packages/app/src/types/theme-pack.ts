@@ -99,6 +99,7 @@ export type ThemeActionId =
   | 'search'
   | 'template'
   | 'export'
+  | 'review'
   | 'share'
   | 'theme'
   | 'settings'

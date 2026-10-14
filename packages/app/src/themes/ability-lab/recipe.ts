@@ -27,5 +27,6 @@ export const recipe: ShellRecipe = {
     theme: 'topbar-right',
     settings: 'topbar-right',
     'view-toggle': 'editor-control',
+    review: 'editor-control',
   },
 };

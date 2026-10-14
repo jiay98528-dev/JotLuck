@@ -14,6 +14,12 @@ export const PUBLIC_ENGINE_MAX_CANDIDATES = 32;
 export const PUBLIC_ENGINE_PROVIDER_PRIORITY = 35;
 export const PUBLIC_ENGINE_PROTOCOL_VERSION = 1;
 export const PUBLIC_ENGINE_CONTEXT_MAX_UTF8_BYTES = 256;
+/**
+ * Host-trimmed large-context budget for big-context L3 engines (Reink-1.0
+ * consumes ~1700-2000 characters of prefix). Content only, same source as
+ * contextTail; legacy engines ignore the field and keep the 256-byte tail.
+ */
+export const PUBLIC_ENGINE_EXTENDED_CONTEXT_MAX_UTF8_BYTES = 24_000;
 export const PUBLIC_ENGINE_SUFFIX_MAX_UTF8_BYTES = 256;
 export const PUBLIC_ENGINE_MAX_OUTPUT_CODE_POINTS = 48;
 export const PUBLIC_V25_ENGINE_ID_PREFIX = 'public-v2.5-';
@@ -62,6 +68,13 @@ export interface PublicEngineGenerateRequest {
   /** Host-trimmed UTF-8 suffix. It must never contain the full document by default. */
   contextTail: string;
   contextTailUtf8Bytes: number;
+  /**
+   * Optional host-trimmed UTF-8 suffix (≤24000 bytes) of the same prefix
+   * source as contextTail, for large-context L3 engines. Content only — no
+   * paths or workspace identity are ever carried here. Legacy engines ignore
+   * this field and keep reading contextTail (256-byte fallback).
+   */
+  extendedContextTail?: string;
   /** Host-trimmed text after the cursor on the current line; used only to validate FIM edits. */
   contextSuffix?: string;
   /** Optional V2.2 bounded capsule. Legacy public engines ignore this field. */

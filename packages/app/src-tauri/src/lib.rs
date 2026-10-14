@@ -12,6 +12,7 @@ mod document_import;
 mod file_watcher;
 mod fs_ops;
 mod path;
+mod reink_engine;
 mod window_session;
 mod windows_integration;
 
@@ -366,6 +367,7 @@ pub fn run() {
         .manage(file_watcher::FileWatcherState::new())
         .manage(completion_decoder::CompletionDecoderState::new())
         .manage(completion_retrieval::CompletionRetrievalStates::new())
+        .manage(reink_engine::ReinkState::new())
         .setup(move |app| {
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()
@@ -454,6 +456,11 @@ pub fn run() {
             completion_retrieval::completion_v2_apply_batch,
             completion_retrieval::completion_v2_query,
             completion_retrieval::completion_v2_diagnostics,
+            reink_engine::reink_status,
+            reink_engine::reink_configure,
+            reink_engine::reink_warmup,
+            reink_engine::reink_generate,
+            reink_engine::reink_dispose,
             file_watcher::start_file_watcher,
             file_watcher::stop_file_watcher,
         ])

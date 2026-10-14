@@ -27,6 +27,7 @@ import { EditorState, Compartment } from '@codemirror/state';
 import { isolateHistory } from '@codemirror/commands';
 import { jotluckExtensions, jotluckPlaceholder } from '@/utils/cm6-extensions';
 import { exitLivePreviewOnEscape, livePreviewExtension } from '@/utils/cm6-live-preview';
+import { reviewMarksExtension, setReviewMarks, type ReviewMarkRange } from '@/utils/review-marks';
 import { findReplaceExtension } from '@/utils/cm6-find-replace';
 import { ghostTextPlugin } from '@/utils/cm6-ghost-text';
 import { slashCommandsExtension } from '@/utils/cm6-slash-commands';
@@ -82,6 +83,10 @@ const props = withDefaults(
     onEditorDrop?: (event: DragEvent) => void;
     onEditorDragOver?: (event: DragEvent) => void;
     onEditorPaste?: (event: ClipboardEvent) => boolean | void | Promise<boolean>;
+    /** 改稿模式：非聚焦块渲染 widget DOM 构建完成后的内嵌批注钩子（透传 livePreviewExtension） */
+    annotateRenderedBlock?: (range: { from: number; to: number }, dom: HTMLElement) => void;
+    /** 改稿模式：源码态马克笔集合（透传 reviewMarksExtension；未用时保持空集合） */
+    reviewMarks?: ReviewMarkRange[];
   }>(),
   {
     readOnly: false,
@@ -109,6 +114,8 @@ const props = withDefaults(
     onEditorDrop: undefined,
     onEditorDragOver: undefined,
     onEditorPaste: undefined,
+    annotateRenderedBlock: undefined,
+    reviewMarks: undefined,
   },
 );
 
@@ -364,6 +371,8 @@ function createState(doc: string) {
         },
       ]),
       ...jotluckExtensions(props.sourceOnly),
+      // 改稿模式源码态马克笔：空集合时零渲染输出，对非改稿调用方无副作用。
+      reviewMarksExtension(),
       // 查找替换：静态扩展（不支持 Compartment 动态切换）；search() 默认面板
       // + phrases 五语文案 + readOnly 门控详见 utils/cm6-find-replace.ts。
       ...findReplaceExtension(),
@@ -383,6 +392,7 @@ function createState(doc: string) {
               onRemoteImageClick: props.onLivePreviewRemoteImageClick,
               onRemoteImageLoad: props.onLivePreviewRemoteImageLoad,
               onRemoteImageError: props.onLivePreviewRemoteImageError,
+              annotateRenderedBlock: props.annotateRenderedBlock,
             })
           : [],
       ),
@@ -583,6 +593,7 @@ function refreshLivePreview(): void {
             onRemoteImageClick: props.onLivePreviewRemoteImageClick,
             onRemoteImageLoad: props.onLivePreviewRemoteImageLoad,
             onRemoteImageError: props.onLivePreviewRemoteImageError,
+            annotateRenderedBlock: props.annotateRenderedBlock,
           })
         : [],
     ),
@@ -595,8 +606,19 @@ watch(
     props.imageRevision,
     props.remoteImageRevision,
     currentLocale.value,
+    // 改稿模式：批注集合更换会更换钩子闭包，reconfigure 让 widget 重建并重新标注
+    props.annotateRenderedBlock,
   ],
   refreshLivePreview,
+);
+
+// 改稿模式源码态马克笔：集合变化 → 全量替换标注（reviewMarksField 的 effect 语义）
+watch(
+  () => props.reviewMarks,
+  (marks) => {
+    if (!view) return;
+    setReviewMarks(view, marks ?? []);
+  },
 );
 
 // Dynamic autocomplete toggle
@@ -653,6 +675,8 @@ onMounted(() => {
     state: createState(props.modelValue),
     parent: editorHost.value,
   });
+  // 改稿模式：挂载时已携带马克笔集合（watch 拿不到 pre-mount 值）→ 补一次初始应用
+  if (props.reviewMarks && props.reviewMarks.length > 0) setReviewMarks(view, props.reviewMarks);
   const viewport = observeEditorViewport(() => {
     if (!view?.hasFocus || view.composing || view.compositionStarted) return;
     const caret = view.coordsAtPos(view.state.selection.main.head);
