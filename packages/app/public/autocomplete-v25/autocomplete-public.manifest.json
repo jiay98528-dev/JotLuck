@@ -1,0 +1,261 @@
+{
+  "actualParameterCount": 32551936,
+  "adaptiveThresholds": {
+    "floor": 0.01,
+    "marginFloor": 0.001
+  },
+  "assets": {
+    "model": {
+      "bytes": 17405518,
+      "file": "model.q4.decoder.bin",
+      "sha256": "15ffd3607d25d339ded7cb937a997465e43b72634daac22e147edc7095986196"
+    },
+    "tokenizer": {
+      "bytes": 1442155,
+      "file": "tokenizer.runtime.json",
+      "sha256": "ecce311c0d592fc346e4c636fe23bc395095150282969496e2f1148cd838179f"
+    }
+  },
+  "candidateArtifactSha256": "76f2dbed2450e18389eef8070b5d2483412c3382eed95faa3835e64e3f8f408e",
+  "candidateId": "v25-one-unit-writing-q4-r27",
+  "completionUnit": "one-lexical-unit",
+  "context": {
+    "maximumTokens": 256
+  },
+  "distributionPolicy": "local-research-only",
+  "engine": "public-v2.5-one-unit-writing-v1",
+  "evaluationOnly": false,
+  "lifecycle": "integrationRelease",
+  "matrixId": "32m-q4",
+  "measuredPeakMemoryBytes": 0,
+  "oraclePrecheck": {
+    "checkpoints": 0,
+    "chineseOracleAt8": 0,
+    "englishOracleAt8": 0,
+    "oracleAt32": 0,
+    "oracleAt8": 0,
+    "passed": false
+  },
+  "output": {
+    "chineseMaximumCodePoints": 4,
+    "englishMaximumCodePoints": 24,
+    "preserveCompleteEnglishWord": true
+  },
+  "parameterCount": 32000000,
+  "quantization": "q4",
+  "quantizationDiagnostics": {
+    "aggregate": {
+      "elements": 32489472,
+      "endpointRate": 0.029305523955575518,
+      "endpointValues": 952121,
+      "groups": 507648,
+      "reconstructionMaximumAbsoluteError": 0.018778443336486816,
+      "reconstructionMeanAbsoluteError": 0.0018978815288925028,
+      "reconstructionRootMeanSquareError": 0.002309480728834853,
+      "saturatedValues": 26202,
+      "saturationRate": 0.0008064766334152798,
+      "sourceMaximumAbsolute": 0.1845759153366089,
+      "sourceMean": -7.281347278033706e-7,
+      "sourceRootMeanSquare": 0.026911180117571216,
+      "sourceStandardDeviation": 0.026911180107720662,
+      "tensors": 42
+    },
+    "groupSize": 64,
+    "integerRange": {
+      "maximum": 7,
+      "minimum": -8,
+      "storageBias": 8,
+      "zeroPoint": 0
+    },
+    "largestTensorErrors": [
+      {
+        "maximumAbsoluteError": 0.018778443336486816,
+        "name": "token_embedding.weight",
+        "rootMeanSquareError": 0.003001757694352644
+      },
+      {
+        "maximumAbsoluteError": 0.012618809938430786,
+        "name": "blocks.layers.7.self_attn.in_proj_weight",
+        "rootMeanSquareError": 0.0028313946904789237
+      },
+      {
+        "maximumAbsoluteError": 0.014018349349498749,
+        "name": "blocks.layers.6.self_attn.in_proj_weight",
+        "rootMeanSquareError": 0.0027845320232199253
+      },
+      {
+        "maximumAbsoluteError": 0.011674925684928894,
+        "name": "blocks.layers.8.self_attn.in_proj_weight",
+        "rootMeanSquareError": 0.002707353139860432
+      },
+      {
+        "maximumAbsoluteError": 0.01381644606590271,
+        "name": "blocks.layers.4.self_attn.in_proj_weight",
+        "rootMeanSquareError": 0.0026794492642652624
+      }
+    ],
+    "quantization": "q4",
+    "representativeTensors": {
+      "blocks.layers.0.linear1.weight": {
+        "elements": 786432,
+        "endpointRate": 0.033245086669921875,
+        "endpointValues": 26145,
+        "groups": 12288,
+        "reconstructionMaximumAbsoluteError": 0.007269710302352905,
+        "reconstructionMeanAbsoluteError": 0.0016537499265914003,
+        "reconstructionRootMeanSquareError": 0.001931712879929771,
+        "saturatedValues": 288,
+        "saturationRate": 0.0003662109375,
+        "scaleMaximum": 0.0108642578125,
+        "scaleMinimum": 0.004688262939453125,
+        "sourceMaximumAbsolute": 0.08048734068870544,
+        "sourceMean": -5.77060454969558e-5,
+        "sourceP99Absolute": 0.05134196579456329,
+        "sourceRootMeanSquare": 0.025153738861265085,
+        "sourceStandardDeviation": 0.025153672667540004
+      },
+      "blocks.layers.0.self_attn.in_proj_weight": {
+        "elements": 786432,
+        "endpointRate": 0.032452901204427086,
+        "endpointValues": 25522,
+        "groups": 12288,
+        "reconstructionMaximumAbsoluteError": 0.010010570287704468,
+        "reconstructionMeanAbsoluteError": 0.0020986155369724898,
+        "reconstructionRootMeanSquareError": 0.0024743285312222043,
+        "saturatedValues": 407,
+        "saturationRate": 0.0005175272623697916,
+        "scaleMaximum": 0.01666259765625,
+        "scaleMinimum": 0.005527496337890625,
+        "sourceMaximumAbsolute": 0.12002109736204147,
+        "sourceMean": 2.9968988456955912e-5,
+        "sourceP99Absolute": 0.06827809661626816,
+        "sourceRootMeanSquare": 0.030666223639368592,
+        "sourceStandardDeviation": 0.03066620899592911
+      },
+      "position_embedding.weight": {
+        "elements": 131072,
+        "endpointRate": 0.025390625,
+        "endpointValues": 3328,
+        "groups": 2048,
+        "reconstructionMaximumAbsoluteError": 0.00944681465625763,
+        "reconstructionMeanAbsoluteError": 0.0011093079086246455,
+        "reconstructionRootMeanSquareError": 0.0013470881650024156,
+        "saturatedValues": 214,
+        "saturationRate": 0.0016326904296875,
+        "scaleMaximum": 0.018524169921875,
+        "scaleMinimum": 0.0024318695068359375,
+        "sourceMaximumAbsolute": 0.13613572716712952,
+        "sourceMean": 3.320560808660466e-5,
+        "sourceP99Absolute": 0.03820045292377472,
+        "sourceRootMeanSquare": 0.013708449674863132,
+        "sourceStandardDeviation": 0.013708409458027053
+      },
+      "token_embedding.weight": {
+        "elements": 6144000,
+        "endpointRate": 0.025708984375,
+        "endpointValues": 157956,
+        "groups": 96000,
+        "reconstructionMaximumAbsoluteError": 0.018778443336486816,
+        "reconstructionMeanAbsoluteError": 0.0025304649819989106,
+        "reconstructionRootMeanSquareError": 0.003001757694352644,
+        "saturatedValues": 8438,
+        "saturationRate": 0.0013733723958333334,
+        "scaleMaximum": 0.026153564453125,
+        "scaleMinimum": 0.004947662353515625,
+        "sourceMaximumAbsolute": 0.1845759153366089,
+        "sourceMean": 3.932351461308302e-6,
+        "sourceP99Absolute": 0.08226579427719116,
+        "sourceRootMeanSquare": 0.03138046611755022,
+        "sourceStandardDeviation": 0.03138046587124028
+      }
+    },
+    "scaleAlgorithm": "groupwise-symmetric-mse-v1",
+    "scaleDtype": "f16",
+    "schema": "jotluck.autocomplete.quantization-diagnostics.v1"
+  },
+  "releaseEligible": true,
+  "route": "writing",
+  "runtimeEligible": true,
+  "runtimeStaticDeltaBytes": 0,
+  "schema": "jotluck.autocomplete.public-routed-decoder.v1",
+  "schemaVersion": 1,
+  "tokenizer": {
+    "bilingual": true,
+    "byteFallback": true,
+    "kind": "unigram",
+    "vocabularySize": 12000
+  },
+  "training": {
+    "cleanedPoolBytes": 0,
+    "datasetRecipe": "v25-one-unit-writing-eos-v2",
+    "licenseAuditPassed": false
+  },
+  "triggerPolicy": {
+    "chineseStrongTerminators": "。！？：；.!?;:",
+    "englishStrongTerminators": ".!?",
+    "kind": "g0-strong-terminator-plus-model-score-v1",
+    "modelScoreFloors": {
+      "en": 0.07456736114716736,
+      "zh": 0.08425320262463525
+    }
+  },
+  "visibilityCalibration": {
+    "beamThresholds": {
+      "floor": 0.01,
+      "marginFloor": 0.001
+    },
+    "hardwareProfile": "diagnostic-g0-rule-r25",
+    "modelSha256": "57c17136685e4599aa663ab95f1cc5cbcdb9d5a75224cdc61e1e5377ff854388",
+    "profiles": [
+      {
+        "bias": 0.0,
+        "language": "zh",
+        "route": "writing",
+        "scale": 1.0,
+        "searchMode": "fixed-1",
+        "threshold": 0.08425320262463525
+      },
+      {
+        "bias": 0.0,
+        "language": "zh",
+        "route": "writing",
+        "scale": 1.0,
+        "searchMode": "fixed-4",
+        "threshold": 0.08425320262463525
+      },
+      {
+        "bias": 0.0,
+        "language": "zh",
+        "route": "writing",
+        "scale": 1.0,
+        "searchMode": "adaptive-1-to-4",
+        "threshold": 0.08425320262463525
+      },
+      {
+        "bias": 0.0,
+        "language": "en",
+        "route": "writing",
+        "scale": 1.0,
+        "searchMode": "fixed-1",
+        "threshold": 0.07456736114716736
+      },
+      {
+        "bias": 0.0,
+        "language": "en",
+        "route": "writing",
+        "scale": 1.0,
+        "searchMode": "fixed-4",
+        "threshold": 0.07456736114716736
+      },
+      {
+        "bias": 0.0,
+        "language": "en",
+        "route": "writing",
+        "scale": 1.0,
+        "searchMode": "adaptive-1-to-4",
+        "threshold": 0.07456736114716736
+      }
+    ],
+    "schema": "jotluck.autocomplete.v2.5-visibility-calibration.v1"
+  }
+}
