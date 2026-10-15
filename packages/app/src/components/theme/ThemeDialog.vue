@@ -422,7 +422,7 @@ async function onImportFile(event: Event): Promise<void> {
 <style scoped>
 .theme-center {
   width: min(1080px, calc(100vw - var(--space-32)));
-  max-height: min(820px, calc(100vh - var(--space-32)));
+  height: min(780px, calc(100vh - var(--space-32)));
   min-height: 0;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
@@ -912,7 +912,7 @@ async function onImportFile(event: Event): Promise<void> {
 @media (width <= 620px) {
   .theme-center {
     width: calc(100vw - var(--space-16));
-    max-height: calc(100vh - var(--space-16));
+    height: calc(100vh - var(--space-16));
   }
 
   .theme-center__header,

@@ -7,6 +7,10 @@
  * Import order: after tokens.css + paper.css, before editor.css (see main.css)
  *
  * Winged upgrade: uses --radius-lg (12px), --shadow-wing-float (feathered multi-layer)
+ *
+ * 固定尺寸契约：卡片高度固定（默认 480px，随视口收缩），不随内容变高——
+ * 切换标签页/步骤时窗口不跳动；超出部分由 .modal-body 滚动。
+ * 更高的弹窗（设置/主题中心）在自己的 scoped 样式里覆盖 height。
  */
 
 .modal-overlay {
@@ -30,7 +34,7 @@
 }
 
 .modal-card {
-  max-height: 80vh;
+  height: min(480px, calc(100vh - 64px));
   max-width: calc(100vw - 32px);
   background: var(--paper-raised);
   border: var(--border-thin) solid var(--rule);
@@ -91,6 +95,14 @@
   color: var(--ink-primary);
 }
 
+/* 默认滚动层：自身未声明 overflow 的弹窗（导出/审阅导出）直接获得滚动；
+ * 已有内部滚动列的弹窗（模板/分享/设置/主题）在自己的 scoped 样式里覆盖 */
+.modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .modal-footer {
   display: flex;
   justify-content: flex-end;
@@ -109,7 +121,7 @@
   .modal-card {
     width: 100% !important;
     max-width: 100%;
-    max-height: calc(100vh - 24px);
+    height: calc(100vh - 24px);
   }
 
   .modal-header,

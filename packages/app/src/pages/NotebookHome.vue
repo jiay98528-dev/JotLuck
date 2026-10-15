@@ -6512,6 +6512,9 @@ function onDismissVersion(version: string) {
   padding-top: var(--space-48);
   overflow: hidden;
   position: relative;
+
+  /* 分栏契约：左栏源码行与右栏预览块同起点——源码编辑器顶距压到与 .split-preview 的 16px 一致 */
+  --editor-top-pad: var(--space-16);
 }
 
 .workflow-canvas[data-workspace-intent='archive'] .split-pane,
@@ -6572,6 +6575,12 @@ function onDismissVersion(version: string) {
   overflow-y: auto;
   padding: var(--space-16) var(--space-20);
   scroll-behavior: smooth;
+}
+
+/* 预览/阅读首块的 1.5em 顶部 margin 会叠加在容器顶 pad 上，压低内容起点——裁掉以对齐左栏首行 */
+.split-preview > :first-child,
+.reader-preview > :first-child {
+  margin-top: 0;
 }
 
 .markdown-body--full {

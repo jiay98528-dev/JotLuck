@@ -848,7 +848,7 @@ function close(): void {
 <style scoped>
 .modal-card {
   width: min(680px, calc(100vw - 32px));
-  max-height: 70vh;
+  height: min(640px, calc(100vh - 64px));
 }
 
 .modal-body {

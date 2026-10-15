@@ -641,6 +641,9 @@ onUnmounted(() => {
   display: flex;
   flex: 1;
   min-height: 0;
+
+  /* 左栏 .review-left-render 顶 pad 16px——右栏编辑器同起点 */
+  --editor-top-pad: var(--space-16);
 }
 
 .split-left,
@@ -684,7 +687,9 @@ onUnmounted(() => {
   overflow-wrap: break-word;
 }
 
-/* ── 批注面板锚点（面板自含尺寸，不遮挡其余区域） ── */
+/* ── 批注面板锚点（面板自含尺寸，不遮挡其余区域） ──
+ * host 与面板空白/空态区不拦截指针——编辑器首行位于面板下方，须可直接点选；
+ * 仅折叠头与批注条目本身可交互 */
 .review-panel-host {
   position: absolute;
   top: var(--space-12);
@@ -692,6 +697,12 @@ onUnmounted(() => {
   z-index: 20;
   display: flex;
   justify-content: flex-end;
+  pointer-events: none;
+}
+
+.review-panel-host :deep(.review-panel-header),
+.review-panel-host :deep(.review-panel-item) {
+  pointer-events: auto;
 }
 
 /* ── 小卡对话框（modal-overlay/modal-card 全局范式） ── */
