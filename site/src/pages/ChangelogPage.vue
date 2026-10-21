@@ -5,6 +5,7 @@
  */
 import { computed } from 'vue';
 import { marked } from 'marked';
+import DOMPurify from 'isomorphic-dompurify';
 import { useLocale } from '../composables/useLocale';
 import { usePageHead } from '../composables/usePageHead';
 import changelogData from '../content/changelog.data.json';
@@ -17,7 +18,7 @@ const entries = computed(() =>
   changelogData.releases.map((r) => ({
     ...r,
     dateLabel: new Date(r.dateISO).toISOString().slice(0, 10),
-    html: marked.parse(r.bodyMD, { async: false }) as string,
+    html: DOMPurify.sanitize(marked.parse(r.bodyMD, { async: false }) as string),
   })),
 );
 </script>
@@ -38,7 +39,7 @@ const entries = computed(() =>
           <span v-if="r.prerelease" class="release-state">Preview</span>
         </div>
         <p v-if="r.name && r.name !== r.tag" class="release-name">{{ r.name }}</p>
-        <!-- 发行说明为 Owner 自己发布的原文，构建期 marked 渲染 -->
+        <!-- 发行说明为 Owner 自己发布的原文，构建期经 marked 渲染、DOMPurify 净化 -->
         <div class="release-notes" v-html="r.html"></div>
         <a class="release-link" :href="r.url" target="_blank" rel="noopener">
           {{ c().githubLink }} ↗

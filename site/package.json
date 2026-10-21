@@ -8,13 +8,14 @@
     "dev": "vite-ssg dev",
     "build": "vite-ssg build && node scripts/postbuild.mjs",
     "preview": "vite preview",
+    "check": "vue-tsc --noEmit",
     "typecheck": "vue-tsc --noEmit",
     "verify:hydrated": "node scripts/verify-hydrated-home.mjs",
     "sync:changelog": "node scripts/sync-changelog.mjs"
   },
   "dependencies": {
-    "@jotluck/renderer": "file:../packages/renderer",
     "@unhead/vue": "2.1.16",
+    "isomorphic-dompurify": "^4.6.0",
     "marked": "^18.0.7",
     "vue": "^3.5.35",
     "vue-router": "^4.6.4"
