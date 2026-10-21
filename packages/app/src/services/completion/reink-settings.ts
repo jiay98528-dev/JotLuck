@@ -19,7 +19,9 @@ export const REINK_SETTINGS_KEY = 'jotluck:reink:settings';
 export const REINK_SETTINGS_EVENT = 'jotluck:reink-settings-changed';
 
 export const DEFAULT_REINK_SETTINGS: ReinkSettings = {
-  enabled: true,
+  // 装机默认关闭：Reink 依赖本机 python + 运行包，默认接管会造成
+  // 「配置不可用却抢占公共槽位」的静默降级；用户显式开启才接管。
+  enabled: false,
   pythonPath: 'python',
   runtimeDir: 'D:\\VibeCoding\\模型训练\\06_Reink续墨补全线\\release\\reink-runtime-1.0',
   tier: '32m',
@@ -75,7 +77,9 @@ function normalizeReinkSettings(settings: ReinkSettings): ReinkSettings {
   const tier: ReinkTier = settings.tier === '64m' ? '64m' : '32m';
   const mode: ReinkMode = settings.mode === 'quality' ? 'quality' : 'fast';
   return {
-    enabled: settings.enabled !== false,
+    // 与 DEFAULT_REINK_SETTINGS.enabled=false 对齐：仅显式 true 视为开启，
+    // 缺省/非法值一律回落关闭（缺省不得恒真接管）。
+    enabled: settings.enabled === true,
     pythonPath:
       typeof settings.pythonPath === 'string' && settings.pythonPath.trim().length > 0
         ? settings.pythonPath

@@ -80,16 +80,20 @@ export function useReinkEngineSetup(
     clearIdleWarmupTimer();
     const engine = installedEngine;
     installedEngine = null;
-    if (!engine) return;
-    try {
-      await predictor.removePublicEngineForEvaluation(engine.id);
-    } catch {
-      // 槽位已被后装引擎接管时此处返回 false/抛错，均不影响流程
-    }
-    try {
-      await engine.dispose();
-    } catch {
-      // dispose 失败不得阻断降级路径
+    // 引擎清理与默认链恢复解耦：hotSwap 已先 teardown(false) 清空槽位，
+    // 后续重装失败的恢复路径（teardown(true)）走到这里时 engine 为空，
+    // 但公共槽位确实被撤空了——restoreDefaultEngine 必须照常执行。
+    if (engine) {
+      try {
+        await predictor.removePublicEngineForEvaluation(engine.id);
+      } catch {
+        // 槽位已被后装引擎接管时此处返回 false/抛错，均不影响流程
+      }
+      try {
+        await engine.dispose();
+      } catch {
+        // dispose 失败不得阻断降级路径
+      }
     }
     if (restoreDefault) {
       try {

@@ -611,6 +611,13 @@ fn spawn_reink_runtime(
         .env("PYTHONUNBUFFERED", "1");
     configure_reink_command(&mut command);
     let mut child = command.spawn().map_err(|error| {
+        // 装机排查锚点：spawn 失败（python 路径不存在等）必须落日志，不能只回错误帧。
+        log::warn!(
+            "reink bridge spawn failed: python={} runtime={} bridge={} error={error}",
+            config.python_path,
+            config.runtime_dir.display(),
+            bridge_path.display(),
+        );
         CommandErrorPayload::from_diagnostic(format!(
             "unable to start reink bridge (python {:?}): {error}",
             config.python_path
@@ -675,12 +682,25 @@ fn spawn_reink_runtime(
     let ready = match ready_rx.recv_timeout(REINK_SPAWN_READY_TIMEOUT) {
         Ok(Ok(data)) => data,
         Ok(Err(error)) => {
+            // 就绪帧报错（桥接脚本 import 失败等）：kill 前先落日志。
+            log::warn!(
+                "reink bridge failed to initialize: python={} runtime={} error={error}",
+                config.python_path,
+                config.runtime_dir.display(),
+            );
             kill_child(&child);
             return Err(CommandErrorPayload::from_diagnostic(format!(
                 "reink bridge failed to initialize: {error}"
             )));
         }
         Err(_) => {
+            log::warn!(
+                "reink bridge did not signal readiness within {:?}: python={} runtime={} \
+                 (python/torch import too slow or missing)",
+                REINK_SPAWN_READY_TIMEOUT,
+                config.python_path,
+                config.runtime_dir.display(),
+            );
             kill_child(&child);
             return Err(CommandErrorPayload::from_diagnostic(
                 "reink bridge did not signal readiness in time (python/torch import too slow or missing)",
@@ -688,6 +708,11 @@ fn spawn_reink_runtime(
         }
     };
     if ready.get("bridge").and_then(serde_json::Value::as_str) != Some("reink") {
+        log::warn!(
+            "reink bridge identity mismatch: python={} runtime={} ready_frame={ready}",
+            config.python_path,
+            config.runtime_dir.display(),
+        );
         kill_child(&child);
         return Err(CommandErrorPayload::from_diagnostic(
             "reink bridge identity mismatch",
@@ -707,6 +732,14 @@ fn spawn_reink_runtime(
     })?;
     if let Err(error) = dispatch_request(&runtime, configure_id, configure_line, REINK_CONFIGURE_TIMEOUT)
     {
+        // 初始 configure 帧被拒（超时/写失败）：错误摘要必须落日志供装机排查。
+        log::warn!(
+            "reink bridge rejected the initial configure frame: python={} runtime={} \
+             timeout={:?} error={error}",
+            config.python_path,
+            config.runtime_dir.display(),
+            REINK_CONFIGURE_TIMEOUT,
+        );
         kill_child(&child);
         if let Ok(mut status) = shared.lock() {
             status.last_error = Some(error);

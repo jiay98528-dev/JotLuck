@@ -103,7 +103,13 @@ describe('virtual reading correctness', () => {
     wrappers.push(wrapper);
     await vi.waitFor(() => expect(wrapper.text()).toContain('start'));
     priority(fragments.slice(-2));
-    await vi.waitFor(() => expect(wrapper.text()).toContain('Last'));
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toContain('Last');
+      // 「Last」在 h2 上屏即满足上一行；p('last') 与 h2 分属两个片段、
+      // 挂载有先后——须等 p('last') 也上屏，否则 range 终点落回 start 段，
+      // 并行负载下会复现「只复制到 'star'」的竞态（同用例 3 的去脆口径）。
+      expect(wrapper.findAll('p').map((node) => node.text())).toContain('last');
+    });
     const paragraphs = wrapper.findAll('p');
     const range = document.createRange();
     range.setStart(paragraphs[0]!.element.firstChild!, 0);

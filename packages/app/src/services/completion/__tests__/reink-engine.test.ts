@@ -261,4 +261,34 @@ describe('reink settings', () => {
       localStorage.clear();
     }
   });
+
+  it('defaults to disabled and only an explicit true re-enables reink', () => {
+    localStorage.clear();
+    // 装机默认关闭：enabled 缺省/非法值不得回落为开启（原 !==false 恒真缺省）。
+    expect(DEFAULT_REINK_SETTINGS.enabled).toBe(false);
+    expect(getReinkSettings().enabled).toBe(false);
+
+    localStorage.setItem(
+      REINK_SETTINGS_KEY,
+      JSON.stringify({
+        pythonPath: 'python',
+        runtimeDir: 'D:\\reink',
+        tier: '64m',
+        mode: 'quality',
+      }),
+    );
+    expect(getReinkSettings().enabled).toBe(false);
+
+    localStorage.setItem(
+      REINK_SETTINGS_KEY,
+      JSON.stringify({ ...DEFAULT_REINK_SETTINGS, enabled: 'yes' }),
+    );
+    expect(getReinkSettings().enabled).toBe(false);
+
+    localStorage.setItem(
+      REINK_SETTINGS_KEY,
+      JSON.stringify({ ...DEFAULT_REINK_SETTINGS, enabled: true }),
+    );
+    expect(getReinkSettings().enabled).toBe(true);
+  });
 });
