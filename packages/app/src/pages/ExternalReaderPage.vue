@@ -328,6 +328,7 @@ import type { RightWingRegion } from '@/types/theme-pack';
 import { openExternalUrl } from '@/utils/urlUtils';
 import { useI18n } from 'vue-i18n';
 import { normalizeCommandError } from '@/services/command-errors';
+import { invalidateWindowBootstrap } from '@/services/windowBootstrapCache';
 import { useDialogFocus } from '@/composables/useDialogFocus';
 import { useRemoteImageSession } from '@/composables/useRemoteImageSession';
 
@@ -907,6 +908,8 @@ async function enableEdit(): Promise<void> {
   actionPending.value = true;
   try {
     await invoke('enable_external_edit');
+    // 后端窗口身份已切换为可编辑；失效冷启动缓存，避免工作台初始化读到只读旧态。
+    invalidateWindowBootstrap();
     await router.replace('/workspace');
   } catch (error) {
     errorMessage.value = userErrorMessage(error);
@@ -919,6 +922,8 @@ async function promote(): Promise<void> {
   actionPending.value = true;
   try {
     await invoke<PromotedNotebookPayload>('promote_external_file_to_notebook');
+    // 后端窗口身份已切换为笔记本；失效冷启动缓存，避免工作台初始化读到只读旧态。
+    invalidateWindowBootstrap();
     await router.replace('/workspace');
   } catch (error) {
     errorMessage.value = userErrorMessage(error);

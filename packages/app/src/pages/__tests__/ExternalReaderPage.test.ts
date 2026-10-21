@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ExternalReaderPage from '../ExternalReaderPage.vue';
+import { getWindowBootstrap, invalidateWindowBootstrap } from '../../services/windowBootstrapCache';
 
 const { invoke, replace, isTauri, shellOpen, Channel, channels } = vi.hoisted(() => {
   const channelInstances: Array<{ onmessage?: (event: unknown) => void }> = [];
@@ -138,6 +139,57 @@ describe('ExternalReaderPage', () => {
     expect(invoke).toHaveBeenCalledWith('promote_external_file_to_notebook');
     expect(replace).toHaveBeenCalledWith('/workspace');
     wrapper.unmount();
+  });
+
+  it('invalidates the window bootstrap cache after enable-edit and promote succeed', async () => {
+    invoke.mockImplementation(async (command: string) => {
+      if (command === 'get_window_bootstrap') {
+        return {
+          mode: 'external-readonly',
+          openedFile: {
+            absolutePath: 'D:/notes/cache.md',
+            relativePath: '/cache.md',
+            accessToken: 'token',
+          },
+        };
+      }
+      if (command === 'read_external_note_file') return '# Cache';
+      if (command === 'enable_external_edit') return undefined;
+      if (command === 'promote_external_file_to_notebook') {
+        return { rootPath: 'D:/notes', name: 'notes', initialRelativePath: '/cache.md' };
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    // 模拟 BootstrapPage 冷启动已把 external-readonly 写入窗口级缓存。
+    invalidateWindowBootstrap();
+    await getWindowBootstrap();
+    const bootstrapCalls = () =>
+      invoke.mock.calls.filter(([command]) => command === 'get_window_bootstrap').length;
+    const warmCalls = bootstrapCalls();
+
+    const wrapper = mountReader();
+    await vi.waitFor(() => expect(wrapper.find('article h1').exists()).toBe(true));
+    // 页面自身直读一次 bootstrap；此时缓存未失效，窗口内重复读取不再 invoke。
+    expect(bootstrapCalls()).toBe(warmCalls + 1);
+    await getWindowBootstrap();
+    expect(bootstrapCalls()).toBe(warmCalls + 1);
+
+    const buttons = wrapper.findAll('button');
+    await buttons.find((button) => button.text() === '启用编辑')!.trigger('click');
+    await flushPromises();
+    expect(replace).toHaveBeenCalledWith('/workspace');
+    await getWindowBootstrap();
+    expect(bootstrapCalls()).toBe(warmCalls + 2);
+
+    replace.mockReset();
+    await buttons.find((button) => button.text() === '添加到笔记')!.trigger('click');
+    await flushPromises();
+    expect(replace).toHaveBeenCalledWith('/workspace');
+    await getWindowBootstrap();
+    expect(bootstrapCalls()).toBe(warmCalls + 3);
+    wrapper.unmount();
+    invalidateWindowBootstrap();
   });
 
   it('streams document chunks in order and offers exactly two edit paths after conversion', async () => {

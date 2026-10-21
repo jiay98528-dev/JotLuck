@@ -965,7 +965,7 @@ import ThemeSlotBoundary from '@/components/theme/ThemeSlotBoundary.vue';
 import ToastContainer, { useToast } from '@/components/common/Toast.vue';
 import { MockFSService } from '@/services/MockFSService';
 import { TauriIPCService } from '@/services/TauriIPCService';
-import { getWindowBootstrap } from '@/services/windowBootstrapCache';
+import { getWindowBootstrap, invalidateWindowBootstrap } from '@/services/windowBootstrapCache';
 import {
   applyGuidedSampleEdit,
   createGuidedSampleSession,
@@ -4413,7 +4413,11 @@ function confirmExternalEdit(): void {
 async function enableExternalEdit(): Promise<void> {
   if (!externalFile.value || externalError.value) return;
   try {
-    if (isDesktopRuntime()) await invoke('enable_external_edit');
+    if (isDesktopRuntime()) {
+      await invoke('enable_external_edit');
+      // 后端窗口身份已切换为可编辑；失效冷启动缓存，避免后续初始化读到只读旧态。
+      invalidateWindowBootstrap();
+    }
     confirmExternalEdit();
   } catch (error) {
     externalError.value = userErrorMessage(error);
@@ -4421,11 +4425,14 @@ async function enableExternalEdit(): Promise<void> {
 }
 
 async function openExternalParentAsNotebook(): Promise<void> {
-  if (!externalFile.value) return;
+  if (!externalFile.value) {
+    // 防御分支：外部文件会话已不在时仍被触发，给出可见反馈而非静默返回。
+    toast.show(t('errors.operationFailed'), 'error', 4000);
+    return;
+  }
   const target = externalFile.value;
   isNoteSwitching.value = true;
-  await imageUpload.waitForIdle();
-  if (!(await flushPendingCurrentSave())) {
+  if (!(await flushCurrentSaveOrBlock(t('externalReader.addToNotes')))) {
     isNoteSwitching.value = false;
     return;
   }

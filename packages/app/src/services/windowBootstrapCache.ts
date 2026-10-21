@@ -22,8 +22,20 @@ export function getWindowBootstrap(): Promise<WindowBootstrapPayload> {
         });
       })
       .catch(() => {
-        cached = null;
+        // 仅当失败请求仍是当前缓存条目时清空，避免失效后旧请求的迟到失败误清新缓存。
+        if (cached === request) cached = null;
       });
   }
   return cached;
+}
+
+/**
+ * 显式失效窗口级缓存。
+ *
+ * enable_external_edit / promote_external_file_to_notebook 成功后，后端窗口身份
+ * 已切换，旧 bootstrap 结果不再可信；调用方须在路由跳转前调用本函数，使下一次
+ * getWindowBootstrap 重新发起 IPC。重复调用幂等（缓存已清空时再清一次无副作用）。
+ */
+export function invalidateWindowBootstrap(): void {
+  cached = null;
 }
