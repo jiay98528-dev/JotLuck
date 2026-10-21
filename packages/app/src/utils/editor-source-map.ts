@@ -84,14 +84,21 @@ export function snapSourceBoundary(source: string, offset: number): number {
   return source.length;
 }
 
+/**
+ * 渲染块内不参与源码坐标投影的装饰节点选择器（列表 bullet 槽 / 交互控件 /
+ * 远程图占位）。mapDomText 与 review-dom-annotator 的可见文本聚合（collectTextSpans /
+ * visibleTextOf）必须共享这同一常量——两套坐标任一侧单独增删跳过项都会整体漂移。
+ */
+export const DECORATIVE_NODE_SELECTOR =
+  '.cm-list-marker-slot, button, .remote-image, .cm-task-toggle';
+
 export function mapDomText(root: HTMLElement, map: TextSourceMap): WeakMap<Node, number[]> {
   const nodes = new WeakMap<Node, number[]>();
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let consumed = 0;
   while (walker.nextNode()) {
     const node = walker.currentNode;
-    if (node.parentElement?.closest('.cm-list-marker-slot, button, .remote-image, .cm-task-toggle'))
-      continue;
+    if (node.parentElement?.closest(DECORATIVE_NODE_SELECTOR)) continue;
     const text = node.textContent ?? '';
     if (!text) continue;
     // Ordered consumption within a single token-derived block prevents duplicate-word jumps.

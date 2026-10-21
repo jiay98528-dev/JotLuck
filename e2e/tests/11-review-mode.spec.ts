@@ -2,8 +2,8 @@
  * 11-review-mode.spec.ts — 改稿（审批/批注）模式 E2E 验收
  *
  * 覆盖：进入/退出改稿工作台、右栏编辑自动生成批注、源码态红/绿马克笔、
- *       渲染态内嵌标记、批注面板定位与批准/丢弃、版本化导出 V1 递进、
- *       设置面板 Reink 区块存在性。
+ *       渲染态内嵌标记（含 08 词级绿马克笔投影：改写词 + 列表标记不进马克笔）、
+ *       批注面板定位与批准/丢弃、版本化导出 V1 递进、设置面板 Reink 区块存在性。
  *
  * 基于 V1-V6 测试规则：
  *   V1 交互正确性 — 验证交互后的结果
@@ -242,5 +242,41 @@ test.describe('改稿（审批/批注）模式', () => {
       path: '../../e2e/screenshots/review-mode/06-settings-reink.png',
       fullPage: false,
     });
+  });
+
+  // IME 行首直输修复（reconfigure→destroy→重建链切断）无法在 Playwright 可靠
+  // 复现 Windows IME 组合窗口，列为手工验收项：Windows 中文 IME 行首直输无需
+  // 先打空格（见 PR 验收清单）。
+  test('08-渲染态右栏词级绿马克笔：段落改写词 + 列表整行新增（投影非 tint）', async ({ page }) => {
+    await enterReviewMode(page);
+    await switchReviewMode(page, '源码');
+    // 改写第一段（选用 fixture 内高区分度改写词，降低词级 diff 碎片脆性）。
+    // 选区用 Home→Shift+End 的行内选区：三击选区含行尾换行符，insertText 会
+    // 连换行一起替换，把第一段与第二段粘连成一个段落块、hunk 配对漂移。
+    const firstPara = page
+      .locator('.review-workbench .split-right .cm-line', { hasText: '第一段原始内容' })
+      .first();
+    await firstPara.click();
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Shift+End');
+    await page.keyboard.insertText('第一段已被审稿人彻底重写的措辞。');
+    // 追加列表行（block-level insert）：钉「列表标记后空白不进马克笔」的
+    // contentFrom 契约——mark 文本恰为内容、不含 '- ' 前缀
+    await appendInRightEditor(page, '\n\n- 列表项新增内容');
+    await expect(page.locator('.review-panel-item').first()).toBeVisible({ timeout: 5000 });
+
+    // 切回即时渲染：右栏渲染 widget 内出现词级绿马克笔
+    await switchReviewMode(page, '即时渲染');
+    await expect(
+      page.locator('.review-workbench .split-right .review-mark-add', { hasText: '措辞' }),
+    ).toBeVisible({ timeout: 5000 });
+    // 列表整行新增：mark 精确包裹内容文本（不含 '- '）
+    const listMark = page.locator('.review-workbench .split-right .review-mark-add', {
+      hasText: '列表项新增内容',
+    });
+    await expect(listMark).toBeVisible();
+    await expect(listMark.first()).toHaveText('列表项新增内容');
+    // fixture 各 hunk 均走投影路径（词级马克笔），不应出现整块绿底 tint
+    await expect(page.locator('.review-workbench .split-right .review-block-add')).toHaveCount(0);
   });
 });

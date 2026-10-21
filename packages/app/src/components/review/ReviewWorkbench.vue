@@ -83,7 +83,7 @@
           :live-preview="mode === 'rendered'"
           :source-only="mode === 'source'"
           :review-marks="rightMarks"
-          :annotate-rendered-block="mode === 'rendered' ? annotateHook : undefined"
+          :annotate-rendered-block="annotateHook"
           :predictor="predictor"
           :completion-settings="completionSettings"
           :enable-autocomplete="true"
@@ -174,11 +174,14 @@
  * renderMarkdown。块对齐用 parseDocument，与 cm6-live-preview 同一 AST 权威。
  *
  * 右栏渲染态用 cm6-live-preview 的 annotateRenderedBlock 钩子对未聚焦改动块做
- * 渲染内嵌：整块被单个 hunk 覆盖时 computeVisibleDiffMarks 词级绿马克笔，其余
- * （跨块/部分覆盖，坐标对不齐）退化为整块绿底 tint（applyBlockTint）；聚焦
- * 改动块显示源码，由 reviewMarks 绿标覆盖。
+ * 渲染内嵌：按块载荷（contentFrom/literal/definitions，与 sourcePosition 同口径）
+ * 经 annotateBlockBySourceRanges 做「源码区间 → 可见文本」的词级绿马克笔投影
+ * （带 visibleTextOf===map.text 全等校验，位移型错位一律回退）；投影空/校验
+ * 失败/tableRow 退化为整块绿底 tint（applyBlockTint）；聚焦改动块显示源码，
+ * 由 reviewMarks 绿标覆盖。注解器为 setup 期一次创建的稳定函数 + signature，
+ * 批注数据轮换走 refreshRenderedAnnotations（换数据不换扩展，IME 友好）。
  */
-import { computed, onUnmounted, ref } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { EditorView } from '@codemirror/view';
 import { parseDocument, renderMarkdown } from '@jotluck/renderer';
@@ -197,11 +200,11 @@ import {
   mapLeftPositionToWorking,
   rightMarksFromHunks,
 } from '@/services/review-session-store';
-import {
-  annotateRenderedFragment,
-  applyBlockTint,
-  computeVisibleDiffMarks,
-} from '@/utils/review-dom-annotator';
+import { annotateBlockBySourceRanges, applyBlockTint } from '@/utils/review-dom-annotator';
+import type {
+  RenderedBlockAnnotator,
+  RenderedBlockAnnotationPayload,
+} from '@/utils/cm6-live-preview';
 
 const props = defineProps<{
   fs: IFileSystemService;
@@ -319,51 +322,61 @@ function renderLeftPane(source: string, allHunks: readonly ReviewHunk[]): string
 
 const leftRenderedHtml = computed(() => renderLeftPane(sourceText.value, hunks.value));
 
-// ── 右栏渲染态钩子：未聚焦改动块的内嵌批注 ──
+// ── 右栏渲染态钩子：未聚焦改动块的内嵌批注（投影梯） ──
 
-function annotateRightBlock(range: { from: number; to: number }, dom: HTMLElement): void {
-  const current = hunks.value;
-  if (current.length === 0) return;
-  const working = workingText.value;
-  const intersecting = current.filter(
+/** 与块区间相交的 add 侧 hunk（modify/insert 且有 rightRange） */
+function intersectingHunksOf(payload: RenderedBlockAnnotationPayload): ReviewHunk[] {
+  return hunks.value.filter(
     (hunk) =>
       (hunk.type === 'modify' || hunk.type === 'insert') &&
       hunk.rightRange &&
-      hunk.rightRange.from < range.to &&
-      hunk.rightRange.to > range.from,
+      hunk.rightRange.from < payload.to &&
+      hunk.rightRange.to > payload.from,
   );
+}
+
+/**
+ * 投影梯：相交 hunk 过滤 → tableRow 直接 tint（V1 非 prose 块：网格布局 +
+ * 空格补位，词级投影对不齐，不升级）→ 其余块用 annotateBlockBySourceRanges
+ * 做源码坐标 → 可见文本的词级绿马克笔；false（投影空 / 全等校验失败 /
+ * 词法异常）一律回退整块绿底 tint——宁降级不错位。
+ */
+function annotateRightBlock(payload: RenderedBlockAnnotationPayload, dom: HTMLElement): void {
+  const intersecting = intersectingHunksOf(payload);
   if (intersecting.length === 0) return;
-  // V1 块对齐口径：仅当单个 hunk 完整覆盖该块时做词级绿马克笔（两侧文本切片
-  // 坐标空间一致）；部分覆盖/跨块对不齐 → 整块绿底 tint
-  const whole = intersecting.find(
-    (hunk) => hunk.rightRange!.from <= range.from && hunk.rightRange!.to >= range.to,
-  );
-  if (whole && (whole.type === 'insert' || whole.leftRange)) {
-    const leftSlice =
-      whole.type === 'insert'
-        ? ''
-        : whole.leftRange
-          ? sourceText.value.slice(whole.leftRange.from, whole.leftRange.to)
-          : whole.leftText;
-    const rightSlice = working.slice(range.from, range.to);
-    try {
-      annotateRenderedFragment(dom, computeVisibleDiffMarks(leftSlice, rightSlice, 'add'));
-      return;
-    } catch {
-      // 词级失败 → tint 兜底
-    }
+  if (payload.type === 'tableRow') {
+    applyBlockTint(dom, 'add');
+    return;
+  }
+  const working = workingText.value;
+  try {
+    const projected = annotateBlockBySourceRanges(dom, {
+      blockSource: working.slice(payload.contentFrom, payload.to),
+      contentFrom: payload.contentFrom,
+      literal: payload.literal,
+      definitions: payload.definitions,
+      ranges: intersecting.flatMap((hunk) => (hunk.rightRange ? [hunk.rightRange] : [])),
+      side: 'add',
+    });
+    if (projected) return;
+  } catch {
+    // 投影异常 → tint 兜底
   }
   applyBlockTint(dom, 'add');
 }
 
 /**
- * 钩子闭包身份随 hunk 集合更换：hunks 每轮重算 → 新闭包 → 编辑器
- * annotateRenderedBlock prop 身份变化 → livePreviewCompartment reconfigure
- * → 渲染 widget 全部重建并按最新 hunk 重新标注（如批准后撤掉绿笔）。
+ * 稳定注解器：函数身份在 setup 期创建后永不变（闭包身份恒定），批注数据经
+ * hunks.value 实时读取。数据轮换由 signature（相交 hunk 的 id:rightRange 区间
+ * 串接，无相交为 ''）驱动 cm6-live-preview 的定向 widget 重建（换数据不换
+ * 扩展，IME/renderCache 不受扰动）；hunks 变化另经下方 watch 主动触发
+ * refreshRenderedAnnotations 兜底刷新。
  */
-const annotateHook = computed(() => {
-  void hunks.value;
-  return (range: { from: number; to: number }, dom: HTMLElement) => annotateRightBlock(range, dom);
+const annotateHook: RenderedBlockAnnotator = Object.assign(annotateRightBlock, {
+  signature: (payload: RenderedBlockAnnotationPayload): string =>
+    intersectingHunksOf(payload)
+      .map((hunk) => `${hunk.id}:${hunk.rightRange?.from ?? ''}-${hunk.rightRange?.to ?? ''}`)
+      .join('|'),
 });
 
 // ── 编辑同步（右栏） ──
@@ -371,6 +384,12 @@ const annotateHook = computed(() => {
 function onWorkingUpdate(value: string): void {
   workingText.value = value;
 }
+
+// hunks 轮换 → 渲染态右栏定向刷新（adopt/discard 的 computeNow 同步重算路径
+// 同样覆盖；引用稳定化使结构未变时不触发本 watch，避免无谓刷新）
+watch(hunks, () => {
+  if (mode.value === 'rendered') rightEditorRef.value?.refreshRenderedAnnotations();
+});
 
 // ── 面板定位：两栏滚动 ──
 

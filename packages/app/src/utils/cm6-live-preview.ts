@@ -136,7 +136,40 @@ interface LiveBlock {
   headingLevel?: 1 | 2;
   /** 结构标记源码区间（如 `- `、`> `、`---`、围栏定界行；源码 UTF-16 偏移，与 from/to 同空间） */
   markerRange?: { from: number; to: number };
+  /**
+   * 块内容源码区间（AST contentRange 透传：listItem/heading/blockquoteLine）。
+   * 与 markerRange 口径不同：contentRange.from = 标记后空白之后的内容起点
+   * （ast.ts listItem contentStart 含标记后空白，markerEnd 不含），渲染 DOM
+   * 剥壳后不含该空白——注解投影（contentFrom）须按本字段，否则整体错一格。
+   */
+  contentRange?: { from: number; to: number };
 }
+
+/** 注解载荷：widget 覆盖区间 + 把该块渲染 DOM 投影回源码坐标所需的口径 */
+export interface RenderedBlockAnnotationPayload {
+  /** widget 覆盖的源码区间（UTF-16 偏移） */
+  from: number;
+  to: number;
+  /** 内容起点：contentRange.from ?? markerRange.to ?? from（与 sourcePosition 同口径） */
+  contentFrom: number;
+  /** 整行字面渲染（codeFence 内容行 / jsonBlockLine / frontmatterLine）：无行内语法 */
+  literal: boolean;
+  /** 块型（LiveBlock.type），调用方按型决定投影或 tint */
+  type: string;
+  /** 全文引用式链接/图片定义（[r]: url 逐行串接）；ref 链接解析与坐标对齐共用 */
+  definitions: string;
+}
+
+/**
+ * 改稿模式渲染块注解器：widget DOM 构建完成后调用，把载荷与 DOM 交给调用方
+ * 做内嵌批注（如绿马克笔 / 整块底色）。函数身份在装配期固定（换批注数据靠
+ * refreshLivePreviewAnnotations 触发定向重建，而非更换本函数——见 eq 注释）；
+ * 可选 signature 返回批注数据指纹，签名未变的块 widget eq 命中、DOM 原样复用。
+ */
+export type RenderedBlockAnnotator = {
+  (payload: RenderedBlockAnnotationPayload, dom: HTMLElement): void;
+  signature?: (payload: RenderedBlockAnnotationPayload) => string;
+};
 
 interface LivePreviewOptions {
   onExternalLinkClick?: (href: string) => void;
@@ -148,12 +181,8 @@ interface LivePreviewOptions {
   onRemoteImageClick?: (event: MouseEvent) => boolean;
   onRemoteImageLoad?: (event: Event) => boolean;
   onRemoteImageError?: (event: Event) => boolean;
-  /**
-   * 改稿模式钩子：非聚焦块的渲染 widget DOM 构建完成后调用，
-   * 把 widget 覆盖的源码区间与构建出的 DOM 交给调用方做内嵌批注
-   * （如绿马克笔 / 整块底色）。区间为文档 UTF-16 偏移，与 from/to 同空间。
-   */
-  annotateRenderedBlock?: (range: { from: number; to: number }, dom: HTMLElement) => void;
+  /** 改稿模式钩子（见 RenderedBlockAnnotator） */
+  annotateRenderedBlock?: RenderedBlockAnnotator;
 }
 
 const SOURCE_PRESERVING_BLOCK_TYPES = new Set<BlockType>([
@@ -162,6 +191,13 @@ const SOURCE_PRESERVING_BLOCK_TYPES = new Set<BlockType>([
   'paragraph',
   'tableRow',
   'jsonBlockLine',
+]);
+
+/** 整行字面渲染的块型（无行内语法）：注解载荷 literal 口径，与 sourcePosition 一致 */
+const LITERAL_ANNOTATION_BLOCK_TYPES = new Set<BlockType>([
+  'codeFenceLine',
+  'jsonBlockLine',
+  'frontmatterLine',
 ]);
 const SOURCE_MARK_NODE_NAMES = new Set([
   'HeaderMark',
@@ -291,12 +327,9 @@ function buildSearchRevealMatcher(
   return (blockText) => blockText.toLowerCase().includes(lower);
 }
 
-/** 生成稳定 block ID：行号 + 内容 hash，编辑上方内容不会改变 key */
-function blockKey(lineNumber: number, raw: string): string {
-  let h = 0;
-  const s = raw.substring(0, 32);
-  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
-  return `L${lineNumber}_${Math.abs(h).toString(36)}`;
+/** 家族序号消歧键：与 blockKey 的 hash 同口径（前 32 字符），保证「同 hash ⇒ 同家族 ⇒ ordinal 消歧」 */
+function keyFamilyOf(raw: string): string {
+  return raw.substring(0, 32);
 }
 
 function groupKey(lineNumber: number): string {
@@ -312,7 +345,8 @@ function groupKey(lineNumber: number): string {
  * - raw 一律取归一化行文本（normalizeFullwidthMarkdownSyntax 不增删行，行号与源码一一对应）；
  * - from/to 一律取源码 UTF-16 偏移（AST range 或行前缀和，与 AST 内部 lineStarts 同口径），
  *   顺带修复旧实现「归一变长时装饰范围漂移」缺陷；
- * - blockKey/groupKey 算法不变；装饰体系、renderBlockHtml、wrapBlockHtml、build() 零改动。
+ * - blockKey 为「内容键 + 家族 ordinal 消歧」（去行号，键跨编辑稳定，见 keyFor）；
+ *   groupKey 维持行号制不变；装饰体系、renderBlockHtml、wrapBlockHtml、build() 零改动。
  *
  * 【明示收紧 1】代码围栏：AST 支持 ~~~ 围栏与「同字符且长度 ≥ 开围栏」闭合；
  * 旧实现仅 ``` 且等长闭合。围栏行渲染外壳（renderBlockHtml）未改动。
@@ -323,7 +357,15 @@ function groupKey(lineNumber: number): string {
  */
 const liveLines = new WeakMap<
   DocumentAst,
-  { lines: string[]; starts: number[]; refs: Map<string, string> }
+  {
+    lines: string[];
+    starts: number[];
+    refs: Map<string, string>;
+    /** 同内容行家族规模（键 = 归一化行文本前 32 字符，与 blockKey hash 同口径） */
+    familySizes: Map<string, number>;
+    /** 每行在其家族内的序号（0 基，全文档口径——窗口区间/单行解析共享，键跨口径一致） */
+    lineOrdinals: number[];
+  }
 >();
 const tableWidths = new WeakMap<BlockNode, string>();
 
@@ -337,7 +379,19 @@ function documentLines(ast: DocumentAst) {
     offset += line.length + 1;
     return from;
   });
-  const result = { lines, starts, refs: collectRefDefs(ast) };
+  // 两遍 O(N) 建 blockKey 的「同内容行」全量表：家族按归一化行文本计数（与
+  // parseLiveBlocks 传入 blockKey 的 raw 同一归一化），序号按文档序分配。
+  const normalizedKeys = lines.map((line) => keyFamilyOf(normalizeFullwidthMarkdownSyntax(line)));
+  const familySizes = new Map<string, number>();
+  for (const key of normalizedKeys) familySizes.set(key, (familySizes.get(key) ?? 0) + 1);
+  const lineOrdinals: number[] = [];
+  const seen = new Map<string, number>();
+  for (const key of normalizedKeys) {
+    const ordinal = seen.get(key) ?? 0;
+    lineOrdinals.push(ordinal);
+    seen.set(key, ordinal + 1);
+  }
+  const result = { lines, starts, refs: collectRefDefs(ast), familySizes, lineOrdinals };
   liveLines.set(ast, result);
   return result;
 }
@@ -350,9 +404,25 @@ function parseLiveBlocks(
   lastLine = ast.lineMap.length - 1,
   render = true,
 ): LiveBlock[] {
-  const { lines: sourceLines, starts: lineStarts } = documentLines(ast);
+  const { lines: sourceLines, starts: lineStarts, familySizes, lineOrdinals } = documentLines(ast);
   const normalizedLine = (line: number): string =>
     normalizeFullwidthMarkdownSyntax(sourceLines[line] ?? '');
+  /**
+   * 内容键 + 家族 ordinal 消歧（去行号）：hash(归一化行文本前 32 字符)，
+   * 家族规模 >1 时追加 ~ordinal。上方插入不同内容的行时，下方块的键（及其
+   * pin）不变；编辑本块内容则键随之变化。旧行号制 L<行号>_<hash> 在上方插行
+   * 时全体下方键平移，pin 全部失联——本改法消除该缺陷。ordinal 取自
+   * documentLines 的全文档表，窗口化解析与全量解析产出同一键。
+   */
+  const keyFor = (line: number, raw: string): string => {
+    let h = 0;
+    const s = raw.substring(0, 32);
+    for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+    const base = `B${Math.abs(h).toString(36)}`;
+    return (familySizes.get(keyFamilyOf(raw)) ?? 1) > 1
+      ? `${base}~${lineOrdinals[line] ?? 0}`
+      : base;
+  };
   const lineRange = (lineNumber: number) => ({
     from: lineStarts[lineNumber]!,
     to: lineStarts[lineNumber]! + sourceLines[lineNumber]!.length,
@@ -380,7 +450,7 @@ function parseLiveBlocks(
         const raw = normalizedLine(k);
         const range = lineRange(k);
         const block: LiveBlock = {
-          key: blockKey(k, raw),
+          key: keyFor(k, raw),
           from: range.from,
           to: range.to,
           type: 'frontmatterLine',
@@ -410,7 +480,7 @@ function parseLiveBlocks(
         const raw = normalizedLine(k);
         const range = lineRange(k);
         const block: LiveBlock = {
-          key: blockKey(k, raw),
+          key: keyFor(k, raw),
           from: range.from,
           to: range.to,
           type: 'codeFenceLine',
@@ -438,7 +508,7 @@ function parseLiveBlocks(
         const raw = normalizedLine(k);
         const range = lineRange(k);
         blocks.push({
-          key: blockKey(k, raw),
+          key: keyFor(k, raw),
           from: range.from,
           to: range.to,
           type: 'jsonBlockLine',
@@ -463,7 +533,7 @@ function parseLiveBlocks(
       const raw = normalizedLine(node.lineFrom);
       const range = lineRange(node.lineFrom);
       blocks.push({
-        key: blockKey(node.lineFrom, raw),
+        key: keyFor(node.lineFrom, raw),
         from: range.from,
         to: range.to,
         type: 'horizontalRule',
@@ -482,18 +552,20 @@ function parseLiveBlocks(
         const textRaw = normalizedLine(node.lineFrom);
         const textRange = lineRange(node.lineFrom);
         blocks.push({
-          key: blockKey(node.lineFrom, textRaw),
+          key: keyFor(node.lineFrom, textRaw),
           from: textRange.from,
           to: textRange.to,
           type: 'setextHeadingText',
           raw: textRaw,
           html: '',
           headingLevel: level,
+          // setext 文本行的内容区间（AST 源码空间，去首尾空白）——注解投影用
+          contentRange: node.contentRange,
         });
         const ruleRaw = normalizedLine(node.lineTo);
         const ruleRange = lineRange(node.lineTo);
         blocks.push({
-          key: blockKey(node.lineTo, ruleRaw),
+          key: keyFor(node.lineTo, ruleRaw),
           from: ruleRange.from,
           to: ruleRange.to,
           type: 'setextHeadingRule',
@@ -506,12 +578,14 @@ function parseLiveBlocks(
         const raw = normalizedLine(node.lineFrom);
         const range = lineRange(node.lineFrom);
         const block: LiveBlock = {
-          key: blockKey(node.lineFrom, raw),
+          key: keyFor(node.lineFrom, raw),
           from: range.from,
           to: range.to,
           type: 'heading',
           raw,
           html: '',
+          // 标题内容区间（井号与后随空白之后，AST 源码空间）——注解投影用
+          contentRange: node.contentRange,
         };
         // ATX 标题井号前缀（含后随空白）作为 markerRange：覆盖全角 `＃` —— Lezer 不识全角井号
         const atxMatch = SRC_ATX_HEADING_RE.exec(raw);
@@ -537,7 +611,7 @@ function parseLiveBlocks(
         const line = node.lines[k]!;
         const raw = normalizedLine(line.lineNumber);
         blocks.push({
-          key: blockKey(line.lineNumber, raw),
+          key: keyFor(line.lineNumber, raw),
           from: line.range.from,
           to: line.range.to,
           type: 'blockquoteLine',
@@ -548,6 +622,8 @@ function parseLiveBlocks(
             count === 1 ? 'single' : k === 0 ? 'first' : k === count - 1 ? 'last' : 'middle',
           // AST 在源码空间切出 `>`/＞ 及其后一个空白，全角标记同样被幽灵化
           markerRange: line.markerRange,
+          // 行内容区间（标记及其后一个空白之后）——注解投影用
+          contentRange: line.contentRange,
         });
       }
       continue;
@@ -566,13 +642,15 @@ function parseLiveBlocks(
             ? 'taskListItem'
             : 'unorderedListItem';
       blocks.push({
-        key: blockKey(node.lineFrom, raw),
+        key: keyFor(node.lineFrom, raw),
         from: node.range.from,
         to: node.range.to,
         raw,
         html: '',
         type,
         markerRange: node.markerRange,
+        // 内容区间（标记后空白之后）——注解投影用；与 render 路径同源（AST contentRange）
+        contentRange: node.contentRange,
         itemIndex: node.itemIndex,
         groupKey: `G${node.groupRange.from}`,
         position:
@@ -619,7 +697,7 @@ function parseLiveBlocks(
         if (family === 'ordered' && item.delimiter === ')') {
           flushRun();
           blocks.push({
-            key: blockKey(item.lineFrom, raw),
+            key: keyFor(item.lineFrom, raw),
             from: range.from,
             to: range.to,
             type: 'paragraph',
@@ -643,7 +721,7 @@ function parseLiveBlocks(
           if (/^[-－] \[[ x]\]$/.test(markerSlice)) blockType = 'taskListItem';
         }
         const liveBlock: LiveBlock = {
-          key: blockKey(item.lineFrom, raw),
+          key: keyFor(item.lineFrom, raw),
           from: range.from,
           to: range.to,
           type: blockType,
@@ -653,6 +731,9 @@ function parseLiveBlocks(
           // AST markerRange 源码空间切分：无序为 bullet、有序为 `1.`，
           // 任务含 `[ ]`/`[x]`（全角 bullet 同样被幽灵化）
           markerRange: item.markerRange,
+          // 内容区间（标记后空白之后，AST contentRange）——注解投影用；
+          // renderBlockHtml 剥壳后 DOM 不含标记与标记后空白，口径必须同源
+          contentRange: item.contentRange,
         };
         if (family === 'ordered') liveBlock.itemIndex = itemIndex;
         run.push(liveBlock);
@@ -686,7 +767,7 @@ function parseLiveBlocks(
         if (row.lineNumber > lastLine) break;
         const raw = normalizedLine(row.lineNumber);
         blocks.push({
-          key: blockKey(row.lineNumber, raw),
+          key: keyFor(row.lineNumber, raw),
           from: row.range.from,
           to: row.range.to,
           type: 'tableRow',
@@ -720,7 +801,7 @@ function parseLiveBlocks(
         const raw = normalizedLine(k);
         const range = lineRange(k);
         blocks.push({
-          key: blockKey(k, raw),
+          key: keyFor(k, raw),
           from: range.from,
           to: range.to,
           type: 'paragraph',
@@ -950,32 +1031,41 @@ const renderedWidgetKeys = new WeakMap<HTMLElement, string>();
 class RenderedBlockWidget extends WidgetType {
   private html: string;
   private key: string;
-  /** widget 覆盖的源码区间（UTF-16 偏移），供 annotateRenderedBlock 钩子消费 */
-  private range: { from: number; to: number };
-  private annotate?: (range: { from: number; to: number }, dom: HTMLElement) => void;
+  /** 注解载荷（覆盖区间 + 投影口径），供 annotate/signature 消费 */
+  private payload: RenderedBlockAnnotationPayload;
+  private annotate?: RenderedBlockAnnotator;
+  /** 构造时定格的批注签名快照（annotate.signature?.(payload)）——eq 比较用 */
+  private sig: string | undefined;
 
   constructor(
     html: string,
     key: string,
-    range: { from: number; to: number },
-    annotate?: (range: { from: number; to: number }, dom: HTMLElement) => void,
+    payload: RenderedBlockAnnotationPayload,
+    annotate?: RenderedBlockAnnotator,
   ) {
     super();
     this.html = html;
     this.key = key;
-    this.range = range;
+    this.payload = payload;
     this.annotate = annotate;
+    this.sig = annotate?.signature?.(payload);
   }
 
   override eq(other: RenderedBlockWidget): boolean {
-    // 钩子身份参与比较：调用方随批注集合更换闭包即可让受影响 widget 重建
-    // 并重新标注；未启用钩子时 undefined === undefined，复用语义与旧版一致。
-    return this.html === other.html && this.key === other.key && this.annotate === other.annotate;
+    if (this.html !== other.html || this.key !== other.key) return false;
+    // 状态化注解的比较契约：双方均携带签名 → 只比签名。批注数据轮换时
+    // （refreshLivePreviewAnnotations 触发重建）签名未变的块 eq 命中、既有
+    // DOM（含已标注的 mark）原样复用，仅签名变化块重建重标注——批注轮
+    // 不再需要更换扩展/闭包身份。任一方无签名（主编辑器不传 annotate，或
+    // 调用方未提供 signature）→ 回退旧「闭包身份」比较：主编辑器两侧均为
+    // undefined 恒等，复用语义与历史版本一致、零变化。
+    if (this.sig !== undefined && other.sig !== undefined) return this.sig === other.sig;
+    return this.annotate === other.annotate;
   }
 
   toDOM(): HTMLElement {
     const dom = this.buildDom();
-    this.annotate?.(this.range, dom);
+    this.annotate?.(this.payload, dom);
     return dom;
   }
 
@@ -1073,14 +1163,27 @@ class UnclosedBlockWidget extends WidgetType {
 }
 
 // ---- Pin State (block-key based, survives edits) ----
+// blockKey 为「内容键 + 家族 ordinal 消歧」（见 parseLiveBlocks 内 keyFor）：
+// 上方插不同内容时下方块键/pin 不变，编辑本块内容则键随之变化（pin 随之
+// 失效，由 build() 的死键修剪清出 pinnedSourceField）。
 
 const pinSourceEffect = StateEffect.define<{ key: string }>();
 const unpinSourceEffect = StateEffect.define<{ key: string }>();
 const revealSourceAtPositionEffect = StateEffect.define<number>();
 
+/**
+ * 注解数据已更新（批注集合轮换）：下一次重建让 RenderedBlockWidget.eq 按
+ * 新签名定向重建受影响块。StateEffect 事务范式同 review-marks 的
+ * setReviewMarksEffect——「换数据不换扩展」：ViewPlugin、renderCache、IME
+ * composition 监听全部存活，不走 Compartment.reconfigure（那会销毁并重建
+ * 插件实例，是改稿态 IME 行首不可编辑的已确认机制之一）。
+ */
+const renderedAnnotationRefreshEffect = StateEffect.define<null>();
+
 const pendingRestoredBlockFocusCleanup = new WeakMap<EditorView, () => void>();
 
-const pinnedSourceField = StateField.define<Set<string>>({
+/** 固定源码态键集合（导出供单测观测死键修剪） */
+export const pinnedSourceField = StateField.define<Set<string>>({
   create() {
     return new Set();
   },
@@ -1184,6 +1287,25 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         this.renderFrame = requestAnimationFrame(() => {
           this.renderFrame = null;
           if (!this.destroyed) view.dispatch({ effects: documentAnalysisReady.of() });
+        });
+      }
+
+      /** 死键修剪累积集合 + 防重入位：同 microtask 窗口内的多次 build 一并清空 */
+      pendingPinPrune = new Set<string>();
+      prunePinsScheduled = false;
+      schedulePinPrune(view: EditorView, deadKeys: string[]): void {
+        for (const key of deadKeys) this.pendingPinPrune.add(key);
+        if (this.prunePinsScheduled) return;
+        this.prunePinsScheduled = true;
+        queueMicrotask(() => {
+          this.prunePinsScheduled = false;
+          if (this.destroyed || !view.dom.isConnected) {
+            this.pendingPinPrune.clear();
+            return;
+          }
+          const keys = [...this.pendingPinPrune];
+          this.pendingPinPrune.clear();
+          view.dispatch({ effects: keys.map((key) => unpinSourceEffect.of({ key })) });
         });
       }
 
@@ -1566,6 +1688,13 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         const searchQueryChanged = update.transactions.some((tr) =>
           tr.effects.some((e) => e.is(setSearchQuery)),
         );
+        // 注解数据轮换（refreshLivePreviewAnnotations）：重建装饰让 eq 按新
+        // 签名定向重建受影响块。IME 组合窗口内该事务被下方早退分支转为
+        // 「组合结束后的延迟重建」——组合中重建会让 Decoration.replace 切碎
+        // 预编辑串（同文档编辑守卫，不另开豁免口子）。
+        const annotationRefreshed = update.transactions.some((tr) =>
+          tr.effects.some((e) => e.is(renderedAnnotationRefreshEffect)),
+        );
         const hasComposeTransaction = update.transactions.some((tr) =>
           tr.isUserEvent('input.type.compose'),
         );
@@ -1590,6 +1719,10 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           // widgets reappear on unrelated lower lines after Backspace/commit.
           if (update.docChanged) {
             this.decorations = this.decorations.map(update.changes);
+            this.scheduleCompositionRebuild(update.view);
+          } else if (annotationRefreshed) {
+            // 注解刷新事务到达时仍处 IME 组合窗口：转挂延迟重建（组合结束后
+            // 统一重建并按最新签名重标注），不在组合中重建——守卫同文档编辑。
             this.scheduleCompositionRebuild(update.view);
           } else {
             this.clearPendingCompositionRebuild();
@@ -1623,6 +1756,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           update.viewportChanged ||
           revealedPosition !== null ||
           searchQueryChanged ||
+          annotationRefreshed ||
           update.transactions.some((tr) => tr.effects.some((e) => e.is(documentAnalysisReady))) ||
           !this.decorationsBuilt
         ) {
@@ -1789,6 +1923,17 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         const searchMatcher = buildSearchRevealMatcher(view.state);
         const decos: Range<Decoration>[] = [];
         const unclosedWarnings = new Map<string, { end: number; type: BlockType }>();
+        // 注解载荷口径与 sourcePosition 同源：contentFrom 取 AST contentRange（标记
+        // 后空白之后），definitions 为全文引用定义串接（ref 链接解析依赖）
+        const annotationDefinitions = [...documentLines(ast).refs.values()].join('\n');
+        const annotationPayloadOf = (block: LiveBlock): RenderedBlockAnnotationPayload => ({
+          from: block.from,
+          to: block.to,
+          contentFrom: block.contentRange?.from ?? block.markerRange?.to ?? block.from,
+          literal: LITERAL_ANNOTATION_BLOCK_TYPES.has(block.type),
+          type: block.type,
+          definitions: annotationDefinitions,
+        });
 
         for (const block of blocks) {
           // Track unclosed groups for warning decoration
@@ -1801,6 +1946,10 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
 
           // Very long source lines stay native so CM6 can virtualize horizontal content.
           if (block.raw.length > 16_384) continue;
+          // 如实边界：cacheKey 仍含 from/to（wrapBlockHtml 把 data-block-from 烧进
+          // html 串，unpinFocusedBlock 的回退匹配依赖它）——去行号化的 blockKey
+          // 只稳定 pin 与 widget eq 复用，本步不解锁「上方插行下方块免重渲染」
+          // 的缓存命中，不做虚假承诺。
           const cacheKey = JSON.stringify([
             block.key,
             block.raw,
@@ -1893,7 +2042,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
                 widget: new RenderedBlockWidget(
                   block.html,
                   block.key,
-                  { from: block.from, to: block.to },
+                  annotationPayloadOf(block),
                   options.annotateRenderedBlock,
                 ),
                 side: 1,
@@ -1911,11 +2060,22 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
               widget: new RenderedBlockWidget(
                 block.html,
                 block.key,
-                { from: block.from, to: block.to },
+                annotationPayloadOf(block),
                 options.annotateRenderedBlock,
               ),
             }).range(block.from, block.to),
           );
+        }
+
+        // 死键修剪：blockKey 去行号后 pin 可跨编辑存活，但「内容被删/被改成
+        // 其他内容」的键不会再出现——留着会让 pinnedSourceField 单调膨胀且
+        // 同内容重现时意外复源。仅非大文档（全量解析）判定；缺失键经防重入
+        // guard 后 microtask dispatch（update() 进行中同步 dispatch 会抛
+        // "Calls to EditorView.update are not allowed"，调度范式同 renderMore）。
+        if (!large && pinned.size > 0) {
+          const presentKeys = new Set(blocks.map((block) => block.key));
+          const deadKeys = [...pinned].filter((key) => !presentKeys.has(key));
+          if (deadKeys.length > 0) this.schedulePinPrune(view, deadKeys);
         }
 
         // Unclosed multi-line block warnings
@@ -2110,6 +2270,17 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
 
 export function livePreviewExtension(options: LivePreviewOptions = {}) {
   return [pinnedSourceField, createLivePreviewPlugin(options)];
+}
+
+/**
+ * 通知 live preview：批注数据已更新（改稿模式批注集合轮换后的刷新入口，
+ * 范式同 review-marks setReviewMarks——「换数据不换扩展」）。下一次装饰
+ * 重建中 RenderedBlockWidget.eq 按新签名定向重建受影响块并重标注；未变
+ * 块 DOM 原样复用。IME 组合窗口内由 update() 的组合守卫自动转为组合结束
+ * 后的延迟重建（组合中重建会破坏预编辑串，见 update() 内 IME guard 注释）。
+ */
+export function refreshLivePreviewAnnotations(view: EditorView): void {
+  view.dispatch({ effects: renderedAnnotationRefreshEffect.of(null) });
 }
 
 /**

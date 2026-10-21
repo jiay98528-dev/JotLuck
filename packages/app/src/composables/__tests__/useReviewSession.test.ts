@@ -5,7 +5,7 @@ import { nextTick } from 'vue';
 const computeReviewDiffMock = vi.hoisted(() => vi.fn());
 vi.mock('@/utils/review-diff', () => ({ computeReviewDiff: computeReviewDiffMock }));
 
-import { useReviewSession } from '../useReviewSession';
+import { useReviewSession, reviewHunksEqual } from '../useReviewSession';
 import type { ReviewAdoptResult } from '../useReviewSession';
 import type { IFileSystemService } from '@/types/file-system';
 import type { ReviewHunk } from '@/utils/review-types';
@@ -193,6 +193,106 @@ describe('useReviewSession adopt/discard', () => {
     expect(session.sourceText.value).toBe('Hello World v2');
     expect(session.sourceRevision.value).toBe('sha256:new');
     expect(session.workingText.value).toBe('Hallo Welt');
+  });
+});
+
+describe('useReviewSession hunks 引用稳定化', () => {
+  // computeReviewDiff 每轮返回全新嵌套对象（review-diff.ts 的 { ...range } 展开
+  // 与 toDocRange 新字面量），下述用例刻意用「每次调用现造新字面量」复刻该行为；
+  // reviewHunksEqual 对 leftRange/rightRange 做字段级深比较（from/to 数值逐一
+  // 相等），引用比较会让稳定化形同虚设。
+  beforeEach(() => {
+    localStorage.clear();
+    computeReviewDiffMock.mockReset();
+    computeReviewDiffMock.mockReturnValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** 每次调用构造结构等价但全新嵌套对象的 hunk 数组 */
+  const buildFreshHunks = (): ReviewHunk[] => [
+    makeHunk({
+      id: 'hunk-1',
+      type: 'modify',
+      leftRange: { from: 0, to: 5 },
+      rightRange: { from: 0, to: 6 },
+      leftText: 'Hello',
+      rightText: 'Hallo!',
+    }),
+    makeHunk({
+      id: 'hunk-2',
+      type: 'insert',
+      rightRange: { from: 10, to: 20 },
+      leftAnchor: 10,
+      blockLevelInsert: true,
+      leftText: '',
+      rightText: '新增段落',
+    }),
+  ];
+
+  it('computeReviewDiff 返回结构等价的全新嵌套对象 → hunks.value 保持同一引用', () => {
+    computeReviewDiffMock.mockImplementation(buildFreshHunks);
+    const session = useReviewSession({
+      fs: createFsMock(),
+      root: 'rootA',
+      path: 'notes/x.md',
+      initialSnapshot: { content: SOURCE, revision: REVISION },
+    });
+    const first = session.hunks.value;
+    expect(first).toEqual(buildFreshHunks());
+
+    session.workingText.value = 'Hallo Welt'; // 触发一轮重算（此处直接 computeNow）
+    session.computeNow();
+    expect(computeReviewDiffMock).toHaveBeenCalledTimes(2);
+    // 两次结果结构等价但为全新嵌套对象 → 引用稳定化必须保住 first
+    expect(Object.is(session.hunks.value, first)).toBe(true);
+  });
+
+  it('内容变化 → hunks.value 换新引用（下游 computed 缓存失效）', () => {
+    computeReviewDiffMock.mockImplementation(buildFreshHunks);
+    const session = useReviewSession({
+      fs: createFsMock(),
+      root: 'rootA',
+      path: 'notes/x.md',
+      initialSnapshot: { content: SOURCE, revision: REVISION },
+    });
+    const first = session.hunks.value;
+
+    computeReviewDiffMock.mockReturnValue([
+      makeHunk({
+        id: 'hunk-9',
+        type: 'modify',
+        leftRange: { from: 0, to: 5 },
+        rightRange: { from: 0, to: 7 }, // 区间数值变化
+        leftText: 'Hello',
+        rightText: 'Hallo!!',
+      }),
+    ]);
+    session.computeNow();
+    expect(Object.is(session.hunks.value, first)).toBe(false);
+    expect(session.hunks.value[0]?.id).toBe('hunk-9');
+  });
+
+  it('reviewHunksEqual：区间字段级深比较（新字面量等价 → true），数值差异 → false', () => {
+    const a = buildFreshHunks();
+    const b = buildFreshHunks();
+    expect(a[0]?.leftRange).not.toBe(b[0]?.leftRange); // 确非同一引用
+    expect(reviewHunksEqual(a, b)).toBe(true);
+    expect(reviewHunksEqual([], [])).toBe(true);
+
+    const c = buildFreshHunks();
+    c[0]!.rightRange = { from: 0, to: 5 }; // 与 a 的 rightRange.to 差 1
+    expect(reviewHunksEqual(a, c)).toBe(false);
+
+    const d = buildFreshHunks();
+    delete d[1]!.blockLevelInsert;
+    expect(reviewHunksEqual(a, d)).toBe(false);
+
+    const e = buildFreshHunks();
+    e[1]!.leftAnchor = 3;
+    expect(reviewHunksEqual(a, e)).toBe(false);
   });
 });
 

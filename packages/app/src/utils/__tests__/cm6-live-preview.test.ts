@@ -6,10 +6,13 @@ import {
   __parseLiveBlocksForTest,
   exitLivePreviewOnEscape,
   livePreviewExtension,
+  pinnedSourceField,
+  refreshLivePreviewAnnotations,
   revealLivePreviewSourceAt,
   toggleBlockRender,
   unpinFocusedBlock,
 } from '../cm6-live-preview';
+import type { RenderedBlockAnnotator, RenderedBlockAnnotationPayload } from '../cm6-live-preview';
 
 const mountedViews: EditorView[] = [];
 
@@ -370,6 +373,237 @@ describe('cm6 live preview list rendering', () => {
     expect(row?.html).toContain('cm-list-marker-slot');
     expect(row?.html).toContain('cm-list-content');
     expect(row?.html).toContain('Alpha');
+  });
+});
+
+describe('cm6 live preview rendered-block annotation refresh', () => {
+  /** 挂载带注解器的编辑器；记录每次 annotate 调用的 (payload, dom) */
+  function mountAnnotated(
+    doc: string,
+    sigFor: (payload: RenderedBlockAnnotationPayload) => string,
+  ): {
+    view: EditorView;
+    calls: Array<{ payload: RenderedBlockAnnotationPayload; dom: HTMLElement }>;
+  } {
+    const calls: Array<{ payload: RenderedBlockAnnotationPayload; dom: HTMLElement }> = [];
+    const annotateFn = (payload: RenderedBlockAnnotationPayload, dom: HTMLElement): void => {
+      calls.push({ payload, dom });
+    };
+    const annotator: RenderedBlockAnnotator = Object.assign(annotateFn, { signature: sigFor });
+    const host = document.createElement('div');
+    document.body.append(host);
+    const view = new EditorView({
+      state: EditorState.create({
+        doc,
+        selection: { anchor: doc.length },
+        extensions: [livePreviewExtension({ annotateRenderedBlock: annotator }), markdown()],
+      }),
+      parent: host,
+    });
+    mountedViews.push(view);
+    view.focus();
+    return { view, calls };
+  }
+
+  const byFrom = (
+    calls: Array<{ payload: RenderedBlockAnnotationPayload; dom: HTMLElement }>,
+    from: number,
+  ) => calls.filter((call) => call.payload.from === from);
+
+  it('refresh 重建且仅重建签名变化的块，未变块不重复标注', async () => {
+    const doc = ['# 标题甲', '', '段落一起始', '', '段落二起始', '', '尾部锚点'].join('\n');
+    const sigAt: Record<number, string> = {};
+    const first = doc.indexOf('段落一');
+    const second = doc.indexOf('段落二');
+    sigAt[first] = 'a1';
+    sigAt[second] = 'b1';
+    const { view, calls } = mountAnnotated(doc, (payload) => sigAt[payload.from] ?? '');
+
+    await vi.waitFor(() => {
+      expect(byFrom(calls, first)).toHaveLength(1);
+      expect(byFrom(calls, second)).toHaveLength(1);
+    });
+    const domFirst = byFrom(calls, first)[0]!.dom;
+    const domSecond = byFrom(calls, second)[0]!.dom;
+
+    sigAt[first] = 'a2'; // 仅段落一签名变化
+    refreshLivePreviewAnnotations(view);
+
+    await vi.waitFor(() => {
+      expect(byFrom(calls, first).length).toBe(2);
+    });
+    // 签名变化块：新 DOM 重建并重标注，旧 DOM 脱离
+    const rebuilt = byFrom(calls, first)[1]!;
+    expect(rebuilt.dom).not.toBe(domFirst);
+    expect(domFirst.isConnected).toBe(false);
+    // 未变块：不重复调用 annotate（eq 命中、DOM 原样复用）
+    expect(byFrom(calls, second)).toHaveLength(1);
+    expect(domSecond.isConnected).toBe(true);
+    expect(view.dom.contains(domSecond)).toBe(true);
+  });
+
+  it('数据未变时 refresh 为轻量操作：全部块 DOM 节点保持同一引用', async () => {
+    const doc = ['# 标题甲', '', '段落一起始', '', '段落二起始', '', '尾部锚点'].join('\n');
+    const { view, calls } = mountAnnotated(doc, () => '固定签名');
+
+    await vi.waitFor(() => {
+      expect(calls.length).toBeGreaterThanOrEqual(3); // 标题 + 两段
+    });
+    const doms = calls.map((call) => call.dom);
+    const countBefore = calls.length;
+
+    refreshLivePreviewAnnotations(view);
+    await vi.waitFor(() => {
+      expect(view.dom.querySelectorAll('.cm-live-block').length).toBeGreaterThanOrEqual(3);
+    });
+
+    expect(calls.length).toBe(countBefore); // 无任何重建
+    for (const dom of doms) {
+      expect(dom.isConnected).toBe(true); // 引用相等：同一 DOM 节点未被销毁重建
+      expect(view.dom.contains(dom)).toBe(true);
+    }
+  });
+
+  it('IME 组合窗口内 refresh 不重建，compositionend 后延迟重建', async () => {
+    const doc = ['# 标题甲', '', '段落一起始', '', '尾部锚点'].join('\n');
+    const sigAt: Record<number, string> = { [doc.indexOf('段落一')]: 'v1' };
+    const first = doc.indexOf('段落一');
+    const { view, calls } = mountAnnotated(doc, (payload) => sigAt[payload.from] ?? '');
+
+    await vi.waitFor(() => {
+      expect(byFrom(calls, first)).toHaveLength(1);
+    });
+    const domFirst = byFrom(calls, first)[0]!.dom;
+
+    view.contentDOM.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+    sigAt[first] = 'v2';
+    refreshLivePreviewAnnotations(view);
+
+    // 组合中：不重建（同节点仍在），也不额外标注
+    expect(byFrom(calls, first)).toHaveLength(1);
+    expect(domFirst.isConnected).toBe(true);
+
+    view.contentDOM.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+    await vi.waitFor(() => {
+      expect(byFrom(calls, first).length).toBe(2); // 组合结束后延迟重建并重标注
+    });
+    expect(byFrom(calls, first)[1]!.dom).not.toBe(domFirst);
+  });
+});
+
+describe('cm6 live preview content-key block pinning', () => {
+  it('pin 下方块后上方插行：内容键不变，pin 存活仍源码显形', async () => {
+    const doc = ['首段文字', '', '被固定的段落', '', '尾段文字'].join('\n');
+    const view = mountLiveEditor(doc, doc.indexOf('被固定') + 2);
+
+    await vi.waitFor(() => {
+      expect(findRenderedBlock(view, '首段文字')).toBeDefined();
+    });
+    expect(toggleBlockRender(view)).toBe(true);
+    view.dispatch({ selection: { anchor: doc.indexOf('尾段') } });
+    await vi.waitFor(() => {
+      expect(findRenderedBlock(view, '被固定的段落')).toBeUndefined(); // pin → 源码显形
+    });
+
+    // 上方插入不同内容：行号全体下移，内容键不随行号变化 → pin 不失联
+    view.dispatch({
+      changes: { from: 0, insert: '插入的新首行\n\n' },
+      selection: { anchor: '插入的新首行\n\n'.length + doc.indexOf('尾段') },
+    });
+    await vi.waitFor(() => {
+      expect(findRenderedBlock(view, '插入的新首行')).toBeDefined();
+    });
+    expect(findRenderedBlock(view, '被固定的段落')).toBeUndefined(); // 仍 pinned
+    expect(view.state.field(pinnedSourceField).size).toBe(1);
+  });
+
+  it('重复行 ordinal 消歧：pin 第二条相同行，上方插不同行后仍 pinned', async () => {
+    const doc = ['同样文字', '', '同样文字', '', '收尾段'].join('\n');
+    const second = doc.indexOf('同样文字', 3);
+    const view = mountLiveEditor(doc, second + 2);
+
+    await vi.waitFor(() => {
+      expect(view.dom.querySelectorAll('.cm-live-block').length).toBeGreaterThanOrEqual(1);
+    });
+    expect(toggleBlockRender(view)).toBe(true); // pin 第二条
+    view.dispatch({ selection: { anchor: doc.indexOf('收尾') } });
+    await vi.waitFor(() => {
+      // 第一条渲染（widget 内含文本），第二条 pinned 源码显形 → widget 只剩 1 条
+      expect(
+        [...view.dom.querySelectorAll('.cm-live-block')].filter((b) =>
+          b.textContent?.includes('同样文字'),
+        ),
+      ).toHaveLength(1);
+    });
+
+    view.dispatch({
+      changes: { from: 0, insert: '不同内容行\n\n' },
+      selection: { anchor: '不同内容行\n\n'.length + doc.indexOf('收尾') },
+    });
+    await vi.waitFor(() => {
+      expect(
+        [...view.dom.querySelectorAll('.cm-live-block')].filter((b) =>
+          b.textContent?.includes('不同内容行'),
+        ),
+      ).toHaveLength(1);
+    });
+    // 第二条同样文字仍 pinned（家族 ordinal 未因上方插入不同内容而漂移）
+    expect(
+      [...view.dom.querySelectorAll('.cm-live-block')].filter((b) =>
+        b.textContent?.includes('同样文字'),
+      ),
+    ).toHaveLength(1);
+    expect(view.state.field(pinnedSourceField).size).toBe(1);
+  });
+
+  it('死键修剪：pin 的行被删除后 pinnedSourceField 清空', async () => {
+    const doc = ['被删除的段落', '', '尾段文字'].join('\n');
+    const view = mountLiveEditor(doc, doc.indexOf('被删除') + 2);
+
+    await vi.waitFor(() => {
+      expect(findRenderedBlock(view, '尾段文字')).toBeDefined();
+    });
+    expect(toggleBlockRender(view)).toBe(true);
+    view.dispatch({ selection: { anchor: doc.length } });
+    await vi.waitFor(() => {
+      expect(view.state.field(pinnedSourceField).size).toBe(1);
+    });
+
+    const line = view.state.doc.line(1);
+    view.dispatch({ changes: { from: line.from, to: line.to + 1 } }); // 删除整行（含换行）
+    await vi.waitFor(() => {
+      expect(view.state.field(pinnedSourceField).size).toBe(0);
+    });
+  });
+
+  it('列表项注解载荷：contentFrom 为 AST contentRange.from（标记后空白之后）', async () => {
+    const doc = ['- 列表项内容', '', '尾部锚点'].join('\n');
+    const calls: RenderedBlockAnnotationPayload[] = [];
+    const annotator: RenderedBlockAnnotator = (payload) => {
+      calls.push(payload);
+    };
+    const host = document.createElement('div');
+    document.body.append(host);
+    const view = new EditorView({
+      state: EditorState.create({
+        doc,
+        selection: { anchor: doc.length },
+        extensions: [livePreviewExtension({ annotateRenderedBlock: annotator })],
+      }),
+      parent: host,
+    });
+    mountedViews.push(view);
+    view.focus();
+
+    await vi.waitFor(() => {
+      expect(calls.some((payload) => payload.type === 'unorderedListItem')).toBe(true);
+    });
+    const payload = calls.find((item) => item.type === 'unorderedListItem')!;
+    // '- 列表项内容'：markerRange.to = 1（'-' 之后），contentRange.from = 2（'- ' 之后）
+    expect(payload.contentFrom).toBe(2);
+    expect(payload.literal).toBe(false);
+    expect(doc.slice(payload.contentFrom, payload.to)).toBe('列表项内容');
+    expect(payload.definitions).toBe('');
   });
 });
 

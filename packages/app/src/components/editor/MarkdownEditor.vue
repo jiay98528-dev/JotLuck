@@ -26,7 +26,12 @@ import { EditorView, lineNumbers, keymap } from '@codemirror/view';
 import { EditorState, Compartment } from '@codemirror/state';
 import { isolateHistory } from '@codemirror/commands';
 import { jotluckExtensions, jotluckPlaceholder } from '@/utils/cm6-extensions';
-import { exitLivePreviewOnEscape, livePreviewExtension } from '@/utils/cm6-live-preview';
+import {
+  exitLivePreviewOnEscape,
+  livePreviewExtension,
+  refreshLivePreviewAnnotations,
+} from '@/utils/cm6-live-preview';
+import type { RenderedBlockAnnotator } from '@/utils/cm6-live-preview';
 import { reviewMarksExtension, setReviewMarks, type ReviewMarkRange } from '@/utils/review-marks';
 import { findReplaceExtension } from '@/utils/cm6-find-replace';
 import { ghostTextPlugin } from '@/utils/cm6-ghost-text';
@@ -83,8 +88,12 @@ const props = withDefaults(
     onEditorDrop?: (event: DragEvent) => void;
     onEditorDragOver?: (event: DragEvent) => void;
     onEditorPaste?: (event: ClipboardEvent) => boolean | void | Promise<boolean>;
-    /** 改稿模式：非聚焦块渲染 widget DOM 构建完成后的内嵌批注钩子（透传 livePreviewExtension） */
-    annotateRenderedBlock?: (range: { from: number; to: number }, dom: HTMLElement) => void;
+    /**
+     * 改稿模式：非聚焦块渲染 widget 的内嵌批注器（透传 livePreviewExtension）。
+     * 身份须在装配期固定（稳定函数 + signature）——批注数据轮换走
+     * refreshRenderedAnnotations() 的 StateEffect 事务，不触发 reconfigure。
+     */
+    annotateRenderedBlock?: RenderedBlockAnnotator;
     /** 改稿模式：源码态马克笔集合（透传 reviewMarksExtension；未用时保持空集合） */
     reviewMarks?: ReviewMarkRange[];
   }>(),
@@ -606,8 +615,6 @@ watch(
     props.imageRevision,
     props.remoteImageRevision,
     currentLocale.value,
-    // 改稿模式：批注集合更换会更换钩子闭包，reconfigure 让 widget 重建并重新标注
-    props.annotateRenderedBlock,
   ],
   refreshLivePreview,
 );
@@ -846,6 +853,15 @@ function getEditorView(): EditorView | null {
   return view;
 }
 
+/**
+ * 改稿模式：通知 live preview 批注数据已更新（换数据不换扩展，范式同下方
+ * reviewMarks watch）。view 不存在或 livePreview 关闭时为安全 no-op。
+ */
+function refreshRenderedAnnotations(): void {
+  if (!view || !props.livePreview) return;
+  refreshLivePreviewAnnotations(view);
+}
+
 function focus(): void {
   view?.focus();
 }
@@ -861,7 +877,13 @@ async function settlePendingAutocompleteFeedback(): Promise<void> {
   await flushCompletionStorageMutations();
 }
 
-defineExpose({ getEditorView, focus, predictor, settlePendingAutocompleteFeedback });
+defineExpose({
+  getEditorView,
+  focus,
+  predictor,
+  settlePendingAutocompleteFeedback,
+  refreshRenderedAnnotations,
+});
 </script>
 
 <style scoped>

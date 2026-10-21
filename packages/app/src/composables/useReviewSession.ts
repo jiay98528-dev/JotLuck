@@ -14,7 +14,7 @@
 
 import { getCurrentInstance, onUnmounted, ref, watch } from 'vue';
 import type { Ref } from 'vue';
-import type { ReviewHunk } from '@/utils/review-types';
+import type { ReviewHunk, ReviewRange } from '@/utils/review-types';
 import type { IFileSystemService } from '@/types/file-system';
 import { computeReviewDiff } from '@/utils/review-diff';
 import {
@@ -41,6 +41,35 @@ export interface UseReviewSessionOptions {
   diffDebounceMs?: number;
   /** workingText → localStorage 暂存的防抖毫秒数，默认 800 */
   persistDebounceMs?: number;
+}
+
+function rangeEquals(a: ReviewRange | undefined, b: ReviewRange | undefined): boolean {
+  if ((a === undefined) !== (b === undefined)) return false;
+  if (a === undefined || b === undefined) return true;
+  return a.from === b.from && a.to === b.to;
+}
+
+/**
+ * hunk 集合结构等价比较（纯函数，供 recomputeHunks 引用稳定化与单测使用）。
+ * 注意 leftRange/rightRange 必须字段级深比较（from/to 数值逐一相等）：computeReviewDiff
+ * 每轮返回全新嵌套对象（review-diff.ts 的 { ...range } 展开 toDocRange 新字面量），
+ * 引用 === 会使等价集合永远判不等、稳定化形同虚设。
+ */
+export function reviewHunksEqual(a: readonly ReviewHunk[], b: readonly ReviewHunk[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]!;
+    const y = b[i]!;
+    if (x.id !== y.id || x.type !== y.type) return false;
+    if ((x.leftAnchor ?? null) !== (y.leftAnchor ?? null)) return false;
+    if ((x.blockLevelInsert ?? false) !== (y.blockLevelInsert ?? false)) return false;
+    if (x.leftText !== y.leftText || x.rightText !== y.rightText) return false;
+    if (!rangeEquals(x.leftRange, y.leftRange) || !rangeEquals(x.rightRange, y.rightRange)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function useReviewSession(options: UseReviewSessionOptions) {
@@ -78,9 +107,14 @@ export function useReviewSession(options: UseReviewSessionOptions) {
   function recomputeHunks(): void {
     diffComputing.value = true;
     try {
-      hunks.value = computeReviewDiff(sourceText.value, workingText.value);
+      const next = computeReviewDiff(sourceText.value, workingText.value);
+      // 引用稳定化：结构等价则保持 hunks.value 原引用（跳过赋值），下游
+      // computed（左右马克笔、渲染 HTML、annotate 签名）缓存不失效；不等价
+      // 才整体替换。computeReviewDiff 每轮全新嵌套对象，等价判定见
+      // reviewHunksEqual 的字段级深比较。
+      if (!reviewHunksEqual(hunks.value, next)) hunks.value = next;
     } catch {
-      hunks.value = []; // diff 内部异常：降级为「无批注」，不阻断编辑
+      if (hunks.value.length > 0) hunks.value = []; // diff 内部异常：降级为「无批注」，不阻断编辑
     } finally {
       diffComputing.value = false;
     }

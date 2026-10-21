@@ -2,23 +2,27 @@
  * review-dom-annotator — 改稿模式渲染结果内嵌马克笔标注器
  *
  * 即时渲染态下，块级 widget / 预览面板里的已渲染 HTML 不经过 CM6 Decoration
- * 管线；本模块直接在这些 DOM 片段上按「可见文本坐标」做马克笔包裹。
+ * 管线；本模块直接在这些 DOM 片段上做马克笔包裹。
  *
- * 坐标系：root 子树的聚合可见文本 = 树序遍历全部 text node 的 data 串接
- *        （等价于 document order 的 textContent，标签与属性不参与计数）。
+ * 坐标系：root 子树的聚合可见文本 = 树序遍历全部「非装饰」text node 的 data
+ *        串接（跳过 DECORATIVE_NODE_SELECTOR 命中子树——列表 bullet 槽、按钮、
+ *        远程图占位、任务复选框；与 editor-source-map mapDomText 共享同一常量，
+ *        两套坐标任一侧单独增删跳过项都会整体漂移）。
  *
  * 契约与防御（契约侧见 review-types.ts VisibleTextMark）：
  *  - 调用方保证区间升序且互不重叠；本模块仍做防御：
  *    越界钳制到 [0, total)、空/倒置区间丢弃、乱序输入按 from 排序、
  *    与前一段重叠的区间整段丢弃；
  *  - 只切分 text node 并用 <mark> 包裹对应段，不增删、不重排任何字符
- *    （包裹前后 root.textContent 逐字节一致）；
+ *    （包裹前后聚合可见文本逐字节一致）；
  *  - 假定对同一 DOM 只跑一次（重复跑会在旧 mark 内再包一层）；
  *  - 已位于 mark 元素内的 text node 与普通节点同等处理（正常包裹）。
+ *
+ * 源码坐标 → 可见坐标投影：annotateBlockBySourceRanges（见其注释）。
  */
 
 import type { ReviewMarkSide, VisibleTextMark } from './review-types';
-import { diffWordSpans } from './review-worddiff';
+import { DECORATIVE_NODE_SELECTOR, inlineSourceMap } from './editor-source-map';
 
 /** 行内马克笔类名（del=源稿红笔，add=工作稿绿笔） */
 const MARK_CLASS: Record<ReviewMarkSide, string> = {
@@ -40,7 +44,7 @@ interface TextNodeSpan {
   end: number;
 }
 
-/** 树序（document order）收集 root 下全部非空 text node 及其聚合偏移 */
+/** 树序（document order）收集 root 下全部非装饰、非空 text node 及其聚合偏移 */
 function collectTextSpans(root: ParentNode): TextNodeSpan[] {
   const spans: TextNodeSpan[] = [];
   const ownerDoc = root.ownerDocument ?? document;
@@ -48,12 +52,20 @@ function collectTextSpans(root: ParentNode): TextNodeSpan[] {
   let offset = 0;
   for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
     const text = node as Text;
+    if (text.parentElement?.closest(DECORATIVE_NODE_SELECTOR)) continue;
     if (text.data.length > 0) {
       spans.push({ node: text, start: offset, end: offset + text.data.length });
+      offset += text.data.length;
     }
-    offset += text.data.length;
   }
   return spans;
+}
+
+/** root 的聚合可见文本（与 collectTextSpans 同一跳过规则），供全等校验与测试共用 */
+export function visibleTextOf(root: ParentNode): string {
+  let out = '';
+  for (const span of collectTextSpans(root)) out += span.node.data;
+  return out;
 }
 
 /**
@@ -124,16 +136,83 @@ export function applyBlockTint(el: Element, side: ReviewMarkSide): void {
   el.classList.add(BLOCK_CLASS[side]);
 }
 
+/** annotateBlockBySourceRanges 的投影输入 */
+export interface SourceRangeProjection {
+  /** 块内容源码切片（文档中自 contentFrom 起）；inlineSourceMap 以它为词法输入 */
+  blockSource: string;
+  /** blockSource 首字符的文档 UTF-16 偏移（map.starts 与 ranges 同一坐标空间） */
+  contentFrom: number;
+  /** 整行字面渲染（code 围栏内容行 / json 行 / frontmatter 行）：无行内语法 */
+  literal: boolean;
+  /**
+   * 全文引用式链接/图片定义（[r]: url 逐行串接）。renderer 的 lexer 仅在
+   * definitions 非空时注入 links（renderer index.ts inlineSourceTokens），
+   * 缺省则 [text][ref] 不解析、map.text 含字面方括号而 DOM 只显 text——
+   * 下方全等校验因此失败回退。必须透传。
+   */
+  definitions: string;
+  /** 文档源码坐标区间集合（无需升序，逐区间独立判定） */
+  ranges: Array<{ from: number; to: number }>;
+  side: ReviewMarkSide;
+}
+
 /**
- * 在可见文本坐标上做词级 diff 并按侧取区间：
- * side='del' 取 a 侧（源稿被改动/删除），side='add' 取 b 侧（工作稿修改/新增）。
+ * 源码坐标区间 → 渲染 DOM 的词级马克笔投影。返回是否成功：
+ *  - 先用 inlineSourceMap 构造「可见文本 ↔ 源码偏移」映射，再比对
+ *    visibleTextOf(root) === map.text（逐字符全等，仅豁免尾部纯空白——
+ *    renderMarkdown 块 HTML 的尾随换行 artifact）。不全等说明词法投影与
+ *    真实 DOM 存在位移型分歧（缺 definitions 的 ref 链接、inline HTML、
+ *    未预见分歧）——直接 return false 交调用方 tint 兜底，宁降级不错位。
+ *    已知残余：全等但字符对位不同的理论情形（文本置排列）未防，实际概率
+ *    可忽略。
+ *  - 全等时按「可见字符 i 的源码偏移 map.starts[i] 落在任一区间内」投影，
+ *    连续命中段合并为一个 mark（annotateRenderedFragment 应用）。
+ *  - 投影为空（纯语法改动等）也 return false：交调用方 tint 兜底。
  */
-export function computeVisibleDiffMarks(
-  textA: string,
-  textB: string,
-  side: ReviewMarkSide,
-): VisibleTextMark[] {
-  const spans = diffWordSpans(textA, textB);
-  const list = side === 'del' ? spans.left : spans.right;
-  return list.map((span) => ({ from: span.from, to: span.to, side }));
+export function annotateBlockBySourceRanges(
+  root: ParentNode,
+  input: SourceRangeProjection,
+): boolean {
+  let map;
+  try {
+    map = inlineSourceMap(input.blockSource, input.contentFrom, input.literal, input.definitions);
+  } catch {
+    return false; // 词法异常：不赌坐标，交 tint 兜底
+  }
+  const visibleText = visibleTextOf(root);
+  // 尾部纯空白豁免：renderMarkdown 的块 HTML 带尾随换行（如 `<p>x</p>\n`），
+  // DOMPurify 将其保留为空白 text node——属渲染管线固定 artifact，不是内容、
+  // 也不影响其前任何可见字符的坐标。首部空白不豁免（会平移全部坐标），
+  // 中段分歧照旧拦截。
+  if (
+    visibleText !== map.text &&
+    visibleText.replace(/\s+$/, '') !== map.text.replace(/\s+$/, '')
+  ) {
+    return false;
+  }
+
+  const visible: VisibleTextMark[] = [];
+  let runFrom = -1;
+  let runTo = -1;
+  const flush = (): void => {
+    if (runFrom >= 0 && runTo > runFrom) {
+      visible.push({ from: runFrom, to: runTo, side: input.side });
+    }
+    runFrom = -1;
+    runTo = -1;
+  };
+  for (let i = 0; i < map.text.length; i++) {
+    const at = map.starts[i]!;
+    const hit = input.ranges.some((range) => at >= range.from && at < range.to);
+    if (hit) {
+      if (runFrom < 0) runFrom = i;
+      runTo = i + 1;
+    } else if (runFrom >= 0) {
+      flush();
+    }
+  }
+  flush();
+  if (visible.length === 0) return false;
+  annotateRenderedFragment(root, visible);
+  return true;
 }
