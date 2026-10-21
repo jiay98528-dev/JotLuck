@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { MockFSService } from '@/services/MockFSService';
-import { useIndexStore } from '../index';
+import { useIndexStore } from '../notebookIndex';
 
 describe('useIndexStore initialization races', () => {
   beforeEach(() => {

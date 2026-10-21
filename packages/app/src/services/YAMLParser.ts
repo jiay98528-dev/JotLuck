@@ -63,11 +63,6 @@ export function parseFrontmatter(content: string): FrontmatterResult {
   return { data, raw, contentStart: node.range.to + 1, hasFrontmatter: true };
 }
 
-export function stripFrontmatter(content: string): string {
-  const result = parseFrontmatter(content);
-  return result.hasFrontmatter ? content.slice(result.contentStart) : content;
-}
-
 export function extractTitle(content: string): string {
   const ast = parseDocument(content);
   // 与旧实现 `/^#\s+(.+)$/m` 的明示收紧：fence 内的 `# x` 不再被当作标题。

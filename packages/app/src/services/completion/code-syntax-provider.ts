@@ -196,7 +196,3 @@ function isJson(language: CodeSyntaxLanguage): boolean {
 function isYaml(language: CodeSyntaxLanguage): boolean {
   return language === 'yaml' || language === 'yml';
 }
-
-export function isSupportedCodeLanguage(language: string): language is CodeSyntaxLanguage {
-  return CODE_SYNTAX_LANGUAGES.includes(language as CodeSyntaxLanguage);
-}

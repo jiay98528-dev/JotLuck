@@ -26,7 +26,15 @@ import { translate } from '@/i18n';
 import { normalizeCommandError } from './command-errors';
 import { createSampleNotebookSeed } from './SampleSeed';
 
-async function invokeCommand<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+/**
+ * 统一 IPC 入口：错误经 normalizeCommandError 归一为 CommandError。
+ * 供本类与 windowSession / windowsIntegrationService 等收口层共享，
+ * 页面层不再直调 @tauri-apps/api/core。
+ */
+export async function invokeCommand<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
   try {
     return args ? await invoke<T>(command, args) : await invoke<T>(command);
   } catch (error) {

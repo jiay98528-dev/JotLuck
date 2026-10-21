@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { parseSearchQuery, useSearch } from '../useSearch';
-import { useIndexStore } from '@/stores/index';
+import { useIndexStore } from '@/stores/notebookIndex';
 import { useSearchStore } from '@/stores/search';
 import { MockFSService } from '@/services/MockFSService';
 

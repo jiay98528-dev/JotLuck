@@ -107,7 +107,3 @@ export function jotluckExtensions(sourceOnly = false): Extension[] {
     ),
   ];
 }
-
-export function markdownKeymap(): Record<string, (view: EditorView) => boolean> {
-  return {};
-}

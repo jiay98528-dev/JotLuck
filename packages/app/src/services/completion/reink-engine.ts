@@ -65,6 +65,22 @@ export interface ReinkGeneratePayload {
   deadlineMs: number;
 }
 
+/** reink_configure 请求体：与 Rust reink_engine::ReinkConfigureRequest 对齐。 */
+export interface ReinkConfigureRequest {
+  pythonPath: string;
+  runtimeDir: string;
+  tier: ReinkTier;
+  fast: boolean;
+}
+
+/**
+ * 模块级配置命令：configure 发生在 new ReinkEngine 之前，不属引擎实例
+ * 生命周期，故不挂在 adapter（adapter 四方法只管实例运行期）。
+ */
+export function configureReinkRuntime(request: ReinkConfigureRequest): Promise<void> {
+  return invoke<void>('reink_configure', { request });
+}
+
 /** Tauri adapter seam（默认走 invoke，测试可注入 mock）。 */
 export interface ReinkEngineAdapter {
   warmup(): Promise<boolean>;

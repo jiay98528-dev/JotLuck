@@ -159,6 +159,28 @@ describe('usePublicDecoderSetup', () => {
     expect(rejections).toEqual([]);
   });
 
+  it('disposes the engine when installPublicEngineForEvaluation returns false', async () => {
+    const h = buildHarness();
+    const engine = createEngine('install-false');
+    h.canonicalFactory.mockResolvedValueOnce(engine);
+    h.install.mockResolvedValueOnce(false);
+    await h.setup();
+    await Promise.resolve();
+    expect(h.install).toHaveBeenCalledWith(engine);
+    expect(engine.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('disposes the engine when installPublicEngineForEvaluation rejects', async () => {
+    const h = buildHarness();
+    const engine = createEngine('install-rejected');
+    h.canonicalFactory.mockResolvedValueOnce(engine);
+    h.install.mockRejectedValueOnce(new Error('install blew up'));
+    await h.setup();
+    await Promise.resolve();
+    expect(h.install).toHaveBeenCalledTimes(1);
+    expect(engine.dispose).toHaveBeenCalledTimes(1);
+  });
+
   it('stops auto-retrying after the configured attempt budget is exhausted', async () => {
     const h = buildHarness();
     h.canonicalFactory.mockResolvedValue(null);

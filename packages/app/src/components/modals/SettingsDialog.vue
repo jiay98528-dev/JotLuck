@@ -498,7 +498,6 @@
 </template>
 
 <script setup lang="ts">
-import { invoke } from '@tauri-apps/api/core';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
@@ -516,6 +515,10 @@ import {
 import type { CompletionTrainingMeta } from '@/services/CompletionTrainingService';
 import { useDialogFocus } from '@/composables/useDialogFocus';
 import { requestWelcomeReplay } from '@/utils/welcome';
+import {
+  getWindowsAssociationStatus,
+  openJotluckDefaultAppsSettings,
+} from '@/services/windowsIntegrationService';
 import { formatDate } from '@/i18n';
 import { useLocale } from '@/composables/useLocale';
 import type { AssociationGroupStatus, WindowsAssociationStatus } from '@/types';
@@ -790,9 +793,7 @@ async function refreshAssociationStatus(): Promise<void> {
 
   associationLoading.value = true;
   try {
-    associationStatus.value = await invoke<WindowsAssociationStatus>(
-      'get_windows_association_status',
-    );
+    associationStatus.value = await getWindowsAssociationStatus();
   } catch {
     associationStatus.value = null;
     associationError.value = true;
@@ -804,7 +805,7 @@ async function refreshAssociationStatus(): Promise<void> {
 async function openAssociationSettings(): Promise<void> {
   if (!desktopRuntime || associationLoading.value) return;
   try {
-    await invoke('open_jotluck_default_apps_settings');
+    await openJotluckDefaultAppsSettings();
   } catch {
     associationError.value = true;
   }

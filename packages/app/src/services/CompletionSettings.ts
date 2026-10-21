@@ -49,12 +49,6 @@ export function saveCompletionSettings(settings: CompletionSettings): void {
   emitCompletionSettingsChanged(normalized);
 }
 
-export function updateCompletionSettings(partial: Partial<CompletionSettings>): CompletionSettings {
-  const next = normalizeSettings({ ...getCompletionSettings(), ...partial });
-  saveCompletionSettings(next);
-  return next;
-}
-
 export function subscribeCompletionSettings(
   listener: (settings: CompletionSettings) => void,
 ): () => void {

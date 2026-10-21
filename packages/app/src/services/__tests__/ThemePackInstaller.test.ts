@@ -100,14 +100,13 @@ describe('ThemePackInstaller', () => {
     expect(issues.map((issue) => issue.code)).toContain('missing-code-entrypoint');
   });
 
-  it('installs, loads, and removes a local theme without trusted-code authorization gates', () => {
+  it('installs, loads, and removes a local theme', () => {
     const pack = installLocalThemePackage({
       manifest: manifest(),
       css: "[data-theme-id='local.test-theme'] { --accent: oklch(58% 0.12 180); }",
     });
 
     expect(pack.source).toBe('imported');
-    expect(pack.trustedCodeAuthorized).toBe(true);
     expect(loadInstalledThemePacks()).toHaveLength(1);
 
     removeInstalledThemePack(pack.manifest.id);

@@ -60,11 +60,6 @@ export const useSearchStore = defineStore('search', () => {
     }
   }
 
-  function clearHistory(): void {
-    searchHistory.value = [];
-    localStorage.removeItem(HISTORY_KEY);
-  }
-
   /**
    * Starts a new workspace search scope while intentionally preserving the
    * user's cross-workspace query history.
@@ -121,7 +116,6 @@ export const useSearchStore = defineStore('search', () => {
     clearResults,
     addToHistory,
     loadHistory,
-    clearHistory,
     resetWorkspaceState,
     open,
     close,

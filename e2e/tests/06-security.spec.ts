@@ -7,7 +7,6 @@
  *
  * 渲染管线: Markdown text → marked.parse → DOMPurify.sanitize → safe HTML
  * @see packages/renderer/src/sanitize.ts — DOMPurify 配置（FORBID_TAGS/FORBID_ATTR）
- * @see packages/app/src/utils/contentUtils.ts — 内容安全扫描器
  */
 import { test, expect } from '@playwright/test';
 import {
@@ -198,7 +197,7 @@ test.describe('安全测试', () => {
 
     // 运行内容安全扫描器
     const warnings = await page.evaluate((content) => {
-      // Dynamically import the scanner — use the same logic as contentUtils.ts
+      // scanner 全局从未在 app 内挂载，本 spec 自带内联实现
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const scanner = (window as any).__jotluck_scanContentWarnings;
       if (typeof scanner === 'function') return scanner(content);

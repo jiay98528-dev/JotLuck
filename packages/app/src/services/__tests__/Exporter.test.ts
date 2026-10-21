@@ -79,6 +79,18 @@ describe('Exporter CSV safety', () => {
     expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
     expect(capturedBlob).toBeNull();
   });
+
+  it('rejects empty markdown with export.empty before any download side effect', async () => {
+    const result = await exportNote('', 'empty-note', { format: ExportFormat.CSV });
+
+    expect(result).toMatchObject({
+      success: false,
+      format: ExportFormat.CSV,
+      error: '笔记内容为空',
+    });
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
+    expect(capturedBlob).toBeNull();
+  });
 });
 
 describe('Exporter PDF terminal states', () => {

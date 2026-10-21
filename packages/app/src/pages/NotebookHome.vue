@@ -154,7 +154,7 @@
           :show-right-wing="showRightWing && !isWorkspaceUnbound"
           :headings="headings"
           :backlinks="shellBacklinks"
-          :tags="shellTags"
+          :tags="[]"
           :active-heading-id="activeHeadingId"
           :char-count="editorStats.charCount"
           :word-count="editorStats.wordCount"
@@ -965,20 +965,26 @@ import ThemeSlotBoundary from '@/components/theme/ThemeSlotBoundary.vue';
 import ToastContainer, { useToast } from '@/components/common/Toast.vue';
 import { MockFSService } from '@/services/MockFSService';
 import { TauriIPCService } from '@/services/TauriIPCService';
-import { getWindowBootstrap, invalidateWindowBootstrap } from '@/services/windowBootstrapCache';
+import {
+  destroyCurrentWindow,
+  // 本地同名编排函数（外部编辑确认流）遮蔽风险：服务命令以 Ipc 后缀别名导入。
+  enableExternalEdit as enableExternalEditIpc,
+  getWindowBootstrap,
+  promoteExternalFileToNotebook,
+  revokeExternalAccess,
+} from '@/services/windowSession';
 import {
   applyGuidedSampleEdit,
   createGuidedSampleSession,
   decideEmptyWorkspaceFallback,
   findGuidedSampleNote,
-  findGuidedSampleNoteByTitle,
   guidedNotesAsDirEntries,
   guidedSampleWikiLinkExists,
   isGuidedSampleDirty,
   nextAvailableNotePath,
   type GuidedSampleSession,
 } from '@/services/GuidedSampleSession';
-import { useIndexStore } from '@/stores/index';
+import { useIndexStore } from '@/stores/notebookIndex';
 import { useSearchStore } from '@/stores/search';
 import { useThemeStore } from '@/stores/theme';
 import ProgressivePreview from '@/components/editor/ProgressivePreview.vue';
@@ -987,9 +993,9 @@ import {
   isLargeDocument as shouldUseProgressiveRendering,
 } from '@/services/document-analysis';
 import { useHeadings } from '@/composables/useHeadings';
+import { useDocumentNavigation } from '@/composables/useDocumentNavigation';
+import { useSavePipeline } from '@/composables/useSavePipeline';
 import { editorSource } from '@/utils/editor-source';
-import { relocateBacklink, type DocumentLocation } from '@/utils/document-location';
-import type { DocumentAnalysisResult } from '@/services/document-analysis';
 import { renderMarkdown, highlightCodeBlocks } from '@jotluck/renderer';
 import type {
   DirEntry,
@@ -1005,7 +1011,6 @@ import type {
   TextFileSnapshot,
   ConditionalWriteResult,
   WindowBootstrapPayload,
-  PromotedNotebookPayload,
   SaveExternalNoteAsRequest,
 } from '@/types';
 import { EditorView } from '@codemirror/view';
@@ -1060,6 +1065,21 @@ import {
 import { getDraftMarkdownFileName } from '@/utils/draft-file-name';
 import { getJotLuckE2EBridge, peekJotLuckE2EBridge } from '@/utils/e2e-bridge';
 import { summarizeActiveFileChanges } from '@/utils/file-change-events';
+import {
+  basenameFromPath,
+  displayNameFromPath,
+  downloadMarkdownFile,
+  encodeContentSize,
+  ensureMarkdownExtension,
+  hashString,
+  joinPath,
+  normalizeDir,
+  normalizeOsPath,
+  normalizePath,
+  notebookRootsEqual,
+  parentDirFromPath,
+  splitAbsoluteFilePath,
+} from '@/utils/notebook-paths';
 import { isDesktopRuntime, shouldPersistMockFs } from '@/utils/runtime';
 import {
   loadCustomTemplatesFromFiles,
@@ -1153,14 +1173,6 @@ interface OpenedFilePayload {
   accessToken?: string;
 }
 
-interface SaveIssue {
-  kind: 'io' | 'conflict' | 'missing';
-  source: 'workspace' | 'external';
-  path: string;
-  message: string;
-  actualRevision?: string | null;
-}
-
 type ExternalSessionMode = 'none' | 'readonly' | 'edit-shell';
 interface NotebookOpenGateExposed {
   focusPrimary(): Promise<void>;
@@ -1192,8 +1204,7 @@ const { headings } = headingIndex;
 function updateHeadings(content: string): void {
   headingIndex.update(editorSource(content));
 }
-const activeDocumentPosition = ref(0);
-let activeLocationPane: 'editor' | 'preview' = 'editor';
+// activeDocumentPosition / activeLocationPane 已迁出至 useDocumentNavigation（工单 B3）
 
 // --- UI State ---
 type ViewMode = ThemeViewMode | string;
@@ -1269,11 +1280,8 @@ function onReviewSourceAdopted(content: string, revision: string): void {
   currentContent.value = content;
   currentDiskRevision.value = revision;
   isDirty.value = false;
-  localWriteEpoch++;
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-  }
+  localWriteEpoch.value++;
+  cancelScheduledSave();
 }
 const completionTrainingMeta = ref<CompletionTrainingMeta>(loadTrainingMeta());
 const completionPredictor = new MarkdownPredictor(4);
@@ -2045,7 +2053,7 @@ function onSplitContentUpdate(content: string): void {
     requireBoundWorkspace(t('notebook.actions.editNote'));
     return;
   }
-  const revision = ++contentRevision;
+  const revision = ++contentRevision.value;
   currentContent.value = content;
   updateHeadings(content);
   updateEditorStats(content);
@@ -2056,17 +2064,22 @@ function onSplitContentUpdate(content: string): void {
     isDirty.value = content.trim().length > 0;
     clearSaveIssue();
   } else if (activePath.value) {
+    // E1-02 只读笔记：编辑路径在 CM6 readOnly facet 处已被阻断，这里再补一层
+    // 防御：拒绝把内容更新当作可保存 dirty，也拒绝排程自动保存定时器。
+    // （覆盖主题宿主 UI setContent 等可能绕过 EditorState.readOnly 的入口。）
+    if (isNoteReadonly.value) {
+      cancelScheduledSave();
+      isDirty.value = false;
+      return;
+    }
     isDirty.value = true;
     clearTransientSaveIssueOnEdit();
-    if (saveTimer) {
-      clearTimeout(saveTimer);
-      saveTimer = null;
-    }
+    cancelScheduledSave();
     if (!isAutosavePausedForDiskIssue()) {
       const savingPath = activePath.value;
       const savingRoot = activeNotebookRoot.value;
       const savingGeneration = notebookDataGeneration;
-      saveTimer = setTimeout(
+      scheduleSave(
         () => void debouncedSave(savingPath, content, revision, savingRoot, savingGeneration),
         600,
       );
@@ -2118,40 +2131,71 @@ function onSplitDragStart(event: PointerEvent): void {
 const isDirty = ref(false);
 const isSaving = ref(false);
 const saveError = ref<string | null>(null);
-const saveIssue = ref<SaveIssue | null>(null);
-const currentDiskRevision = ref<string | null>(null);
-const lastSavedAt = ref<number | null>(null);
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
-let saveGeneration = 0;
-let contentRevision = 0;
-let localWriteEpoch = 0;
-let currentSavePromise: Promise<boolean> | null = null;
 let noteSelectionQueue: Promise<void> = Promise.resolve();
 let noteSelectionVersion = 0;
 let externalSelectionVersion = 0;
-const unsavedDialogIntent = ref<'recover' | 'close' | 'bind-workspace'>('recover');
-
-function clearSaveIssue(): void {
-  saveIssue.value = null;
-  saveError.value = null;
-}
-
-function clearTransientSaveIssueOnEdit(): void {
-  if (saveIssue.value && saveIssue.value.kind !== 'io') return;
-  clearSaveIssue();
-}
+// 保存管线迁出至 useSavePipeline（工单 B4 / Phase3）：saveIssue/currentDiskRevision/
+// lastSavedAt/unsavedDialogIntent 与三个原 let 计数器（saveGeneration/contentRevision/
+// localWriteEpoch，升格 ref）按原名解构；saveTimer 收进管线内部经
+// scheduleSave/cancelScheduledSave 访问；currentSavePromise 为管线内部句柄不暴露。
+const {
+  saveIssue,
+  currentDiskRevision,
+  lastSavedAt,
+  unsavedDialogIntent,
+  saveGeneration,
+  contentRevision,
+  localWriteEpoch,
+  scheduleSave,
+  cancelScheduledSave,
+  clearSaveIssue,
+  clearTransientSaveIssueOnEdit,
+  reportSaveIssue,
+  flushPendingCurrentSave,
+  retryCurrentSave,
+  debouncedSave,
+  debouncedExternalSave,
+} = useSavePipeline({
+  currentContent,
+  activePath,
+  activeNotebookRoot,
+  externalFile,
+  isDirty,
+  isSaving,
+  saveError,
+  showScratchExitDialog,
+  wikiLinkRevision,
+  editorRef,
+  fs,
+  indexStore,
+  notebookDataGeneration: () => notebookDataGeneration,
+  forcedE2ESaveFailure: {
+    get: () => forcedE2ESaveFailure,
+    set: (value) => (forcedE2ESaveFailure = value),
+  },
+  isExternalEditing,
+  isExternalSession,
+  isExternalReadonly,
+  isGuidedSampleSession,
+  isScratchSession,
+  isWorkspaceUnbound,
+  isNotebookOpening,
+  isAutosavePausedForDiskIssue,
+  externalFileKey,
+  writeExternalNoteFileIfUnchanged,
+  syncCurrentContentFromEditor,
+  persistGuidedSampleCurrent,
+  requestWorkspaceForGuidedSave,
+  saveScratchAs,
+  requireBoundWorkspace,
+  trainCurrentFile,
+  userErrorMessage,
+  toast,
+  t,
+});
 
 function isAutosavePausedForDiskIssue(): boolean {
   return saveIssue.value?.kind === 'conflict' || saveIssue.value?.kind === 'missing';
-}
-
-function reportSaveIssue(issue: SaveIssue, openRecovery = issue.kind !== 'io'): void {
-  saveIssue.value = issue;
-  saveError.value = issue.message;
-  if (openRecovery) {
-    unsavedDialogIntent.value = 'recover';
-    showScratchExitDialog.value = true;
-  }
 }
 
 // --- Editor Stats ---
@@ -2215,7 +2259,6 @@ const shellNotebookName = computed(() => {
 });
 const shellFiles = computed(() => (isExternalEditing.value ? externalFiles.value : files.value));
 const shellBacklinks = computed((): BacklinkEntry[] => currentBacklinks.value);
-const shellTags = computed(() => []);
 
 // Recent notes with auto-assigned bookmark colors
 const recentNotesWithColors = computed(() =>
@@ -2251,12 +2294,6 @@ const shellRecentNotesWithColors = computed(() => {
     ? externalRecentNotesWithColors.value
     : recentNotesWithColors.value;
 });
-function hashString(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
-  return Math.abs(h);
-}
-
 // Debug watcher — log recentNotes population
 watch(
   () => indexStore.recentNotes.length,
@@ -2273,27 +2310,6 @@ watch(
 );
 
 // --- Initialize ---
-function displayNameFromPath(path: string): string {
-  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '');
-  return normalized.split('/').pop() || normalized || 'Notebook';
-}
-
-function normalizeOsPath(path: string): string {
-  const normalized = (path || '').replace(/\\/g, '/');
-  if (/^[A-Za-z]:\/$/.test(normalized)) return normalized;
-  if (normalized === '/') return '/';
-  return normalized.replace(/\/+$/, '');
-}
-
-function notebookRootsEqual(left: string, right: string): boolean {
-  const normalizedLeft = normalizeOsPath(left);
-  const normalizedRight = normalizeOsPath(right);
-  const isWindowsPath = /^[A-Za-z]:\//.test(normalizedLeft) || /^[A-Za-z]:\//.test(normalizedRight);
-  return isWindowsPath
-    ? normalizedLeft.toLocaleLowerCase() === normalizedRight.toLocaleLowerCase()
-    : normalizedLeft === normalizedRight;
-}
-
 function normalizeOpenedFilePayload(payload: unknown): OpenedFilePayload | null {
   if (!payload) return null;
 
@@ -2360,13 +2376,10 @@ async function suspendWorkspaceForTransition(): Promise<void> {
   noteSelectionVersion++;
   externalSelectionVersion++;
   isNoteSwitching.value = false;
-  saveGeneration++;
+  saveGeneration.value++;
   notebookDataGeneration++;
   fileTreeRequestId++;
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-  }
+  cancelScheduledSave();
 }
 
 async function commitWorkspaceHandle(
@@ -2383,7 +2396,7 @@ async function commitWorkspaceHandle(
   activeNotebookRoot.value = normalizeOsPath(handle.rootPath);
   notebookName.value = handle.name || displayNameFromPath(handle.rootPath);
   activePath.value = '';
-  contentRevision++;
+  contentRevision.value++;
   currentContent.value = '';
   currentDiskRevision.value = null;
   files.value = stagedFiles ?? [];
@@ -2415,11 +2428,8 @@ async function enterWorkspaceGate(error = ''): Promise<void> {
   noteSelectionVersion++;
   externalSelectionVersion++;
   isNoteSwitching.value = false;
-  saveGeneration++;
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-  }
+  saveGeneration.value++;
+  cancelScheduledSave();
 
   isScratchSession.value = false;
   clearGuidedSampleSession();
@@ -2430,7 +2440,7 @@ async function enterWorkspaceGate(error = ''): Promise<void> {
   activeNotebookRoot.value = '';
   notebookDataGeneration++;
   activePath.value = '';
-  contentRevision++;
+  contentRevision.value++;
   currentContent.value = '';
   currentDiskRevision.value = null;
   files.value = [];
@@ -2595,8 +2605,8 @@ async function flushWatcherEvents(
     events.some((event) => event.rescan || event.entryKind === 'directory');
   if (!active || !requiresActiveRecheck) return;
 
-  const expectedContentRevision = contentRevision;
-  const expectedLocalWriteEpoch = localWriteEpoch;
+  const expectedContentRevision = contentRevision.value;
+  const expectedLocalWriteEpoch = localWriteEpoch.value;
   let diskSnapshot: TextFileSnapshot;
   try {
     // A replacement may be reported as remove + rename, or even as remove before the matching
@@ -2606,8 +2616,8 @@ async function flushWatcherEvents(
     if (
       !isCurrentWatcher() ||
       normalizePath(activePath.value) !== active ||
-      contentRevision !== expectedContentRevision ||
-      localWriteEpoch !== expectedLocalWriteEpoch
+      contentRevision.value !== expectedContentRevision ||
+      localWriteEpoch.value !== expectedLocalWriteEpoch
     ) {
       return;
     }
@@ -2651,12 +2661,12 @@ async function flushWatcherEvents(
     !isCurrentWatcher() ||
     normalizePath(activePath.value) !== active ||
     isDirty.value ||
-    contentRevision !== expectedContentRevision ||
-    localWriteEpoch !== expectedLocalWriteEpoch
+    contentRevision.value !== expectedContentRevision ||
+    localWriteEpoch.value !== expectedLocalWriteEpoch
   ) {
     return;
   }
-  contentRevision++;
+  contentRevision.value++;
   currentContent.value = diskSnapshot.content;
   currentDiskRevision.value = diskSnapshot.revision;
   clearSaveIssue();
@@ -2732,7 +2742,7 @@ function enterGuidedSampleSession(): boolean {
   files.value = guidedNotesAsDirEntries(session);
   currentDir.value = '/';
   activePath.value = first.path;
-  contentRevision++;
+  contentRevision.value++;
   currentContent.value = first.content;
   currentDiskRevision.value = null;
   isDirty.value = false;
@@ -2847,7 +2857,7 @@ function enterNotebookFileState(path: string, content: string, revision: string)
   externalFile.value = null;
   externalError.value = '';
   activePath.value = path;
-  contentRevision++;
+  contentRevision.value++;
   currentContent.value = content;
   currentDiskRevision.value = revision;
   isDirty.value = false;
@@ -2942,38 +2952,18 @@ async function writeExternalNoteFileIfUnchanged(
 async function revokeExternalGrant(openedFile: OpenedFilePayload | null): Promise<void> {
   if (!isDesktopRuntime() || !openedFile?.accessToken) return;
   try {
-    await invoke('revoke_external_access', { accessToken: openedFile.accessToken });
+    await revokeExternalAccess(openedFile.accessToken);
   } catch {
     // Window teardown must not be blocked by an already-expired grant.
   }
 }
 
-function ensureMarkdownExtension(path: string): string {
-  return /\.[^\\/]+$/.test(path) ? path : `${path}.md`;
-}
-
-function splitAbsoluteFilePath(path: string): { root: string; relativePath: string } {
-  const normalized = normalizeOsPath(path);
-  const slash = normalized.lastIndexOf('/');
-  if (slash < 0) return { root: '/', relativePath: `/${normalized}` };
-  const root = normalizeOsPath(normalized.slice(0, slash) || '/');
-  return { root, relativePath: `/${normalized.slice(slash + 1)}` };
-}
-
 function downloadCurrentContentAsMarkdown(fileName: string): void {
-  const blob = new Blob([currentContent.value], { type: 'text/markdown;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  downloadMarkdownFile(currentContent.value, fileName);
 }
 
 function downloadScratchAsMarkdown(fileName: string): void {
-  downloadCurrentContentAsMarkdown(fileName);
+  downloadMarkdownFile(currentContent.value, fileName);
   toast.show(t('notebook.toast.webDraftDownloaded'), 'info', 3500);
 }
 
@@ -3133,7 +3123,7 @@ function syncCurrentContentFromEditor(): void {
   const content = view.state.doc.toString();
   if (content === currentContent.value) return;
 
-  contentRevision++;
+  contentRevision.value++;
   currentContent.value = content;
   updateHeadings(content);
   updateEditorStats(content);
@@ -3151,131 +3141,12 @@ function syncCurrentContentFromEditor(): void {
   }
 }
 
-function encodeContentSize(content: string): number {
-  return new TextEncoder().encode(content).length;
-}
-
-function parentDirFromPath(path: string): string {
-  const normalized = normalizePath(path);
-  const slash = normalized.lastIndexOf('/');
-  return slash > 0 ? normalized.slice(0, slash) : '/';
-}
-
-function basenameFromPath(path: string): string {
-  return normalizePath(path).split('/').pop() ?? '';
-}
-
 async function createTextFile(path: string, content: string): Promise<string> {
   const result = await fs.writeFileIfUnchanged(path, content, null);
   if (result.status === 'conflict') {
     throw createUserMessageError('notebook.error.fileExists', { path });
   }
   return result.revision;
-}
-
-async function flushPendingCurrentSave(): Promise<boolean> {
-  syncCurrentContentFromEditor();
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-  }
-  if (isGuidedSampleSession.value) {
-    persistGuidedSampleCurrent();
-    return true;
-  }
-  if (!isDirty.value) {
-    if (currentSavePromise) await currentSavePromise;
-    return !saveError.value;
-  }
-
-  for (let attempt = 0; attempt < 3 && isDirty.value; attempt++) {
-    const revision = contentRevision;
-    const content = currentContent.value;
-    const path = activePath.value;
-    const externalSnapshot = externalFile.value ? { ...externalFile.value } : null;
-    const saved =
-      isExternalEditing.value && externalSnapshot
-        ? await debouncedExternalSave(content, externalSnapshot, revision)
-        : path
-          ? await debouncedSave(path, content, revision)
-          : currentSavePromise
-            ? (await currentSavePromise, !saveError.value)
-            : false;
-    if (!saved) return false;
-    if (
-      revision === contentRevision &&
-      path === activePath.value &&
-      externalFileKey(externalSnapshot) === externalFileKey(externalFile.value)
-    ) {
-      break;
-    }
-  }
-  return !isDirty.value && !saveError.value;
-}
-
-async function retryCurrentSave(): Promise<boolean> {
-  syncCurrentContentFromEditor();
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-  }
-
-  if (saveIssue.value?.kind === 'conflict' || saveIssue.value?.kind === 'missing') {
-    unsavedDialogIntent.value = 'recover';
-    showScratchExitDialog.value = true;
-    return false;
-  }
-
-  if (isGuidedSampleSession.value) return requestWorkspaceForGuidedSave();
-  if (isScratchSession.value) return saveScratchAs();
-  if (isWorkspaceUnbound.value || isNotebookOpening.value) {
-    requireBoundWorkspace(t('notebook.actions.saveNote'));
-    return false;
-  }
-
-  if (isExternalReadonly.value) return false;
-  const externalSnapshot = externalFile.value ? { ...externalFile.value } : null;
-  if (!isExternalEditing.value && !activePath.value) {
-    toast.show(t('notebook.toast.noSavableNote'), 'info', 2500);
-    return false;
-  }
-  if (isExternalEditing.value && !externalSnapshot) {
-    toast.show(t('notebook.toast.externalAccessExpired'), 'error', 4000);
-    return false;
-  }
-
-  const revision = contentRevision;
-  const content = currentContent.value;
-  isDirty.value = true;
-
-  const saved =
-    isExternalEditing.value && externalSnapshot
-      ? await debouncedExternalSave(content, externalSnapshot, revision)
-      : activePath.value
-        ? await debouncedSave(
-            activePath.value,
-            content,
-            revision,
-            activeNotebookRoot.value,
-            notebookDataGeneration,
-          )
-        : false;
-
-  if (!saved) {
-    if (!saveError.value) {
-      reportSaveIssue(
-        {
-          kind: 'io',
-          source: isExternalEditing.value ? 'external' : 'workspace',
-          path: isExternalEditing.value ? (externalSnapshot?.relativePath ?? '') : activePath.value,
-          message: t('notebook.unsaved.noWritablePath'),
-        },
-        false,
-      );
-    }
-    toast.show(t('notebook.toast.retrySaveFailed', { error: saveError.value }), 'error', 4000);
-  }
-  return saved;
 }
 
 async function flushCurrentSaveOrBlock(reason: string): Promise<boolean> {
@@ -3486,11 +3357,8 @@ async function performOpenNotebook(): Promise<boolean> {
 function clearPendingSaveForPath(path: string): void {
   const normalized = normalizePath(path);
   if (normalizePath(activePath.value) === normalized) {
-    if (saveTimer) {
-      clearTimeout(saveTimer);
-      saveTimer = null;
-    }
-    saveGeneration++;
+    cancelScheduledSave();
+    saveGeneration.value++;
   }
 }
 
@@ -3549,7 +3417,7 @@ async function enterExternalFileSession(
     }
     externalFile.value = openedFile;
     externalSessionMode.value = 'readonly';
-    contentRevision++;
+    contentRevision.value++;
     currentContent.value = snapshot.content;
     currentDiskRevision.value = snapshot.revision;
     rememberExternalOpenedFile(openedFile);
@@ -3566,7 +3434,7 @@ async function enterExternalFileSession(
     if (sessionGeneration !== externalSessionGeneration) return;
     externalFile.value = openedFile;
     externalSessionMode.value = 'readonly';
-    contentRevision++;
+    contentRevision.value++;
     currentContent.value = '';
     currentDiskRevision.value = null;
     exposeOnlyCurrentExternalFile(openedFile, '');
@@ -3616,6 +3484,9 @@ async function initNotebook(): Promise<void> {
       }
       if (bootstrap.mode !== 'workspace') {
         pendingOpenedFile = openedFileFromBootstrap(bootstrap);
+        // 模式三段式（勿删任何一段）：pre-set 先置目标模式，兜住 enterExternalFileSession
+        // 内多个 await 间隙的模板读取（AppShell 常驻渲染、无 loading 根门控）；post-restore
+        // 是因为其内部恒设 'readonly' 会覆写 edit-shell，await 返回后必须重设一次恢复。
         externalSessionMode.value = bootstrap.mode === 'external-edit' ? 'edit-shell' : 'readonly';
         startupRouteResolved.value = true;
         await enterExternalFileSession(pendingOpenedFile, { setLoading: false });
@@ -3729,27 +3600,11 @@ async function refreshCustomTemplates(
   }
 }
 
-function normalizePath(path: string): string {
-  const normalized = (path || '').replace(/\\/g, '/');
-  if (normalized === '/') return '/';
-  return normalized.endsWith('/') ? normalized.slice(0, -1) : normalized;
-}
-
-function normalizeDir(dir: string): string {
-  const normalized = normalizePath(dir);
-  return normalized === '' ? '/' : normalized;
-}
-
-function joinPath(dir: string, name: string): string {
-  const base = normalizeDir(dir);
-  return base === '/' ? `/${name}` : `${base}/${name}`;
-}
-
 function clearActiveNoteState(): void {
   activePath.value = '';
   // 清理只读打开残留（删除活跃只读笔记等路径），防同名新笔记被误置只读
   readonlyOpenPath.value = null;
-  contentRevision++;
+  contentRevision.value++;
   currentContent.value = '';
   currentDiskRevision.value = null;
   isDirty.value = false;
@@ -3908,10 +3763,7 @@ async function selectNoteNow(path: string, selectionVersion: number): Promise<vo
   await imageUpload.waitForIdle();
   if (selectionVersion !== noteSelectionVersion) return;
   // Flush any pending save before switching notes
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-  }
+  cancelScheduledSave();
   syncCurrentContentFromEditor();
   if (guidedSampleSession.value) {
     persistGuidedSampleCurrent();
@@ -3925,7 +3777,7 @@ async function selectNoteNow(path: string, selectionVersion: number): Promise<vo
     if (selectionVersion !== noteSelectionVersion) return;
     showLeftDrawer.value = false;
     activePath.value = note.path;
-    contentRevision++;
+    contentRevision.value++;
     currentContent.value = note.content;
     currentDiskRevision.value = null;
     isDirty.value = isGuidedSampleDirty(note);
@@ -4003,7 +3855,7 @@ async function selectNoteNow(path: string, selectionVersion: number): Promise<vo
   // Now set reactive state — editor mounts with content already available
   isScratchSession.value = false;
   activePath.value = path;
-  contentRevision++;
+  contentRevision.value++;
   currentContent.value = snapshot.content;
   currentDiskRevision.value = snapshot.revision;
 
@@ -4060,7 +3912,7 @@ async function onSelectExternalNote(path: string): Promise<void> {
     const snapshot = await readExternalNoteFileSnapshot(openedFile);
     if (selectionVersion !== externalSelectionVersion) return;
     externalFile.value = openedFile;
-    contentRevision++;
+    contentRevision.value++;
     currentContent.value = snapshot.content;
     currentDiskRevision.value = snapshot.revision;
     rememberExternalOpenedFile(openedFile);
@@ -4370,9 +4222,7 @@ function updateSplitPreview(): void {
         }
       }
       void nextTick(() => {
-        const previewEl = document.querySelector<HTMLElement>(
-          '.split-preview, .markdown-body--full',
-        );
+        const previewEl = document.querySelector<HTMLElement>('.split-preview');
         if (previewEl) highlightCodeBlocks(previewEl);
       });
     } catch (e) {
@@ -4414,9 +4264,8 @@ async function enableExternalEdit(): Promise<void> {
   if (!externalFile.value || externalError.value) return;
   try {
     if (isDesktopRuntime()) {
-      await invoke('enable_external_edit');
-      // 后端窗口身份已切换为可编辑；失效冷启动缓存，避免后续初始化读到只读旧态。
-      invalidateWindowBootstrap();
+      // 成功即失效冷启动缓存（收口层内完成），避免后续初始化读到只读旧态。
+      await enableExternalEditIpc();
     }
     confirmExternalEdit();
   } catch (error) {
@@ -4451,7 +4300,8 @@ async function openExternalParentAsNotebook(): Promise<void> {
       workspaceCommitted = true;
       await hydrateMockNotebookFromExternalFiles(target.notebookRoot);
     } else {
-      const promoted = await invoke<PromotedNotebookPayload>('promote_external_file_to_notebook');
+      // 成功即失效冷启动缓存（收口层内完成）；窗口身份已切换为笔记本。
+      const promoted = await promoteExternalFileToNotebook();
       await commitWorkspaceHandle({ rootPath: promoted.rootPath, name: promoted.name }, null, true);
       workspaceCommitted = true;
       initialRelativePath = normalizePath(promoted.initialRelativePath);
@@ -4485,7 +4335,7 @@ async function openExternalParentAsNotebook(): Promise<void> {
       externalOpenedNotes.value = [];
       externalOpenedFileMap.value = {};
       activePath.value = '';
-      contentRevision++;
+      contentRevision.value++;
       currentContent.value = preservedDraft;
       currentDiskRevision.value = null;
       isDirty.value = preservedDraft.trim().length > 0;
@@ -4551,7 +4401,7 @@ function onContentUpdate(content: string): void {
     requireBoundWorkspace(t('notebook.actions.editNote'));
     return;
   }
-  const revision = ++contentRevision;
+  const revision = ++contentRevision.value;
   currentContent.value = content;
   updateHeadings(content);
   updateEditorStats(content);
@@ -4572,24 +4422,18 @@ function onContentUpdate(content: string): void {
     // 防御：拒绝把内容更新当作可保存 dirty，也拒绝排程自动保存定时器。
     // （覆盖主题宿主 UI setContent 等可能绕过 EditorState.readOnly 的入口。）
     if (isNoteReadonly.value) {
-      if (saveTimer) {
-        clearTimeout(saveTimer);
-        saveTimer = null;
-      }
+      cancelScheduledSave();
       isDirty.value = false;
       return;
     }
     isDirty.value = true;
     clearTransientSaveIssueOnEdit();
-    if (saveTimer) {
-      clearTimeout(saveTimer);
-      saveTimer = null;
-    }
+    cancelScheduledSave();
     if (isAutosavePausedForDiskIssue()) return;
     const savingPath = activePath.value;
     const savingRoot = activeNotebookRoot.value;
     const savingGeneration = notebookDataGeneration;
-    saveTimer = setTimeout(
+    scheduleSave(
       () => void debouncedSave(savingPath, content, revision, savingRoot, savingGeneration),
       600,
     );
@@ -4598,20 +4442,17 @@ function onContentUpdate(content: string): void {
 
 function onExternalContentUpdate(content: string): void {
   if (isInteractionLocked.value) return;
-  const revision = ++contentRevision;
+  const revision = ++contentRevision.value;
   currentContent.value = content;
   updateHeadings(content);
   updateEditorStats(content);
   if (externalFile.value) {
     isDirty.value = true;
     clearTransientSaveIssueOnEdit();
-    if (saveTimer) {
-      clearTimeout(saveTimer);
-      saveTimer = null;
-    }
+    cancelScheduledSave();
     if (isAutosavePausedForDiskIssue()) return;
     const savingFile = { ...externalFile.value };
-    saveTimer = setTimeout(() => void debouncedExternalSave(content, savingFile, revision), 600);
+    scheduleSave(() => void debouncedExternalSave(content, savingFile, revision), 600);
   }
 }
 
@@ -4645,181 +4486,6 @@ function updateEditorStats(content: string): void {
       : content.split('\n').length;
 }
 
-async function debouncedSave(
-  path: string,
-  content: string,
-  revision = contentRevision,
-  expectedRoot = activeNotebookRoot.value,
-  expectedWorkspaceGeneration = notebookDataGeneration,
-  expectedRevisionOverride?: string | null,
-): Promise<boolean> {
-  const previousSave = currentSavePromise;
-  const saveTask = (async () => {
-    if (previousSave) await previousSave.catch(() => undefined);
-    const gen = ++saveGeneration;
-    isSaving.value = true;
-    const start = Date.now();
-    try {
-      if (
-        !expectedRoot ||
-        !activeNotebookRoot.value ||
-        isWorkspaceUnbound.value ||
-        isNotebookOpening.value ||
-        expectedWorkspaceGeneration !== notebookDataGeneration ||
-        !notebookRootsEqual(expectedRoot, activeNotebookRoot.value) ||
-        normalizePath(path) !== normalizePath(activePath.value)
-      ) {
-        throw createUserMessageError('notebook.error.staleWrite');
-      }
-      if (forcedE2ESaveFailure) {
-        const message = forcedE2ESaveFailure;
-        forcedE2ESaveFailure = null;
-        throw new Error(message);
-      }
-      const expectedRevision =
-        expectedRevisionOverride === undefined
-          ? currentDiskRevision.value
-          : expectedRevisionOverride;
-      const result = await fs.writeFileIfUnchanged(path, content, expectedRevision);
-      if (result.status === 'conflict') {
-        const kind = result.actualRevision === null ? 'missing' : 'conflict';
-        reportSaveIssue({
-          kind,
-          source: 'workspace',
-          path,
-          actualRevision: result.actualRevision,
-          message:
-            kind === 'missing'
-              ? t('notebook.unsaved.missingIssue')
-              : t('notebook.unsaved.conflictIssue'),
-        });
-        return false;
-      }
-      if (gen !== saveGeneration) return true;
-      currentDiskRevision.value = result.revision;
-      localWriteEpoch++;
-      clearSaveIssue();
-      try {
-        await indexStore.refreshDocument(fs, path);
-      } catch (error) {
-        // The file is already safely written; an index refresh must not turn it into a save failure.
-        // eslint-disable-next-line no-console
-        console.warn('[NotebookHome] post-save index refresh failed', error);
-      }
-      void trainCurrentFile(path, content);
-      if (gen !== saveGeneration) return true;
-      wikiLinkRevision.value++;
-      lastSavedAt.value = Date.now();
-      const elapsed = Date.now() - start;
-      if (elapsed < 500) await new Promise((r) => setTimeout(r, 500 - elapsed));
-      if (gen !== saveGeneration) return true;
-      if (activePath.value === path && contentRevision === revision) {
-        await editorRef.value?.settlePendingAutocompleteFeedback();
-        if (gen === saveGeneration && activePath.value === path && contentRevision === revision) {
-          isDirty.value = false;
-        }
-      }
-      return true;
-    } catch (e) {
-      if (gen === saveGeneration) {
-        reportSaveIssue(
-          {
-            kind: 'io',
-            source: 'workspace',
-            path,
-            message: userErrorMessage(e),
-          },
-          false,
-        );
-      }
-      return false;
-    } finally {
-      if (gen === saveGeneration) isSaving.value = false;
-    }
-  })();
-  currentSavePromise = saveTask;
-  try {
-    return await saveTask;
-  } finally {
-    if (currentSavePromise === saveTask) currentSavePromise = null;
-  }
-}
-
-async function debouncedExternalSave(
-  content: string,
-  openedFile: OpenedFilePayload,
-  revision = contentRevision,
-  expectedRevisionOverride?: string | null,
-): Promise<boolean> {
-  const previousSave = currentSavePromise;
-  const saveTask = (async () => {
-    if (previousSave) await previousSave.catch(() => undefined);
-    const gen = ++saveGeneration;
-    isSaving.value = true;
-    const start = Date.now();
-    try {
-      if (externalFileKey(externalFile.value) !== externalFileKey(openedFile)) {
-        return false;
-      }
-      const expectedRevision =
-        expectedRevisionOverride === undefined
-          ? currentDiskRevision.value
-          : expectedRevisionOverride;
-      const result = await writeExternalNoteFileIfUnchanged(openedFile, content, expectedRevision);
-      if (result.status === 'conflict') {
-        const kind = result.actualRevision === null ? 'missing' : 'conflict';
-        reportSaveIssue({
-          kind,
-          source: 'external',
-          path: openedFile.relativePath,
-          actualRevision: result.actualRevision,
-          message:
-            kind === 'missing'
-              ? t('notebook.unsaved.missingIssue')
-              : t('notebook.unsaved.conflictIssue'),
-        });
-        return false;
-      }
-      if (gen !== saveGeneration) return true;
-      currentDiskRevision.value = result.revision;
-      localWriteEpoch++;
-      clearSaveIssue();
-      lastSavedAt.value = Date.now();
-      const elapsed = Date.now() - start;
-      if (elapsed < 300) await new Promise((r) => setTimeout(r, 300 - elapsed));
-      if (gen !== saveGeneration) return true;
-      if (
-        externalFileKey(externalFile.value) === externalFileKey(openedFile) &&
-        contentRevision === revision
-      ) {
-        isDirty.value = false;
-      }
-      return true;
-    } catch (e) {
-      if (gen === saveGeneration) {
-        reportSaveIssue(
-          {
-            kind: 'io',
-            source: 'external',
-            path: openedFile.relativePath,
-            message: userErrorMessage(e),
-          },
-          false,
-        );
-      }
-      return false;
-    } finally {
-      if (gen === saveGeneration) isSaving.value = false;
-    }
-  })();
-  currentSavePromise = saveTask;
-  try {
-    return await saveTask;
-  } finally {
-    if (currentSavePromise === saveTask) currentSavePromise = null;
-  }
-}
-
 // --- Format Bubble ---
 const FORMAT_HINT_KEY = 'jotluck:formatBubble:hintShown';
 
@@ -4842,8 +4508,18 @@ function onSelectionChange(sel: { from: number; to: number } | null): void {
   }
 
   // BUG-013: 首次选中文字 → 显示一次性格式气泡提示
-  if (!localStorage.getItem(FORMAT_HINT_KEY)) {
-    localStorage.setItem(FORMAT_HINT_KEY, '1');
+  let formatHintRaw: string | null = null;
+  try {
+    formatHintRaw = localStorage.getItem(FORMAT_HINT_KEY);
+  } catch {
+    /* ok */
+  }
+  if (!formatHintRaw) {
+    try {
+      localStorage.setItem(FORMAT_HINT_KEY, '1');
+    } catch {
+      /* ok */
+    }
     toast.show(t('notebook.toast.formatHint'), 'info', 5000);
   }
 
@@ -4852,10 +4528,7 @@ function onSelectionChange(sel: { from: number; to: number } | null): void {
     const headCoords = bubbleAnchor() ?? view.coordsAtPos(sel.from);
     if (headCoords) {
       bubblePosition.value = {
-        x:
-          headCoords.left +
-          (view.coordsAtPos(sel.to)?.left ?? headCoords.left) / 2 -
-          (headCoords.left > (view.coordsAtPos(sel.to)?.left ?? headCoords.left) ? 0 : 0),
+        x: headCoords.left + (view.coordsAtPos(sel.to)?.left ?? headCoords.left) / 2,
         y: headCoords.top,
       };
       // Recalculate: center of selection
@@ -5058,8 +4731,8 @@ watch(
   () => `${activeNotebookRoot.value}:${activePath.value}:${externalFilePath.value}`,
   () => {
     if (
-      navigationRequest &&
-      normalizePath(activePath.value) !== normalizePath(navigationRequest.path)
+      navigationRequest.value &&
+      normalizePath(activePath.value) !== normalizePath(navigationRequest.value.path)
     )
       cancelDocumentNavigation();
     activeDocumentPosition.value = 0;
@@ -5073,25 +4746,60 @@ const progressivePreviewRef = ref<InstanceType<typeof ProgressivePreview> | null
 const readerWorkbenchRef = ref<HTMLElement | null>(null);
 const staticPreviewRef = ref<HTMLElement | null>(null);
 const renderedPreviewSource = ref<string | null>(null);
+
+// --- Document position and navigation ---（导航块原样迁出至 useDocumentNavigation，工单 B3）
+const {
+  activeDocumentPosition,
+  activeLocationPane,
+  staticNavigationScroll,
+  navigationRequest,
+  staticPreviewViewport,
+  cancelDocumentNavigation,
+  onDocumentInteraction,
+  onEditorPosition,
+  onPreviewPosition,
+  onNavTreeNavigate,
+  onBacklinkNavigate,
+  onLivePreviewWikiLinkClick,
+} = useDocumentNavigation({
+  renderedPreviewSource,
+  staticPreviewRef,
+  progressivePreviewRef,
+  displayContent,
+  documentAnalysis,
+  headingIndex,
+  editorStats,
+  editorRef,
+  viewMode,
+  currentContent,
+  activeNotebookRoot,
+  activePath,
+  notebookDataGeneration: () => notebookDataGeneration,
+  indexStore,
+  toast,
+  t,
+  onShellSelectNote,
+  currentBacklinks,
+  isExternalEditing,
+  guidedSampleSession,
+});
+
 let staticPositionFrame: number | null = null;
-let staticNavigationScroll = false;
-let staticNavigationTimer: ReturnType<typeof setTimeout> | null = null;
-function staticPreviewViewport(root: HTMLElement) {
-  const owner = root.closest<HTMLElement>('.reader-workbench') ?? root;
-  const bounds = owner.getBoundingClientRect();
-  const barHeight =
-    owner === root
-      ? 0
-      : (owner.querySelector('.reader-workbench__bar')?.getBoundingClientRect().height ?? 0);
-  return { owner, top: bounds.top + barHeight, bottom: bounds.bottom };
-}
 function onStaticPreviewScroll(): void {
-  if (staticPositionFrame !== null || activeLocationPane !== 'preview' || staticNavigationScroll)
+  if (
+    staticPositionFrame !== null ||
+    activeLocationPane.value !== 'preview' ||
+    staticNavigationScroll.value
+  )
     return;
   staticPositionFrame = requestAnimationFrame(() => {
     staticPositionFrame = null;
     const root = staticPreviewRef.value;
-    if (!root || staticNavigationScroll || renderedPreviewSource.value !== displayContent.value)
+    if (
+      !root ||
+      staticNavigationScroll.value ||
+      renderedPreviewSource.value !== displayContent.value
+    )
       return;
     const top = staticPreviewViewport(root).top + 24;
     const items = headingIndex.ordered.value;
@@ -5111,54 +4819,6 @@ function onStaticPreviewScroll(): void {
     });
   });
 }
-async function navigateStaticPreview(
-  request: NavigationRequest,
-  from: number,
-  to: number,
-  headingId?: string,
-): Promise<void> {
-  if (renderedPreviewSource.value !== request.source || !staticPreviewRef.value) {
-    await new Promise<void>((resolve) => {
-      const stop = watch([renderedPreviewSource, staticPreviewRef], () => {
-        if (renderedPreviewSource.value === request.source && staticPreviewRef.value) done();
-      });
-      const done = () => {
-        stop();
-        clearTimeout(timeout);
-        request.controller.signal.removeEventListener('abort', done);
-        resolve();
-      };
-      const timeout = setTimeout(done, 5000);
-      request.controller.signal.addEventListener('abort', done, { once: true });
-    });
-  }
-  await nextTick();
-  if (!currentNavigation(request) || renderedPreviewSource.value !== displayContent.value) return;
-  const root = staticPreviewRef.value;
-  if (!root) return;
-  let target: HTMLElement | null = null;
-  if (headingId) target = root.querySelector<HTMLElement>(`[id="${CSS.escape(headingId)}"]`);
-  else {
-    const occurrences = documentAnalysis.result?.wikiLinks ?? [];
-    const index = occurrences.findIndex((item) => item.from === from && item.to === to);
-    const anchors = root.querySelectorAll<HTMLElement>('a[data-note]');
-    if (anchors.length === occurrences.length) target = anchors[index] ?? null;
-  }
-  if (target) {
-    staticNavigationScroll = true;
-    const viewport = staticPreviewViewport(root);
-    const rect = target.getBoundingClientRect();
-    const top = headingId ? viewport.top + 24 : (viewport.top + viewport.bottom - rect.height) / 2;
-    viewport.owner.scrollTop += rect.top - top;
-    if (!headingId) {
-      target.classList.add('preview-navigation-target');
-      staticNavigationTimer = setTimeout(() => {
-        target?.classList.remove('preview-navigation-target');
-        staticNavigationTimer = null;
-      }, 1600);
-    }
-  } else staticPreviewViewport(root).owner.scrollTop = 0;
-}
 
 const progressivePreviewOptions = computed(() => ({
   wikiLinkExists,
@@ -5166,187 +4826,6 @@ const progressivePreviewOptions = computed(() => ({
   remoteImages: remoteImagePolicy.value,
 }));
 
-// --- Document position and navigation ---
-interface NavigationRequest {
-  controller: AbortController;
-  path: string;
-  workspace: string | null;
-  generation: number;
-  source?: string;
-}
-let navigationRequest: NavigationRequest | null = null;
-function cancelDocumentNavigation(): void {
-  navigationRequest?.controller.abort();
-  navigationRequest = null;
-  progressivePreviewRef.value?.cancelNavigation();
-  if (staticNavigationTimer) clearTimeout(staticNavigationTimer);
-  staticPreviewRef.value
-    ?.querySelectorAll('.preview-navigation-target')
-    .forEach((node) => node.classList.remove('preview-navigation-target'));
-}
-function onDocumentInteraction(pane: 'editor' | 'preview'): void {
-  if (pane === 'preview') staticNavigationScroll = false;
-  activeLocationPane = pane;
-  cancelDocumentNavigation();
-  document.dispatchEvent(new Event('jotluck-document-activity'));
-}
-function onEditorPosition(location: DocumentLocation): void {
-  if (location.analysis !== documentAnalysis || location.revision !== documentAnalysis.version)
-    return;
-  if (location.changes && location.doc)
-    headingIndex.mapChanges(location.changes, location.doc, location.revision);
-  if (location.line !== undefined) {
-    editorStats.cursorLine = location.line;
-    editorStats.cursorCol = location.column ?? 1;
-  }
-  if (location.reason === 'cursor' && editorRef.value?.getEditorView()?.hasFocus)
-    activeLocationPane = 'editor';
-  if (activeLocationPane === 'editor') activeDocumentPosition.value = location.position;
-}
-function onPreviewPosition(location: DocumentLocation): void {
-  if (
-    location.analysis === documentAnalysis &&
-    location.revision === documentAnalysis.version &&
-    activeLocationPane === 'preview'
-  )
-    activeDocumentPosition.value = location.position;
-}
-watch(viewMode, (mode) => {
-  activeLocationPane = mode === 'read' ? 'preview' : 'editor';
-  cancelDocumentNavigation();
-});
-watch(currentContent, (content) => {
-  if (navigationRequest?.source !== undefined && navigationRequest.source !== editorSource(content))
-    cancelDocumentNavigation();
-});
-function currentNavigation(request: NavigationRequest): boolean {
-  return (
-    navigationRequest === request &&
-    !request.controller.signal.aborted &&
-    request.workspace === activeNotebookRoot.value &&
-    request.generation === notebookDataGeneration &&
-    normalizePath(request.path) === normalizePath(activePath.value)
-  );
-}
-function awaitNavigationAnalysis(
-  request: NavigationRequest,
-): Promise<DocumentAnalysisResult | null> {
-  const ready = documentAnalysis.result;
-  if (ready?.ast.source === displayContent.value) return Promise.resolve(ready);
-  return new Promise((resolve) => {
-    const finish = (result: DocumentAnalysisResult | null) => {
-      unsubscribe();
-      clearTimeout(timeout);
-      request.controller.signal.removeEventListener('abort', aborted);
-      resolve(result);
-    };
-    const aborted = () => finish(null);
-    const unsubscribe = documentAnalysis.subscribe((result) => {
-      if (currentNavigation(request) && result.ast.source === displayContent.value) finish(result);
-    });
-    const timeout = setTimeout(() => finish(null), 5000);
-    request.controller.signal.addEventListener('abort', aborted, { once: true });
-    documentAnalysis.update(displayContent.value);
-    if (!currentNavigation(request)) finish(null);
-  });
-}
-async function navigateDocument(target: {
-  path: string;
-  headingId?: string;
-  headingFrom?: number;
-  anchor?: string;
-  backlink?: BacklinkEntry;
-}): Promise<void> {
-  const editing = editorRef.value?.getEditorView();
-  if (editing?.composing || editing?.compositionStarted) return;
-  cancelDocumentNavigation();
-  const request: NavigationRequest = {
-    controller: new AbortController(),
-    path: target.path,
-    workspace: activeNotebookRoot.value,
-    generation: notebookDataGeneration,
-  };
-  navigationRequest = request;
-  if (normalizePath(activePath.value) !== normalizePath(target.path))
-    await onShellSelectNote(target.path);
-  await nextTick();
-  if (!currentNavigation(request)) return;
-  request.source = displayContent.value;
-  const result = await awaitNavigationAnalysis(request);
-  if (!result || !currentNavigation(request)) return;
-  let from = 0,
-    to = 0,
-    headingId: string | undefined;
-  if (target.backlink) {
-    const entry = target.backlink;
-    const occurrences = result.wikiLinks ?? [];
-    const exact =
-      entry.location && indexStore.getIndexService()?.isBacklinkCurrent(entry, currentContent.value)
-        ? occurrences.find(
-            (item) =>
-              item.from === entry.location!.from &&
-              item.to === entry.location!.to &&
-              item.raw === entry.location!.raw,
-          )
-        : null;
-    const occurrence = exact ?? relocateBacklink(entry, occurrences);
-    if (!occurrence) {
-      toast.show(t('navigation.referenceMoved'), 'info', 3500);
-      return;
-    }
-    from = occurrence.from;
-    to = occurrence.to;
-  } else if (target.headingId || target.anchor) {
-    const items = result.ast.blocks.filter((block) => block.type === 'heading');
-    const heading =
-      target.headingFrom !== undefined
-        ? items.find((item) => item.range.from === target.headingFrom)
-        : (items.find((item) => item.id === (target.headingId ?? target.anchor)) ??
-          items.find((item) => item.text.trim() === target.anchor?.trim()));
-    if (!heading) return;
-    from = to = heading.range.from;
-    headingId = heading.id;
-  }
-  if (!currentNavigation(request)) return;
-  activeDocumentPosition.value = from;
-  if (viewMode.value !== 'read') {
-    const view = editorRef.value?.getEditorView();
-    if (!view || view.composing || view.compositionStarted) return;
-    revealLivePreviewSourceAt(view, from);
-    view.dispatch({
-      selection: { anchor: from, head: to },
-      effects: EditorView.scrollIntoView(from, { y: 'center' }),
-    });
-    view.focus();
-    activeLocationPane = 'editor';
-  } else activeLocationPane = 'preview';
-  if (viewMode.value !== 'live') {
-    if (progressivePreviewRef.value) {
-      if (headingId) progressivePreviewRef.value.scrollToHeading(headingId);
-      else progressivePreviewRef.value.navigateToRange(from, to);
-    } else await navigateStaticPreview(request, from, to, headingId);
-  }
-}
-function onNavTreeNavigate(headingId: string, lineNumber: number): void {
-  const item = headingIndex.ordered.value.find((heading) => heading.id === headingId);
-  const view = editorRef.value?.getEditorView();
-  const from =
-    item?.from ??
-    (view && lineNumber > 0
-      ? view.state.doc.line(Math.min(lineNumber, view.state.doc.lines)).from
-      : undefined);
-  void navigateDocument({ path: activePath.value, headingId, headingFrom: from });
-}
-function onBacklinkNavigate(entry: BacklinkEntry): void {
-  const indexed = entry.location
-    ? entry
-    : (currentBacklinks.value.find(
-        (candidate) =>
-          candidate.notePath === entry.notePath &&
-          (!entry.lineNumber || candidate.lineNumber === entry.lineNumber),
-      ) ?? entry);
-  void navigateDocument({ path: indexed.notePath, backlink: indexed });
-}
 function onTagSelect(tagName: string): void {
   if (isExternalEditing.value) {
     toast.show(t('notebook.external.tagRestricted'), 'info', 3500);
@@ -5362,28 +4841,6 @@ function onLivePreviewExternalLinkClick(href: string): void {
 
 function onLivePreviewTagClick(tagName: string): void {
   onTagSelect(tagName);
-}
-
-async function onLivePreviewWikiLinkClick(noteTitle: string, anchor: null | string): Promise<void> {
-  if (isExternalEditing.value) {
-    toast.show(t('notebook.external.wikiRestricted'), 'info', 3500);
-    return;
-  }
-  if (guidedSampleSession.value) {
-    const guided = findGuidedSampleNoteByTitle(guidedSampleSession.value, noteTitle);
-    if (!guided) {
-      toast.show(t('notebook.error.noteNotFound', { title: noteTitle }), 'warning', 3000);
-      return;
-    }
-    await navigateDocument({ path: guided.path, anchor: anchor ?? undefined });
-    return;
-  }
-  const exact = indexStore.getIndexService()?.resolveWikiLink(noteTitle);
-  if (!exact) {
-    toast.show(t('notebook.error.noteNotFound', { title: noteTitle }), 'warning', 3000);
-    return;
-  }
-  await navigateDocument({ path: exact.path, anchor: anchor ?? undefined });
 }
 
 // --- Templates ---
@@ -5697,7 +5154,7 @@ async function closeCurrentWindow(): Promise<boolean> {
   allowWindowClose = true;
   try {
     if (isDesktopRuntime()) {
-      await invoke('destroy_current_window');
+      await destroyCurrentWindow();
       return true;
     }
     window.close();
@@ -5788,7 +5245,7 @@ async function reloadCurrentFromDisk(): Promise<void> {
     ) {
       return;
     }
-    contentRevision++;
+    contentRevision.value++;
     currentContent.value = snapshot.content;
     currentDiskRevision.value = snapshot.revision;
     isDirty.value = false;
@@ -5816,11 +5273,8 @@ async function overwriteCurrentDiskVersion(): Promise<void> {
   if (!issue || (issue.kind !== 'conflict' && issue.kind !== 'missing')) return;
   const intent = unsavedDialogIntent.value;
   syncCurrentContentFromEditor();
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-  }
-  const revision = contentRevision;
+  cancelScheduledSave();
+  const revision = contentRevision.value;
   const content = currentContent.value;
   isDirty.value = true;
   isNoteSwitching.value = true;
@@ -5971,7 +5425,7 @@ onUnmounted(() => {
   externalSessionGeneration++;
   window.removeEventListener('keydown', onGlobalKeydown, { capture: true });
   window.removeEventListener('beforeunload', onBeforeUnload);
-  if (saveTimer) clearTimeout(saveTimer);
+  cancelScheduledSave();
   if (splitDebounceTimer) clearTimeout(splitDebounceTimer);
   if (previewRenderTimer) clearTimeout(previewRenderTimer);
   previewImages.reset();
@@ -5990,7 +5444,11 @@ onUnmounted(() => {
 });
 
 function onDismissVersion(version: string) {
-  localStorage.setItem('jotluck:version:dismissedVersion', version);
+  try {
+    localStorage.setItem('jotluck:version:dismissedVersion', version);
+  } catch {
+    /* ok */
+  }
   showUpdateNotification.value = false;
 }
 </script>
@@ -6457,12 +5915,6 @@ function onDismissVersion(version: string) {
   transform: scale(0.97);
 }
 
-.external-edit-return {
-  display: flex;
-  justify-content: flex-end;
-  padding: var(--space-6) var(--space-12) 0;
-}
-
 .reader-workbench {
   display: flex;
   flex-direction: column;
@@ -6588,14 +6040,6 @@ function onDismissVersion(version: string) {
 .split-preview > :first-child,
 .reader-preview > :first-child {
   margin-top: 0;
-}
-
-.markdown-body--full {
-  height: 100%;
-  overflow-y: auto;
-  padding: var(--editor-top-pad) var(--space-32) var(--space-96);
-  max-width: var(--editor-max-width);
-  margin: 0 auto;
 }
 
 .file-name-input {

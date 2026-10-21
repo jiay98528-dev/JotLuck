@@ -256,13 +256,3 @@ export function getLocalMarketThemePacks(): InstalledThemePack[] {
 export function getAllRegistryThemePacks(): InstalledThemePack[] {
   return [...getBuiltInThemePacks(), ...getLocalMarketThemePacks()];
 }
-
-export function getThemePerformanceBadge(level: ThemePerformanceLevel): ThemePerformanceBadge {
-  return getThemePerformanceBadges()[level];
-}
-
-export function getOfficialThemeProfile(themeId: string): OfficialThemeProfile | undefined {
-  return cloneOfficialProfile(
-    getAllRegistryThemePacks().find((pack) => pack.manifest.id === themeId)?.officialProfile,
-  );
-}

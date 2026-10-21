@@ -1,15 +1,17 @@
 import { preparePreviewFragments } from '@jotluck/renderer/progressive';
 
 let job = 0;
+// 契约对齐实发（document-analysis.ts）：requestRange 发全量字段，
+// cancelPriority 只发 { job } —— 故除 job 外全部可选，运行时以 source 缺失判取消。
 self.onmessage = ({
   data,
 }: MessageEvent<{
   job: number;
-  revision: number;
+  revision?: number;
   source?: string;
-  from: number;
-  definitions: string;
-  headings: string[];
+  from?: number;
+  definitions?: string;
+  headings?: string[];
 }>) => {
   job = data.job;
   if (data.source === undefined) return;
@@ -17,7 +19,7 @@ self.onmessage = ({
     try {
       const source = data.source!;
       const fragments = await preparePreviewFragments(
-        source + '\n\n' + data.definitions,
+        source + '\n\n' + data.definitions!,
         () => job !== data.job,
       );
       if (job !== data.job) return;
@@ -25,12 +27,12 @@ self.onmessage = ({
       const result = fragments
         .filter((part) => part.from < source.length)
         .map((part) => {
-          const ids = part.headings.map((id) => data.headings[heading++] ?? id);
+          const ids = part.headings.map((id) => data.headings![heading++] ?? id);
           let index = 0;
           return {
             ...part,
-            from: part.from + data.from,
-            to: Math.min(part.to, source.length) + data.from,
+            from: part.from + data.from!,
+            to: Math.min(part.to, source.length) + data.from!,
             headings: ids,
             html: part.html.replace(
               /(<h[1-6] id=")[^"]*(")/g,
@@ -38,7 +40,7 @@ self.onmessage = ({
             ),
           };
         });
-      self.postMessage({ job: data.job, revision: data.revision, fragments: result });
+      self.postMessage({ job: data.job, revision: data.revision!, fragments: result });
     } catch {
       /* Keep the last valid view. The normal renderer and its retry remain available. */
     }

@@ -107,10 +107,6 @@ export const useIndexStore = defineStore('index', () => {
     return indexService?.getBacklinks(notePath) ?? [];
   }
 
-  function getDeadLinks() {
-    return indexService?.getWikiLinkGraph().deadLinks ?? [];
-  }
-
   function getEngine(): SearchEngine | null {
     return indexService?.getEngine() ?? null;
   }
@@ -135,7 +131,6 @@ export const useIndexStore = defineStore('index', () => {
     synchronizeFromFileTree,
     getIndexService,
     getBacklinks,
-    getDeadLinks,
     getEngine,
   };
 });

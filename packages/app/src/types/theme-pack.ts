@@ -448,7 +448,6 @@ export interface InstalledThemePack {
   ux?: ThemeUxRecipeMap;
   codeBundles?: Record<string, string>;
   readonly?: boolean;
-  trustedCodeAuthorized?: boolean;
 }
 
 export interface ThemeValidationIssue {

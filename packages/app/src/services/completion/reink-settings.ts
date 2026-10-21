@@ -23,7 +23,9 @@ export const DEFAULT_REINK_SETTINGS: ReinkSettings = {
   // 「配置不可用却抢占公共槽位」的静默降级；用户显式开启才接管。
   enabled: false,
   pythonPath: 'python',
-  runtimeDir: 'D:\\VibeCoding\\模型训练\\06_Reink续墨补全线\\release\\reink-runtime-1.0',
+  // runtimeDir 不设装机默认（去个人路径）：留空由用户显式配置；
+  // 空值 + 用户开启 → reink_configure 报错 → recoverWithDefault 兜底。
+  runtimeDir: '',
   tier: '32m',
   mode: 'fast',
 };
@@ -84,10 +86,12 @@ function normalizeReinkSettings(settings: ReinkSettings): ReinkSettings {
       typeof settings.pythonPath === 'string' && settings.pythonPath.trim().length > 0
         ? settings.pythonPath
         : DEFAULT_REINK_SETTINGS.pythonPath,
+    // 空串不回填默认值：runtimeDir 无装机默认，空值保留为空串，
+    // 由 reink_configure 的报错链兜底（见 useReinkEngineSetup 的 recoverWithDefault）。
     runtimeDir:
       typeof settings.runtimeDir === 'string' && settings.runtimeDir.trim().length > 0
         ? settings.runtimeDir
-        : DEFAULT_REINK_SETTINGS.runtimeDir,
+        : '',
     tier,
     mode,
   };

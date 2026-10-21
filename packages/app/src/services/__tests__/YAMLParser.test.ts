@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractTitle, parseFrontmatter, stripFrontmatter } from '../YAMLParser';
+import { extractTitle, parseFrontmatter } from '../YAMLParser';
 
 describe('parseFrontmatter', () => {
   it('parses a properly closed frontmatter block', () => {
@@ -38,16 +38,6 @@ describe('parseFrontmatter', () => {
   it('keeps string tags as-is when not array-form and not empty', () => {
     const result = parseFrontmatter('---\ntags: foo, bar, baz\n---\nbody');
     expect(result.data.tags).toBe('foo, bar, baz');
-  });
-});
-
-describe('stripFrontmatter', () => {
-  it('drops a present frontmatter block', () => {
-    expect(stripFrontmatter('---\nfoo: bar\n---\nbody')).toBe('body');
-  });
-
-  it('returns the content unchanged when no frontmatter is present', () => {
-    expect(stripFrontmatter('# Heading\nbody')).toBe('# Heading\nbody');
   });
 });
 

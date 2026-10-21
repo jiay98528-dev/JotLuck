@@ -3,10 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
 import type { ReinkSettings } from '@/services/completion/reink-settings';
 
-// 单测以 mock 驱动编排逻辑：invoke（reink_configure）、ReinkEngine、
-// reink-settings 与 isDesktopRuntime 均不触真实实现。
+// 单测以 mock 驱动编排逻辑：configureReinkRuntime（reink-engine 模块级
+// 导出）、ReinkEngine、reink-settings 与 isDesktopRuntime 均不触真实实现。
 
-const invokeMock = vi.hoisted(() => vi.fn());
+const configureMock = vi.hoisted(() => vi.fn());
 
 interface StubReinkEngine {
   id: string;
@@ -58,9 +58,11 @@ const settingsStub = vi.hoisted(() => {
   return { listeners, current };
 });
 
-vi.mock('@tauri-apps/api/core', () => ({ invoke: invokeMock }));
 vi.mock('@/utils/runtime', () => ({ isDesktopRuntime: () => false }));
-vi.mock('@/services/completion/reink-engine', () => ({ ReinkEngine: reinkStub.ReinkEngine }));
+vi.mock('@/services/completion/reink-engine', () => ({
+  ReinkEngine: reinkStub.ReinkEngine,
+  configureReinkRuntime: configureMock,
+}));
 vi.mock('@/services/completion/reink-settings', () => ({
   getReinkSettings: () => settingsStub.current,
   subscribeReinkSettings: (listener: (settings: ReinkSettings) => void) => {
@@ -93,14 +95,11 @@ interface Harness {
 }
 
 function configureResponder(succeeds: boolean): void {
-  invokeMock.mockImplementation((command: string) => {
-    if (command !== 'reink_configure') {
-      return Promise.reject(new Error(`unexpected invoke command: ${command}`));
-    }
-    return succeeds
+  configureMock.mockImplementation(() =>
+    succeeds
       ? Promise.resolve(undefined)
-      : Promise.reject(new Error('unable to start reink bridge (python "python")'));
-  });
+      : Promise.reject(new Error('unable to start reink bridge (python "python")')),
+  );
 }
 
 async function settle(): Promise<void> {
@@ -160,7 +159,7 @@ afterEach(() => {
 describe('useReinkEngineSetup', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    invokeMock.mockReset();
+    configureMock.mockReset();
     reinkStub.instances.length = 0;
     settingsStub.listeners.clear();
     settingsStub.current = { ...BASE_SETTINGS };
@@ -195,9 +194,43 @@ describe('useReinkEngineSetup', () => {
     configureResponder(false);
     const harness = buildHarness();
     await harness.setup();
+    // 失败发生在 configureReinkRuntime，随后走 recoverWithDefault 既有链。
+    expect(configureMock).toHaveBeenCalledTimes(1);
     expect(harness.status.value).toBe('error');
     expect(harness.install).not.toHaveBeenCalled();
     expect(harness.restoreDefault).toHaveBeenCalled();
+    harness.unmount();
+  });
+
+  it('配置经收口层 configureReinkRuntime 下发且请求字段按设置映射', async () => {
+    configureResponder(true);
+    const harness = buildHarness();
+    await harness.setup();
+
+    expect(configureMock).toHaveBeenCalledTimes(1);
+    expect(configureMock).toHaveBeenCalledWith({
+      pythonPath: 'python',
+      runtimeDir: 'D:\\reink',
+      tier: '32m',
+      fast: true,
+    });
+    expect(harness.status.value).toBe('installed');
+    harness.unmount();
+  });
+
+  it('热切换 quality 模式：configure 请求的 fast 随 mode 映射为 false', async () => {
+    configureResponder(true);
+    const harness = buildHarness();
+    await harness.setup();
+
+    await harness.emitSettings({ ...BASE_SETTINGS, mode: 'quality' });
+    expect(configureMock).toHaveBeenCalledTimes(2);
+    expect(configureMock).toHaveBeenLastCalledWith({
+      pythonPath: 'python',
+      runtimeDir: 'D:\\reink',
+      tier: '32m',
+      fast: false,
+    });
     harness.unmount();
   });
 

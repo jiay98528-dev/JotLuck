@@ -118,25 +118,6 @@ export function parseJsonSafely(value: string | null): unknown | null {
   }
 }
 
-export function migrateFirstValidLegacyValue(args: {
-  targetKey: string;
-  legacyKeys: readonly string[];
-  isValid: (value: unknown) => boolean;
-}): string | null {
-  const current = readStorage(args.targetKey);
-  if (current !== null) return current;
-
-  for (const legacyKey of args.legacyKeys) {
-    const raw = readStorage(legacyKey);
-    if (raw === null || !args.isValid(parseJsonSafely(raw))) continue;
-    if (writeStorage(args.targetKey, raw)) {
-      removeStorage(...args.legacyKeys);
-      return raw;
-    }
-  }
-  return null;
-}
-
 function ensureStorageObservers(): void {
   if (observersReady || typeof window === 'undefined') return;
   observersReady = true;

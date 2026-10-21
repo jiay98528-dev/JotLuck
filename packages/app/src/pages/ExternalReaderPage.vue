@@ -312,23 +312,33 @@ import { useHeadings } from '@/composables/useHeadings';
 import appLogoUrl from '../../src-tauri/icons/128x128.png';
 import type {
   BacklinkEntry,
-  DocumentConversionAssetPayload,
   DocumentConversionEvent,
   DocumentEditorCandidate,
-  DocumentEditorLaunchResult,
   DocumentImportBootstrapPayload,
   DocumentProgressUnit,
   ExternalOpenedFile,
-  PromotedNotebookPayload,
   SaveConvertedDocumentDialogRequest,
   TagEntry,
-  WindowBootstrapPayload,
 } from '@/types';
 import type { RightWingRegion } from '@/types/theme-pack';
 import { openExternalUrl } from '@/utils/urlUtils';
 import { useI18n } from 'vue-i18n';
 import { normalizeCommandError } from '@/services/command-errors';
-import { invalidateWindowBootstrap } from '@/services/windowBootstrapCache';
+import {
+  cancelDocumentConversion,
+  enableExternalEdit,
+  getWindowBootstrap,
+  promoteExternalFileToNotebook,
+  readDocumentConversionAsset,
+  refreshDocumentSourceRevision,
+  saveConvertedDocumentAs,
+  // 本地同名编排函数（页面转换流程）遮蔽风险：服务命令以 Ipc 后缀别名导入。
+  startDocumentConversion as startDocumentConversionIpc,
+} from '@/services/windowSession';
+import {
+  getDocumentEditorCandidate,
+  openDocumentSourceInEditor,
+} from '@/services/windowsIntegrationService';
 import { useDialogFocus } from '@/composables/useDialogFocus';
 import { useRemoteImageSession } from '@/composables/useRemoteImageSession';
 
@@ -522,7 +532,7 @@ async function load(): Promise<void> {
   errorMessage.value = '';
   documentActionError.value = '';
   try {
-    const bootstrap = await invoke<WindowBootstrapPayload>('get_window_bootstrap');
+    const bootstrap = await getWindowBootstrap();
     if (bootstrap.mode === 'workspace') {
       await router.replace('/workspace');
       return;
@@ -584,10 +594,10 @@ async function startDocumentConversion(): Promise<void> {
     void handleConversionEvent(event);
   };
   try {
-    const startedConversionId = await invoke<string>('start_document_conversion', { channel });
+    const startedConversionId = await startDocumentConversionIpc(channel);
     if (generation !== conversionGeneration.value) {
       try {
-        await invoke('cancel_document_conversion', { conversionId: startedConversionId });
+        await cancelDocumentConversion(startedConversionId);
       } catch {
         // A generation change already detached this UI from the worker.
       }
@@ -617,7 +627,7 @@ async function handleConversionEvent(event: DocumentConversionEvent): Promise<vo
         errorMessage.value = t('documentImport.outOfOrder');
         if (conversionId.value) {
           try {
-            await invoke('cancel_document_conversion', { conversionId: conversionId.value });
+            await cancelDocumentConversion(conversionId.value);
           } catch {
             // Preserve the protocol error; the window cleanup path still terminates the worker.
           }
@@ -662,10 +672,7 @@ async function loadConversionAsset(
 ): Promise<void> {
   if (!conversionId.value) return;
   try {
-    const payload = await invoke<DocumentConversionAssetPayload>('read_document_conversion_asset', {
-      conversionId: conversionId.value,
-      assetId: event.assetId,
-    });
+    const payload = await readDocumentConversionAsset(conversionId.value, event.assetId);
     if (generation !== conversionGeneration.value) return;
     const previous = assetUrls.get(event.assetId);
     if (previous) URL.revokeObjectURL(previous);
@@ -712,7 +719,7 @@ async function cancelConversion(): Promise<void> {
   pendingAssets.splice(0);
   if (!activeConversionId) return;
   try {
-    await invoke('cancel_document_conversion', { conversionId: activeConversionId });
+    await cancelDocumentConversion(activeConversionId);
   } catch {
     // The detached worker is also terminated by the window cleanup path.
   }
@@ -721,7 +728,7 @@ async function cancelConversion(): Promise<void> {
 async function detectEditorCandidate(): Promise<void> {
   editorCandidatePending.value = true;
   try {
-    editorCandidate.value = await invoke<DocumentEditorCandidate>('get_document_editor_candidate');
+    editorCandidate.value = await getDocumentEditorCandidate();
   } catch {
     editorCandidate.value = {
       displayName: t('documentImport.professionalApp'),
@@ -761,9 +768,7 @@ async function editOriginalInProfessionalApp(): Promise<void> {
   actionPending.value = true;
   documentActionError.value = '';
   try {
-    await invoke<DocumentEditorLaunchResult>('open_document_source_in_editor', {
-      handlerId: editorCandidate.value?.handlerId,
-    });
+    await openDocumentSourceInEditor(editorCandidate.value?.handlerId);
     editDialogOpen.value = false;
   } catch (error) {
     documentActionError.value = userErrorMessage(error);
@@ -784,10 +789,7 @@ async function saveMarkdownCopy(): Promise<void> {
       filterName: t('documentImport.markdownFile'),
       originalPreservationConfirmed: true,
     };
-    const saved = await invoke<ExternalOpenedFile | null>('save_converted_document_as', {
-      conversionId: conversionId.value,
-      dialogRequest: request,
-    });
+    const saved = await saveConvertedDocumentAs(conversionId.value, request);
     if (!saved) return;
     editDialogOpen.value = false;
     await router.replace('/workspace');
@@ -811,9 +813,7 @@ async function refreshSourceOnFocus(): Promise<void> {
     return;
   }
   try {
-    const current = await invoke<boolean>('refresh_document_source_revision', {
-      conversionId: conversionId.value,
-    });
+    const current = await refreshDocumentSourceRevision(conversionId.value);
     if (!current) {
       conversionStatus.value = 'stale';
       editorCandidate.value = null;
@@ -907,9 +907,8 @@ function onBacklinkNavigate(): void {
 async function enableEdit(): Promise<void> {
   actionPending.value = true;
   try {
-    await invoke('enable_external_edit');
-    // 后端窗口身份已切换为可编辑；失效冷启动缓存，避免工作台初始化读到只读旧态。
-    invalidateWindowBootstrap();
+    // 成功即失效冷启动缓存（收口层内完成），避免工作台初始化读到只读旧态。
+    await enableExternalEdit();
     await router.replace('/workspace');
   } catch (error) {
     errorMessage.value = userErrorMessage(error);
@@ -921,9 +920,8 @@ async function enableEdit(): Promise<void> {
 async function promote(): Promise<void> {
   actionPending.value = true;
   try {
-    await invoke<PromotedNotebookPayload>('promote_external_file_to_notebook');
-    // 后端窗口身份已切换为笔记本；失效冷启动缓存，避免工作台初始化读到只读旧态。
-    invalidateWindowBootstrap();
+    // 成功即失效冷启动缓存（收口层内完成），避免工作台初始化读到只读旧态。
+    await promoteExternalFileToNotebook();
     await router.replace('/workspace');
   } catch (error) {
     errorMessage.value = userErrorMessage(error);
@@ -946,7 +944,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('focus', refreshSourceOnFocus);
   clearAssetUrls();
   if (conversionStatus.value === 'running' && conversionId.value) {
-    void invoke('cancel_document_conversion', { conversionId: conversionId.value });
+    void cancelDocumentConversion(conversionId.value);
   }
 });
 </script>

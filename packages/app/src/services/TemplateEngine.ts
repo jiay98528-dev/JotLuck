@@ -171,14 +171,6 @@ created: {{date}}
   ];
 }
 
-export function getBuiltInTemplateContent(
-  templatePath: string,
-  locale: SupportedLocale = getCurrentLocale(),
-): string {
-  const tpl = getBuiltInTemplates(locale).find((t) => t.id === templatePath);
-  return tpl?.content ?? '';
-}
-
 // === Custom Templates (notebook files) ===
 
 function sanitizeTemplateFileName(name: string): string {

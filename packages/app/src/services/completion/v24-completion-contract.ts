@@ -87,16 +87,6 @@ export function createV24CacheIdentityKey(identity: V24CacheIdentity): string {
     .join('|');
 }
 
-export function createEmptyDecoderRuntimeDiagnostics(): DecoderRuntimeDiagnostics {
-  return {
-    cacheStatus: 'miss',
-    reusedTokens: 0,
-    computedTokens: 0,
-    finalBeamWidth: 1,
-    escalationReasons: [],
-  };
-}
-
 export function shouldEscalateAdaptiveBeam(
   top1Probability: number,
   top2Probability: number,

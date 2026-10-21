@@ -104,6 +104,11 @@ export function usePublicDecoderSetup(
           console.warn(
             `[public-decoder-setup] installPublicEngineForEvaluation(${channel}) returned false.`,
           );
+        try {
+          await engine.dispose();
+        } catch {
+          // 安装被拒后的 dispose 失败可忽略，不得向 void 调用点抛出 rejection
+        }
       }
       return ok;
     } catch (error) {
@@ -114,6 +119,11 @@ export function usePublicDecoderSetup(
           `[public-decoder-setup] installPublicEngineForEvaluation(${channel}) rejected; will allow retry.`,
           error,
         );
+      try {
+        await engine.dispose();
+      } catch {
+        // 安装抛错后的 dispose 失败可忽略，不得向 void 调用点抛出 rejection
+      }
       return false;
     }
   }

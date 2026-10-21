@@ -1394,7 +1394,7 @@ export async function exportNote(
   options?: Partial<ExportOptions>,
 ): Promise<ExportResult> {
   throwIfExportAborted(options?.signal);
-  if (!markdown && markdown !== '') {
+  if (!markdown) {
     return {
       success: false,
       format: options?.format ?? ExportFormat.PDF,

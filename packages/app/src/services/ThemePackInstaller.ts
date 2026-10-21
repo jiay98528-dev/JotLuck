@@ -87,7 +87,6 @@ interface StoredThemePackage {
   ux?: ThemeUxRecipeMap;
   codeBundles?: Record<string, string>;
   installedAt: number;
-  trustedCodeAuthorized?: boolean;
 }
 
 type ThemeZipInput = Blob | ArrayBuffer | Uint8Array;
@@ -443,7 +442,6 @@ export function installLocalThemePackage(input: ThemePackageInput): InstalledThe
     ux: input.ux,
     codeBundles: input.codeBundles,
     installedAt: Date.now(),
-    trustedCodeAuthorized: true,
   };
   const all = loadStoredThemePackages().filter((item) => item.manifest.id !== input.manifest.id);
   all.unshift(stored);
@@ -459,15 +457,6 @@ export function removeInstalledThemePack(themeId: string): InstalledThemePack[] 
   const next = loadStoredThemePackages().filter((item) => item.manifest.id !== themeId);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   return next.map(storedToInstalled);
-}
-
-export function authorizeTrustedCodeTheme(themeId: string): void {
-  void themeId;
-}
-
-export function isTrustedCodeThemeAuthorized(themeId: string): boolean {
-  void themeId;
-  return true;
 }
 
 function loadStoredThemePackages(): StoredThemePackage[] {
@@ -490,6 +479,5 @@ function storedToInstalled(stored: StoredThemePackage): InstalledThemePack {
     previewImages: stored.manifest.previewImages,
     ux: stored.ux,
     codeBundles: stored.codeBundles,
-    trustedCodeAuthorized: stored.trustedCodeAuthorized ?? true,
   };
 }

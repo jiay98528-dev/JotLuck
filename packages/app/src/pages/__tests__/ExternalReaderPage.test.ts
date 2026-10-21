@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ExternalReaderPage from '../ExternalReaderPage.vue';
-import { getWindowBootstrap, invalidateWindowBootstrap } from '../../services/windowBootstrapCache';
+import { getWindowBootstrap, invalidateWindowBootstrap } from '../../services/windowSession';
 
 const { invoke, replace, isTauri, shellOpen, Channel, channels } = vi.hoisted(() => {
   const channelInstances: Array<{ onmessage?: (event: unknown) => void }> = [];
@@ -45,6 +45,8 @@ describe('ExternalReaderPage', () => {
     replace.mockReset();
     isTauri.mockReset();
     isTauri.mockReturnValue(false);
+    // 页面经 getWindowBootstrap 走窗口级共享缓存；逐测清缓存保证各测冷启动。
+    invalidateWindowBootstrap();
     shellOpen.mockReset();
     channels.splice(0);
     document.title = 'JotLuck';
@@ -170,24 +172,24 @@ describe('ExternalReaderPage', () => {
 
     const wrapper = mountReader();
     await vi.waitFor(() => expect(wrapper.find('article h1').exists()).toBe(true));
-    // 页面自身直读一次 bootstrap；此时缓存未失效，窗口内重复读取不再 invoke。
-    expect(bootstrapCalls()).toBe(warmCalls + 1);
+    // 页面也走 getWindowBootstrap 共享缓存；此时缓存未失效，窗口内读取不再 invoke。
+    expect(bootstrapCalls()).toBe(warmCalls);
     await getWindowBootstrap();
-    expect(bootstrapCalls()).toBe(warmCalls + 1);
+    expect(bootstrapCalls()).toBe(warmCalls);
 
     const buttons = wrapper.findAll('button');
     await buttons.find((button) => button.text() === '启用编辑')!.trigger('click');
     await flushPromises();
     expect(replace).toHaveBeenCalledWith('/workspace');
     await getWindowBootstrap();
-    expect(bootstrapCalls()).toBe(warmCalls + 2);
+    expect(bootstrapCalls()).toBe(warmCalls + 1);
 
     replace.mockReset();
     await buttons.find((button) => button.text() === '添加到笔记')!.trigger('click');
     await flushPromises();
     expect(replace).toHaveBeenCalledWith('/workspace');
     await getWindowBootstrap();
-    expect(bootstrapCalls()).toBe(warmCalls + 3);
+    expect(bootstrapCalls()).toBe(warmCalls + 2);
     wrapper.unmount();
     invalidateWindowBootstrap();
   });

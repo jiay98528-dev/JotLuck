@@ -2,7 +2,6 @@ import { isDesktopRuntime } from '@/utils/runtime';
 import {
   PUBLIC_V25_JOINT_ENGINE_ID,
   parsePublicFreeDecoderManifest,
-  type PublicFreeDecoderManifest,
 } from './public-free-decoder-contract';
 import {
   PublicFreeDecoderEngine,
@@ -142,18 +141,6 @@ export function isPublicFreeDecoderEvaluationEnvironment(
     environment.VITE_AUTOCOMPLETE_PUBLIC_FREE_DECODER === '1' &&
     isEvaluationMode(String(environment.MODE ?? ''))
   );
-}
-
-export function isPublicFreeDecoderManifest(
-  value: unknown,
-  manifestBytes: number,
-): value is PublicFreeDecoderManifest {
-  try {
-    parsePublicFreeDecoderManifest(value, manifestBytes);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function isEvaluationMode(mode: string): boolean {

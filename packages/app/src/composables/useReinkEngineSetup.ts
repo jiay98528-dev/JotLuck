@@ -1,8 +1,7 @@
 import { onBeforeUnmount, ref, type Ref } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
 import { isDesktopRuntime } from '@/utils/runtime';
 import type { MarkdownPredictor } from '@/services/MarkdownPredictor';
-import { ReinkEngine } from '@/services/completion/reink-engine';
+import { ReinkEngine, configureReinkRuntime } from '@/services/completion/reink-engine';
 import {
   getReinkSettings,
   subscribeReinkSettings,
@@ -123,13 +122,11 @@ export function useReinkEngineSetup(
 
     status.value = 'configuring';
     try {
-      await invoke('reink_configure', {
-        request: {
-          pythonPath: settings.pythonPath,
-          runtimeDir: settings.runtimeDir,
-          tier: settings.tier,
-          fast: settings.mode === 'fast',
-        },
+      await configureReinkRuntime({
+        pythonPath: settings.pythonPath,
+        runtimeDir: settings.runtimeDir,
+        tier: settings.tier,
+        fast: settings.mode === 'fast',
       });
     } catch (configureError) {
       warn('reink_configure rejected; falling back to the default engine.', configureError);

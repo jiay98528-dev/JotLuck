@@ -1,7 +1,7 @@
 import { it, expect } from 'vitest';
 import { computed } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
-import { useIndexStore } from '../index';
+import { useIndexStore } from '../notebookIndex';
 import { MockFSService } from '@/services/MockFSService';
 
 it('invalidates an already observed backlink list when files change without changing the active note', async () => {

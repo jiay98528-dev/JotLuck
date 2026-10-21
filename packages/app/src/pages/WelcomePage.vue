@@ -173,12 +173,15 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
 import Button from '@/components/common/Button.vue';
 import { useDialogFocus } from '@/composables/useDialogFocus';
 import { isDesktopRuntime } from '@/utils/runtime';
 import { isWindows } from '@/utils/platform';
 import { hasCompletedWelcome, markWelcomeCompleted } from '@/utils/welcome';
+import {
+  getWindowsAssociationStatus,
+  openJotluckDefaultAppsSettings,
+} from '@/services/windowsIntegrationService';
 import { useI18n } from 'vue-i18n';
 import type {
   AssociationApplicationState,
@@ -195,8 +198,17 @@ const AUTO_INSTALL_KEY = 'jotluck:version:autoInstall';
 const DEFAULT_EDITOR_PROMPT_KEY = 'jotluck:welcome:defaultEditorPrompted';
 const TOTAL_STEPS = 6;
 
+function readAutoCheckEnabled(): boolean {
+  try {
+    return localStorage.getItem(AUTO_CHECK_KEY) === 'true';
+  } catch {
+    /* ok */
+  }
+  return false;
+}
+
 const currentStep = ref(1);
-const autoCheckEnabled = ref(localStorage.getItem(AUTO_CHECK_KEY) === 'true');
+const autoCheckEnabled = ref(readAutoCheckEnabled());
 type DefaultEditorNotice = '' | 'webPreview' | 'settingsOpened' | 'settingsFailed';
 type AssociationGroupId = AssociationGroupStatus['id'];
 const associationGroupDefinitions: Array<Pick<AssociationGroupStatus, 'id' | 'extensions'>> = [
@@ -290,7 +302,7 @@ watch(
   (visible) => {
     if (!visible) return;
     currentStep.value = 1;
-    autoCheckEnabled.value = localStorage.getItem(AUTO_CHECK_KEY) === 'true';
+    autoCheckEnabled.value = readAutoCheckEnabled();
     defaultEditorNoticeKind.value = '';
     selectedAssociationGroups.value = defaultAssociationSelections();
     void refreshAssociationStatus();
@@ -319,14 +331,22 @@ function close(): void {
 
 function complete(): void {
   markWelcomeCompleted();
-  localStorage.setItem(AUTO_CHECK_KEY, String(autoCheckEnabled.value));
-  localStorage.setItem(AUTO_INSTALL_KEY, 'false');
+  try {
+    localStorage.setItem(AUTO_CHECK_KEY, String(autoCheckEnabled.value));
+    localStorage.setItem(AUTO_INSTALL_KEY, 'false');
+  } catch {
+    /* ok */
+  }
   emit('update:visible', false);
   emit('complete');
 }
 
 async function onSetDefaultEditor(): Promise<void> {
-  localStorage.setItem(DEFAULT_EDITOR_PROMPT_KEY, '1');
+  try {
+    localStorage.setItem(DEFAULT_EDITOR_PROMPT_KEY, '1');
+  } catch {
+    /* ok */
+  }
 
   if (!isDesktopRuntime()) {
     defaultEditorNoticeKind.value = 'webPreview';
@@ -340,7 +360,7 @@ async function onSetDefaultEditor(): Promise<void> {
 
   try {
     associationPending.value = true;
-    await invoke('open_jotluck_default_apps_settings');
+    await openJotluckDefaultAppsSettings();
     defaultEditorNoticeKind.value = 'settingsOpened';
   } catch {
     defaultEditorNoticeKind.value = 'settingsFailed';
@@ -364,9 +384,7 @@ async function refreshAssociationStatus(): Promise<void> {
 
   associationStatusPending.value = true;
   try {
-    associationStatus.value = await invoke<WindowsAssociationStatus>(
-      'get_windows_association_status',
-    );
+    associationStatus.value = await getWindowsAssociationStatus();
   } catch {
     associationStatus.value = null;
     associationStatusError.value = true;

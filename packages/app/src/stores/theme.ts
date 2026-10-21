@@ -19,7 +19,6 @@ import {
 } from '@/services/ThemeRegistry';
 import {
   importThemePackFromFile,
-  installLocalThemePackage,
   loadInstalledThemePacks,
   removeInstalledThemePack,
   validateThemePackage,
@@ -329,13 +328,6 @@ export const useThemeStore = defineStore('theme', () => {
     apply();
   }
 
-  function installTheme(input: ThemePackageInput): ThemeValidationIssue[] {
-    installLocalThemePackage(input);
-    refreshRegistry();
-    void refreshEntitlements();
-    return [];
-  }
-
   async function importThemePack(
     input: Blob | ArrayBuffer | Uint8Array,
   ): Promise<InstalledThemePack> {
@@ -360,11 +352,6 @@ export const useThemeStore = defineStore('theme', () => {
     if (previewThemeId.value === themeId) previewThemeId.value = null;
     apply();
     void refreshEntitlements();
-  }
-
-  function authorizeTrustedCode(themeId: string): void {
-    void themeId;
-    refreshRegistry();
   }
 
   function validateTheme(input: ThemePackageInput): ThemeValidationIssue[] {
@@ -437,10 +424,8 @@ export const useThemeStore = defineStore('theme', () => {
     activateTheme,
     previewThemeById,
     clearPreview,
-    installTheme,
     importThemePack,
     uninstallTheme,
-    authorizeTrustedCode,
     validateTheme,
     entitlementFor,
     refreshEntitlements,

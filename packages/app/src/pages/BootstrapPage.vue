@@ -9,7 +9,7 @@
 import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
-import { getWindowBootstrap } from '@/services/windowBootstrapCache';
+import { getWindowBootstrap } from '@/services/windowSession';
 import { isDesktopRuntime } from '@/utils/runtime';
 
 const router = useRouter();

@@ -6,7 +6,7 @@
  * @see migration-map.md §5
  */
 import { useSearchStore } from '@/stores/search';
-import { useIndexStore } from '@/stores/index';
+import { useIndexStore } from '@/stores/notebookIndex';
 import type { SearchResult, SearchQuery, DateRange } from '@/types';
 import { getCurrentScope, onScopeDispose } from 'vue';
 
