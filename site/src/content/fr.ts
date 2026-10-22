@@ -20,7 +20,7 @@ export const fr: SiteContent = {
       download:
         'Téléchargez JotLuck Windows x64 : notes Markdown gratuites et open source, hors ligne, Preview publiée. Chaque note reste un fichier texte dans votre dossier.',
       themes:
-        "Thèmes de JotLuck, notes Markdown gratuites et open source : Paper, Halo Canvas, Lumen Field — chacun remodèle l'espace de travail, du papier aux fenêtres.",
+        "Thèmes de JotLuck, notes Markdown open source : Paper, Halo Canvas, Lumen Field, Constellation — chacun remodèle l'espace de travail, du papier aux fenêtres.",
       studio:
         'LeankomStudio aide les idées à traverser les genres. JotLuck, notre application de notes Markdown open source, est la première page que nous déplions.',
       privacy:
@@ -101,25 +101,25 @@ export const fr: SiteContent = {
   download: {
     eyebrow: 'Téléchargement',
     title: 'La Preview est en ligne.',
-    lead: 'Les Previews Windows x64 et Linux x86_64 sont prêtes à télécharger dès maintenant. macOS suivra — le texte brut ne choisit jamais sa plateforme, et vos notes restent des fichiers locaux sur tous les systèmes.',
+    lead: 'La Preview Windows x64 est prête à télécharger dès maintenant ; le paquet Linux reste à la version précédente v0.14.0, inchangé cette fois. macOS suivra — le texte brut ne choisit jamais sa plateforme, et vos notes restent des fichiers locaux sur tous les systèmes.',
     statusLabel: 'Première plateforme',
     statusValue: 'Windows x64',
     platformTitle: 'Plateformes',
     platforms: [
       { name: 'Windows x64', state: 'Preview en ligne' },
       { name: 'macOS', state: 'Suivra' },
-      { name: 'Linux x86_64', state: 'Preview en ligne' },
+      { name: 'Linux x86_64', state: 'Restée en v0.14.0' },
     ],
     honestyTitle: "La Preview d'abord.",
     honestyBody:
       "L'installateur Preview est déjà sur GitHub Releases — téléchargeable, vérifiable, réversible.",
-    previewTitle: 'v0.14.0 Preview',
+    previewTitle: 'Téléchargement de la Preview',
     downloadBtn: 'Télécharger la Preview (Windows x64)',
     downloadBtnLinux: 'Télécharger la Preview (Linux .deb)',
     githubBtn: 'GitHub',
     releaseBtn: 'Notes de version et checksum',
     signNote:
-      "Cette Preview n'est pas signée. Windows SmartScreen peut avertir ; sous Linux, installez avec dpkg et vérifiez le SHA-256 sur la page Release.",
+      "Cette Preview n'est pas signée. Windows SmartScreen peut avertir ; vérifiez le SHA-256 sur la page Release avant l'installation.",
     signPolicyLink: 'Politique de signature de code',
     notesTitle: 'À savoir',
     notes: [
@@ -149,6 +149,12 @@ export const fr: SiteContent = {
         id: 'lumen-field',
         name: 'Lumen Field',
         blurb: 'Un champ sombre pour la concentration. Juste vous et le texte.',
+      },
+      {
+        id: 'constellation',
+        name: 'Constellation',
+        blurb:
+          'Un pont de mission sur une coque blanc laiteux ; les étoiles dérivent derrière les panneaux.',
       },
     ],
     blueprintTitle: 'Le système de thèmes',

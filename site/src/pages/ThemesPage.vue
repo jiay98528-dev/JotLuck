@@ -4,6 +4,7 @@ import { usePageHead } from '../composables/usePageHead';
 import PaperPreview from '../components/themes/PaperPreview.vue';
 import HaloCanvasPreview from '../components/themes/HaloCanvasPreview.vue';
 import LumenFieldPreview from '../components/themes/LumenFieldPreview.vue';
+import ConstellationPreview from '../components/themes/ConstellationPreview.vue';
 
 const { content } = useLocale();
 usePageHead('themes');
@@ -19,7 +20,7 @@ const preview = () => content.value.themePreview;
       <p class="head-lead">{{ t().lead }}</p>
     </header>
 
-    <!-- 三款主题的 1:1 SVG 重绘：界面词与示例笔记内容随页面语言 -->
+    <!-- 四款主题的 1:1 SVG 重绘：界面词与示例笔记内容随页面语言 -->
     <section class="theme-gallery" aria-label="themes">
       <figure v-for="(item, i) in t().items" :key="item.id" :data-theme="item.id">
         <span class="annotation-num" aria-hidden="true">{{ String(i + 1).padStart(2, '0') }}</span>
@@ -34,6 +35,11 @@ const preview = () => content.value.themePreview;
             :ui="preview().ui"
             :note="preview().sampleNote"
             :frame="preview().haloNote"
+          />
+          <ConstellationPreview
+            v-else-if="item.id === 'constellation'"
+            :ui="preview().ui"
+            :note="preview().sampleNote"
           />
           <LumenFieldPreview v-else :ui="preview().ui" :note="preview().sampleNote" />
         </div>

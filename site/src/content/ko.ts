@@ -20,7 +20,7 @@ export const ko: SiteContent = {
       download:
         'Windows x64용 JotLuck을 다운로드하세요: 무료 오픈 소스로 오프라인에서도 쓸 수 있는 Markdown 노트 앱, Preview 공개 중. 모든 노트는 순수 텍스트 파일로 당신의 폴더에 저장됩니다.',
       themes:
-        '무료 오픈 소스 Markdown 노트 앱 JotLuck의 테마——Paper, Halo Canvas, Lumen Field 세 가지. 테마는 작업 공간 자체를 다시 만듭니다——종이와 먹의 색부터 창 레이아웃까지.',
+        '무료 오픈 소스 Markdown 노트 앱 JotLuck의 테마——Paper, Halo Canvas, Lumen Field, Constellation 네 가지. 테마는 작업 공간 자체를 다시 만듭니다——종이와 먹의 색부터 창 레이아웃까지.',
       studio:
         'LeankomStudio는 鸰湖科技의 제품 스튜디오입니다. 무료 오픈 소스 Markdown 노트 앱 JotLuck은 우리가 바깥으로 펼쳐 낸 첫 번째 페이지——아이디어가 범주를 넘어, 가장 잘 어울리는 형태를 만나게 하세요.',
       privacy:
@@ -98,25 +98,25 @@ export const ko: SiteContent = {
   download: {
     eyebrow: '다운로드',
     title: 'Preview가 공개되었습니다.',
-    lead: 'Windows x64와 Linux x86_64 미리보기 버전은 지금 바로 다운로드할 수 있습니다. macOS는 뒤따릅니다——순수 텍스트는 플랫폼을 가리지 않으며, 당신의 노트는 어떤 시스템에서도 로컬 파일로 남습니다.',
+    lead: 'Windows x64 미리 보기 버전은 지금 바로 다운로드할 수 있습니다. Linux 패키지는 이전 v0.14.0에 머물러 있으며 이번 라운드에는 업데이트되지 않았습니다. macOS는 뒤따릅니다——순수 텍스트는 플랫폼을 가리지 않으며, 당신의 노트는 어떤 시스템에서도 로컬 파일로 남습니다.',
     statusLabel: '첫 번째 플랫폼',
     statusValue: 'Windows x64',
     platformTitle: '플랫폼',
     platforms: [
       { name: 'Windows x64', state: 'Preview 공개 중' },
       { name: 'macOS', state: '이어서 출시' },
-      { name: 'Linux x86_64', state: 'Preview 공개 중' },
+      { name: 'Linux x86_64', state: 'v0.14.0 유지' },
     ],
     honestyTitle: 'Preview가 먼저입니다.',
     honestyBody:
       'Preview 설치 파일은 이미 GitHub Releases에 공개되었습니다——다운로드 가능하고, 검증 가능하며, 되돌릴 수 있습니다.',
-    previewTitle: 'v0.14.0 Preview',
+    previewTitle: 'Preview 다운로드',
     downloadBtn: 'Preview 다운로드（Windows x64）',
     downloadBtnLinux: 'Preview 다운로드（Linux .deb）',
     githubBtn: 'GitHub',
     releaseBtn: 'Release 노트와 체크섬',
     signNote:
-      '이 Preview는 서명되지 않았습니다. Windows SmartScreen이 경고할 수 있습니다. Linux는 dpkg로 설치하고 SHA-256을 Release 페이지와 맞추세요.',
+      '이 Preview는 서명되지 않았습니다. Windows SmartScreen이 경고할 수 있습니다. 설치하기 전에 SHA-256을 Release 페이지와 맞추세요.',
     signPolicyLink: '코드 서명 정책',
     notesTitle: '알아 두면 좋은 것',
     notes: [
@@ -145,6 +145,11 @@ export const ko: SiteContent = {
         id: 'lumen-field',
         name: 'Lumen Field',
         blurb: '집중을 위한 어두운 들판. 당신과 텍스트만.',
+      },
+      {
+        id: 'constellation',
+        name: 'Constellation',
+        blurb: '유백색 선체 위의 임무 데크. 패널 너머로 별이 흐릅니다.',
       },
     ],
     blueprintTitle: '테마 시스템',

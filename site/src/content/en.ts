@@ -20,7 +20,7 @@ export const en: SiteContent = {
       download:
         'Download JotLuck for Windows x64 — a free, open-source Markdown notes app, offline, Preview live now. Every note is a plain-text file in your own folder.',
       themes:
-        'Themes for JotLuck, a free open-source Markdown notes app: Paper, Halo Canvas, Lumen Field — each reshapes the workspace, from paper and ink to window layout.',
+        'Themes for JotLuck, free and open-source: Paper, Halo Canvas, Lumen Field, Constellation — each reshapes the workspace, from paper and ink to window layout.',
       studio:
         'LeankomStudio helps ideas cross genres and find the shape that fits them. JotLuck, our open-source Markdown notes app, is the first page we unfold outward.',
       privacy:
@@ -98,25 +98,25 @@ export const en: SiteContent = {
   download: {
     eyebrow: 'Download',
     title: 'Preview is live.',
-    lead: 'Windows x64 and Linux x86_64 previews are ready to download now. macOS follows. Plain text never picks platforms, and your notes stay local files on every system.',
+    lead: 'The Windows x64 preview is ready to download now; the Linux package stays at the earlier v0.14.0 release, unchanged this round. macOS follows. Plain text never picks platforms, and your notes stay local files on every system.',
     statusLabel: 'First platform',
     statusValue: 'Windows x64',
     platformTitle: 'Platforms',
     platforms: [
       { name: 'Windows x64', state: 'Preview live' },
       { name: 'macOS', state: 'Follows' },
-      { name: 'Linux x86_64', state: 'Preview live' },
+      { name: 'Linux x86_64', state: 'Held at v0.14.0' },
     ],
     honestyTitle: 'Preview first.',
     honestyBody:
       'The preview installer is already on GitHub Releases — downloadable, verifiable, reversible.',
-    previewTitle: 'v0.14.0 Preview',
+    previewTitle: 'Preview download',
     downloadBtn: 'Download Preview (Windows x64)',
     downloadBtnLinux: 'Download Preview (Linux .deb)',
     githubBtn: 'GitHub',
     releaseBtn: 'Release notes & checksum',
     signNote:
-      'This preview is unsigned: Windows SmartScreen may warn; on Linux use dpkg and verify SHA-256. Check the Release page before installing.',
+      'This preview is unsigned: Windows SmartScreen may warn. Verify the SHA-256 against the Release page before installing.',
     signPolicyLink: 'Code signing policy',
     notesTitle: 'Worth knowing',
     notes: [
@@ -145,6 +145,11 @@ export const en: SiteContent = {
         id: 'lumen-field',
         name: 'Lumen Field',
         blurb: 'A dark field for focus. Just you and the text.',
+      },
+      {
+        id: 'constellation',
+        name: 'Constellation',
+        blurb: 'A mission deck on a milky-white hull; stars drift behind the panels.',
       },
     ],
     blueprintTitle: 'The theme system',

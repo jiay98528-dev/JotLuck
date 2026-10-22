@@ -20,7 +20,7 @@ export const zh: SiteContent = {
       download:
         '下载 JotLuck Windows x64 版：免费开源、离线可用的 Markdown 笔记软件，Preview 已上架。每条笔记都是纯文本文件，保存在你自己的文件夹里。',
       themes:
-        'JotLuck 免费开源的 Markdown 笔记软件提供三套工作区主题：Paper 纸、Halo Canvas、Lumen Field——主题重新塑造工作区本身，从纸墨颜色到窗口布局。',
+        'JotLuck 免费开源的 Markdown 笔记软件提供四套工作区主题：Paper 纸、Halo Canvas、Lumen Field、Constellation——主题重新塑造工作区本身，从纸墨颜色到窗口布局。',
       studio:
         'LeankomStudio 是鸰湖科技的产品工作室，免费开源的 Markdown 笔记软件 JotLuck 是我们向外展开的第一页——让想法越过类型，找到最适合它的形状。',
       privacy:
@@ -98,24 +98,23 @@ export const zh: SiteContent = {
   download: {
     eyebrow: '下载',
     title: 'Preview 已上架。',
-    lead: 'Windows x64 与 Linux x86_64 预览版现在即可下载。macOS 随后跟进——纯文本从不挑平台，你的笔记在任何系统上都是本地文件。',
+    lead: 'Windows x64 预览版现在即可下载；Linux 包停留在 v0.14.0 历史版本，本轮未更新。macOS 随后跟进——纯文本从不挑平台，你的笔记在任何系统上都是本地文件。',
     statusLabel: '首发平台',
     statusValue: 'Windows x64',
     platformTitle: '平台',
     platforms: [
       { name: 'Windows x64', state: 'Preview 已上架' },
       { name: 'macOS', state: '随后跟进' },
-      { name: 'Linux x86_64', state: 'Preview 已上架' },
+      { name: 'Linux x86_64', state: '维持 v0.14.0 历史包' },
     ],
     honestyTitle: '预览版先行。',
     honestyBody: '预览版安装包已上架 GitHub Releases——可下载、可校验、可回退。',
-    previewTitle: 'v0.14.0 Preview',
+    previewTitle: 'Preview 下载',
     downloadBtn: '下载 Preview（Windows x64）',
     downloadBtnLinux: '下载 Preview（Linux .deb）',
     githubBtn: 'GitHub',
     releaseBtn: 'Release 说明与校验',
-    signNote:
-      '预览版未签名。Windows SmartScreen 可能提示风险；Linux 请用 dpkg 安装并核对 SHA-256。安装前请与 Release 页一致。',
+    signNote: '预览版未签名。Windows SmartScreen 可能提示风险。安装前请与 Release 页核对 SHA-256。',
     signPolicyLink: '代码签名政策',
     notesTitle: '值得知道',
     notes: [
@@ -133,6 +132,11 @@ export const zh: SiteContent = {
       { id: 'paper', name: 'Paper 纸', blurb: '默认主题。和纸暖调，墨色文字，工具退后。' },
       { id: 'halo-canvas', name: 'Halo Canvas', blurb: '浮动画布布局，书签、面板各就其位。' },
       { id: 'lumen-field', name: 'Lumen Field', blurb: '暗色专注场域，只剩你和文字。' },
+      {
+        id: 'constellation',
+        name: 'Constellation 群星',
+        blurb: '乳白舱体上的任务甲板，星点在面板后缓行。',
+      },
     ],
     blueprintTitle: '主题系统',
     blueprintBody:

@@ -20,7 +20,7 @@ export const ja: SiteContent = {
       download:
         'JotLuck Windows x64 版をダウンロード：無料・オープンソースでオフラインでも使える Markdown ノートアプリ、Preview 公開中。ノートはすべてプレーンテキストで、あなたのフォルダの中に保存されます。',
       themes:
-        '無料・オープンソースの Markdown ノートアプリ JotLuck のテーマ——Paper・Halo Canvas・Lumen Field の 3 種類。テーマはワークスペースそのものを再形成します——紙と墨の色から、ウィンドウのレイアウトまで。',
+        '無料・オープンソースの Markdown ノートアプリ JotLuck のテーマ——Paper・Halo Canvas・Lumen Field・Constellation の 4 種類。テーマはワークスペースそのものを再形成します——紙と墨の色から、ウィンドウのレイアウトまで。',
       studio:
         'LeankomStudio は鸰湖科技のプロダクトスタジオです。無料・オープンソースの Markdown ノートアプリ JotLuck は、私たちが外に向かって開いた最初のページ——アイデアがカテゴリを越え、いちばん合う形に出会えるように。',
       privacy:
@@ -97,25 +97,25 @@ export const ja: SiteContent = {
   download: {
     eyebrow: 'ダウンロード',
     title: 'Preview は公開中です。',
-    lead: 'Windows x64 と Linux x86_64 のプレビュー版は今すぐダウンロードできます。macOS は続きます——プレーンテキストはプラットフォームを選びません。どのシステムでも、ノートはローカルファイルのままです。',
+    lead: 'Windows x64 のプレビュー版は今すぐダウンロードできます。Linux パッケージは前回の v0.14.0 のまま、今回のラウンドでは更新されていません。macOS は続きます——プレーンテキストはプラットフォームを選びません。どのシステムでも、ノートはローカルファイルのままです。',
     statusLabel: '最初のプラットフォーム',
     statusValue: 'Windows x64',
     platformTitle: 'プラットフォーム',
     platforms: [
       { name: 'Windows x64', state: 'Preview 公開中' },
       { name: 'macOS', state: '続いて公開予定' },
-      { name: 'Linux x86_64', state: 'Preview 公開中' },
+      { name: 'Linux x86_64', state: 'v0.14.0 のまま' },
     ],
     honestyTitle: 'Preview 先行。',
     honestyBody:
       'Preview インストーラーはすでに GitHub Releases に公開されています——ダウンロード可能、検証可能、巻き戻し可能。',
-    previewTitle: 'v0.14.0 Preview',
+    previewTitle: 'Preview ダウンロード',
     downloadBtn: 'Preview をダウンロード（Windows x64）',
     downloadBtnLinux: 'Preview をダウンロード（Linux .deb）',
     githubBtn: 'GitHub',
     releaseBtn: 'Release ノートとチェックサム',
     signNote:
-      'この Preview は未署名です。Windows SmartScreen が警告する場合があります。Linux は dpkg で入れ、SHA-256 を Release ページと照合してください。',
+      'この Preview は未署名です。Windows SmartScreen が警告する場合があります。インストール前に、SHA-256 を Release ページと照合してください。',
     signPolicyLink: 'コード署名ポリシー',
     notesTitle: '知っておきたいこと',
     notes: [
@@ -144,6 +144,11 @@ export const ja: SiteContent = {
         id: 'lumen-field',
         name: 'Lumen Field',
         blurb: '集中のための暗い野原。あなたとテキストだけ。',
+      },
+      {
+        id: 'constellation',
+        name: 'Constellation',
+        blurb: '乳白色の船体に載せた任務デッキ。パネルの向こうで星が流れます。',
       },
     ],
     blueprintTitle: 'テーマシステム',

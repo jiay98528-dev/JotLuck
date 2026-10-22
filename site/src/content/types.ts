@@ -104,7 +104,11 @@ export interface ThemesContent {
   eyebrow: string;
   title: string;
   lead: string;
-  items: Array<{ id: 'paper' | 'halo-canvas' | 'lumen-field'; name: string; blurb: string }>;
+  items: Array<{
+    id: 'paper' | 'halo-canvas' | 'lumen-field' | 'constellation';
+    name: string;
+    blurb: string;
+  }>;
   blueprintTitle: string;
   blueprintBody: string;
   marketplaceNote: string;
