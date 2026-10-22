@@ -90,6 +90,11 @@ export const messages = {
         done: '완료',
         idle: '학습 대기',
       },
+      training: {
+        failedFiles: '파일 {count}개 학습 실패',
+        failedPaths: '실패한 파일 목록 보기',
+        lastError: '최근 오류: {error}',
+      },
       engine: {
         title: '공개 완성 엔진',
         status: '엔진 상태',
@@ -284,6 +289,8 @@ export const messages = {
       wikiLinks: 'Wiki 링크 [[...]] 유지',
       wikiLinksAria: 'Wiki 링크 유지',
       exporting: '내보내는 중…',
+      stageRendering: '렌더링 중…',
+      stagePacking: '패키징 중…',
       failed: '내보내기 실패',
       export: '내보내기',
       cancelExport: '내보내기 취소',
@@ -337,6 +344,7 @@ export const messages = {
     exportCurrent: '현재 노트 내보내기',
     exportCurrentTitle: '현재 노트 내보내기',
     settings: '설정',
+    indexBuilding: '인덱스 구축 중…',
   },
   fileDrawer: {
     aria: '파일 브라우저',
@@ -908,6 +916,7 @@ export const messages = {
       guidedHint: '샘플은 디스크에 저장되지 않습니다. 저장하려면 노트북 폴더를 선택하세요.',
       openNotebook: '노트북 열기',
       externalSession: '외부 파일 · {name}',
+      imageUploading: '이미지 {count}개 불러오는 중…',
     },
     file: {
       newTitle: '새 파일',
@@ -1062,6 +1071,9 @@ export const messages = {
       diskReadFailed: '디스크의 버전을 읽을 수 없습니다: {error}',
       recreated: '원래 위치에 파일을 다시 만들었습니다.',
       overwritten: '선택에 따라 원본 파일을 덮어썼습니다.',
+      watcherStartFailed:
+        '파일 감시 시작 실패: {error}. 창에 포커스가 돌아오면 자동으로 재시도합니다.',
+      watcherRefreshFailed: '파일 감시 새로 고침 실패: {error}',
     },
   },
   review: {
@@ -1099,6 +1111,14 @@ export const messages = {
       hint: '이 변경 사항',
       adopt: '승인',
       discard: '버리기',
+    },
+    bulk: {
+      adoptAll: '모두 승인',
+      discardAll: '모두 버리기',
+      confirmAdopt: '주석 {n}개를 모두 승인해 원고에 반영할까요?',
+      confirmDiscard: '주석 {n}개를 모두 버릴까요? 작업 원고가 원고로 되돌아갑니다.',
+      confirmLabel: '확인',
+      cancel: '취소',
     },
     export: {
       button: '교정본 내보내기',

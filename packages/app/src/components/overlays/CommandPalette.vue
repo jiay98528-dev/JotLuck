@@ -74,10 +74,10 @@
               <!-- eslint-enable vue/no-v-html -->
             </button>
 
-            <!-- Empty State -->
+            <!-- Empty State（fb-1: 索引构建中显示构建态文案，避免误报“无匹配”） -->
             <div v-if="query.length > 0 && displayResults.length === 0" class="no-results">
               <span class="no-results-icon">--</span>
-              <span>{{ t('command.noMatch') }}</span>
+              <span>{{ emptyStateMessage }}</span>
             </div>
           </div>
 
@@ -172,6 +172,7 @@
  */
 import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue';
 import { useSearchStore } from '@/stores/search';
+import { useIndexStore } from '@/stores/notebookIndex';
 import { useSearch } from '@/composables/useSearch';
 import type { SearchResult } from '@/types';
 import DOMPurify from 'dompurify';
@@ -198,6 +199,7 @@ const emit = defineEmits<{
 // ============================================================
 
 const searchStore = useSearchStore();
+const indexStore = useIndexStore();
 const { searchWithDebounce } = useSearch();
 
 // ============================================================
@@ -233,6 +235,13 @@ const resultCountLabel = computed(() => {
 });
 
 const searchPlaceholder = computed(() => t('command.placeholder'));
+
+// fb-1: 索引构建中时空态文案区分（useSearch 在 ready 时自动重放查询）
+const isIndexBuilding = computed(() => indexStore.status === 'building');
+
+const emptyStateMessage = computed(() =>
+  isIndexBuilding.value ? t('command.indexBuilding') : t('command.noMatch'),
+);
 
 // ============================================================
 // Methods

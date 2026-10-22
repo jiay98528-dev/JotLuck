@@ -96,6 +96,11 @@ export const messages = {
         done: 'Terminé',
         idle: 'En attente d’analyse',
       },
+      training: {
+        failedFiles: '{count} fichier(s) en échec d’analyse',
+        failedPaths: 'Voir les fichiers en échec',
+        lastError: 'Dernière erreur : {error}',
+      },
       engine: {
         title: 'Moteur de complétion public',
         status: 'État du moteur',
@@ -292,6 +297,8 @@ export const messages = {
       wikiLinks: 'Conserver les Wiki-liens [[...]]',
       wikiLinksAria: 'Conserver les Wiki-liens',
       exporting: 'Exportation…',
+      stageRendering: 'Rendu…',
+      stagePacking: 'Empaquetage…',
       failed: 'Échec de l’exportation',
       export: 'Exporter',
       cancelExport: 'Annuler l’exportation',
@@ -345,6 +352,7 @@ export const messages = {
     exportCurrent: 'Exporter la note actuelle',
     exportCurrentTitle: 'Exporter la note actuelle',
     settings: 'Réglages',
+    indexBuilding: 'Construction de l’index…',
   },
   fileDrawer: {
     aria: 'Explorateur de fichiers',
@@ -939,6 +947,7 @@ export const messages = {
         'Les exemples ne sont pas écrits sur le disque. Choisissez un dossier de carnet pour enregistrer.',
       openNotebook: 'Ouvrir un carnet',
       externalSession: 'Fichier externe · {name}',
+      imageUploading: 'Chargement de {count} image(s)…',
     },
     file: {
       newTitle: 'Nouveau fichier',
@@ -1111,6 +1120,9 @@ export const messages = {
       diskReadFailed: 'Impossible de lire la version du disque : {error}',
       recreated: 'Le fichier a été recréé à son emplacement d’origine.',
       overwritten: 'Le fichier original a été écrasé comme demandé.',
+      watcherStartFailed:
+        'Échec du démarrage de la surveillance des fichiers : {error}. Nouvelle tentative au retour du focus sur la fenêtre.',
+      watcherRefreshFailed: 'Échec de l’actualisation de la surveillance des fichiers : {error}',
     },
   },
   review: {
@@ -1148,6 +1160,14 @@ export const messages = {
       hint: 'Cette modification',
       adopt: 'Approuver',
       discard: 'Ignorer',
+    },
+    bulk: {
+      adoptAll: 'Tout approuver',
+      discardAll: 'Tout ignorer',
+      confirmAdopt: 'Approuver les {n} annotations et les écrire dans la note source ?',
+      confirmDiscard: 'Ignorer les {n} annotations ? La copie de travail revient à la source.',
+      confirmLabel: 'Confirmer',
+      cancel: 'Annuler',
     },
     export: {
       button: 'Exporter la version révisée',

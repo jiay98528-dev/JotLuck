@@ -12,9 +12,14 @@
     @wheel.passive="onUserInteraction"
     @touchmove.passive="onUserInteraction"
   >
-    <form v-if="findOpen" class="preview-find" @submit.prevent="find(1)">
-      <input ref="findInput" v-model="query" :aria-label="t('editor.find.find')" @input="find(0)" />
-      <button type="button" @click="find(-1)">{{ t('editor.find.previous') }}</button>
+    <form v-if="findOpen" class="preview-find" @submit.prevent="findNext()">
+      <input
+        ref="findInput"
+        v-model="query"
+        :aria-label="t('editor.find.find')"
+        @input="scheduleFind()"
+      />
+      <button type="button" @click="findPrevious()">{{ t('editor.find.previous') }}</button>
       <button type="submit">{{ t('editor.find.next') }}</button>
       <button type="button" @click="findOpen = false">{{ t('editor.find.close') }}</button>
     </form>
@@ -671,6 +676,57 @@ function onKeydown(event: KeyboardEvent) {
     selection?.addRange(range);
   }
 }
+// 查找输入防抖（~150ms）：每字符触发的 find(0) 会做全文转义+编译+全文扫描
+// （miss 再全文回扫），大文档下逐字符代价过高——仅延迟「查找跳转」时机；
+// Enter 提交 / 上一处 / 下一处按钮 / Esc 关闭均即时且行为不变。
+let findDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+function cancelFindDebounce() {
+  if (findDebounceTimer !== null) {
+    clearTimeout(findDebounceTimer);
+    findDebounceTimer = null;
+  }
+}
+function scheduleFind() {
+  if (!query.value) {
+    // 清空查询走即时反馈（无编译无扫描，成本可忽略），与旧 @input 直调等价。
+    cancelFindDebounce();
+    find(0);
+    return;
+  }
+  cancelFindDebounce();
+  findDebounceTimer = setTimeout(() => {
+    findDebounceTimer = null;
+    // 面板已关（Esc/关闭按钮经 watch 取消定时器，此为兜底）则不再跳转。
+    if (findOpen.value) find(0);
+  }, 150);
+}
+/** 提交/按钮触发前冲刷未决防抖：复现旧「input 先 find(0)、按钮后 find(±1)」的事件序与跳转目标。 */
+function flushFind() {
+  if (findDebounceTimer === null) return;
+  cancelFindDebounce();
+  find(0);
+}
+function findNext() {
+  flushFind();
+  find(1);
+}
+function findPrevious() {
+  flushFind();
+  find(-1);
+}
+// 查找正则按查询串缓存：query 未变时 find/highlightFound 复用同一实例，
+// 免重复字面量转义+giu 编译。实例携带可变 lastIndex，取用时统一归零，
+// 防 find 的 exec 游标泄漏进 highlightFound 的 matchAll/反向扫描起点。
+let findPattern: RegExp | null = null;
+let findPatternQuery: string | null = null;
+function findPatternFor(raw: string): RegExp {
+  if (findPatternQuery !== raw || findPattern === null) {
+    findPattern = new RegExp(raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'giu');
+    findPatternQuery = raw;
+  }
+  findPattern.lastIndex = 0;
+  return findPattern;
+}
 function find(direction: number) {
   for (const mark of root.value?.querySelectorAll('mark.preview-find-match') ?? [])
     mark.replaceWith(...mark.childNodes);
@@ -680,7 +736,7 @@ function find(direction: number) {
     return;
   }
   const source = props.source;
-  const pattern = new RegExp(query.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'giu');
+  const pattern = findPatternFor(query.value);
   const start = direction === 0 ? 0 : foundOffset + direction;
   let offset = -1;
   if (direction >= 0) {
@@ -717,7 +773,7 @@ function highlightFound() {
       continue;
     for (const mark of root.value?.querySelectorAll('mark.preview-find-match') ?? [])
       mark.replaceWith(...mark.childNodes);
-    const pattern = new RegExp(query.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'giu');
+    const pattern = findPatternFor(query.value);
     let skip = [...props.source.slice(fragment.from, foundOffset).matchAll(pattern)].length;
     let walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
     let node: Node | null;
@@ -844,6 +900,8 @@ watch(
 );
 watch(findOpen, (open) => {
   if (open) return;
+  // 面板关闭即取消未决的防抖查找：关闭后不再发生跳转/滚动（兜底，按钮与 Esc 共用此路径）。
+  cancelFindDebounce();
   highlightedMatch = '';
   foundOffset = -1;
   for (const element of elements.values()) {
@@ -896,6 +954,7 @@ onMounted(() => {
 });
 onUnmounted(() => {
   cancelNavigation();
+  cancelFindDebounce();
   unsubscribeHeadings?.();
   if (positionFrame !== null) cancelAnimationFrame(positionFrame);
   disposed = true;

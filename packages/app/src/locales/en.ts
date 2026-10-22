@@ -94,6 +94,11 @@ export const messages = {
         done: 'Complete',
         idle: 'Waiting to train',
       },
+      training: {
+        failedFiles: '{count} file(s) failed to train',
+        failedPaths: 'View failed files',
+        lastError: 'Last error: {error}',
+      },
       engine: {
         title: 'Public completion engine',
         status: 'Engine status',
@@ -288,6 +293,8 @@ export const messages = {
       wikiLinks: 'Keep Wiki links [[...]]',
       wikiLinksAria: 'Keep Wiki links',
       exporting: 'Exporting…',
+      stageRendering: 'Rendering…',
+      stagePacking: 'Packing…',
       failed: 'Export failed',
       export: 'Export',
       cancelExport: 'Cancel export',
@@ -341,6 +348,7 @@ export const messages = {
     exportCurrent: 'Export current note',
     exportCurrentTitle: 'Export current note',
     settings: 'Settings',
+    indexBuilding: 'Building index…',
   },
   fileDrawer: {
     aria: 'File browser',
@@ -923,6 +931,7 @@ export const messages = {
       guidedHint: 'Samples are not written to disk. Choose a notebook folder to save.',
       openNotebook: 'Open notebook',
       externalSession: 'External file · {name}',
+      imageUploading: 'Loading {count} image(s)…',
     },
     file: {
       newTitle: 'New file',
@@ -1082,6 +1091,9 @@ export const messages = {
       diskReadFailed: 'Could not read the version on disk: {error}',
       recreated: 'The file was recreated in its original location.',
       overwritten: 'The original file was overwritten as requested.',
+      watcherStartFailed:
+        'File watcher failed to start: {error}. It will retry when the window regains focus.',
+      watcherRefreshFailed: 'File watcher refresh failed: {error}',
     },
   },
   review: {
@@ -1119,6 +1131,14 @@ export const messages = {
       hint: 'This change',
       adopt: 'Approve',
       discard: 'Discard',
+    },
+    bulk: {
+      adoptAll: 'Approve all',
+      discardAll: 'Discard all',
+      confirmAdopt: 'Approve all {n} changes and write them to the source note?',
+      confirmDiscard: 'Discard all {n} changes? The working copy reverts to the source.',
+      confirmLabel: 'Confirm',
+      cancel: 'Cancel',
     },
     export: {
       button: 'Export review version',

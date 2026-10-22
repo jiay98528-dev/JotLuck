@@ -10,6 +10,9 @@ import type { SearchResult, SearchQuery, DocumentEntry, SearchMatch } from '@/ty
 interface IndexedDoc {
   entry: DocumentEntry;
   content: string;
+  /** 索引写入时预计算的小写形式，评分热路径免做全文 toLowerCase */
+  titleLC: string;
+  contentLC: string;
 }
 
 interface LocatedMatch {
@@ -17,14 +20,30 @@ interface LocatedMatch {
   text: string;
 }
 
+/** 查询期一次预编译的词项：term 用于 includes 判定，regex 用于出现次数计数 */
+interface CompiledTerm {
+  term: string;
+  regex: RegExp;
+}
+
 export class SearchEngine {
   private docs: Map<string, IndexedDoc> = new Map();
   private destroyed = false;
 
+  /** 索引写入唯一入口：小写缓存随写入同步失效并重建 */
+  private createDoc(entry: DocumentEntry, content: string): IndexedDoc {
+    return {
+      entry,
+      content,
+      titleLC: entry.title.toLowerCase(),
+      contentLC: content.toLowerCase(),
+    };
+  }
+
   buildIndex(documents: Record<string, DocumentEntry>): void {
     this.docs.clear();
     for (const [path, entry] of Object.entries(documents)) {
-      this.docs.set(path, { entry, content: '' });
+      this.docs.set(path, this.createDoc(entry, ''));
     }
   }
 
@@ -35,12 +54,12 @@ export class SearchEngine {
     for (const [path, entry] of Object.entries(documents)) {
       try {
         const content = await contentProvider(path);
-        this.docs.set(path, { entry, content });
+        this.docs.set(path, this.createDoc(entry, content));
       } catch (e) {
         // 读取文件内容失败时静默降级为空内容，索引仍可基于标题匹配
         // eslint-disable-next-line no-console
         console.error('[SearchEngine] preloadContent 读取文件失败，使用空内容:', path, e);
-        this.docs.set(path, { entry, content: '' });
+        this.docs.set(path, this.createDoc(entry, ''));
       }
     }
   }
@@ -48,9 +67,11 @@ export class SearchEngine {
   search(query: SearchQuery): SearchResult[] {
     if (this.destroyed) return [];
 
-    let candidates: Array<{ path: string; doc: IndexedDoc }> = [...this.docs.entries()].map(
-      ([path, doc]) => ({ path, doc }),
-    );
+    // 零中间数组：直接迭代 Map entries 构建候选列表（原实现经 [...entries()].map 双数组展开）
+    let candidates: Array<{ path: string; doc: IndexedDoc }> = [];
+    for (const [path, doc] of this.docs.entries()) {
+      candidates.push({ path, doc });
+    }
 
     // Tag filter
     if (query.tags && query.tags.length > 0) {
@@ -90,14 +111,17 @@ export class SearchEngine {
         return [];
       }
 
+      // 辅助词项与正则一样按查询预编译一次，避免每 candidate 重复 split + RegExp
+      const auxiliaryTerms = query.text.trim()
+        ? this.compileTerms(query.text.trim().toLowerCase().split(/\s+/))
+        : null;
+
       const ranked = candidates
         .map((candidate) => {
           const contentMatch = this.findRegexMatch(candidate.doc.content, regex);
           const titleMatch = this.findRegexMatch(candidate.doc.entry.title, regex);
           if (!contentMatch && !titleMatch) return null;
-          const auxiliaryScore = query.text.trim()
-            ? this.scoreText(candidate.doc, query.text.trim().toLowerCase().split(/\s+/))
-            : 0;
+          const auxiliaryScore = auxiliaryTerms ? this.scoreText(candidate.doc, auxiliaryTerms) : 0;
           return {
             ...candidate,
             contentMatch,
@@ -123,11 +147,16 @@ export class SearchEngine {
 
     // Text search
     if (query.text && query.text.trim()) {
-      const terms = query.text.trim().toLowerCase().split(/\s+/);
+      // 词项每查询预编译一次（原实现每 doc×term 现场构造 RegExp）
+      const compiled = this.compileTerms(query.text.trim().toLowerCase().split(/\s+/));
       const scored = candidates
         .map((c) => {
-          const score = this.scoreText(c.doc, terms);
-          return { ...c, score, contentMatch: this.findFirstTextMatch(c.doc.content, terms) };
+          const score = this.scoreText(c.doc, compiled);
+          return {
+            ...c,
+            score,
+            contentMatch: this.findFirstTextMatch(c.doc, compiled),
+          };
         })
         .filter((c) => c.score > 0)
         .sort((a, b) => b.score - a.score);
@@ -139,15 +168,25 @@ export class SearchEngine {
     return candidates.map((c) => this.toResult(c.path, c.doc, null, 0));
   }
 
-  private scoreText(doc: IndexedDoc, terms: string[]): number {
-    let score = 0;
-    const titleLC = doc.entry.title.toLowerCase();
-    const contentLC = doc.content.toLowerCase();
+  /** 词项预编译：空 term 跳过，与原 scoreText 内 `if (!term) continue` 语义一致 */
+  private compileTerms(terms: string[]): CompiledTerm[] {
+    const compiled: CompiledTerm[] = [];
     for (const term of terms) {
       if (!term) continue;
-      if (titleLC.includes(term)) score += 10;
       const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      score += (contentLC.match(new RegExp(escaped, 'g')) || []).length;
+      compiled.push({ term, regex: new RegExp(escaped, 'g') });
+    }
+    return compiled;
+  }
+
+  private scoreText(doc: IndexedDoc, compiled: CompiledTerm[]): number {
+    let score = 0;
+    const titleLC = doc.titleLC;
+    const contentLC = doc.contentLC;
+    for (const { term, regex } of compiled) {
+      if (titleLC.includes(term)) score += 10;
+      // 带 g 标志的 RegExp 复用安全：String.match 每次调用前按规范重置 lastIndex
+      score += (contentLC.match(regex) || []).length;
     }
     return score;
   }
@@ -160,12 +199,12 @@ export class SearchEngine {
     return { index: match.index, text: match[0] ?? '' };
   }
 
-  private findFirstTextMatch(content: string, terms: string[]): LocatedMatch | null {
+  private findFirstTextMatch(doc: IndexedDoc, compiled: CompiledTerm[]): LocatedMatch | null {
+    const content = doc.content;
     if (!content) return null;
-    const contentLC = content.toLowerCase();
+    const contentLC = doc.contentLC;
     let best: LocatedMatch | null = null;
-    for (const term of terms) {
-      if (!term) continue;
+    for (const { term } of compiled) {
       const index = contentLC.indexOf(term);
       if (index < 0 || (best && best.index <= index)) continue;
       best = { index, text: content.slice(index, index + term.length) };
@@ -208,7 +247,7 @@ export class SearchEngine {
   }
 
   updateDocument(path: string, doc: DocumentEntry, content: string): void {
-    this.docs.set(path, { entry: doc, content });
+    this.docs.set(path, this.createDoc(doc, content));
   }
 
   removeDocument(path: string): void {

@@ -8,7 +8,7 @@
 import { useSearchStore } from '@/stores/search';
 import { useIndexStore } from '@/stores/notebookIndex';
 import type { SearchResult, SearchQuery, DateRange } from '@/types';
-import { getCurrentScope, onScopeDispose } from 'vue';
+import { getCurrentScope, onScopeDispose, watch } from 'vue';
 
 const DEBOUNCE_MS = 250;
 
@@ -39,7 +39,11 @@ export function useSearch() {
     }
     const engine = indexStore.getEngine();
     if (!engine) {
-      searchStore.clearResults();
+      // fb-1: 索引构建中不算“无匹配”——保留当前查询与既有结果，
+      // 待 status 转 ready 后由下方 watch 自动重放；idle/error 维持清空现状。
+      if (indexStore.status !== 'building') {
+        searchStore.clearResults();
+      }
       return;
     }
 
@@ -112,7 +116,20 @@ export function useSearch() {
     return searchStore.getSelected();
   }
 
-  if (getCurrentScope()) onScopeDispose(cancelPendingSearch);
+  if (getCurrentScope()) {
+    onScopeDispose(cancelPendingSearch);
+    // fb-1: 索引构建期间的搜索请求因 engine 未就绪而搁置，
+    // status 转 ready 后自动重放当前查询，避免面板停留在误导性空态。
+    watch(
+      () => indexStore.status,
+      (status) => {
+        if (status !== 'ready') return;
+        const currentQuery = searchStore.query;
+        if (!currentQuery.trim()) return;
+        searchImmediately(currentQuery);
+      },
+    );
+  }
 
   return {
     searchWithDebounce,

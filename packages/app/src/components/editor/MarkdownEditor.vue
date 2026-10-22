@@ -20,7 +20,7 @@ import {
   clearInteractionSelection,
 } from '@/utils/cm6-interaction-selection';
 import { DocumentAnalysis } from '@/services/document-analysis';
-import { documentAnalysisExtension } from '@/utils/cm6-document-analysis';
+import { documentAnalysisExtension, docToString } from '@/utils/cm6-document-analysis';
 import type { DocumentLocation } from '@/utils/document-location';
 import { EditorView, lineNumbers, keymap } from '@codemirror/view';
 import { EditorState, Compartment } from '@codemirror/state';
@@ -429,7 +429,9 @@ function createState(doc: string) {
           emit('selection-change', null);
         }
         if (update.docChanged && !suppressSync) {
-          const value = update.state.doc.toString();
+          // 共享取串：analysis 扩展（先注册先跑）已对同一 doc 物化过全文串，
+          // 此处 WeakMap 命中，避免每击键第二次 O(N) 全文 toString。
+          const value = docToString(update.state.doc);
           internallyEmittedValues.add(value);
           if (internallyEmittedValues.size > 2) {
             const oldest = internallyEmittedValues.values().next().value;

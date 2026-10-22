@@ -91,6 +91,11 @@ export const messages = {
         done: '完了',
         idle: '学習待ち',
       },
+      training: {
+        failedFiles: '{count} 個のファイルの学習に失敗',
+        failedPaths: '失敗したファイルの一覧を表示',
+        lastError: '直近のエラー：{error}',
+      },
       engine: {
         title: '公開補完エンジン',
         status: 'エンジン状態',
@@ -285,6 +290,8 @@ export const messages = {
       wikiLinks: 'Wiki リンク [[...]] を保持',
       wikiLinksAria: 'Wiki リンクを保持',
       exporting: 'エクスポート中…',
+      stageRendering: 'レンダリング中…',
+      stagePacking: 'パッケージ化中…',
       failed: 'エクスポートに失敗',
       export: 'エクスポート',
       cancelExport: 'エクスポートを中止',
@@ -338,6 +345,7 @@ export const messages = {
     exportCurrent: '現在のノートをエクスポート',
     exportCurrentTitle: '現在のノートをエクスポート',
     settings: '設定',
+    indexBuilding: '索引を構築中…',
   },
   fileDrawer: {
     aria: 'ファイルブラウザー',
@@ -909,6 +917,7 @@ export const messages = {
         'サンプルはディスクに書き込まれません。保存するにはノートブックフォルダーを選んでください。',
       openNotebook: 'ノートブックを開く',
       externalSession: '外部ファイル · {name}',
+      imageUploading: '{count} 枚の画像を読み込み中…',
     },
     file: {
       newTitle: '新しいファイル',
@@ -1068,6 +1077,9 @@ export const messages = {
       diskReadFailed: 'ディスク上の版を読み込めませんでした：{error}',
       recreated: '元の場所にファイルを再作成しました。',
       overwritten: '選択に従って元のファイルを上書きしました。',
+      watcherStartFailed:
+        'ファイル監視の開始に失敗しました：{error}。ウィンドウにフォーカスが戻ると自動で再試行します。',
+      watcherRefreshFailed: 'ファイル監視の更新に失敗しました：{error}',
     },
   },
   review: {
@@ -1105,6 +1117,14 @@ export const messages = {
       hint: 'この変更',
       adopt: '承認',
       discard: '破棄',
+    },
+    bulk: {
+      adoptAll: 'すべて承認',
+      discardAll: 'すべて破棄',
+      confirmAdopt: '全 {n} 件の注釈を承認して原稿に書き込みますか？',
+      confirmDiscard: '全 {n} 件の注釈を破棄しますか？作業原稿は原稿に戻ります。',
+      confirmLabel: '確認',
+      cancel: 'キャンセル',
     },
     export: {
       button: '校正版を書き出す',

@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
+import { effectScope, nextTick } from 'vue';
 import { parseSearchQuery, useSearch } from '../useSearch';
 import { useIndexStore } from '@/stores/notebookIndex';
 import { useSearchStore } from '@/stores/search';
 import { MockFSService } from '@/services/MockFSService';
+import type { SearchResult } from '@/types';
 
 describe('parseSearchQuery', () => {
   it('recognizes one regex literal between filters and preserves outside text', () => {
@@ -93,5 +95,70 @@ describe('useSearch workspace ordering', () => {
     expect(searchStore.results).toEqual([]);
     expect(searchStore.isVisible).toBe(false);
     expect(searchStore.searchHistory).toEqual(['保留的历史']);
+  });
+});
+
+describe('useSearch index readiness (fb-1)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('keeps existing results while the index is building and still clears on idle', () => {
+    const indexStore = useIndexStore();
+    const searchStore = useSearchStore();
+    indexStore.status = 'building'; // 模拟启动构建期（engine 未挂载）
+
+    const scope = effectScope();
+    const search = scope.run(() => useSearch())!;
+
+    const stale: SearchResult = { notePath: '/a.md', noteTitle: '旧结果', matches: [], score: 1 };
+    searchStore.setQuery('任意查询');
+    searchStore.setResults([stale]);
+
+    // building：保留既有结果，不落入误导性的“无匹配”清空态
+    search.searchImmediately('任意查询');
+    expect(searchStore.results).toEqual([stale]);
+
+    // idle/error：维持既有清空行为
+    indexStore.status = 'idle';
+    search.searchImmediately('任意查询');
+    expect(searchStore.results).toEqual([]);
+
+    scope.stop();
+  });
+
+  it('replays the pending query automatically once the index becomes ready', async () => {
+    const indexStore = useIndexStore();
+    const searchStore = useSearchStore();
+    const fs = new MockFSService(0, {
+      persist: false,
+      initialFiles: {
+        '/notes/target.md': '# 目标笔记\n\n包含 独特探针词 unique-probe 的正文。',
+      },
+    });
+    indexStore.status = 'building'; // 模拟启动构建期（engine 未挂载）
+
+    const scope = effectScope();
+    const search = scope.run(() => useSearch())!;
+
+    // 构建期搜索被搁置：不报无匹配，结果保持空等待重放
+    search.searchImmediately('独特探针词');
+    expect(searchStore.results).toEqual([]);
+
+    // 索引就绪 → watch 自动重放当前查询
+    await indexStore.initialize(fs, true);
+    await nextTick();
+
+    expect(searchStore.query).toBe('独特探针词');
+    expect(searchStore.results.length).toBeGreaterThanOrEqual(1);
+    expect(searchStore.results[0]!.notePath).toBe('/notes/target.md');
+
+    scope.stop();
   });
 });

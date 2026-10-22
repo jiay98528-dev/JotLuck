@@ -92,6 +92,11 @@ export const messages = {
         done: '已完成',
         idle: '待训练',
       },
+      training: {
+        failedFiles: '{count} 个文件训练失败',
+        failedPaths: '查看失败文件清单',
+        lastError: '最近错误：{error}',
+      },
       engine: {
         title: '公共补全引擎',
         status: '运行状态',
@@ -287,6 +292,8 @@ export const messages = {
       wikiLinks: '保留 Wiki 链接 [[...]]',
       wikiLinksAria: '保留 Wiki 链接',
       exporting: '正在导出…',
+      stageRendering: '渲染中…',
+      stagePacking: '打包中…',
       failed: '导出失败',
       export: '导出',
       cancelExport: '取消导出',
@@ -340,6 +347,7 @@ export const messages = {
     exportCurrent: '导出当前',
     exportCurrentTitle: '导出当前笔记',
     settings: '设置',
+    indexBuilding: '索引构建中…',
   },
   fileDrawer: {
     aria: '文件浏览器',
@@ -766,6 +774,7 @@ export const messages = {
       guidedHint: '示例不会写入磁盘，选择笔记本文件夹后即可保存',
       openNotebook: '打开笔记本',
       externalSession: '外部文件 · {name}',
+      imageUploading: '正在装载 {count} 张图片…',
     },
     file: {
       newTitle: '新建文件',
@@ -906,6 +915,8 @@ export const messages = {
       diskReadFailed: '读取磁盘版本失败：{error}',
       recreated: '已在原位置重建文件。',
       overwritten: '已按你的选择覆盖原文件。',
+      watcherStartFailed: '文件变更监视启动失败：{error}。窗口聚焦时将自动重试。',
+      watcherRefreshFailed: '文件变更刷新失败：{error}',
     },
   },
   externalReader: {
@@ -1065,6 +1076,14 @@ export const messages = {
       hint: '该处修改',
       adopt: '批准',
       discard: '丢弃',
+    },
+    bulk: {
+      adoptAll: '全部批准',
+      discardAll: '全部丢弃',
+      confirmAdopt: '批准全部 {n} 处批注并写入源稿？',
+      confirmDiscard: '丢弃全部 {n} 处批注？工作稿将回滚为源稿。',
+      confirmLabel: '确认',
+      cancel: '取消',
     },
     export: {
       button: '导出批注版本',

@@ -1264,6 +1264,52 @@ function handleLiveAnchorClick(anchor: HTMLAnchorElement, options: LivePreviewOp
   return false;
 }
 
+/**
+ * 轻量块缓存键：原 JSON.stringify 九元组改为 NUL 分隔拼接（省数组分配与
+ * 逐字符转义扫描，键更短连带 renderBytes 记账更省）。语义等价保证：
+ * - from/to 仍入键（wrapBlockHtml 把 data-block-from 烧进 html、
+ *   unpinFocusedBlock 回退匹配依赖它），字段集与旧实现完全一致；
+ * - type/position 为固定枚举，from/to/itemIndex 为数字，tableGridTemplate
+ *   为内部生成的 CSS 串（minmax(Nch,Nfr) 拼接，非空、无 NUL），
+ *   tableAlignments 为枚举数组（编码 'A'+join，与 undefined 的 '' 区分，
+ *   与旧 JSON 的 null/[] 区分口径一致）——这些槽位不可能含 NUL；
+ * - 唯一可含 NUL 的用户内容槽位（key/raw）前置检测，命中即回退旧
+ *   JSON.stringify 路径。JSON 输出必转义控制字符（不含裸 NUL），拼接
+ *   输出恒含 8 个裸 NUL 分隔符，两路径输出空间不相交；无 NUL 拼接可由
+ *   NUL 切分无损还原九槽位 → 单射，键空间与原实现等价。
+ */
+function liveCacheKey(block: LiveBlock): string {
+  const { key, raw, tableGridTemplate } = block;
+  if (
+    key.includes('\u0000') ||
+    raw.includes('\u0000') ||
+    (tableGridTemplate !== undefined && tableGridTemplate.includes('\u0000'))
+  ) {
+    return JSON.stringify([
+      block.key,
+      block.raw,
+      block.type,
+      block.from,
+      block.to,
+      block.position,
+      block.itemIndex,
+      block.tableGridTemplate,
+      block.tableAlignments,
+    ]);
+  }
+  return [
+    key,
+    raw,
+    block.type,
+    block.from,
+    block.to,
+    block.position ?? '',
+    block.itemIndex ?? '',
+    tableGridTemplate ?? '',
+    block.tableAlignments === undefined ? '' : `A${block.tableAlignments.join(',')}`,
+  ].join('\u0000');
+}
+
 function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
   return ViewPlugin.fromClass(
     class {
@@ -1950,17 +1996,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           // html 串，unpinFocusedBlock 的回退匹配依赖它）——去行号化的 blockKey
           // 只稳定 pin 与 widget eq 复用，本步不解锁「上方插行下方块免重渲染」
           // 的缓存命中，不做虚假承诺。
-          const cacheKey = JSON.stringify([
-            block.key,
-            block.raw,
-            block.type,
-            block.from,
-            block.to,
-            block.position,
-            block.itemIndex,
-            block.tableGridTemplate,
-            block.tableAlignments,
-          ]);
+          const cacheKey = liveCacheKey(block);
           const cached = this.renderCache.get(cacheKey);
           if (cached !== undefined) {
             block.html = cached;

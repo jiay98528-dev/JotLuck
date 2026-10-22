@@ -8,11 +8,25 @@ export const documentAnalysisFacet = Facet.define<DocumentAnalysis, DocumentAnal
 });
 export const documentAnalysisReady = StateEffect.define<void>();
 const exactCache = new WeakMap<Text, DocumentAst>();
+// 全文 toString 按 doc 身份缓存：Text 不可变，同身份必同内容；击键链上
+// analysis.update / peekDocumentAst / MarkdownEditor 同步 / NotebookHome 统计
+// 对同一 doc 版本只物化一次全文串（大文档下每次物化均为 O(N) 全拷贝）。
+const docStringCache = new WeakMap<Text, string>();
+
+/** 共享取串：同一 doc 版本（Text 身份）重复调用只做一次全文 toString。 */
+export function docToString(doc: Text): string {
+  let text = docStringCache.get(doc);
+  if (text === undefined) {
+    text = doc.toString();
+    docStringCache.set(doc, text);
+  }
+  return text;
+}
 
 export function getDocumentAst(state: EditorState): DocumentAst {
   const cached = peekDocumentAst(state);
   if (cached) return cached;
-  const source = state.doc.toString();
+  const source = docToString(state.doc);
   const ast = state.facet(documentAnalysisFacet)?.exact(source) ?? parseDocument(source);
   exactCache.set(state.doc, ast);
   return ast;
@@ -22,7 +36,7 @@ export function peekDocumentAst(state: EditorState): DocumentAst | null {
   const cached = exactCache.get(state.doc);
   if (cached) return cached;
   const result = state.facet(documentAnalysisFacet)?.result;
-  if (result && result.ast.source === state.doc.toString()) {
+  if (result && result.ast.source === docToString(state.doc)) {
     exactCache.set(state.doc, result.ast);
     return result.ast;
   }
@@ -42,10 +56,10 @@ export function documentAnalysisExtension(analysis: DocumentAnalysis) {
           if (!disposed) view.dispatch({ effects: documentAnalysisReady.of() });
         }, 0);
       });
-      analysis.update(view.state.doc.toString());
+      analysis.update(docToString(view.state.doc));
       return {
         update(update) {
-          if (update.docChanged) analysis.update(update.state.doc.toString());
+          if (update.docChanged) analysis.update(docToString(update.state.doc));
         },
         destroy() {
           disposed = true;
