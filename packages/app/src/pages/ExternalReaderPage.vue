@@ -294,18 +294,16 @@
           </section>
         </div>
       </Teleport>
-      <!-- 外链打开失败等全局 toast 在阅读窗口内也要可见（模块级单例状态） -->
-      <ToastContainer />
+      <!-- Toast：已收敛至 App.vue 全局单挂载（原 3f78a0b 为阅读窗口补挂载，全局挂载后撤销） -->
     </main>
   </ExternalReaderSlotBoundary>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Channel, invoke } from '@tauri-apps/api/core';
+import { Channel } from '@tauri-apps/api/core';
 import { useRouter } from 'vue-router';
 import Button from '@/components/common/Button.vue';
-import ToastContainer from '@/components/common/Toast.vue';
 import RightWing from '@/components/layout/RightWing.vue';
 import ExternalReaderSlotBoundary from '@/components/theme/ExternalReaderSlotBoundary.vue';
 import { useHeadings } from '@/composables/useHeadings';
@@ -330,6 +328,7 @@ import {
   getWindowBootstrap,
   promoteExternalFileToNotebook,
   readDocumentConversionAsset,
+  readExternalNoteFile,
   refreshDocumentSourceRevision,
   saveConvertedDocumentAs,
   // 本地同名编排函数（页面转换流程）遮蔽风险：服务命令以 Ipc 后缀别名导入。
@@ -552,10 +551,10 @@ async function load(): Promise<void> {
     openedFile.value = bootstrap.openedFile;
     remoteImages.setScope('external-file', bootstrap.openedFile.absolutePath);
     isEditing.value = bootstrap.mode === 'external-edit';
-    content.value = await invoke<string>('read_external_note_file', {
-      accessToken: bootstrap.openedFile.accessToken,
-      relativePath: bootstrap.openedFile.relativePath,
-    });
+    content.value = await readExternalNoteFile(
+      bootstrap.openedFile.accessToken,
+      bootstrap.openedFile.relativePath,
+    );
     document.title = `${fileName.value} · JotLuck`;
     if (!isPlainText.value) {
       updateHeadings(content.value);

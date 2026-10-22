@@ -164,7 +164,7 @@
           :is-dirty="isDirty"
           :is-saving="isSaving"
           :save-error="saveError"
-          :status-note="guidedStatusNote"
+          :status-note="statusBarNote"
           :last-saved-at="lastSavedAt"
           :theme-chrome="chrome"
           :actions="shellActions"
@@ -266,7 +266,7 @@
                       :root="activeNotebookRoot"
                       :path="reviewSession.path"
                       :initial-snapshot="reviewSession.snapshot"
-                      :predictor="completionPredictor"
+                      :predictor="completionPredictor ?? undefined"
                       :completion-settings="completionSettings"
                       @exit="onExitReviewMode"
                       @source-adopted="onReviewSourceAdopted"
@@ -364,7 +364,7 @@
                             :on-live-preview-remote-image-load="remoteImages.handleLoad"
                             :on-live-preview-remote-image-error="remoteImages.handleError"
                             :completion-settings="completionSettings"
-                            :predictor="completionPredictor"
+                            :predictor="completionPredictor ?? undefined"
                             :enable-autocomplete="!isExternalEditing && !isLargeDocument"
                             :on-editor-drop="
                               isExternalEditing ||
@@ -466,7 +466,7 @@
                         :on-live-preview-remote-image-load="remoteImages.handleLoad"
                         :on-live-preview-remote-image-error="remoteImages.handleError"
                         :completion-settings="completionSettings"
-                        :predictor="completionPredictor"
+                        :predictor="completionPredictor ?? undefined"
                         :enable-autocomplete="!isExternalEditing && !isLargeDocument"
                         :on-editor-drop="
                           isExternalEditing ||
@@ -505,6 +505,17 @@
             </ThemeSlotBoundary>
           </template>
         </AppShell>
+        <!-- 图片粘贴/拖放装载进度：多图串行装载时右下角 spinner + 计数文案 -->
+        <div
+          v-if="isImageUploading"
+          class="image-upload-indicator"
+          role="status"
+          aria-live="polite"
+          data-testid="image-upload-indicator"
+        >
+          <span class="image-upload-indicator__spinner" aria-hidden="true" />
+          {{ t('notebook.status.imageUploading', { count: imageUploadPendingCount }) }}
+        </div>
         <div
           v-if="isInteractionLocked && !isWorkspaceUnbound"
           class="workspace-opening-overlay"
@@ -617,8 +628,8 @@
       :completion-settings="completionSettings"
       :completion-training-meta="completionTrainingMeta"
       :completion-engine-health="completionEngineHealth"
-      :reink-setup-status="reinkEngineSetup.status.value"
-      :reink-setup-error="reinkEngineSetup.error.value"
+      :reink-setup-status="reinkSetupStatus"
+      :reink-setup-error="reinkSetupError"
       @update:visible="onSettingsVisibilityChange"
       @update-completion-settings="onUpdateCompletionSettings"
       @clear-completion-data="onClearCompletionData"
@@ -652,16 +663,7 @@
     />
   </ThemeSlotBoundary>
 
-  <!-- Toast Container -->
-  <ThemeSlotBoundary
-    slot-id="toast-container"
-    :theme-id="theme.renderedTheme.manifest.id"
-    :recipe="theme.activeUxRecipes['toast-container']"
-    :actions="shellActions"
-    :slot-props="toastSlotProps"
-  >
-    <ToastContainer />
-  </ThemeSlotBoundary>
+  <!-- Toast Container：已收敛至 App.vue 全局单挂载（模块级单例，双挂载会重复渲染） -->
 
   <!-- Update Notification -->
   <ThemeSlotBoundary
@@ -936,7 +938,7 @@
  *
  * 集成 AppShell 布局 + MarkdownEditor + 所有浮层/对话框。
  *
- * @see migration-map.md §2
+ * 职责域行号地图与 Phase4 迁移计划：doc/notebook-home-domains.md
  */
 import {
   ref,
@@ -946,15 +948,14 @@ import {
   onUnmounted,
   nextTick,
   watch,
+  shallowRef,
   defineAsyncComponent,
 } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import AppShell from '@/components/layout/AppShell.vue';
 import ShellActionButton from '@/components/layout/ShellActionButton.vue';
-import ReviewWorkbench from '@/components/review/ReviewWorkbench.vue';
 import FormatBubble from '@/components/editor/FormatBubble.vue';
 import EditorControlStrip from '@/components/editor/EditorControlStrip.vue';
 import StudioRail from '@/components/editor/StudioRail.vue';
@@ -962,28 +963,23 @@ import NotebookOpenGate, {
   type NotebookOpenGateStatus,
 } from '@/components/workspace/NotebookOpenGate.vue';
 import ThemeSlotBoundary from '@/components/theme/ThemeSlotBoundary.vue';
-import ToastContainer, { useToast } from '@/components/common/Toast.vue';
+import { useToast } from '@/components/common/Toast.vue';
 import { MockFSService } from '@/services/MockFSService';
 import { TauriIPCService } from '@/services/TauriIPCService';
 import {
   destroyCurrentWindow,
-  // 本地同名编排函数（外部编辑确认流）遮蔽风险：服务命令以 Ipc 后缀别名导入。
+  // 本地同名编排函数（外部编辑确认流/外链笔记存取）遮蔽风险：服务命令以 Ipc 后缀别名导入。
   enableExternalEdit as enableExternalEditIpc,
+  getNotebookRoot,
   getWindowBootstrap,
   promoteExternalFileToNotebook,
+  readExternalNoteFileSnapshot as readExternalNoteFileSnapshotIpc,
   revokeExternalAccess,
+  saveExternalNoteAs,
+  writeExternalNoteFileIfUnchanged as writeExternalNoteFileIfUnchangedIpc,
+  type OpenedFilePayload,
 } from '@/services/windowSession';
-import {
-  applyGuidedSampleEdit,
-  createGuidedSampleSession,
-  decideEmptyWorkspaceFallback,
-  findGuidedSampleNote,
-  guidedNotesAsDirEntries,
-  guidedSampleWikiLinkExists,
-  isGuidedSampleDirty,
-  nextAvailableNotePath,
-  type GuidedSampleSession,
-} from '@/services/GuidedSampleSession';
+import type { GuidedSampleSession } from '@/services/GuidedSampleSession';
 import { useIndexStore } from '@/stores/notebookIndex';
 import { useSearchStore } from '@/stores/search';
 import { useThemeStore } from '@/stores/theme';
@@ -1026,6 +1022,7 @@ import { useRemoteImageSession } from '@/composables/useRemoteImageSession';
 import { useDialogFocus } from '@/composables/useDialogFocus';
 import { openExternalUrl } from '@/utils/urlUtils';
 import { revealLivePreviewSourceAt } from '@/utils/cm6-live-preview';
+import { docToString } from '@/utils/cm6-document-analysis';
 import {
   getCompletionSettings,
   saveCompletionSettings,
@@ -1040,15 +1037,20 @@ import {
   subscribeTrainingMeta,
   type CompletionTrainingMeta,
 } from '@/services/CompletionTrainingService';
-import { MarkdownPredictor } from '@/services/MarkdownPredictor';
-import {
-  createCanonicalPublicFreeDecoderEngine,
-  createFlaggedPublicFreeDecoderEngine,
-} from '@/services/completion/public-free-decoder-factory';
+// 补全引擎模块异步化（高危分包）：MarkdownPredictor 依赖图经动态 import 加载，
+// 构造/装配见下方 completionAssembly；此处仅保留类型引用。
+import type { MarkdownPredictor } from '@/services/MarkdownPredictor';
 import type { PublicEngineDiagnostics } from '@/services/completion/public-engine-types';
-import { usePublicDecoderSetup } from '@/composables/usePublicDecoderSetup';
+import {
+  usePublicDecoderSetup,
+  type UsePublicDecoderSetupReturn,
+} from '@/composables/usePublicDecoderSetup';
 // 工单 S5：Reink-1.0 本地神经补全引擎（与 public-free-decoder 同槽位互斥，后装胜出）。
-import { useReinkEngineSetup } from '@/composables/useReinkEngineSetup';
+import {
+  useReinkEngineSetup,
+  type ReinkSetupStatus,
+  type UseReinkEngineSetupReturn,
+} from '@/composables/useReinkEngineSetup';
 import {
   applyParagraphPreset,
   clearMarkdownFormatting,
@@ -1102,6 +1104,11 @@ const CommandPalette = defineAsyncComponent(
   () => import('@/components/overlays/CommandPalette.vue'),
 );
 const MarkdownEditor = defineAsyncComponent(() => import('@/components/editor/MarkdownEditor.vue'));
+// 改稿工作台仅 reviewSession 非空时渲染；异步化后其依赖树（含 MarkdownEditor
+// 与补全引擎图）随按需块加载，不再压入 NotebookHome 首屏 chunk。
+const ReviewWorkbench = defineAsyncComponent(
+  () => import('@/components/review/ReviewWorkbench.vue'),
+);
 const FileDrawer = defineAsyncComponent(() => import('@/components/overlays/FileDrawer.vue'));
 const ThemeDialog = defineAsyncComponent(() => import('@/components/theme/ThemeDialog.vue'));
 const UpdateNotification = defineAsyncComponent(
@@ -1166,13 +1173,6 @@ function userErrorMessage(error: unknown): string {
   return normalizeCommandError(error).message;
 }
 
-interface OpenedFilePayload {
-  absolutePath: string;
-  notebookRoot: string;
-  relativePath: string;
-  accessToken?: string;
-}
-
 type ExternalSessionMode = 'none' | 'readonly' | 'edit-shell';
 interface NotebookOpenGateExposed {
   focusPrimary(): Promise<void>;
@@ -1228,6 +1228,18 @@ const showShare = ref(false);
 const isScratchSession = ref(false);
 const guidedSampleSession = ref<GuidedSampleSession | null>(null);
 const isGuidedSampleSession = computed(() => guidedSampleSession.value !== null);
+// 引导示例服务改异步块加载（高危分包）：openInitialNotebook 引导分支先
+// await 装配；其余调用点由「会话已存在 ⇒ 模块已就绪」不变式兜底（会话
+// 仅在装配后的 enterGuidedSampleSession 内创建）。
+let guidedApi: typeof import('@/services/GuidedSampleSession') | null = null;
+const guidedApiReady = import('@/services/GuidedSampleSession').then((api) => {
+  guidedApi = api;
+  return api;
+});
+
+function guided(): typeof import('@/services/GuidedSampleSession') {
+  return guidedApi!;
+}
 const workspaceGateStatus = ref<NotebookOpenGateStatus | null>(null);
 const workspaceGateError = ref('');
 const isNotebookOpening = ref(false);
@@ -1284,30 +1296,26 @@ function onReviewSourceAdopted(content: string, revision: string): void {
   cancelScheduledSave();
 }
 const completionTrainingMeta = ref<CompletionTrainingMeta>(loadTrainingMeta());
-const completionPredictor = new MarkdownPredictor(4);
+// 补全引擎模块异步化（高危分包）：MarkdownPredictor 依赖图随编辑器异步块
+// 加载，构造完成后注入 shallowRef。引擎模块与 MarkdownEditor 同 chunk 且
+// 动态 import 登记更早，装配先于编辑器组件解析——编辑器的共享实例契约
+// （props.predictor 缺省回退）与补全可用时序不回退。
+const completionPredictor = shallowRef<MarkdownPredictor | null>(null);
 // Engine health snapshot surfaced via the Settings dialog (工单 B / B2).
 // The composable manages canonical→flagged fallback retries; we mirror the
 // predictor's diagnostics into a ref so the dialog can refresh on demand.
 const completionEngineHealth = ref<PublicEngineDiagnostics | null>(null);
-const publicDecoderSetup = usePublicDecoderSetup({
-  predictor: completionPredictor,
-  isAvailable: isDesktopRuntime,
-  isUnmounted: () => componentUnmounted,
-  createCanonicalEngine: () => createCanonicalPublicFreeDecoderEngine(),
-  createFlaggedEngine: () => createFlaggedPublicFreeDecoderEngine(),
-});
-// Reink 安装在默认公共引擎链之后（setupCanonicalPublicDecoderOnce 完成后再
-// setupNow），保证同槽位「后装胜出」的确定性；禁用/失败时 teardown 会回调
-// retryNow 恢复默认链。状态 ref 供后续 SettingsDialog 工单展示。
-const reinkEngineSetup = useReinkEngineSetup({
-  predictor: completionPredictor,
-  isAvailable: isDesktopRuntime,
-  isUnmounted: () => componentUnmounted,
-  restoreDefaultEngine: () => publicDecoderSetup.retryNow(),
-});
+// 引擎编排器随 completionAssembly 装配（异步上下文无法注册组件级
+// onBeforeUnmount，卸载清理由 onUnmounted 显式 cancel 兜底）；模板/设置
+// 弹窗改绑下方的稳定 ref，装配后由镜像 watch 驱动。
+let publicDecoderSetup: UsePublicDecoderSetupReturn | null = null;
+let reinkEngineSetup: UseReinkEngineSetupReturn | null = null;
+const reinkSetupStatus = ref<ReinkSetupStatus>('idle');
+const reinkSetupError = ref<string | null>(null);
+let stopReinkStateMirror: (() => void) | null = null;
 
 function refreshCompletionEngineHealth(): void {
-  completionEngineHealth.value = completionPredictor.getPublicEngineDiagnostics();
+  completionEngineHealth.value = completionPredictor.value?.getPublicEngineDiagnostics() ?? null;
 }
 let unsubscribeCompletionSettings: (() => void) | null = null;
 let unsubscribeTrainingMeta: (() => void) | null = null;
@@ -1325,6 +1333,67 @@ let watcherFlushChain: Promise<void> = Promise.resolve();
 let fileTreeRequestId = 0;
 let backgroundTrainingTimer: ReturnType<typeof setTimeout> | null = null;
 const MAX_FILE_TREE_ENTRIES = 5000;
+
+// 补全引擎惰性装配：模块就绪即构造并创建引擎编排器（decode 工厂同样异步
+// 加载）。调用方一律先 await completionAssembly 再触达编排器；失败静默降级
+// 为无补全（引擎块与编辑器块同源，加载失败时编辑器本身亦不可用）。
+const completionAssembly: Promise<MarkdownPredictor | null> = import('@/services/MarkdownPredictor')
+  .then(({ MarkdownPredictor: PredictorClass }) => {
+    const predictor = new PredictorClass(4);
+    if (componentUnmounted) {
+      // 卸载竞态：装配已无意义，立即释放，避免学习数据写回句柄泄漏。
+      void predictor.dispose();
+      return null;
+    }
+    completionPredictor.value = predictor;
+    publicDecoderSetup = usePublicDecoderSetup({
+      predictor,
+      isAvailable: isDesktopRuntime,
+      isUnmounted: () => componentUnmounted,
+      createCanonicalEngine: () =>
+        import('@/services/completion/public-free-decoder-factory').then((factory) =>
+          factory.createCanonicalPublicFreeDecoderEngine(),
+        ),
+      createFlaggedEngine: () =>
+        import('@/services/completion/public-free-decoder-factory').then((factory) =>
+          factory.createFlaggedPublicFreeDecoderEngine(),
+        ),
+    });
+    // Reink 安装在默认公共引擎链之后（setupCanonicalPublicDecoderOnce 完成后
+    // 再 setupNow），保证同槽位「后装胜出」的确定性；禁用/失败时 teardown 会
+    // 回调 retryNow 恢复默认链。状态镜像到稳定 ref 供 SettingsDialog 展示。
+    reinkEngineSetup = useReinkEngineSetup({
+      predictor,
+      isAvailable: isDesktopRuntime,
+      isUnmounted: () => componentUnmounted,
+      restoreDefaultEngine: () => publicDecoderSetup?.retryNow() ?? Promise.resolve(),
+    });
+    const stopStatus = watch(
+      reinkEngineSetup.status,
+      (value) => {
+        reinkSetupStatus.value = value;
+      },
+      { immediate: true },
+    );
+    const stopError = watch(
+      reinkEngineSetup.error,
+      (value) => {
+        reinkSetupError.value = value;
+      },
+      { immediate: true },
+    );
+    stopReinkStateMirror = () => {
+      stopStatus();
+      stopError();
+    };
+    return predictor;
+  })
+  .catch((error: unknown) => {
+    if (isDesktopRuntime())
+      // eslint-disable-next-line no-console
+      console.warn('[NotebookHome] completion engine chunk failed to load', error);
+    return null;
+  });
 
 function hashCompletionScope(input: string): string {
   let hash = 2166136261;
@@ -1690,10 +1759,6 @@ const shareDialogSlotProps = computed(() => ({
   close: () => {
     showShare.value = false;
   },
-}));
-
-const toastSlotProps = computed(() => ({
-  activeThemeId: theme.activeThemeId,
 }));
 
 const updateNotificationSlotProps = computed(() => ({
@@ -2174,13 +2239,11 @@ const {
     set: (value) => (forcedE2ESaveFailure = value),
   },
   isExternalEditing,
-  isExternalSession,
   isExternalReadonly,
   isGuidedSampleSession,
   isScratchSession,
   isWorkspaceUnbound,
   isNotebookOpening,
-  isAutosavePausedForDiskIssue,
   externalFileKey,
   writeExternalNoteFileIfUnchanged,
   syncCurrentContentFromEditor,
@@ -2238,7 +2301,7 @@ const shellActivePath = computed(() =>
 const shellNoteTitle = computed(() => {
   if (guidedSampleSession.value) {
     return (
-      findGuidedSampleNote(guidedSampleSession.value, activePath.value)?.title ||
+      guided().findGuidedSampleNote(guidedSampleSession.value, activePath.value)?.title ||
       t('notebook.status.guided')
     );
   }
@@ -2288,6 +2351,16 @@ const guidedRecentNotesWithColors = computed(() =>
 const guidedStatusNote = computed(() =>
   isGuidedSampleSession.value ? t('notebook.status.guidedHint') : null,
 );
+// 图片粘贴/拖放装载态：composable 返回的是普通对象内嵌 ref（模板不自动解包），
+// 此处桥接为页面级 computed，供状态栏文案与编辑区右下角 spinner 徽标共用。
+const isImageUploading = computed(() => imageUpload.isUploading.value);
+const imageUploadPendingCount = computed(() => imageUpload.pendingCount.value);
+const imageUploadStatusNote = computed(() =>
+  isImageUploading.value
+    ? t('notebook.status.imageUploading', { count: imageUploadPendingCount.value })
+    : null,
+);
+const statusBarNote = computed(() => imageUploadStatusNote.value ?? guidedStatusNote.value);
 const shellRecentNotesWithColors = computed(() => {
   if (isGuidedSampleSession.value) return guidedRecentNotesWithColors.value;
   return isExternalEditing.value
@@ -2597,6 +2670,8 @@ async function flushWatcherEvents(
   } catch (error) {
     // eslint-disable-next-line no-console
     console.warn('[NotebookHome] file watcher refresh failed', error);
+    // 不自动重试：保存重试/watcher 变更/重启重建等兜底已覆盖后续一致性。
+    toast.warning(t('notebook.toast.watcherRefreshFailed', { error: userErrorMessage(error) }));
   }
 
   const requiresActiveRecheck =
@@ -2675,6 +2750,10 @@ async function flushWatcherEvents(
   refreshSplitPreviewIfVisible();
 }
 
+// watcher 启动失败后的兜底：下一次窗口获得焦点时重试启动一次；
+// 代际或根目录已变化（切换/停止/外部会话）则作废，交给新的 watcher 生命周期。
+let watcherStartRetryOnFocus: { rootPath: string; generation: number } | null = null;
+
 async function restartNotebookWatcher(rootPath: string): Promise<void> {
   const generation = ++notebookWatchGeneration;
   unwatchNotebook?.();
@@ -2693,7 +2772,24 @@ async function restartNotebookWatcher(rootPath: string): Promise<void> {
   } catch (error) {
     // eslint-disable-next-line no-console
     console.warn('[NotebookHome] file watcher start failed', error);
+    toast.warning(t('notebook.toast.watcherStartFailed', { error: userErrorMessage(error) }));
+    watcherStartRetryOnFocus = { rootPath, generation };
   }
+}
+
+function onWindowFocusRetryWatcherStart(): void {
+  const pending = watcherStartRetryOnFocus;
+  if (!pending) return;
+  watcherStartRetryOnFocus = null;
+  if (
+    pending.generation !== notebookWatchGeneration ||
+    isScratchSession.value ||
+    isExternalReadonly.value ||
+    !notebookRootsEqual(pending.rootPath, activeNotebookRoot.value)
+  ) {
+    return;
+  }
+  void restartNotebookWatcher(pending.rootPath);
 }
 
 let initialNotebookGateError = '';
@@ -2714,22 +2810,22 @@ function persistGuidedSampleCurrent(): void {
   const session = guidedSampleSession.value;
   if (!session || !activePath.value) return;
   syncCurrentContentFromEditor();
-  const next = applyGuidedSampleEdit(session, activePath.value, currentContent.value);
+  const next = guided().applyGuidedSampleEdit(session, activePath.value, currentContent.value);
   if (next !== session) guidedSampleSession.value = next;
-  const note = findGuidedSampleNote(next, activePath.value);
-  isDirty.value = Boolean(note && isGuidedSampleDirty(note));
+  const note = guided().findGuidedSampleNote(next, activePath.value);
+  isDirty.value = Boolean(note && guided().isGuidedSampleDirty(note));
 }
 
 function isGuidedCurrentDirty(): boolean {
   persistGuidedSampleCurrent();
   const session = guidedSampleSession.value;
   if (!session || !activePath.value) return false;
-  const note = findGuidedSampleNote(session, activePath.value);
-  return Boolean(note && isGuidedSampleDirty(note));
+  const note = guided().findGuidedSampleNote(session, activePath.value);
+  return Boolean(note && guided().isGuidedSampleDirty(note));
 }
 
 function enterGuidedSampleSession(): boolean {
-  const session = createGuidedSampleSession();
+  const session = guided().createGuidedSampleSession();
   const first = session.notes[0];
   if (!first) return false;
 
@@ -2739,7 +2835,7 @@ function enterGuidedSampleSession(): boolean {
   workspaceGateError.value = '';
   activeNotebookRoot.value = '';
   notebookName.value = session.notebookName;
-  files.value = guidedNotesAsDirEntries(session);
+  files.value = guided().guidedNotesAsDirEntries(session);
   currentDir.value = '/';
   activePath.value = first.path;
   contentRevision.value++;
@@ -2795,7 +2891,7 @@ async function writeCarriedGuidedNote(path: string, content: string): Promise<st
   const existing = (await listDirectoryRecursive('/'))
     .filter((entry) => entry.isFile)
     .map((entry) => entry.path);
-  const target = nextAvailableNotePath(existing, path);
+  const target = guided().nextAvailableNotePath(existing, path);
   const result = await fs.writeFileIfUnchanged(target, content, null);
   if (result.status === 'conflict') {
     throw createUserMessageError('notebook.error.fileExists', { path: target });
@@ -2829,7 +2925,9 @@ async function openInitialNotebook(): Promise<boolean> {
     initialNotebookGateError = t('notebook.error.recentUnavailable');
   }
 
-  const fallback = decideEmptyWorkspaceFallback({
+  // 引导示例模块异步加载：空工作台判定前显式 await（首帧即发起，此处通常零等待）。
+  await guidedApiReady;
+  const fallback = guided().decideEmptyWorkspaceFallback({
     isDesktop: isDesktopRuntime(),
     forceGate,
     recentCount: recent.length,
@@ -2887,10 +2985,10 @@ async function readExternalNoteFileSnapshot(
     if (!openedFile.accessToken)
       throw createUserMessageError('notebook.toast.externalAccessExpired');
     return withTimeout(
-      invoke<TextFileSnapshot>('read_external_note_file_snapshot', {
-        accessToken: openedFile.accessToken,
-        relativePath: normalizePath(openedFile.relativePath),
-      }),
+      readExternalNoteFileSnapshotIpc(
+        openedFile.accessToken,
+        normalizePath(openedFile.relativePath),
+      ),
       EXTERNAL_FILE_READ_TIMEOUT_MS,
       t('notebook.actions.openExternalFile'),
     );
@@ -2912,12 +3010,12 @@ async function writeExternalNoteFileIfUnchanged(
   if (isDesktopRuntime()) {
     if (!openedFile.accessToken)
       throw createUserMessageError('notebook.toast.externalAccessExpired');
-    return invoke<ConditionalWriteResult>('write_external_note_file_if_unchanged', {
-      accessToken: openedFile.accessToken,
-      relativePath: normalizePath(openedFile.relativePath),
+    return writeExternalNoteFileIfUnchangedIpc(
+      openedFile.accessToken,
+      normalizePath(openedFile.relativePath),
       content,
       expectedRevision,
-    });
+    );
   }
   const e2eBridge = getJotLuckE2EBridge();
   if (!e2eBridge) throw createUserMessageError('notebook.error.webExternalE2eOnly');
@@ -2999,7 +3097,7 @@ async function saveScratchAs(): Promise<boolean> {
     dialogTitle: t('dialogs.native.saveNoteTitle'),
     filterName: t('dialogs.native.markdownFiles'),
   };
-  const savedFile = await invoke<OpenedFilePayload | null>('save_external_note_as', { request });
+  const savedFile = await saveExternalNoteAs(request);
   if (!savedFile) return false;
   await enterNotebookFromSavedNote(savedFile);
 
@@ -3033,7 +3131,7 @@ async function saveCurrentAsCopy(): Promise<boolean> {
       dialogTitle: t('dialogs.native.saveNoteTitle'),
       filterName: t('dialogs.native.markdownFiles'),
     };
-    savedFile = await invoke<OpenedFilePayload | null>('save_external_note_as', { request });
+    savedFile = await saveExternalNoteAs(request);
   } catch (error) {
     toast.show(t('notebook.toast.copyFailed', { error: userErrorMessage(error) }), 'error', 5000);
     return false;
@@ -3497,7 +3595,7 @@ async function initNotebook(): Promise<void> {
       if (bootstrap.mode === 'workspace') {
         initialRelativePath = bootstrap.initialRelativePath;
         if (initialRelativePath) {
-          const root = await invoke<string | null>('get_notebook_root');
+          const root = await getNotebookRoot();
           if (!root) throw createUserMessageError('notebook.error.windowRootMissing');
           await openNotebookRoot(root);
           notebookReady = true;
@@ -3552,7 +3650,7 @@ async function initNotebook(): Promise<void> {
       refreshSplitPreviewIfVisible();
       // 索引就绪后补全引擎才能拿到标题/路径数据；onMounted 首次连接可能
       // 早于后台索引完成（与 initialRelativePath 路径的兜底行为对齐）。
-      connectPredictor();
+      void connectPredictor();
       performance.mark('jotluck:indexer-ready');
       if (performance.getEntriesByName('jotluck:bootstrap-start').length > 0) {
         performance.measure(
@@ -3769,7 +3867,7 @@ async function selectNoteNow(path: string, selectionVersion: number): Promise<vo
     persistGuidedSampleCurrent();
     const session = guidedSampleSession.value;
     if (!session) return;
-    const note = findGuidedSampleNote(session, normalizePath(path));
+    const note = guided().findGuidedSampleNote(session, normalizePath(path));
     if (!note) {
       toast.show(t('notebook.error.noteNotFound', { title: path }), 'warning', 3000);
       return;
@@ -3780,7 +3878,7 @@ async function selectNoteNow(path: string, selectionVersion: number): Promise<vo
     contentRevision.value++;
     currentContent.value = note.content;
     currentDiskRevision.value = null;
-    isDirty.value = isGuidedSampleDirty(note);
+    isDirty.value = guided().isGuidedSampleDirty(note);
     isSaving.value = false;
     clearSaveIssue();
     const dir = note.path.substring(0, note.path.lastIndexOf('/') + 1) || '/';
@@ -4176,7 +4274,10 @@ let previewRenderTimer: ReturnType<typeof setTimeout> | null = null;
 function wikiLinkExists(noteTitle: string): boolean {
   const target = noteTitle.trim();
   if (!target) return false;
-  if (guidedSampleSession.value && guidedSampleWikiLinkExists(guidedSampleSession.value, target)) {
+  if (
+    guidedSampleSession.value &&
+    guided().guidedSampleWikiLinkExists(guidedSampleSession.value, target)
+  ) {
     return true;
   }
   const tree = isExternalEditing.value ? externalFiles.value : files.value;
@@ -4481,7 +4582,9 @@ function updateEditorStats(content: string): void {
   const editorDoc = editorRef.value?.getEditorView()?.state.doc;
   editorStats.lineCount = !content
     ? 0
-    : editorDoc?.length === content.length && editorDoc.toString() === content
+    : // 共享取串：击键链上 analysis/编辑器同步已物化过同一 doc 的全文串，
+      // 此处命中 WeakMap 缓存，避免每击键多一次 O(N) 全文 toString。
+      editorDoc?.length === content.length && docToString(editorDoc) === content
       ? editorDoc.lines
       : content.split('\n').length;
 }
@@ -4958,7 +5061,7 @@ function onGlobalKeydown(e: KeyboardEvent): void {
   const key = e.code;
   if (
     (e.ctrlKey || e.metaKey) &&
-    key === 'f' &&
+    key === 'KeyF' &&
     progressivePreviewRef.value &&
     (viewMode.value === 'read' || isExternalReadonly.value)
   ) {
@@ -4967,7 +5070,7 @@ function onGlobalKeydown(e: KeyboardEvent): void {
     progressivePreviewRef.value.openFind();
     return;
   }
-  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && key === 'p' && progressivePreviewRef.value) {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && key === 'KeyP' && progressivePreviewRef.value) {
     e.preventDefault();
     e.stopPropagation();
     // Export prepares the complete document, not the currently mounted virtual range.
@@ -4996,6 +5099,14 @@ function onGlobalKeydown(e: KeyboardEvent): void {
     }
     return;
   }
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && key === 'KeyN') {
+    e.preventDefault();
+    e.stopPropagation();
+    // 守卫统一由 onShellCreateNote 内部处理（外部单文件拒绝 + 未绑定工作区提示），
+    // 与工具栏「新建笔记」按钮共用同一入口。
+    onShellCreateNote();
+    return;
+  }
   if (isExternalSession.value) return;
   if ((e.ctrlKey || e.metaKey) && key === 'KeyO') {
     e.preventDefault();
@@ -5017,8 +5128,10 @@ function onGlobalKeydown(e: KeyboardEvent): void {
 }
 
 /** Wire predictor to IndexStore for structured completions ([[/#/path). */
-function connectPredictor(): void {
-  const pred = completionPredictor;
+async function connectPredictor(): Promise<void> {
+  // 惰性装配兜底：引擎模块就绪（或确认降级）后才可连接索引数据。
+  const pred = await completionAssembly;
+  if (!pred) return;
   pred.setSessionKind(
     isExternalSession.value
       ? 'external'
@@ -5064,10 +5177,12 @@ function connectPredictor(): void {
   scheduleBackgroundTraining();
 }
 
-function setupCanonicalPublicDecoderOnce(): Promise<void> {
+async function setupCanonicalPublicDecoderOnce(): Promise<void> {
   // 旧实现使用 ??= 永久缓存首个 Promise；改由 usePublicDecoderSetup 统一驱动
-  // canonical→flagged 链并提供有界重试。详见工单 B / B1。
-  return publicDecoderSetup.setupNow();
+  // canonical→flagged 链并提供有界重试。详见工单 B / B1。引擎模块就绪前
+  // （completionAssembly）不得启动安装链。
+  await completionAssembly;
+  if (publicDecoderSetup) await publicDecoderSetup.setupNow();
 }
 
 function scheduleBackgroundTraining(): void {
@@ -5079,7 +5194,11 @@ function scheduleBackgroundTraining(): void {
   }, 2000);
 }
 
-function ensureCompletionTrainer(pred = completionPredictor): CompletionTrainingService | null {
+function ensureCompletionTrainer(
+  pred: MarkdownPredictor | null = completionPredictor.value,
+): CompletionTrainingService | null {
+  // 引擎未装配（异步竞态/降级）时跳过——后台训练定时器与保存流均在装配后触发。
+  if (!pred) return null;
   if (!completionTrainer) completionTrainer = new CompletionTrainingService(fs, pred);
   return completionTrainer;
 }
@@ -5108,14 +5227,14 @@ async function trainCurrentFile(path: string, content: string): Promise<void> {
 function onUpdateCompletionSettings(settings: CompletionSettings): void {
   completionSettings.value = settings;
   saveCompletionSettings(settings);
-  completionPredictor.configure(settings);
+  completionPredictor.value?.configure(settings);
   if (settings.backgroundTraining) scheduleBackgroundTraining();
 }
 
 function onClearCompletionData(): void {
   completionTrainer?.cancelCurrentRun();
   completionTrainer = null;
-  completionPredictor.clearLearningData();
+  completionPredictor.value?.clearLearningData();
   const nextMeta: CompletionTrainingMeta = {
     ...DEFAULT_TRAINING_META,
     trainedPaths: {},
@@ -5134,7 +5253,8 @@ function onSettingsVisibilityChange(visible: boolean): void {
 }
 
 async function onRetryCompletionEngine(): Promise<void> {
-  await publicDecoderSetup.retryNow();
+  // 设置弹窗的重试入口在装配后才会出现；可空兜底以防极端竞态。
+  await publicDecoderSetup?.retryNow();
   refreshCompletionEngineHealth();
 }
 
@@ -5385,19 +5505,20 @@ onMounted(async () => {
   applyInitialThemeWorkflowDefaults();
   window.addEventListener('keydown', onGlobalKeydown, { capture: true });
   window.addEventListener('beforeunload', onBeforeUnload);
+  window.addEventListener('focus', onWindowFocusRetryWatcherStart);
   if (isDesktopRuntime()) setupDesktopLifecycleListeners();
   await initNotebook();
 
   await nextTick();
-  connectPredictor();
+  void connectPredictor();
   // The canonical production engine (V2.5 one-unit, integrationRelease) is
   // preferred; when its manifest is absent the workspace falls back to the
   // dev/E2E evaluation engine, then to no public engine at all. Both factories
   // are invoked at most once per workspace page.
-  void setupCanonicalPublicDecoderOnce().then(() => reinkEngineSetup.setupNow());
+  void setupCanonicalPublicDecoderOnce().then(() => reinkEngineSetup?.setupNow());
   unsubscribeCompletionSettings = subscribeCompletionSettings((settings) => {
     completionSettings.value = settings;
-    completionPredictor.configure(settings);
+    completionPredictor.value?.configure(settings);
     if (!isExternalSession.value && settings.backgroundTraining) scheduleBackgroundTraining();
   });
   unsubscribeTrainingMeta = subscribeTrainingMeta(
@@ -5425,6 +5546,8 @@ onUnmounted(() => {
   externalSessionGeneration++;
   window.removeEventListener('keydown', onGlobalKeydown, { capture: true });
   window.removeEventListener('beforeunload', onBeforeUnload);
+  window.removeEventListener('focus', onWindowFocusRetryWatcherStart);
+  watcherStartRetryOnFocus = null;
   cancelScheduledSave();
   if (splitDebounceTimer) clearTimeout(splitDebounceTimer);
   if (previewRenderTimer) clearTimeout(previewRenderTimer);
@@ -5437,7 +5560,12 @@ onUnmounted(() => {
   unsubscribeTrainingMeta?.();
   completionTrainer?.cancelCurrentRun();
   completionTrainer = null;
-  void completionPredictor.dispose();
+  // 编排器在异步装配中创建（无组件级 onBeforeUnmount 钩子），卸载时显式
+  // cancel；顺序与同步装配版本一致：先停重试/撤引擎，再释放 predictor。
+  publicDecoderSetup?.cancel();
+  reinkEngineSetup?.cancel();
+  stopReinkStateMirror?.();
+  void completionPredictor.value?.dispose();
   void stopNotebookWatcher();
   void revokeExternalGrant(externalFile.value);
   unlistenWindowClose?.();
@@ -5499,6 +5627,47 @@ function onDismissVersion(version: string) {
   font-size: var(--text-sm);
   line-height: var(--lh-ui);
   cursor: wait;
+}
+
+/* 图片装载进度徽标：悬浮于状态栏右上方，不拦截指针事件 */
+.image-upload-indicator {
+  position: absolute;
+  z-index: var(--z-overlay);
+  right: var(--space-12);
+  bottom: calc(var(--statusbar-height) + var(--space-8));
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-4) var(--space-10);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius-full);
+  background: var(--paper-raised);
+  color: var(--ink-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--lh-ui);
+  pointer-events: none;
+}
+
+.image-upload-indicator__spinner {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border: 2px solid var(--rule);
+  border-top-color: var(--accent);
+  border-radius: var(--radius-full);
+  animation: image-upload-spin 0.7s linear infinite;
+}
+
+@keyframes image-upload-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .image-upload-indicator__spinner {
+    animation: none;
+  }
 }
 
 .editor-shell-frame--external {

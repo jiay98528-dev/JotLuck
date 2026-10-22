@@ -42,8 +42,11 @@ export function loadReviewSession(root: string, path: string): ReviewSessionSnap
     if (raw === null) return null;
     const parsed: unknown = JSON.parse(raw);
     return isReviewSessionSnapshot(parsed) ? parsed : null;
-  } catch {
-    return null; // 损坏值吞掉：改稿会话可丢，不可阻断打开
+  } catch (error) {
+    // 产品决策保持：损坏值吞掉——改稿会话可丢，不可阻断打开；仅补可观测性（不弹 toast）
+    // eslint-disable-next-line no-console
+    console.warn('[review-session-store] discard corrupt snapshot', root, path, error);
+    return null;
   }
 }
 
@@ -55,8 +58,10 @@ export function saveReviewSession(
 ): void {
   try {
     localStorage.setItem(reviewSessionStorageKey(root, path), JSON.stringify(snapshot));
-  } catch {
-    // 静默：暂存失败不影响在内存中的改稿进度
+  } catch (error) {
+    // 产品决策保持：静默降级——暂存失败不影响内存中的改稿进度；仅补可观测性（不弹 toast）
+    // eslint-disable-next-line no-console
+    console.warn('[review-session-store] persist snapshot failed', root, path, error);
   }
 }
 
@@ -64,8 +69,10 @@ export function saveReviewSession(
 export function clearReviewSession(root: string, path: string): void {
   try {
     localStorage.removeItem(reviewSessionStorageKey(root, path));
-  } catch {
-    // 静默
+  } catch (error) {
+    // 产品决策保持：静默降级——清除失败不阻断主流程；仅补可观测性（不弹 toast）
+    // eslint-disable-next-line no-console
+    console.warn('[review-session-store] clear snapshot failed', root, path, error);
   }
 }
 

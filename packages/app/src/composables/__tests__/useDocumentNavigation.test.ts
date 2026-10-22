@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { computed, nextTick, ref } from 'vue';
+import type { EditorView } from '@codemirror/view';
 
 import {
   useDocumentNavigation,
@@ -52,7 +53,8 @@ function createNavigationHarness() {
     indexStore: { getIndexService: () => null } as unknown as NavigationDeps['indexStore'],
     toast: { show: vi.fn() } as unknown as NavigationDeps['toast'],
     t: (key: string) => key,
-    onShellSelectNote: vi.fn(async () => {}),
+    // 签名带 path 形参：主流程用例以 mockImplementation 改写换笔记语义
+    onShellSelectNote: vi.fn(async (_path: string) => {}),
     currentBacklinks: ref<BacklinkEntry[]>([]),
     isExternalEditing: ref(false),
     guidedSampleSession: ref<GuidedSampleSession | null>(null),
@@ -155,5 +157,117 @@ describe('useDocumentNavigation 静态预览导航', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('useDocumentNavigation navigateDocument 主流程', () => {
+  /** 编辑器视图桩：composing 关闭、dispatch/focus 打点（revealLivePreviewSourceAt 只读 state.doc.length） */
+  function createEditorViewStub() {
+    return {
+      composing: false,
+      compositionStarted: false,
+      state: { doc: { length: 40 } },
+      dispatch: vi.fn(),
+      focus: vi.fn(),
+    };
+  }
+
+  it('跨笔记切换 + heading 定位：先 onShellSelectNote 换笔记，read 分支驱动渐进预览滚动到标题', async () => {
+    const { nav, deps, analysisStub } = createNavigationHarness();
+    // 目标笔记内容已就绪：分析结果与 displayContent 同源 → awaitNavigationAnalysis 立即命中
+    analysisStub.result = {
+      ast: {
+        source: deps.currentContent.value,
+        blocks: [
+          { type: 'heading', id: 'h-target', range: { from: 8, to: 14 }, text: '目标' },
+          { type: 'paragraph', id: 'p-1', range: { from: 14, to: 30 }, text: '正文' },
+        ],
+      },
+      wikiLinks: [],
+    } as unknown as DocumentAnalysisResult;
+    // 页面 onShellSelectNote 语义：换笔记后 activePath 落到目标路径
+    deps.onShellSelectNote.mockImplementation(async (path: string) => {
+      deps.activePath.value = path;
+    });
+    const progressive = {
+      cancelNavigation: vi.fn(),
+      scrollToHeading: vi.fn(),
+      navigateToRange: vi.fn(),
+    };
+    deps.progressivePreviewRef.value = progressive as unknown as ProgressivePreviewNavigation;
+
+    await nav.navigateDocument({ path: '/root/notes/b.md', headingId: 'h-target' });
+    await nextTick();
+
+    expect(deps.onShellSelectNote).toHaveBeenCalledWith('/root/notes/b.md');
+    expect(deps.activePath.value).toBe('/root/notes/b.md');
+    expect(nav.activeDocumentPosition.value).toBe(8);
+    expect(nav.activeLocationPane.value).toBe('preview'); // read 分支
+    expect(progressive.scrollToHeading).toHaveBeenCalledWith('h-target');
+    expect(progressive.navigateToRange).not.toHaveBeenCalled();
+  });
+
+  it('live 分支 + backlink 定位：重定位成功后驱动编辑器选区；引用迁空则 toast 并放弃', async () => {
+    const { nav, deps, analysisStub } = createNavigationHarness();
+    deps.viewMode.value = 'live';
+    // 先让 viewMode watch（切 pane + 取消在途导航）flush 完，再发起导航，
+    // 避免其异步回调在导航途中 abort 刚登记的请求
+    await nextTick();
+    const view = createEditorViewStub();
+    deps.editorRef.value = {
+      getEditorView: () => view as unknown as EditorView,
+    };
+    const occurrence = {
+      target: 'A',
+      alias: null,
+      anchor: null,
+      from: 5,
+      to: 9,
+      lineNumber: 1,
+      raw: '[[A]]',
+      before: '',
+      after: '',
+    };
+    analysisStub.result = {
+      ast: { source: deps.currentContent.value, blocks: [] },
+      wikiLinks: [occurrence],
+    } as unknown as DocumentAnalysisResult;
+    deps.onShellSelectNote.mockImplementation(async (path: string) => {
+      deps.activePath.value = path;
+    });
+    const backlink = {
+      notePath: '/root/notes/b.md',
+      noteTitle: 'A',
+      context: '',
+      lineNumber: 1,
+      location: { from: 5, to: 9, target: 'A', raw: '[[A]]', before: '', after: '', revision: 1 },
+    };
+
+    await nav.navigateDocument({ path: '/root/notes/b.md', backlink });
+
+    expect(deps.onShellSelectNote).toHaveBeenCalledTimes(1);
+    expect(nav.activeDocumentPosition.value).toBe(5);
+    expect(nav.activeLocationPane.value).toBe('editor'); // live 分支
+    // revealLivePreviewSourceAt 一次 + 选区/滚动 dispatch 一次
+    expect(view.dispatch).toHaveBeenCalledTimes(2);
+    expect(view.focus).toHaveBeenCalledTimes(1);
+
+    // 引用已迁移且无法重定位：toast referenceMoved，不再触编辑器
+    const moved = {
+      ...backlink,
+      location: {
+        from: 55,
+        to: 59,
+        target: 'B',
+        raw: '[[B]]',
+        before: 'x',
+        after: 'y',
+        revision: 1,
+      },
+    };
+    await nav.navigateDocument({ path: '/root/notes/b.md', backlink: moved });
+    expect(deps.toast.show).toHaveBeenCalledWith('navigation.referenceMoved', 'info', 3500);
+    expect(view.dispatch).toHaveBeenCalledTimes(2); // 未新增
+    expect(deps.onShellSelectNote).toHaveBeenCalledTimes(1); // 同笔记不再切换
   });
 });

@@ -1,5 +1,8 @@
-import { inlineSourceTokens, normalizeFullwidthMarkdownSyntax } from '@jotluck/renderer';
-import type { Token } from 'marked';
+import {
+  inlineSourceTokens,
+  normalizeFullwidthMarkdownSyntax,
+  type Token,
+} from '@jotluck/renderer';
 
 export interface TextSourceMap {
   text: string;

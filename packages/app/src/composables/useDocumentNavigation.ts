@@ -289,10 +289,13 @@ export function useDocumentNavigation(
       viewport.owner.scrollTop += rect.top - top;
       if (!headingId) {
         target.classList.add('preview-navigation-target');
-        staticNavigationTimer = setTimeout(() => {
+        // 先捕获句柄、回调内比对自身再置 null：旧 timer 到期不再抹掉新句柄，
+        // cancelDocumentNavigation 始终能 clearTimeout 到最新 timer（工单 B L5）
+        const timer: ReturnType<typeof setTimeout> = setTimeout(() => {
           target?.classList.remove('preview-navigation-target');
-          staticNavigationTimer = null;
+          if (staticNavigationTimer === timer) staticNavigationTimer = null;
         }, 1600);
+        staticNavigationTimer = timer;
       }
     } else staticPreviewViewport(root).owner.scrollTop = 0;
   }
@@ -304,75 +307,83 @@ export function useDocumentNavigation(
     anchor?: string;
     backlink?: BacklinkEntry;
   }): Promise<void> {
-    const editing = editorRef.value?.getEditorView();
-    if (editing?.composing || editing?.compositionStarted) return;
-    cancelDocumentNavigation();
-    const request: NavigationRequest = {
-      controller: new AbortController(),
-      path: target.path,
-      workspace: activeNotebookRoot.value,
-      generation: notebookDataGeneration(),
-    };
-    navigationRequest.value = request;
-    if (normalizePath(activePath.value) !== normalizePath(target.path))
-      await onShellSelectNote(target.path);
-    await nextTick();
-    if (!currentNavigation(request)) return;
-    request.source = displayContent.value;
-    const result = await awaitNavigationAnalysis(request);
-    if (!result || !currentNavigation(request)) return;
-    let from = 0,
-      to = 0,
-      headingId: string | undefined;
-    if (target.backlink) {
-      const entry = target.backlink;
-      const occurrences = result.wikiLinks ?? [];
-      const exact =
-        entry.location &&
-        indexStore.getIndexService()?.isBacklinkCurrent(entry, currentContent.value)
-          ? occurrences.find(
-              (item) =>
-                item.from === entry.location!.from &&
-                item.to === entry.location!.to &&
-                item.raw === entry.location!.raw,
-            )
-          : null;
-      const occurrence = exact ?? relocateBacklink(entry, occurrences);
-      if (!occurrence) {
-        toast.show(t('navigation.referenceMoved'), 'info', 3500);
-        return;
+    // 兜底 catch：导航链任一步抛错（如 awaitNavigationAnalysis 内同步 parseDocument）
+    // 不再以 unhandled rejection 泄出（onNavTreeNavigate/onBacklinkNavigate 均为 void
+    // 调用）；仅 console.warn 保留信号，不改写任何导航状态（工单 B L6）
+    try {
+      const editing = editorRef.value?.getEditorView();
+      if (editing?.composing || editing?.compositionStarted) return;
+      cancelDocumentNavigation();
+      const request: NavigationRequest = {
+        controller: new AbortController(),
+        path: target.path,
+        workspace: activeNotebookRoot.value,
+        generation: notebookDataGeneration(),
+      };
+      navigationRequest.value = request;
+      if (normalizePath(activePath.value) !== normalizePath(target.path))
+        await onShellSelectNote(target.path);
+      await nextTick();
+      if (!currentNavigation(request)) return;
+      request.source = displayContent.value;
+      const result = await awaitNavigationAnalysis(request);
+      if (!result || !currentNavigation(request)) return;
+      let from = 0,
+        to = 0,
+        headingId: string | undefined;
+      if (target.backlink) {
+        const entry = target.backlink;
+        const occurrences = result.wikiLinks ?? [];
+        const exact =
+          entry.location &&
+          indexStore.getIndexService()?.isBacklinkCurrent(entry, currentContent.value)
+            ? occurrences.find(
+                (item) =>
+                  item.from === entry.location!.from &&
+                  item.to === entry.location!.to &&
+                  item.raw === entry.location!.raw,
+              )
+            : null;
+        const occurrence = exact ?? relocateBacklink(entry, occurrences);
+        if (!occurrence) {
+          toast.show(t('navigation.referenceMoved'), 'info', 3500);
+          return;
+        }
+        from = occurrence.from;
+        to = occurrence.to;
+      } else if (target.headingId || target.anchor) {
+        const items = result.ast.blocks.filter((block) => block.type === 'heading');
+        const heading =
+          target.headingFrom !== undefined
+            ? items.find((item) => item.range.from === target.headingFrom)
+            : (items.find((item) => item.id === (target.headingId ?? target.anchor)) ??
+              items.find((item) => item.text.trim() === target.anchor?.trim()));
+        if (!heading) return;
+        from = to = heading.range.from;
+        headingId = heading.id;
       }
-      from = occurrence.from;
-      to = occurrence.to;
-    } else if (target.headingId || target.anchor) {
-      const items = result.ast.blocks.filter((block) => block.type === 'heading');
-      const heading =
-        target.headingFrom !== undefined
-          ? items.find((item) => item.range.from === target.headingFrom)
-          : (items.find((item) => item.id === (target.headingId ?? target.anchor)) ??
-            items.find((item) => item.text.trim() === target.anchor?.trim()));
-      if (!heading) return;
-      from = to = heading.range.from;
-      headingId = heading.id;
-    }
-    if (!currentNavigation(request)) return;
-    activeDocumentPosition.value = from;
-    if (viewMode.value !== 'read') {
-      const view = editorRef.value?.getEditorView();
-      if (!view || view.composing || view.compositionStarted) return;
-      revealLivePreviewSourceAt(view, from);
-      view.dispatch({
-        selection: { anchor: from, head: to },
-        effects: EditorView.scrollIntoView(from, { y: 'center' }),
-      });
-      view.focus();
-      activeLocationPane.value = 'editor';
-    } else activeLocationPane.value = 'preview';
-    if (viewMode.value !== 'live') {
-      if (progressivePreviewRef.value) {
-        if (headingId) progressivePreviewRef.value.scrollToHeading(headingId);
-        else progressivePreviewRef.value.navigateToRange(from, to);
-      } else await navigateStaticPreview(request, from, to, headingId);
+      if (!currentNavigation(request)) return;
+      activeDocumentPosition.value = from;
+      if (viewMode.value !== 'read') {
+        const view = editorRef.value?.getEditorView();
+        if (!view || view.composing || view.compositionStarted) return;
+        revealLivePreviewSourceAt(view, from);
+        view.dispatch({
+          selection: { anchor: from, head: to },
+          effects: EditorView.scrollIntoView(from, { y: 'center' }),
+        });
+        view.focus();
+        activeLocationPane.value = 'editor';
+      } else activeLocationPane.value = 'preview';
+      if (viewMode.value !== 'live') {
+        if (progressivePreviewRef.value) {
+          if (headingId) progressivePreviewRef.value.scrollToHeading(headingId);
+          else progressivePreviewRef.value.navigateToRange(from, to);
+        } else await navigateStaticPreview(request, from, to, headingId);
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn('[NotebookHome] navigation failed', error);
     }
   }
 

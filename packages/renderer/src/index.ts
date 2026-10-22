@@ -78,6 +78,9 @@ export function inlineSourceTokens(source: string, definitions = ''): Token[] {
   return lexer.inlineTokens(source);
 }
 
+// marked 的 Token 类型经包公共面转出：app 包不允许直接依赖 marked（ADR-027）。
+export type { Token };
+
 const DEFAULT_REMOTE_IMAGE_LABELS: RemoteImageLabels = {
   blocked: 'Remote image blocked',
   source: 'Source',

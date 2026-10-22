@@ -16,6 +16,12 @@
  * 依赖全部经参数注入（照 useDocumentNavigation / B3 风格）；计数器 .value 化与
  * saveTimer 两方法替换属工单明确豁免的访问形式映射，逻辑与调用序零变化，
  * 保存竞态由 30-race-regressions 门禁兜底。
+ *
+ * 工单 B【鲁棒核心】后续修订：
+ *  - 保存地板（原 500/300ms await）改为仅约束 isSaving 指示器熄灭时机，
+ *    settle/isDirty 清零/flush 返回不再被地板阻塞；
+ *  - scheduleSave 幂等自清（体内先 clearTimeout 再排程）；
+ *  - 删除声明未消费的死参数 isExternalSession / isAutosavePausedForDiskIssue。
  */
 import { ref } from 'vue';
 import type { Ref } from 'vue';
@@ -76,13 +82,11 @@ export interface UseSavePipelineOptions {
   forcedE2ESaveFailure: ForcedE2ESaveFailureHandle;
   // ── 布尔派生（computed/ref 注入） ──
   isExternalEditing: Ref<boolean>;
-  isExternalSession: Ref<boolean>;
   isExternalReadonly: Ref<boolean>;
   isGuidedSampleSession: Ref<boolean>;
   isScratchSession: Ref<boolean>;
   isWorkspaceUnbound: Ref<boolean>;
   isNotebookOpening: Ref<boolean>;
-  isAutosavePausedForDiskIssue(): boolean;
   // ── 外部会话快照键与写入 ──
   externalFileKey(file: SavePipelineOpenedFile | null): string;
   writeExternalNoteFileIfUnchanged(
@@ -191,6 +195,8 @@ export function useSavePipeline(options: UseSavePipelineOptions): UseSavePipelin
   let currentSavePromise: Promise<boolean> | null = null;
 
   function scheduleSave(callback: () => void, delay: number): void {
+    // 幂等自清：排程前先撤销旧句柄，消除对调用方自律先 cancelScheduledSave 的依赖
+    if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(callback, delay);
   }
 
@@ -335,6 +341,10 @@ export function useSavePipeline(options: UseSavePipelineOptions): UseSavePipelin
       const gen = ++saveGeneration.value;
       isSaving.value = true;
       const start = Date.now();
+      // 指示器地板熄灭时刻（成功路径置位 start+500）：仅约束 isSaving 熄灭时机，
+      // 不再阻塞 settle/isDirty 清零/flush 返回（原 await 地板源自历史常量
+      // MIN_SAVE_DISPLAY_MS 的 UI 最短展示语义，非数据一致性需求）
+      let displayFloorUntil = 0;
       try {
         if (
           !expectedRoot ||
@@ -386,9 +396,9 @@ export function useSavePipeline(options: UseSavePipelineOptions): UseSavePipelin
         if (gen !== saveGeneration.value) return true;
         wikiLinkRevision.value++;
         lastSavedAt.value = Date.now();
-        const elapsed = Date.now() - start;
-        if (elapsed < 500) await new Promise((r) => setTimeout(r, 500 - elapsed));
-        if (gen !== saveGeneration.value) return true;
+        // 地板只置位熄灭时刻（finally 延迟熄灭 isSaving）；settle 与 isDirty 清零
+        // 立即执行，不再被 500ms 阻塞——与慢保存（elapsed>500）时序语义一致
+        displayFloorUntil = start + 500;
         if (activePath.value === path && contentRevision.value === revision) {
           await editorRef.value?.settlePendingAutocompleteFeedback();
           if (
@@ -414,7 +424,16 @@ export function useSavePipeline(options: UseSavePipelineOptions): UseSavePipelin
         }
         return false;
       } finally {
-        if (gen === saveGeneration.value) isSaving.value = false;
+        if (gen === saveGeneration.value) {
+          // isSaving 熄灭延至 start+500ms（UI 最短展示）；期间若新保存接管
+          // （gen 前进），本任务不再触碰指示器，由新任务自管
+          const remaining = displayFloorUntil - Date.now();
+          if (remaining > 0) {
+            setTimeout(() => {
+              if (gen === saveGeneration.value) isSaving.value = false;
+            }, remaining);
+          } else isSaving.value = false;
+        }
       }
     })();
     currentSavePromise = saveTask;
@@ -437,6 +456,8 @@ export function useSavePipeline(options: UseSavePipelineOptions): UseSavePipelin
       const gen = ++saveGeneration.value;
       isSaving.value = true;
       const start = Date.now();
+      // 同 debouncedSave：地板仅约束 isSaving 熄灭时机（外部会话 300ms），不阻塞收尾返回
+      let displayFloorUntil = 0;
       try {
         if (externalFileKey(externalFile.value) !== externalFileKey(openedFile)) {
           return false;
@@ -469,9 +490,8 @@ export function useSavePipeline(options: UseSavePipelineOptions): UseSavePipelin
         localWriteEpoch.value++;
         clearSaveIssue();
         lastSavedAt.value = Date.now();
-        const elapsed = Date.now() - start;
-        if (elapsed < 300) await new Promise((r) => setTimeout(r, 300 - elapsed));
-        if (gen !== saveGeneration.value) return true;
+        // 地板只置位熄灭时刻；isDirty 清零立即执行，不再被 300ms 阻塞
+        displayFloorUntil = start + 300;
         if (
           externalFileKey(externalFile.value) === externalFileKey(openedFile) &&
           contentRevision.value === revision
@@ -493,7 +513,15 @@ export function useSavePipeline(options: UseSavePipelineOptions): UseSavePipelin
         }
         return false;
       } finally {
-        if (gen === saveGeneration.value) isSaving.value = false;
+        if (gen === saveGeneration.value) {
+          // isSaving 熄灭延至 start+300ms；新保存接管（gen 前进）时由新任务自管
+          const remaining = displayFloorUntil - Date.now();
+          if (remaining > 0) {
+            setTimeout(() => {
+              if (gen === saveGeneration.value) isSaving.value = false;
+            }, remaining);
+          } else isSaving.value = false;
+        }
       }
     })();
     currentSavePromise = saveTask;

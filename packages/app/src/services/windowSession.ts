@@ -1,10 +1,13 @@
 import type { Channel } from '@tauri-apps/api/core';
 import type {
+  ConditionalWriteResult,
   DocumentConversionAssetPayload,
   DocumentConversionEvent,
   ExternalOpenedFile,
   PromotedNotebookPayload,
   SaveConvertedDocumentDialogRequest,
+  SaveExternalNoteAsRequest,
+  TextFileSnapshot,
   WindowBootstrapPayload,
 } from '@/types';
 import { invokeCommand } from './TauriIPCService';
@@ -123,4 +126,57 @@ export async function saveConvertedDocumentAs(
 /** 校验转换源文件是否仍与转换时一致（false = 已过期）。 */
 export async function refreshDocumentSourceRevision(conversionId: string): Promise<boolean> {
   return invokeCommand<boolean>('refresh_document_source_revision', { conversionId });
+}
+
+// ── 外链笔记文件（external_note_file / save_external_note_as；纯类型化包装） ──
+
+/** save_external_note_as 的返回载荷：新外链笔记定位（notebookRoot 供进入笔记本）。 */
+export interface OpenedFilePayload {
+  absolutePath: string;
+  notebookRoot: string;
+  relativePath: string;
+  accessToken?: string;
+}
+
+/** 读取外链笔记文件快照（内容 + 磁盘修订号；授权过期由调用方兜底提示）。 */
+export function readExternalNoteFileSnapshot(
+  accessToken: string,
+  relativePath: string,
+): Promise<TextFileSnapshot> {
+  return invokeCommand<TextFileSnapshot>('read_external_note_file_snapshot', {
+    accessToken,
+    relativePath,
+  });
+}
+
+/** 条件写外链笔记文件（revision 不一致时返回 conflict，由保存管线裁决）。 */
+export function writeExternalNoteFileIfUnchanged(
+  accessToken: string,
+  relativePath: string,
+  content: string,
+  expectedRevision: string | null,
+): Promise<ConditionalWriteResult> {
+  return invokeCommand<ConditionalWriteResult>('write_external_note_file_if_unchanged', {
+    accessToken,
+    relativePath,
+    content,
+    expectedRevision,
+  });
+}
+
+/** 经系统另存对话框把内容存为新外链笔记（用户取消返回 null）。 */
+export function saveExternalNoteAs(
+  request: SaveExternalNoteAsRequest,
+): Promise<OpenedFilePayload | null> {
+  return invokeCommand<OpenedFilePayload | null>('save_external_note_as', { request });
+}
+
+/** 读取当前窗口绑定的笔记本根目录（未绑定为 null）。 */
+export function getNotebookRoot(): Promise<string | null> {
+  return invokeCommand<string | null>('get_notebook_root');
+}
+
+/** 只读读取外链文件全文（ExternalReaderPage 冷启动主路径）。 */
+export function readExternalNoteFile(accessToken: string, relativePath: string): Promise<string> {
+  return invokeCommand<string>('read_external_note_file', { accessToken, relativePath });
 }

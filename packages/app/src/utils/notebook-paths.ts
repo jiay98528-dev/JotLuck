@@ -9,6 +9,11 @@ export function displayNameFromPath(path: string): string {
   return normalized.split('/').pop() || normalized || 'Notebook';
 }
 
+/**
+ * 归一化 OS 路径供比较与派生使用：反斜杠统一为正斜杠、去尾部多余斜杠。
+ * 契约特例：Windows 盘符根（`C:/`）与 posix 根（`/`）原样保留，不裁剪；
+ * 其余路径（含空串）至少返回去掉尾斜杠的形式（`''` → `''`）。
+ */
 export function normalizeOsPath(path: string): string {
   const normalized = (path || '').replace(/\\/g, '/');
   if (/^[A-Za-z]:\/$/.test(normalized)) return normalized;
@@ -16,6 +21,13 @@ export function normalizeOsPath(path: string): string {
   return normalized.replace(/\/+$/, '');
 }
 
+/**
+ * 判定两个笔记本根路径是否指向同一根，语义按平台分流：
+ * 任一侧形如 `X:/` 的 Windows 盘符路径 → toLocaleLowerCase 后比较
+ * （Windows 文件系统大小写不敏感，`c:/Notes` 与 `C:\notes\` 视为同根）；
+ * 双侧均为 posix 风格路径 → 严格区分大小写（`/Notes` ≠ `/notes`）。
+ * 行为契约见 utils/__tests__/notebook-paths.test.ts「notebookRootsEqual」组。
+ */
 export function notebookRootsEqual(left: string, right: string): boolean {
   const normalizedLeft = normalizeOsPath(left);
   const normalizedRight = normalizeOsPath(right);
@@ -29,6 +41,13 @@ export function ensureMarkdownExtension(path: string): string {
   return /\.[^\\/]+$/.test(path) ? path : `${path}.md`;
 }
 
+/**
+ * 把绝对文件路径拆为「父目录 root + 带前导斜杠的 relativePath」：
+ * `C:/notes/a/b.md` → `{ root: 'C:/notes/a', relativePath: '/b.md' }`。
+ * root 经 normalizeOsPath 二次归一（去尾斜杠、盘符根保留）；
+ * 路径不含斜杠时（顶层文件形态）root 兜底为 posix 根 `'/'`。
+ * 行为契约见 utils/__tests__/notebook-paths.test.ts「splitAbsoluteFilePath」组。
+ */
 export function splitAbsoluteFilePath(path: string): { root: string; relativePath: string } {
   const normalized = normalizeOsPath(path);
   const slash = normalized.lastIndexOf('/');
