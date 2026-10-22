@@ -210,6 +210,26 @@ describe('exporter characterization baseline (slice D)', () => {
   });
 
   // ==========================================================================
+  // f2) exportMd（MD 导出：preprocessMarkdown 预处理后的原文落盘）
+  // ==========================================================================
+
+  it('md: exportMd preprocessed output (defaults)', async () => {
+    const result = await exportNote(FIXTURE, 'baseline-md', { format: ExportFormat.MD });
+    expect(result.success).toBe(true);
+    expect(result.fileName).toBe('baseline-md.md');
+    expect(await capturedDownloadText()).toMatchSnapshot();
+  });
+
+  it('md: exportMd output (includeFrontmatter: false)', async () => {
+    const result = await exportNote(FIXTURE, 'baseline-md-nofm', {
+      format: ExportFormat.MD,
+      includeFrontmatter: false,
+    });
+    expect(result.success).toBe(true);
+    expect(await capturedDownloadText()).toMatchSnapshot();
+  });
+
+  // ==========================================================================
   // g) exportCsv（含公式注入防护行为）
   // ==========================================================================
 

@@ -267,6 +267,38 @@
                 </span>
               </div>
 
+              <!-- L16：训练失败可观测——partial/error 时在训练状态行下展开失败摘要 -->
+              <div v-if="trainingFailureDetail" class="training-failure" role="status">
+                <p class="training-failure-count">
+                  {{
+                    t('settings.autocomplete.training.failedFiles', {
+                      count: trainingFailureDetail.failureCount,
+                    })
+                  }}
+                </p>
+                <details
+                  v-if="trainingFailureDetail.paths.length > 0"
+                  class="training-failure-paths"
+                >
+                  <summary>{{ t('settings.autocomplete.training.failedPaths') }}</summary>
+                  <ul class="training-failure-list">
+                    <li v-for="item in trainingFailureDetail.paths" :key="item.path">
+                      <span class="training-failure-path">{{ item.path }}</span>
+                      <span v-if="item.error" class="training-failure-reason">
+                        {{ item.error }}
+                      </span>
+                    </li>
+                  </ul>
+                </details>
+                <p v-if="trainingFailureDetail.lastError" class="training-failure-last-error">
+                  {{
+                    t('settings.autocomplete.training.lastError', {
+                      error: trainingFailureDetail.lastError,
+                    })
+                  }}
+                </p>
+              </div>
+
               <div class="setting-row">
                 <div class="setting-info">
                   <span class="setting-label">
@@ -639,6 +671,19 @@ const trainingStatusLabel = computed(() => {
   return t('settings.autocomplete.status.idle');
 });
 
+/**
+ * L16 训练失败可观测：status 为 partial/error 时汇总 failureCount（文件数）、
+ * failedPaths 清单（折叠展示）与 lastError 一行；无可展示信息时返回 null 不渲染。
+ */
+const trainingFailureDetail = computed(() => {
+  const meta = props.completionTrainingMeta;
+  if (!meta || (meta.status !== 'partial' && meta.status !== 'error')) return null;
+  const paths = Object.entries(meta.failedPaths).map(([path, error]) => ({ path, error }));
+  const failureCount = meta.failureCount > 0 ? meta.failureCount : paths.length;
+  if (failureCount === 0 && paths.length === 0 && !meta.lastError) return null;
+  return { failureCount, paths, lastError: meta.lastError ?? null };
+});
+
 const engineSnapshot = computed<PublicEngineDiagnostics | null>(
   () => props.completionEngineHealth ?? null,
 );
@@ -973,6 +1018,52 @@ function close(): void {
   font-size: var(--text-xs);
   line-height: var(--lh-ui);
   overflow-wrap: break-word;
+}
+
+/* L16：训练失败摘要（warning 色系，路径/错误文本可换行） */
+.training-failure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-12);
+  border: var(--border-thin) solid var(--signal-warning);
+  border-radius: var(--radius);
+  background: var(--signal-warning-soft);
+}
+
+.training-failure-count,
+.training-failure-last-error {
+  margin: 0;
+  color: var(--ink-primary);
+  font-size: var(--text-xs);
+  line-height: var(--lh-ui);
+  overflow-wrap: anywhere;
+}
+
+.training-failure-paths summary {
+  cursor: pointer;
+  color: var(--ink-secondary);
+  font-size: var(--text-xs);
+}
+
+.training-failure-list {
+  margin: var(--space-4) 0 0;
+  padding-left: var(--space-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.training-failure-path {
+  color: var(--ink-primary);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+.training-failure-reason {
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
 }
 
 .association-settings {

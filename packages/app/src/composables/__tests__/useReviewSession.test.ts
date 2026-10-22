@@ -196,6 +196,112 @@ describe('useReviewSession adopt/discard', () => {
   });
 });
 
+describe('useReviewSession adoptAll/discardAll', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    computeReviewDiffMock.mockReset();
+    computeReviewDiffMock.mockReturnValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // 长度变化的 modify（Hello→Hi 变短 / World→Welt! 变长）+ insert：
+  // 若按数组序（从左到右）应用，先行改动会使后续 hunk 的源稿坐标漂移，
+  // 此组专门钉住 adoptAll「按源稿锚点降序合并」的语义（终态 = Hi Welt! END）
+  const SHORTEN_HUNK = makeHunk({
+    id: 'b1',
+    type: 'modify',
+    leftRange: { from: 0, to: 5 },
+    rightRange: { from: 0, to: 2 },
+    leftText: 'Hello',
+    rightText: 'Hi',
+  });
+
+  const LENGTHEN_HUNK = makeHunk({
+    id: 'b2',
+    type: 'modify',
+    leftRange: { from: 6, to: 11 },
+    rightRange: { from: 6, to: 11 },
+    leftText: 'World',
+    rightText: 'Welt!',
+  });
+
+  const INSERT_HUNK = makeHunk({
+    id: 'b3',
+    type: 'insert',
+    leftAnchor: 11,
+    rightRange: { from: 11, to: 15 },
+    leftText: '',
+    rightText: ' END',
+  });
+
+  it('adoptAll 成功：全部 hunk 内存合并后仅一次 writeFileIfUnchanged，暂存立即落盘', async () => {
+    computeReviewDiffMock.mockReturnValue([SHORTEN_HUNK, LENGTHEN_HUNK, INSERT_HUNK]);
+    const write = vi.fn().mockResolvedValue({ status: 'saved', revision: 'sha256:bulk' });
+    const session = useReviewSession({
+      fs: createFsMock(write),
+      root: 'rootA',
+      path: 'notes/x.md',
+      initialSnapshot: { content: SOURCE, revision: REVISION },
+    });
+
+    const result = await session.adoptAll();
+    expect(result).toEqual({ ok: true, revision: 'sha256:bulk' });
+    // 一次写盘：降序合并终态（Hi + Welt! + ' END'），升序错序会漂移成错误文本
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(write).toHaveBeenCalledWith('notes/x.md', 'Hi Welt! END', REVISION);
+    expect(session.sourceText.value).toBe('Hi Welt! END');
+    expect(session.sourceRevision.value).toBe('sha256:bulk');
+    expect(loadReviewSession('rootA', 'notes/x.md')?.sourceRevision).toBe('sha256:bulk');
+  });
+
+  it('adoptAll 冲突：一次写盘后返回 conflict 且本地基线不动', async () => {
+    computeReviewDiffMock.mockReturnValue([SHORTEN_HUNK]);
+    const write = vi.fn().mockResolvedValue({
+      status: 'conflict',
+      actualRevision: 'sha256:extern',
+    });
+    const session = useReviewSession({
+      fs: createFsMock(write),
+      root: 'rootA',
+      path: 'notes/x.md',
+      initialSnapshot: { content: SOURCE, revision: REVISION },
+    });
+
+    const result = await session.adoptAll();
+    expect(result).toEqual({ ok: false, reason: 'conflict', actualRevision: 'sha256:extern' });
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(session.sourceText.value).toBe(SOURCE);
+    expect(session.sourceRevision.value).toBe(REVISION);
+  });
+
+  it('discardAll：工作稿整体回滚为源稿、hunks 重算清空、暂存清除', () => {
+    // 初始 diff 有一处批注；discardAll 内的 computeNow 重算返回空 → hunks 清空
+    computeReviewDiffMock.mockReturnValueOnce([DELETE_HUNK]).mockReturnValue([]);
+    const session = useReviewSession({
+      fs: createFsMock(),
+      root: 'rootA',
+      path: 'notes/x.md',
+      initialSnapshot: { content: SOURCE, revision: REVISION },
+    });
+    session.workingText.value = 'Hallo Welt';
+    localStorage.setItem(
+      reviewSessionStorageKey('rootA', 'notes/x.md'),
+      JSON.stringify({ sourceRevision: REVISION, workingText: 'Hallo Welt', savedAt: 1 }),
+    );
+    expect(session.hunks.value).toHaveLength(1);
+
+    const next = session.discardAll();
+    expect(next).toBe(SOURCE);
+    expect(session.workingText.value).toBe(SOURCE);
+    expect(session.hunks.value).toEqual([]);
+    // 回滚后工作稿与源稿一致 → persistNow 清除暂存
+    expect(loadReviewSession('rootA', 'notes/x.md')).toBeNull();
+  });
+});
+
 describe('useReviewSession hunks 引用稳定化', () => {
   // computeReviewDiff 每轮返回全新嵌套对象（review-diff.ts 的 { ...range } 展开
   // 与 toDocRange 新字面量），下述用例刻意用「每次调用现造新字面量」复刻该行为；

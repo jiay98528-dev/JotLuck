@@ -131,7 +131,7 @@ export type {
 
 // --- export.ts ---
 export { ExportFormat, ShareChannel } from './export';
-export type { ExportOptions, ExportResult, ShareOptions } from './export';
+export type { ExportOptions, ExportResult, ExportStage, ShareOptions } from './export';
 
 // --- file-system.ts ---
 export type {

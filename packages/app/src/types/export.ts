@@ -22,7 +22,12 @@ export interface ExportOptions {
   codeLineNumbers: boolean;
   /** Cancels pending preparation before a download or print side effect begins. */
   signal?: AbortSignal;
+  /** Reports coarse preparation progress (render → pack) for UI stage labels. */
+  onStage?: (stage: ExportStage) => void;
 }
+
+/** Coarse preparation phases reported through {@link ExportOptions.onStage}. */
+export type ExportStage = 'rendering' | 'packing';
 
 /** Channels through which an exported document can be shared */
 export enum ShareChannel {

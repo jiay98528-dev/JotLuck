@@ -93,6 +93,90 @@ describe('Exporter CSV safety', () => {
   });
 });
 
+describe('Exporter MD format and stage callback', () => {
+  let capturedBlob: Blob | null = null;
+  const originalCreateObjectUrl = URL.createObjectURL;
+  const originalRevokeObjectUrl = URL.revokeObjectURL;
+
+  beforeEach(() => {
+    capturedBlob = null;
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn((blob: Blob | MediaSource) => {
+        capturedBlob = blob as Blob;
+        return 'blob:jotluck-test';
+      }),
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: vi.fn(() => undefined),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (originalCreateObjectUrl) {
+      Object.defineProperty(URL, 'createObjectURL', {
+        configurable: true,
+        value: originalCreateObjectUrl,
+      });
+    } else {
+      Reflect.deleteProperty(URL, 'createObjectURL');
+    }
+    if (originalRevokeObjectUrl) {
+      Object.defineProperty(URL, 'revokeObjectURL', {
+        configurable: true,
+        value: originalRevokeObjectUrl,
+      });
+    } else {
+      Reflect.deleteProperty(URL, 'revokeObjectURL');
+    }
+  });
+
+  it('exports preprocessed markdown (frontmatter kept, wiki-links converted) as UTF-8 blob', async () => {
+    const result = await exportNote(
+      '---\ntitle: 示例\n---\n\n首段 [[目标|别名]] 收尾。',
+      'md-note',
+      { format: ExportFormat.MD },
+    );
+
+    expect(result).toMatchObject({
+      success: true,
+      format: ExportFormat.MD,
+      fileName: 'md-note.md',
+    });
+    expect(capturedBlob).not.toBeNull();
+    // Blob 规范将 type 归一化为 ASCII 小写：源码传入 charset=UTF-8，读取恒为 utf-8
+    expect(capturedBlob!.type).toBe('text/markdown;charset=utf-8');
+    const text = await capturedBlob!.text();
+    // 导出选项语义照 TXT 惯例：默认保留 frontmatter
+    expect(text).toContain('---\ntitle: 示例\n---');
+    // 默认 includeWikiLinks=true：[[目标|别名]] → [别名](目标)
+    expect(text).toContain('[别名](目标)');
+  });
+
+  it('strips frontmatter when includeFrontmatter is false', async () => {
+    await exportNote('---\ntitle: 示例\n---\n\n正文段。', 'md-no-fm', {
+      format: ExportFormat.MD,
+      includeFrontmatter: false,
+    });
+
+    const text = await capturedBlob!.text();
+    expect(text).not.toContain('title');
+    expect(text).toContain('正文段。');
+  });
+
+  it('reports the rendering stage and never packing for MD', async () => {
+    const onStage = vi.fn();
+    await exportNote('# MD 阶段', 'md-stage', { format: ExportFormat.MD, onStage });
+
+    expect(onStage).toHaveBeenCalledWith('rendering');
+    // MD 无打包步骤——不应回报 packing
+    expect(onStage).not.toHaveBeenCalledWith('packing');
+  });
+});
+
 describe('Exporter PDF terminal states', () => {
   beforeEach(() => {
     vi.useFakeTimers();

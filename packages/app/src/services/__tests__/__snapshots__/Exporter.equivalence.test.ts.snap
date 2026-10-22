@@ -685,6 +685,96 @@ console.log(a);
 </html>"
 `;
 
+exports[`exporter characterization baseline (slice D) > md: exportMd output (includeFrontmatter: false) 1`] = `
+"# 一级标题
+
+## 二级标题
+
+### 三级标题
+
+Setext 二级标题
+---
+
+这是一个 **粗体**、*斜体*、\`行内代码\`、[链接文字](https://example.com/a) 与 ![替代文本](https://example.com/i.png) 的段落，包含 [别名](目标笔记) 和 [目标笔记](目标笔记) 以及 #标签 结尾。
+
+> 单行引用内容
+
+> 第一行引用
+> 第二行引用
+
+- 一级无序
+  - 二级无序
+- 另一个一级
+
+1. 有序第一项
+2. 有序第二项
+
+- [x] 已完成任务
+- [ ] 未完成任务
+
+\`\`\`ts
+const a = 1;
+console.log(a);
+\`\`\`
+
+| 列一 | 列二 | 列三 |
+|:---|:---:|---:|
+| 甲 | 乙 | 丙 |
+| 丁 | 戊 | 己 |
+
+---
+
+文末段落。
+"
+`;
+
+exports[`exporter characterization baseline (slice D) > md: exportMd preprocessed output (defaults) 1`] = `
+"---
+title: 示例笔记
+tags: [工作, 重点]
+---
+# 一级标题
+
+## 二级标题
+
+### 三级标题
+
+Setext 二级标题
+---
+
+这是一个 **粗体**、*斜体*、\`行内代码\`、[链接文字](https://example.com/a) 与 ![替代文本](https://example.com/i.png) 的段落，包含 [别名](目标笔记) 和 [目标笔记](目标笔记) 以及 #标签 结尾。
+
+> 单行引用内容
+
+> 第一行引用
+> 第二行引用
+
+- 一级无序
+  - 二级无序
+- 另一个一级
+
+1. 有序第一项
+2. 有序第二项
+
+- [x] 已完成任务
+- [ ] 未完成任务
+
+\`\`\`ts
+const a = 1;
+console.log(a);
+\`\`\`
+
+| 列一 | 列二 | 列三 |
+|:---|:---:|---:|
+| 甲 | 乙 | 丙 |
+| 丁 | 戊 | 己 |
+
+---
+
+文末段落。
+"
+`;
+
 exports[`exporter characterization baseline (slice D) > preprocess: convertWikiLinks converts alias and plain wiki-links to markdown links 1`] = `
 "---
 title: 示例笔记

@@ -8,6 +8,42 @@
       <span class="review-panel-chevron" :class="{ collapsed }" aria-hidden="true">▾</span>
     </header>
 
+    <!-- 批量裁决入口（hunks 非空且未折叠时显示）：全部批准/全部丢弃为破坏性
+         操作，点击先进内联二次确认条，确认后才 emit decideAll -->
+    <div v-if="!collapsed && hunks.length > 0" class="review-bulk-bar">
+      <template v-if="!bulkPending">
+        <button type="button" class="review-bulk-btn review-bulk-adopt" @click="beginBulk('adopt')">
+          {{ t('review.bulk.adoptAll') }}
+        </button>
+        <button
+          type="button"
+          class="review-bulk-btn review-bulk-discard"
+          @click="beginBulk('discard')"
+        >
+          {{ t('review.bulk.discardAll') }}
+        </button>
+      </template>
+      <template v-else>
+        <span class="review-bulk-confirm-text">
+          {{
+            bulkPending === 'adopt'
+              ? t('review.bulk.confirmAdopt', { n: hunks.length })
+              : t('review.bulk.confirmDiscard', { n: hunks.length })
+          }}
+        </span>
+        <button type="button" class="review-bulk-btn review-bulk-confirm-ok" @click="confirmBulk">
+          {{ t('review.bulk.confirmLabel') }}
+        </button>
+        <button
+          type="button"
+          class="review-bulk-btn review-bulk-confirm-cancel"
+          @click="bulkPending = null"
+        >
+          {{ t('review.bulk.cancel') }}
+        </button>
+      </template>
+    </div>
+
     <ul v-if="!collapsed && hunks.length > 0" class="review-panel-list">
       <li
         v-for="(hunk, index) in hunks"
@@ -60,7 +96,9 @@
  *
  * 列出全部批注（书签式快速预览）；点击条目 → emit locate（工作台滚动定位两栏）
  * 并在鼠标位置附近弹「批准/丢弃」二元小弹窗；弹窗按钮 → emit decide。
- * 鼠标移出弹窗或移出该条目行 150ms 后弹窗自动关闭；点击按钮执行后立即关闭。
+ * 鼠标移出弹窗或移出该条目行 300ms 后弹窗自动关闭；点击按钮执行后立即关闭。
+ * 头部下方另有「全部批准/全部丢弃」批量入口（hunks 非空时显示），经内联
+ * 二次确认后 emit decideAll（由工作台调用会话层 adoptAll/discardAll）。
  */
 import { onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -73,6 +111,8 @@ defineProps<{
 const emit = defineEmits<{
   locate: [hunk: ReviewHunk];
   decide: [hunk: ReviewHunk, action: 'adopt' | 'discard'];
+  /** 批量裁决（内联二次确认通过后触发），action 语义同 decide */
+  decideAll: [action: 'adopt' | 'discard'];
 }>();
 
 const { t } = useI18n();
@@ -82,7 +122,7 @@ const collapsed = ref(false);
 /** 弹窗状态：目标 hunk + 视口坐标（fixed） */
 const popup = ref<{ hunk: ReviewHunk; x: number; y: number } | null>(null);
 let closeTimer: ReturnType<typeof setTimeout> | null = null;
-const CLOSE_DELAY_MS = 150;
+const CLOSE_DELAY_MS = 300;
 const POPUP_WIDTH = 190;
 const POPUP_HEIGHT = 86;
 
@@ -125,6 +165,22 @@ function onDecide(action: 'adopt' | 'discard'): void {
   if (!current) return;
   closePopup();
   emit('decide', current.hunk, action);
+}
+
+// ── 批量裁决（内联二次确认；确认条只在面板内部，不弹 modal/confirm()） ──
+
+/** null=默认按钮态；'adopt'/'discard'=待确认（已进入二次确认条） */
+const bulkPending = ref<'adopt' | 'discard' | null>(null);
+
+function beginBulk(action: 'adopt' | 'discard'): void {
+  closePopup(); // 批量入口与单条弹窗互斥，顺手清理
+  bulkPending.value = action;
+}
+
+function confirmBulk(): void {
+  const action = bulkPending.value;
+  bulkPending.value = null; // 先复位再 emit，避免执行期间残留待确认态
+  if (action) emit('decideAll', action);
 }
 
 /** 摘要：折叠空白后截断到 40 字符 */
@@ -288,6 +344,46 @@ onUnmounted(closePopup);
   font-size: var(--text-xs);
   color: var(--ink-muted);
   text-align: center;
+}
+
+/* ── 批量裁决入口（全部批准/全部丢弃 + 内联二次确认条） ── */
+.review-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+  padding: var(--space-8) var(--space-12) 0;
+}
+
+.review-bulk-btn {
+  padding: 2px 8px;
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-surface);
+  font-size: var(--text-xs);
+  color: var(--ink-secondary);
+  cursor: pointer;
+}
+
+.review-bulk-adopt {
+  border-color: var(--signal-success);
+  color: var(--signal-success);
+}
+
+.review-bulk-discard {
+  border-color: var(--signal-error);
+  color: var(--signal-error);
+}
+
+.review-bulk-btn:hover {
+  background: var(--accent-soft);
+}
+
+/* 确认文案占满整行，确认/取消按钮折到下一行 */
+.review-bulk-confirm-text {
+  flex: 1 1 100%;
+  font-size: var(--text-xs);
+  color: var(--ink-secondary);
 }
 </style>
 

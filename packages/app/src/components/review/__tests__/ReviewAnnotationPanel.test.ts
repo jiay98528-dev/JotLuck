@@ -97,7 +97,7 @@ describe('ReviewAnnotationPanel', () => {
     expect(findPopup()).toBeNull();
   });
 
-  it('鼠标移出条目行 150ms 后弹窗自动关闭', async () => {
+  it('鼠标移出条目行 300ms 后弹窗自动关闭（150ms 旧时序仍保持）', async () => {
     vi.useFakeTimers();
     const wrapper = mount(ReviewAnnotationPanel, { props: { hunks: HUNKS } });
     const row = wrapper.findAll('.review-panel-item')[0]!;
@@ -106,6 +106,8 @@ describe('ReviewAnnotationPanel', () => {
 
     await row.trigger('mouseleave');
     expect(findPopup()).not.toBeNull(); // 延迟内不关
+    vi.advanceTimersByTime(150);
+    expect(findPopup()).not.toBeNull(); // 150ms（旧时序）仍保持打开
     vi.advanceTimersByTime(150);
     await nextTick();
     expect(findPopup()).toBeNull();
@@ -126,5 +128,45 @@ describe('ReviewAnnotationPanel', () => {
     expect(wrapper.find('.review-panel-empty').exists()).toBe(false); // 折叠态不显示空态
     await wrapper.find('.review-panel-header').trigger('click');
     expect(wrapper.find('.review-panel-list').exists()).toBe(true);
+  });
+
+  it('批量入口：hunks 非空时显示，空态与折叠态不显示', async () => {
+    const wrapper = mount(ReviewAnnotationPanel, { props: { hunks: HUNKS } });
+    expect(wrapper.find('.review-bulk-adopt').exists()).toBe(true);
+    expect(wrapper.find('.review-bulk-discard').exists()).toBe(true);
+
+    // 折叠态隐藏（与列表同口径）
+    await wrapper.find('.review-panel-header').trigger('click');
+    expect(wrapper.find('.review-bulk-bar').exists()).toBe(false);
+    await wrapper.find('.review-panel-header').trigger('click');
+
+    // 空态隐藏
+    const empty = mount(ReviewAnnotationPanel, { props: { hunks: [] } });
+    expect(empty.find('.review-bulk-bar').exists()).toBe(false);
+  });
+
+  it('批量丢弃：内联二次确认（第一步不 emit）→ 确认后 emit decideAll(discard)', async () => {
+    const wrapper = mount(ReviewAnnotationPanel, { props: { hunks: HUNKS } });
+    // 第一步点击只进入确认态，不 emit
+    await wrapper.find('.review-bulk-discard').trigger('click');
+    expect(wrapper.emitted('decideAll')).toBeUndefined();
+    expect(wrapper.find('.review-bulk-confirm-text').text()).toContain('3');
+    // 取消 → 回到默认按钮态、仍无 emit
+    await wrapper.find('.review-bulk-confirm-cancel').trigger('click');
+    expect(wrapper.emitted('decideAll')).toBeUndefined();
+    expect(wrapper.find('.review-bulk-discard').exists()).toBe(true);
+    // 再次进入确认态并确认 → emit
+    await wrapper.find('.review-bulk-discard').trigger('click');
+    await wrapper.find('.review-bulk-confirm-ok').trigger('click');
+    expect(wrapper.emitted('decideAll')).toEqual([['discard']]);
+    expect(wrapper.find('.review-bulk-adopt').exists()).toBe(true); // 复位回默认态
+  });
+
+  it('批量批准：内联确认后 emit decideAll(adopt)', async () => {
+    const wrapper = mount(ReviewAnnotationPanel, { props: { hunks: HUNKS } });
+    await wrapper.find('.review-bulk-adopt').trigger('click');
+    expect(wrapper.emitted('decideAll')).toBeUndefined(); // 确认前不 emit
+    await wrapper.find('.review-bulk-confirm-ok').trigger('click');
+    expect(wrapper.emitted('decideAll')).toEqual([['adopt']]);
   });
 });

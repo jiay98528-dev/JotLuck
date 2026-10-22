@@ -279,4 +279,52 @@ test.describe('改稿（审批/批注）模式', () => {
     // fixture 各 hunk 均走投影路径（词级马克笔），不应出现整块绿底 tint
     await expect(page.locator('.review-workbench .split-right .review-block-add')).toHaveCount(0);
   });
+
+  // 批量裁决（09）：全部批准 = N 处批注内存合并后一次写入源稿（写一次的
+  // 契约由 useReviewSession 单测钉住，此处验终态：批注清空 + 退出后主编辑
+  // 器可见新稿）；全部丢弃 = 工作稿整体回滚为源稿。
+  test('09-批量裁决：全部批准一次写入源稿 + 全部丢弃整体回滚', async ({ page }) => {
+    await enterReviewMode(page);
+    await switchReviewMode(page, '源码');
+    await appendInRightEditor(page, '\n\n批量批准的第一处新增。');
+    await appendInRightEditor(page, '\n\n批量批准的第二处新增。');
+    await expect(page.locator('.review-panel-item').first()).toBeVisible({ timeout: 5000 });
+    expect(await panelCount(page)).toBeGreaterThanOrEqual(2);
+
+    // 全部批准：破坏性确认条 → 确认执行
+    await page.locator('.review-bulk-adopt').click();
+    await expect(page.locator('.review-bulk-confirm-ok')).toBeVisible();
+    await page.locator('.review-bulk-confirm-ok').click();
+    // 批注清空：源稿与工作稿两侧一致
+    await expect(page.locator('.review-panel-item')).toHaveCount(0, { timeout: 8000 });
+    await exitReviewMode(page);
+    // 退出后主编辑器可见新稿（两处新增均已并入源稿）
+    await expect(
+      page.locator('.cm-content', { hasText: '批量批准的第一处新增' }).first(),
+    ).toBeVisible({ timeout: 5000 });
+    await expect(
+      page.locator('.cm-content', { hasText: '批量批准的第二处新增' }).first(),
+    ).toBeVisible();
+
+    // 全部丢弃：以已并入的源稿为新基线，再加一处改动后整体回滚
+    await enterReviewMode(page);
+    await switchReviewMode(page, '源码');
+    await appendInRightEditor(page, '\n\n批量丢弃的临时新增。');
+    await expect(page.locator('.review-panel-item').first()).toBeVisible({ timeout: 5000 });
+    await page.locator('.review-bulk-discard').click();
+    await page.screenshot({
+      path: '../../e2e/screenshots/review-mode/07-bulk-decide.png',
+      fullPage: true,
+    });
+    await page.locator('.review-bulk-confirm-ok').click();
+    // 批注清空 + 右栏回滚为源稿（临时新增消失）
+    await expect(page.locator('.review-panel-item')).toHaveCount(0, { timeout: 5000 });
+    await expect(
+      page.locator('.review-workbench .split-right .cm-content', {
+        hasText: '批量丢弃的临时新增',
+      }),
+    ).toHaveCount(0);
+    // 回滚后工作稿===源稿 → 退出无确认卡，直接退出
+    await exitReviewMode(page);
+  });
 });

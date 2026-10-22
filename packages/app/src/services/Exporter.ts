@@ -1,10 +1,10 @@
 import { prepareDocumentHtml } from './progressive-print';
 import { isLargeDocument } from './document-analysis';
 /**
- * Exporter — 6 格式导出服务
+ * Exporter — 7 格式导出服务
  *
  * PDF (window.print + rendered HTML) / DOCX (docx.js) / XLSX (write-excel-file) /
- * CSV / TXT / HTML (self-contained)
+ * CSV / TXT / MD (预处理原文) / HTML (self-contained)
  *
  * 切片 D / WO-D3：四种手写解析（marked.lexer / 逐行扫描 / 14 条正则链）全部收口到
  * 「renderer 块级 AST（export-model.ts）+ renderer 行内词法（lexInlineTokens）」。
@@ -918,8 +918,11 @@ async function exportDocx(
     ],
   });
 
-  const blob = await Packer.toBlob(doc);
+  // fb-4：渲染完成后、打包前检查中止——中止不再白白完成 Packer 打包；
+  // 下载触发前 triggerDownload 内的既有检查保留。
   throwIfExportAborted(options?.signal);
+  options?.onStage?.('packing');
+  const blob = await Packer.toBlob(doc);
   triggerDownload(
     blob,
     `${fileName}.docx`,
@@ -993,8 +996,11 @@ async function exportXlsx(
           columns: buildXlsxColumns(table),
         }));
 
-  const blob = await writeXlsxFile(sheets).toBlob();
+  // fb-4：同 DOCX——打包（writeXlsxFile）前检查中止，中止不再白白完成打包；
+  // 下载触发前 triggerDownload 内的既有检查保留。
   throwIfExportAborted(options?.signal);
+  options?.onStage?.('packing');
+  const blob = await writeXlsxFile(sheets).toBlob();
   triggerDownload(
     blob,
     `${fileName}.xlsx`,
@@ -1192,6 +1198,23 @@ function exportTxt(md: string, fileName: string, options?: Partial<ExportOptions
 
   triggerDownload(processed, `${fileName}.txt`, 'text/plain;charset=UTF-8', options?.signal);
   return { success: true, format: ExportFormat.TXT, fileName: `${fileName}.txt` };
+}
+
+// ============================================================================
+// MD — 预处理后的 Markdown 原文落盘
+// ============================================================================
+
+/**
+ * 导出选项语义照 TXT 惯例：includeFrontmatter=false 时摘除文首 frontmatter 块，
+ * includeWikiLinks 决定 [[...]] 转 markdown 链接或纯文本；其余 Markdown 语法原样保留。
+ * MIME 与 ShareDialog MD 分享同源（text/markdown + charset=UTF-8 的 Blob + a.download）。
+ */
+function exportMd(md: string, fileName: string, options?: Partial<ExportOptions>): ExportResult {
+  const opts = buildInternalOpts(options);
+  const processed = preprocessMarkdown(md, opts);
+
+  triggerDownload(processed, `${fileName}.md`, 'text/markdown;charset=UTF-8', options?.signal);
+  return { success: true, format: ExportFormat.MD, fileName: `${fileName}.md` };
 }
 
 // ============================================================================
@@ -1404,6 +1427,10 @@ export async function exportNote(
 
   const fmt = options?.format ?? ExportFormat.PDF;
 
+  // 阶段文案（导出中细分「渲染中/打包中」）：进入分发即处于渲染阶段；
+  // DOCX/XLSX 在打包调用前再回报 'packing'。
+  options?.onStage?.('rendering');
+
   switch (fmt) {
     case ExportFormat.PDF:
       return exportPDF(markdown, fileName, options);
@@ -1415,6 +1442,8 @@ export async function exportNote(
       return exportCsv(markdown, fileName, options);
     case ExportFormat.TXT:
       return exportTxt(markdown, fileName, options);
+    case ExportFormat.MD:
+      return exportMd(markdown, fileName, options);
     case ExportFormat.HTML:
       return exportHtml(markdown, fileName, options);
     default:

@@ -101,7 +101,7 @@
             aria-live="polite"
           >
             <span class="spinner"></span>
-            <span class="status-text">{{ t('dialogs.export.exporting') }}</span>
+            <span class="status-text">{{ exportingStatusLabel }}</span>
           </div>
 
           <!-- Success -->
@@ -166,7 +166,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { exportNote } from '@/services/Exporter';
 import { ExportFormat } from '@/types';
-import type { ExportResult } from '@/types';
+import type { ExportResult, ExportStage } from '@/types';
 import Button from '@/components/common/Button.vue';
 import { useDialogFocus } from '@/composables/useDialogFocus';
 import { localizeUserError } from '@/services/command-errors';
@@ -202,6 +202,8 @@ const codeLineNumbers = ref<boolean>(false);
 
 type ExportState = 'idle' | 'exporting' | 'success' | 'error';
 const exportState = ref<ExportState>('idle');
+// 导出阶段文案（exporting 态细分「渲染中/打包中」，由 exportNote 的 onStage 回报驱动）
+const exportStage = ref<ExportStage>('rendering');
 const exportMessage = ref<string>('');
 const exportError = ref<string>('');
 const completedFormat = ref<ExportFormat>(ExportFormat.PDF);
@@ -215,6 +217,12 @@ const exportSuccessLabel = computed(() =>
   completedFormat.value === ExportFormat.PDF
     ? t('dialogs.export.printComplete')
     : t('dialogs.export.complete'),
+);
+
+const exportingStatusLabel = computed(() =>
+  exportStage.value === 'packing'
+    ? t('dialogs.export.stagePacking')
+    : t('dialogs.export.stageRendering'),
 );
 
 // ── Format definitions ─────────────────────────────────
@@ -257,6 +265,12 @@ const formats: FormatEntry[] = [
     icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h4M8 17h7"/></svg>',
   },
   {
+    fmt: ExportFormat.MD,
+    name: 'MD',
+    ext: '.md',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M5 15V9l3.5 3.5L12 9v6"/><path d="M15 9v6"/><path d="M15 12l2.5 3 2.5-3"/></svg>',
+  },
+  {
     fmt: ExportFormat.HTML,
     name: 'HTML',
     ext: '.html',
@@ -291,6 +305,7 @@ function resetState(): void {
   codeLineNumbers.value = false;
   completedFormat.value = ExportFormat.PDF;
   exportState.value = 'idle';
+  exportStage.value = 'rendering';
   exportMessage.value = '';
   exportError.value = '';
 }
@@ -304,6 +319,7 @@ async function doExport(): Promise<void> {
   const runId = ++exportRunId;
   const runFormat = selectedFormat.value;
   exportState.value = 'exporting';
+  exportStage.value = 'rendering';
   exportError.value = '';
 
   try {
@@ -316,6 +332,9 @@ async function doExport(): Promise<void> {
         includeWikiLinks: includeWikiLinks.value,
         codeLineNumbers: codeLineNumbers.value,
         signal: controller.signal,
+        onStage: (stage) => {
+          exportStage.value = stage;
+        },
       },
     );
 

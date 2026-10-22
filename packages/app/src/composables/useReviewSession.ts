@@ -9,6 +9,8 @@
  *    conflict 时由调用方弹「以最新源稿重开」对话框并 rebaseSource；
  *  - discard(hunk)：丢弃 → 工作稿该处回滚为源稿原文（单事务替换由组件层
  *    经 MarkdownEditor 的 model-value 同步机制完成）；
+ *  - adoptAll()/discardAll()：批量裁决——全部 hunk 内存降序合并后一次写盘
+ *    / 工作稿整体回滚为源稿，均只做一次 computeNow + persistNow；
  *  - workingText 防抖 800ms 暂存 localStorage。
  */
 
@@ -21,6 +23,7 @@ import {
   applyHunkToSource,
   clearReviewSession,
   loadReviewSession,
+  mapRightPositionToLeft,
   revertHunkInWorking,
   saveReviewSession,
 } from '@/services/review-session-store';
@@ -209,6 +212,55 @@ export function useReviewSession(options: UseReviewSessionOptions) {
     return next;
   }
 
+  /**
+   * 批准全部批注：全部 hunk 在内存按源稿锚点降序（从右向左）合并后一次
+   * writeFileIfUnchanged 落盘——N 处批注只写一次文件、一次 computeNow +
+   * persistNow（禁止逐条循环 adopt 的 N 次写盘）。降序应用使左侧 hunk 的
+   * 源稿坐标不因右侧改动漂移；hunks 互不重叠时合并终态与逐条 adopt 等价。
+   * 冲突/IO 语义与单条 adopt 一致；applyHunkToSource 缺坐标抛错同样向上传播。
+   */
+  async function adoptAll(): Promise<ReviewAdoptResult> {
+    // 源稿锚点排序键：leftRange 优先；insert 缺左区间时按全集位移从
+    // rightRange 反推（与 applyHunkToSource 内的锚点推算同口径）
+    const anchorOf = (hunk: ReviewHunk): number | null =>
+      hunk.leftRange?.from ??
+      hunk.leftAnchor ??
+      (hunk.rightRange ? mapRightPositionToLeft(hunk.rightRange.from, hunks.value) : null);
+    let newSource = sourceText.value;
+    for (const hunk of [...hunks.value].sort((a, b) => (anchorOf(b) ?? -1) - (anchorOf(a) ?? -1))) {
+      newSource = applyHunkToSource(newSource, hunk, hunks.value);
+    }
+    try {
+      const result = await fs.writeFileIfUnchanged(path, newSource, sourceRevision.value);
+      if (result.status === 'conflict') {
+        return { ok: false, reason: 'conflict', actualRevision: result.actualRevision };
+      }
+      sourceText.value = newSource;
+      sourceRevision.value = result.revision;
+      computeNow();
+      persistNow(); // 基线里程碑：立即暂存（而非防抖）
+      return { ok: true, revision: result.revision };
+    } catch (error) {
+      return {
+        ok: false,
+        reason: 'io',
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  /**
+   * 丢弃全部批注：工作稿整体回滚为源稿（全部改动一次撤销，不经逐条
+   * revert），一次 computeNow + persistNow；回滚后工作稿与源稿一致，
+   * persistNow 会顺带清除 localStorage 暂存。
+   */
+  function discardAll(): string {
+    workingText.value = sourceText.value;
+    computeNow();
+    persistNow();
+    return workingText.value;
+  }
+
   /** 冲突后以最新源稿重开：重设基线、保留工作稿、重算批注。 */
   function rebaseSource(newSnapshot: { content: string; revision: string }): void {
     sourceText.value = newSnapshot.content;
@@ -239,6 +291,8 @@ export function useReviewSession(options: UseReviewSessionOptions) {
     computeNow,
     adopt,
     discard,
+    adoptAll,
+    discardAll,
     rebaseSource,
     dispose,
   };

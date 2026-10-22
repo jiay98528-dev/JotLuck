@@ -41,12 +41,12 @@ test.describe('导出与分享', () => {
     // 验证导出对话框可见
     await expect(page.locator('.modal-overlay')).toBeVisible();
 
-    // 验证 6 种格式卡片
+    // 验证 7 种格式卡片
     const formatCards = page.locator('.format-card');
     await expect(formatCards.first()).toBeVisible();
-    await expect(formatCards).toHaveCount(6);
+    await expect(formatCards).toHaveCount(7);
 
-    const expectedFormats = ['PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'HTML'];
+    const expectedFormats = ['PDF', 'DOCX', 'XLSX', 'CSV', 'TXT', 'MD', 'HTML'];
     for (const fmt of expectedFormats) {
       await expect(page.locator('.format-card', { hasText: fmt })).toBeVisible();
     }

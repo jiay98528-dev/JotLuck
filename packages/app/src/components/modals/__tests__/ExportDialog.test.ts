@@ -132,7 +132,7 @@ describe('ExportDialog error recovery', () => {
     resolveFirst({ success: true, message: '过期任务完成' });
     await flushPromises();
 
-    expect(document.body.textContent).toContain(translate('dialogs.export.exporting'));
+    expect(document.body.textContent).toContain(translate('dialogs.export.stageRendering'));
     expect(document.body.textContent).not.toContain('过期任务完成');
 
     resolveSecond({ success: true, message: '当前任务完成' });
@@ -153,5 +153,30 @@ describe('ExportDialog error recovery', () => {
     wrapper.unmount();
 
     expect(signal.aborted).toBe(true);
+  });
+
+  it('forwards the onStage callback and switches the exporting stage label', async () => {
+    let fireStage!: (stage: 'rendering' | 'packing') => void;
+    exportNoteMock.mockImplementationOnce(
+      (_md: string, _name: string, opts?: { onStage?: (stage: 'rendering' | 'packing') => void }) =>
+        new Promise(() => {
+          fireStage = opts!.onStage!;
+        }),
+    );
+    const wrapper = mount(ExportDialog, {
+      props: { visible: true, markdownContent: 'content' },
+      attachTo: document.body,
+    });
+
+    findButton('导出').click();
+    await flushPromises();
+
+    // 未回报阶段前默认展示「渲染中」
+    expect(document.body.textContent).toContain(translate('dialogs.export.stageRendering'));
+
+    fireStage('packing');
+    await flushPromises();
+    expect(document.body.textContent).toContain(translate('dialogs.export.stagePacking'));
+    wrapper.unmount();
   });
 });

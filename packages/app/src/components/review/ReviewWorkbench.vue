@@ -95,7 +95,12 @@
 
       <!-- ── 右上角批注面板（absolute 于分栏容器内，不遮顶栏动作区） ── -->
       <div class="review-panel-host">
-        <ReviewAnnotationPanel :hunks="hunks" @locate="onLocate" @decide="onDecide" />
+        <ReviewAnnotationPanel
+          :hunks="hunks"
+          @locate="onLocate"
+          @decide="onDecide"
+          @decide-all="onDecideAll"
+        />
       </div>
     </div>
 
@@ -436,6 +441,33 @@ const ioError = ref('');
 const conflictVisible = ref(false);
 const rebasing = ref(false);
 
+/**
+ * 批量裁决（面板头部入口，经内联二次确认后触发）：
+ * 全部批准 = 会话层 adoptAll 一次写盘；全部丢弃 = discardAll 整体回滚。
+ * 冲突/IO 处理与单条 onDecide 同口径。
+ */
+async function onDecideAll(action: 'adopt' | 'discard'): Promise<void> {
+  if (deciding.value || hunks.value.length === 0) return;
+  deciding.value = true;
+  ioError.value = '';
+  try {
+    if (action === 'discard') {
+      session.discardAll(); // 整体回滚为纯赋值（workingText=sourceText），无抛错面
+      return;
+    }
+    const result = await session.adoptAll();
+    if (result.ok) {
+      emit('source-adopted', session.sourceText.value, session.sourceRevision.value);
+    } else if (result.reason === 'conflict') {
+      conflictVisible.value = true;
+    } else {
+      ioError.value = t('review.ioError', { message: result.message });
+    }
+  } finally {
+    deciding.value = false;
+  }
+}
+
 async function onDecide(hunk: ReviewHunk, action: 'adopt' | 'discard'): Promise<void> {
   if (deciding.value) return;
   deciding.value = true;
@@ -720,7 +752,8 @@ onUnmounted(() => {
 }
 
 .review-panel-host :deep(.review-panel-header),
-.review-panel-host :deep(.review-panel-item) {
+.review-panel-host :deep(.review-panel-item),
+.review-panel-host :deep(.review-bulk-bar) {
   pointer-events: auto;
 }
 
