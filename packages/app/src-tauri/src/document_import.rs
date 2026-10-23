@@ -1765,6 +1765,33 @@ fn convert_docx(
             None,
         )?;
     }
+    // External hyperlink targets outside the safe set (https/http/mailto/#anchor)
+    // are dropped by is_safe_link_target during rendering. Surface one warning so
+    // the reader knows why those links stay as plain text.
+    let mut unsupported_link_schemes: Vec<String> = document
+        .hyperlinks
+        .iter()
+        .map(|(_, target, _)| target.as_str())
+        .filter(|target| !is_safe_link_target(target))
+        .map(|target| {
+            target
+                .split_once(':')
+                .map(|(scheme, _)| scheme.to_ascii_lowercase())
+                .unwrap_or_else(|| "relative".to_string())
+        })
+        .collect();
+    unsupported_link_schemes.sort();
+    unsupported_link_schemes.dedup();
+    if !unsupported_link_schemes.is_empty() {
+        emitter.warning(
+            "docx-unsupported-link",
+            format!(
+                "Links with unsupported schemes were flattened to plain text: {}.",
+                unsupported_link_schemes.join(", ")
+            ),
+            Some(unsupported_link_schemes.join(", ")),
+        )?;
+    }
 
     for (index, child) in document.document.children.iter().enumerate() {
         use docx_rs::DocumentChild;
@@ -2945,6 +2972,55 @@ mod tests {
             event,
             WorkerEvent::Asset { media_type, .. } if media_type == "image/png"
         )));
+        // The fixture only contains an https hyperlink: the unsupported-scheme
+        // warning must not fire for supported targets.
+        assert!(!events.iter().any(|event| matches!(
+            event,
+            WorkerEvent::Warning { code, .. } if code == "docx-unsupported-link"
+        )));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn docx_unsupported_link_schemes_emit_warning() {
+        use docx_rs::*;
+
+        let root = temp_test_directory("docx-links");
+        let source = root.join("fixture.docx");
+        let assets = root.join("assets");
+        fs::create_dir(&assets).unwrap();
+        Docx::new()
+            .add_paragraph(Paragraph::new().add_hyperlink(
+                Hyperlink::new("file:///C:/report.docx", HyperlinkType::External)
+                    .add_run(Run::new().add_text("本地文件")),
+            ))
+            .add_paragraph(Paragraph::new().add_hyperlink(
+                Hyperlink::new("ftp://files.example.com/data", HyperlinkType::External)
+                    .add_run(Run::new().add_text("文件站")),
+            ))
+            .add_paragraph(Paragraph::new().add_hyperlink(
+                Hyperlink::new("https://example.com/ok", HyperlinkType::External)
+                    .add_run(Run::new().add_text("网页")),
+            ))
+            .build()
+            .pack(File::create(&source).unwrap())
+            .unwrap();
+        let mut frames = Vec::new();
+        convert_docx(&source, &assets, &mut WorkerEmitter::new(&mut frames)).unwrap();
+        let events = decoded_worker_events(frames);
+        let markdown = emitted_markdown(&events);
+
+        // Supported target stays a link; unsupported targets degrade to labels only.
+        assert!(markdown.contains("[网页](https://example.com/ok)"), "{markdown}");
+        assert!(!markdown.contains("file:///"), "{markdown}");
+        assert!(!markdown.contains("ftp://"), "{markdown}");
+        let context = events.iter().find_map(|event| match event {
+            WorkerEvent::Warning { code, context, .. } if code == "docx-unsupported-link" => {
+                context.clone()
+            }
+            _ => None,
+        });
+        assert_eq!(context.as_deref(), Some("file, ftp"));
         fs::remove_dir_all(root).unwrap();
     }
 

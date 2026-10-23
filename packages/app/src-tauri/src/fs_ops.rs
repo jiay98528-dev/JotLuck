@@ -22,6 +22,8 @@ use uuid::Uuid;
 
 static WRITE_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 const MAX_EXTERNAL_NOTE_BYTES: u64 = 5 * 1024 * 1024;
+/// 外部会话图片资产读取上限，与前端 useImageUpload 的 MAX_IMAGE_BYTES（5 MB）对齐。
+const MAX_EXTERNAL_ASSET_BYTES: u64 = 5 * 1024 * 1024;
 
 /// Serializes in-process mutations by canonical path. The map lock is held only
 /// long enough to obtain per-path locks; disk I/O never runs under the map lock.
@@ -417,6 +419,37 @@ impl ExternalAccessGrants {
         self.resolve_file_inner(access_token, relative_path, markdown_only, true, true)
     }
 
+    /// Resolve one image asset inside the granted directory. Unlike text-note
+    /// reads, sibling access is the feature: the grant root is the session
+    /// file's own directory, so whitelisted images beside it resolve without
+    /// the single-file sibling restriction that guards text reads.
+    pub fn resolve_asset(
+        &self,
+        access_token: &str,
+        relative_path: &str,
+    ) -> Result<PathBuf, String> {
+        let grant = self.grant(access_token, can_read)?;
+        let root = grant.root.clone();
+        let target = resolve_safe_path(&root, relative_path).map_err(|e| e.to_string())?;
+        let name = target
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| "external relative path must name a file".to_string())?;
+        if !is_supported_image_asset(name) {
+            return Err("only .png/.jpg/.jpeg/.gif/.webp/.bmp assets are supported".to_string());
+        }
+        if !target.exists() || !target.is_file() {
+            return Err(format!("external note does not exist: {relative_path}"));
+        }
+        let canonical_target = target
+            .canonicalize()
+            .map_err(|e| format!("unable to resolve external target: {e}"))?;
+        if !canonical_target.starts_with(&root) || !canonical_target.is_file() {
+            return Err("external path is outside the granted directory".to_string());
+        }
+        Ok(canonical_target)
+    }
+
     fn resolve_file_inner(
         &self,
         access_token: &str,
@@ -612,6 +645,18 @@ fn is_markdown_like_file(name: &str) -> bool {
         .and_then(|value| value.to_str())
         .map(|value| value.to_ascii_lowercase());
     matches!(ext.as_deref(), Some("md" | "markdown" | "mdx"))
+}
+
+/// 外部会话图片资产白名单：仅位图格式；svg（可携带脚本）刻意排除。
+fn is_supported_image_asset(name: &str) -> bool {
+    let ext = Path::new(name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase());
+    matches!(
+        ext.as_deref(),
+        Some("png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp")
+    )
 }
 
 fn resolve_external_note_file(absolute_path: &str) -> Result<PathBuf, String> {
@@ -1278,6 +1323,29 @@ fn read_external_note_snapshot(target: &Path) -> Result<TextFileSnapshot, String
     Ok(TextFileSnapshot { content, revision })
 }
 
+fn read_external_asset_bytes(target: &Path) -> Result<Vec<u8>, String> {
+    let mut file = File::open(target).map_err(|e| format!("读取外部文件失败: {e}"))?;
+    let size = file
+        .metadata()
+        .map_err(|e| format!("读取外部文件元数据失败: {e}"))?
+        .len();
+    if size > MAX_EXTERNAL_ASSET_BYTES {
+        return Err(format!(
+            "外部图片超过 5 MB，已停止加载以避免应用无响应（当前 {:.1} MB）",
+            size as f64 / (1024.0 * 1024.0)
+        ));
+    }
+    let mut bytes = Vec::with_capacity(size as usize);
+    (&mut file)
+        .take(MAX_EXTERNAL_ASSET_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("读取外部文件失败: {e}"))?;
+    if bytes.len() as u64 > MAX_EXTERNAL_ASSET_BYTES {
+        return Err("外部图片在读取时超过 5 MB，已停止加载以避免应用无响应".to_string());
+    }
+    Ok(bytes)
+}
+
 fn read_external_note_content(target: &Path) -> CommandResult<String> {
     read_external_note_snapshot(target)
         .map(|snapshot| snapshot.content)
@@ -1330,6 +1398,38 @@ pub fn read_external_note_file_snapshot(
     assert_external_owner(&window, &access, &access_token)?;
     let target = access.resolve_file(&access_token, &relative_path, false, false)?;
     read_external_note_snapshot(&target).map_err(Into::into)
+}
+
+/// Read one image asset beside an external session file (base64 payload).
+/// 鉴权与文本族一致（窗口令牌）；resolve 限定在会话文件所在目录，仅放行
+/// 位图扩展名，大小上限对齐前端 MAX_IMAGE_BYTES。
+#[tauri::command]
+pub fn read_external_note_asset(
+    window: WebviewWindow,
+    access_token: String,
+    relative_path: String,
+    access: State<ExternalAccessGrants>,
+) -> CommandResult<String> {
+    assert_external_owner(&window, &access, &access_token)?;
+    let target = access.resolve_asset(&access_token, &relative_path)?;
+    read_external_asset_content(&target)
+}
+
+#[cfg(test)]
+fn read_external_note_asset_with_access(
+    absolute_path: &str,
+    relative_asset: &str,
+    access: &ExternalAccessGrants,
+) -> CommandResult<String> {
+    let handle = access.grant_for_existing_file(absolute_path, "test")?;
+    let target = access.resolve_asset(&handle.access_token, relative_asset)?;
+    read_external_asset_content(&target)
+}
+
+fn read_external_asset_content(target: &Path) -> CommandResult<String> {
+    read_external_asset_bytes(target)
+        .map(|bytes| general_purpose::STANDARD.encode(bytes))
+        .map_err(Into::into)
 }
 
 /// Write content to a file (relative to notebook root).
@@ -2447,6 +2547,117 @@ mod tests {
         file.set_len(MAX_EXTERNAL_NOTE_BYTES + 1).unwrap();
 
         let error = read_external_note_content(&target).unwrap_err();
+        assert_eq!(error.code, "file_too_large");
+        assert!(error
+            .diagnostic
+            .as_deref()
+            .is_some_and(|message| message.contains("超过 5 MB")));
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn external_note_asset_reads_sibling_images_within_grant_directory() {
+        let root = temp_notebook("external-asset-sibling");
+        let target = root.join("note.md");
+        std::fs::write(&target, "# Note").unwrap();
+        std::fs::write(root.join("pic.PNG"), [1u8, 2, 3]).unwrap();
+        std::fs::create_dir_all(root.join("assets")).unwrap();
+        std::fs::write(root.join("assets/shot.webp"), [4u8, 5]).unwrap();
+        let access = ExternalAccessGrants::new();
+
+        // 白名单大小写不敏感；grant root 即会话文件所在目录，旁系图片可读。
+        assert_eq!(
+            read_external_note_asset_with_access(
+                target.to_string_lossy().as_ref(),
+                "/pic.PNG",
+                &access
+            )
+            .unwrap(),
+            general_purpose::STANDARD.encode([1u8, 2, 3])
+        );
+        // 会话目录内的子目录图片同样放行（canonical 包含检查兜底逃逸）。
+        assert!(
+            read_external_note_asset_with_access(
+                target.to_string_lossy().as_ref(),
+                "/assets/shot.webp",
+                &access
+            )
+            .is_ok()
+        );
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn external_note_asset_rejects_non_image_extensions_and_missing_files() {
+        let root = temp_notebook("external-asset-reject");
+        let target = root.join("note.md");
+        std::fs::write(&target, "# Note").unwrap();
+        // svg 属于可携带脚本的可执行载体，刻意排除在白名单外。
+        std::fs::write(root.join("vector.svg"), b"<svg/>").unwrap();
+        std::fs::write(root.join("payload.txt"), b"text").unwrap();
+        let access = ExternalAccessGrants::new();
+        let note_path = target.to_string_lossy().to_string();
+
+        assert!(
+            read_external_note_asset_with_access(&note_path, "/vector.svg", &access).is_err()
+        );
+        assert!(read_external_note_asset_with_access(&note_path, "/payload.txt", &access).is_err());
+        // 会话笔记本体是文本文件，不得经图片通道读取。
+        assert!(read_external_note_asset_with_access(&note_path, "/note.md", &access).is_err());
+        assert!(
+            read_external_note_asset_with_access(&note_path, "/missing.png", &access).is_err()
+        );
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn external_note_asset_rejects_traversal_and_unknown_tokens() {
+        let root = temp_notebook("external-asset-escape");
+        let target = root.join("note.md");
+        std::fs::write(&target, "# Note").unwrap();
+        std::fs::write(root.join("pic.png"), [1u8]).unwrap();
+        let access = ExternalAccessGrants::new();
+
+        assert!(
+            read_external_note_asset_with_access(
+                target.to_string_lossy().as_ref(),
+                "/../pic.png",
+                &access
+            )
+            .is_err()
+        );
+        assert!(
+            read_external_note_asset_with_access(
+                target.to_string_lossy().as_ref(),
+                "/../other/pic.png",
+                &access
+            )
+            .is_err()
+        );
+        assert!(access.resolve_asset("missing-token", "/pic.png").is_err());
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn external_note_asset_rejects_files_larger_than_image_limit() {
+        let root = temp_notebook("external-asset-too-large");
+        let target = root.join("note.md");
+        std::fs::write(&target, "# Note").unwrap();
+        let oversized = root.join("huge.png");
+        let file = std::fs::File::create(&oversized).unwrap();
+        file.set_len(MAX_EXTERNAL_ASSET_BYTES + 1).unwrap();
+        let access = ExternalAccessGrants::new();
+
+        let error = read_external_note_asset_with_access(
+            target.to_string_lossy().as_ref(),
+            "/huge.png",
+            &access,
+        )
+        .unwrap_err();
         assert_eq!(error.code, "file_too_large");
         assert!(error
             .diagnostic

@@ -12,6 +12,15 @@ const REMOTE_IMAGE_RESERVED_ATTRS = [
   'data-remote-image-source',
 ] as const;
 
+/**
+ * 在 DOMPurify 3.x 默认 IS_ALLOWED_URI 的基础上仅追加 blob: 协议：应用自身经
+ * URL.createObjectURL 生成的资源对象 URL（文档导入资产图）需要可渲染，与各窗口
+ * CSP img-src 已放行的 blob: 口径一致，也与 data: 图片（DATA_URI_TAGS 默认放行）
+ * 同级——blob 仅限本源、不可执行。javascript:/file:/ftp: 等其余协议仍被拒绝。
+ */
+const ALLOWED_URI_REGEXP =
+  /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|matrix|blob):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i;
+
 const purifyConfig = {
   ALLOWED_TAGS: [
     'h1',
@@ -46,6 +55,10 @@ const purifyConfig = {
     'div',
     'sup',
     'sub',
+    // DOCX 导入把下划线 run 映射为 <u> 内联 HTML（document_import.rs
+    // apply_docx_run_format），与 <sup>/<sub> 同为排版级内联标签，放行使
+    // 下划线在预览端闭合为可见样式（无属性、不可执行）。
+    'u',
     'details',
     'summary',
   ],
@@ -69,6 +82,7 @@ const purifyConfig = {
     'referrerpolicy',
     'align',
   ],
+  ALLOWED_URI_REGEXP,
   ALLOW_DATA_ATTR: true,
   FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form'],
   FORBID_ATTR: [

@@ -171,6 +171,11 @@ fn build_window(app: &tauri::AppHandle, label: &str) -> Result<WebviewWindow, St
     let config = desktop_window_config(label.to_string());
     let builder =
         WebviewWindowBuilder::from_config(app, &config).map_err(|error| error.to_string())?;
+    // 导航守卫（wry on_navigation 深度兜底）：前端已拦截锚点/脚本导航并移交
+    // 系统浏览器，此处只放行应用自身源——生产 Windows/Android 为 http(s)://
+    // tauri.localhost，macOS/iOS 为 tauri://localhost，Linux 生产源与 Vite 开发
+    // 服务器同为 localhost——其余一切导航一律阻断。
+    let builder = builder.on_navigation(allows_webview_navigation);
     // CDP 环境变量重注入（Windows）：提权进程（CI runner 全程高完整性）中
     // WebView2Loader 会丢弃 WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS 环境变量——
     // 实测 runner 上浏览器进程命令行缺失 --remote-debugging-port、UDF 变量却生效，
@@ -187,6 +192,13 @@ fn build_window(app: &tauri::AppHandle, label: &str) -> Result<WebviewWindow, St
         _ => builder,
     };
     builder.build().map_err(|error| error.to_string())
+}
+
+/// WebView 导航白名单判定：仅应用自身源可通过（见 build_window 注释）。
+fn allows_webview_navigation(url: &tauri::Url) -> bool {
+    let host = url.host_str().unwrap_or_default();
+    matches!(url.scheme(), "http" | "https" | "tauri")
+        && matches!(host, "tauri.localhost" | "localhost")
 }
 
 fn focus_window(window: &WebviewWindow) {
@@ -430,6 +442,7 @@ pub fn run() {
             fs_ops::read_file_snapshot,
             fs_ops::read_external_note_file,
             fs_ops::read_external_note_file_snapshot,
+            fs_ops::read_external_note_asset,
             fs_ops::write_file,
             fs_ops::write_file_if_unchanged,
             fs_ops::read_external_markdown_file,
@@ -495,5 +508,39 @@ mod tests {
         let root = std::env::temp_dir();
         let args = vec!["missing.pdf".to_string(), "missing.md".to_string()];
         assert!(capture_opened_files_from_args(&args, &root).is_empty());
+    }
+
+    #[test]
+    fn webview_navigation_guard_allows_only_app_origins() {
+        let allowed = [
+            "http://tauri.localhost/",
+            "https://tauri.localhost/index.html",
+            "tauri://localhost/",
+            // Linux 生产源与 Vite 开发服务器（端口任意）都在 localhost 上。
+            "http://localhost/",
+            "http://localhost:5173/",
+        ];
+        for source in allowed {
+            assert!(
+                allows_webview_navigation(&source.parse().unwrap()),
+                "expected allowed: {source}"
+            );
+        }
+        let blocked = [
+            "https://example.com/",
+            "http://evil.example/note.md",
+            "file:///C:/Windows/win.ini",
+            "data:text/html,<script>",
+            "blob:https://example.com/id",
+            "javascript:alert(1)",
+            "tauri://evil.example/",
+            "http://tauri.localhost.evil.com/",
+        ];
+        for source in blocked {
+            assert!(
+                !allows_webview_navigation(&source.parse().unwrap()),
+                "expected blocked: {source}"
+            );
+        }
     }
 }
