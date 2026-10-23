@@ -88,6 +88,22 @@ describe('@jotluck/renderer markdown boundaries', () => {
     expect(html).not.toContain('javascript:');
   });
 
+  it('renders app-created blob object URLs while still stripping script protocols', () => {
+    // 文档导入资产经 URL.createObjectURL 换装为 blob:；CSP img-src 已放行 blob:，
+    // 清洗器须与之一致。可执行协议在同一通道内仍被拒绝（不弱化既有契约）。
+    const blob = renderMarkdown('![asset](blob:asset-1)', {
+      resolveImageSrc: (source) => (source.startsWith('blob:') ? source : null),
+    });
+    expect(blob).toContain('src="blob:asset-1"');
+
+    const malicious = renderMarkdown('![evil](blob:asset-1)', {
+      resolveImageSrc: () => 'javascript:alert(1)',
+    });
+    expect(malicious).toContain('alt="evil"');
+    expect(malicious).not.toContain('javascript:');
+    expect(malicious).not.toContain('src=');
+  });
+
   it('does not leak a rejected local image path into rendered HTML', () => {
     const html = renderMarkdown('![blocked](../../outside.png)', {
       resolveImageSrc: () => null,
@@ -156,5 +172,16 @@ describe('@jotluck/renderer markdown boundaries', () => {
     expect(html).not.toContain('<button');
     expect(html).not.toMatch(/data-remote-image-(?:action|control|source|scope)/);
     expect(html).toContain('forged link');
+  });
+
+  it('keeps DOCX underline inline HTML through the sanitizer like sup and sub', () => {
+    // DOCX 转换把下划线 run 映射为 <u> 内联 HTML（document_import.rs
+    // apply_docx_run_format），<sup>/<sub> 同链路；清洗器须放行三者，
+    // 否则导入文档的下划线在预览端静默丢失。
+    const html = renderMarkdown('<u>下划线</u>与<sup>上标</sup>同<sub>下标</sub>口径');
+
+    expect(html).toContain('<u>下划线</u>');
+    expect(html).toContain('<sup>上标</sup>');
+    expect(html).toContain('<sub>下标</sub>');
   });
 });

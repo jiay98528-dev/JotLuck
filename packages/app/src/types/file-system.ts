@@ -80,6 +80,12 @@ export interface IFileSystemService {
   writeBinary(path: string, base64: string): Promise<void>;
   /** Read binary file (returns base64 encoded string) */
   readBinary(path: string): Promise<string>;
+  /**
+   * Read one image asset beside an external session file (base64 payload).
+   * `relativePath` resolves inside the granted directory of `accessToken`
+   * (read_external_note_asset)；桌面走 IPC，Web/E2E 走 mock 字典。
+   */
+  readExternalAsset(accessToken: string, relativePath: string): Promise<string>;
   /** Check if path corresponds to a known binary file type */
   isBinaryPath(path: string): boolean;
   deleteFile(path: string): Promise<void>;

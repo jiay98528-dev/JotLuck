@@ -3,6 +3,7 @@ export const messages = {
     referenceLine: '第 {line} 行',
     showMore: '显示更多',
     referenceMoved: '引用位置已变化，已打开来源笔记。',
+    headingNotFound: '未找到对应标题，无法跳转。',
   },
   common: {
     appName: 'JotLuck',
@@ -948,6 +949,8 @@ export const messages = {
     progressValue: '{phase}：{completed}/{total} {unit}',
     progressAriaComplete: '文档转换完成',
     waitingForContent: '正在等待第一段可预览内容…',
+    assetLoading: '资源读取中…',
+    assetFailed: '资源读取失败',
     complete: '转换完成，可以选择编辑方式。',
     sourceUntouched: '预览未创建用户文件，也未修改原件。',
     cancelled: '转换已取消。已生成的临时内容会被清理。',
@@ -1002,6 +1005,8 @@ export const messages = {
       'docx-revisions-flattened': '修订记录已按可见文字扁平化。',
       'docx-layout-flattened': '文本框或合并单元格已扁平化，Markdown 无法等价表达其版式。',
       'docx-unsupported-image': 'EMF/WMF 图片仅保留占位；JotLuck 不引入额外图像转换引擎。',
+      'docx-unsupported-link':
+        '协议不在支持范围（{context}）的超链接已降级为纯文本，预览中不可点击。',
       'source-watch-unavailable': '无法持续监听原文件；窗口重新获得焦点及另存前仍会复核哈希。',
       'pdf-images-not-imported': 'PDF 只提取可选择文字，不包含图片或 OCR。',
       'spreadsheet-hidden-sheet': '隐藏工作表“{context}”已保留并标注。',
@@ -1063,6 +1068,7 @@ export const messages = {
       cancel: '取消',
     },
     ioError: '操作失败：{message}',
+    linkRestricted: '改稿模式下不能跳转链接；请退出改稿后再使用。',
     panel: {
       title: '批注',
       empty: '暂无批注，右侧的修改会自动列出',

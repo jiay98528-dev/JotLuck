@@ -5,6 +5,7 @@ export const messages = {
     referenceLine: '{line}행',
     showMore: '더 보기',
     referenceMoved: '참조 위치가 변경되었습니다. 원본 노트를 열었습니다.',
+    headingNotFound: '제목을 찾을 수 없어 이동할 수 없습니다.',
   },
   common: {
     appName: 'JotLuck',
@@ -739,6 +740,8 @@ export const messages = {
     progressValue: '{phase}: {completed}/{total} {unit}',
     progressAriaComplete: '문서 변환 완료',
     waitingForContent: '첫 번째 안정적인 미리 보기 내용을 기다리는 중…',
+    assetLoading: '리소스 로드 중…',
+    assetFailed: '리소스를 로드하지 못했습니다',
     complete: '변환이 완료되었습니다. 편집 방법을 선택할 수 있습니다.',
     sourceUntouched: '미리 보기는 사용자 파일을 만들거나 원본을 수정하지 않았습니다.',
     cancelled: '변환을 취소했습니다. 임시 데이터는 정리됩니다.',
@@ -798,6 +801,8 @@ export const messages = {
         '텍스트 상자와 병합 셀은 Markdown에 같은 레이아웃이 없어 단순화했습니다.',
       'docx-unsupported-image':
         'EMF/WMF 이미지는 자리 표시자로 유지합니다. 추가 이미지 변환 엔진은 사용하지 않습니다.',
+      'docx-unsupported-link':
+        '지원되지 않는 스킴({context})을 사용하는 하이퍼링크는 일반 텍스트로 변환되어 미리보기에서 클릭할 수 없습니다.',
       'source-watch-unavailable':
         '원본을 계속 감시할 수 없습니다. 포커스 복귀와 저장 전에 해시를 다시 확인합니다.',
       'pdf-images-not-imported':
@@ -1098,6 +1103,7 @@ export const messages = {
       cancel: '취소',
     },
     ioError: '작업 실패: {message}',
+    linkRestricted: '교정 모드에서는 링크 이동을 사용할 수 없습니다. 교정을 종료한 후 사용하세요.',
     panel: {
       title: '주석',
       empty: '주석이 없습니다. 오른쪽의 수정이 자동으로 표시됩니다',

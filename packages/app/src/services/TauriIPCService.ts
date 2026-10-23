@@ -233,6 +233,10 @@ export class TauriIPCService implements IFileSystemService {
     return invokeCommand<string>('read_binary_file', { relativePath: path });
   }
 
+  async readExternalAsset(accessToken: string, relativePath: string): Promise<string> {
+    return invokeCommand<string>('read_external_note_asset', { accessToken, relativePath });
+  }
+
   isBinaryPath(path: string): boolean {
     const ext = path.split('.').pop()?.toLowerCase();
     return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'pdf', 'docx', 'xlsx'].includes(

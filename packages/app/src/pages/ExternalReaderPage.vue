@@ -320,6 +320,7 @@ import type {
 } from '@/types';
 import type { RightWingRegion } from '@/types/theme-pack';
 import { openExternalUrl } from '@/utils/urlUtils';
+import { findHeadingElement as findHeadingAnchor } from '@/utils/heading-anchor';
 import { useI18n } from 'vue-i18n';
 import { normalizeCommandError } from '@/services/command-errors';
 import {
@@ -354,7 +355,8 @@ type ReaderNoticeKey =
   | 'externalReader.wikiNavigation'
   | 'externalReader.tagFilter'
   | 'externalReader.relativeNavigation'
-  | 'externalReader.backlinkNavigation';
+  | 'externalReader.backlinkNavigation'
+  | 'navigation.headingNotFound';
 interface ReaderNoticeSpec {
   key: ReaderNoticeKey;
   args?: Record<string, string>;
@@ -363,6 +365,8 @@ const readerNoticeSpec = ref<ReaderNoticeSpec | null>(null);
 const readerNotice = computed(() => {
   const spec = readerNoticeSpec.value;
   if (!spec) return '';
+  // 标题未找到是站内事实反馈，不套「需要笔记本上下文」能力包装文案
+  if (spec.key === 'navigation.headingNotFound') return t(spec.key);
   // i18n-dynamic-key: ReaderNoticeKey is a closed union of catalog keys.
   return t('externalReader.capability', { subject: t(spec.key, spec.args ?? {}) });
 });
@@ -388,8 +392,46 @@ const editDialogOpen = ref(false);
 const editDialogStep = ref<'choices' | 'confirm-save'>('choices');
 const editDialogRef = ref<HTMLElement | null>(null);
 const assetUrls = new Map<string, string>();
+/** 读取失败的资产 id：渲染时改为「资源读取失败」占位，而不是落到远程图片策略。 */
+const failedAssets = new Set<string>();
 const pendingAssets: Array<Extract<DocumentConversionEvent, { type: 'asset' }>> = [];
 let renderRevision = 0;
+
+/** 转换产物引用的完整图片语法（worker 生成形态：内联图 + 可选标题段）。 */
+const ASSET_IMAGE_PATTERN = /!\[([^\]]*)\]\(jotluck-asset:\/\/([^\s)]+)(?:\s+"[^"]*")?\)/g;
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * 资产字节转 data: URL（分块拼接避免 String.fromCharCode 栈溢出）。
+ * 刻意不用 blob: object URL——渲染管线的 DOMPurify 默认 URI 规则会剥除
+ * blob: src（仅 data: 有 img 白名单分支），object URL 从未真正显示过。
+ */
+function assetDataUrl(bytes: number[], mediaType: string): string {
+  const binary = Uint8Array.from(bytes);
+  let binaryString = '';
+  const CHUNK_SIZE = 0x8000;
+  for (let offset = 0; offset < binary.length; offset += CHUNK_SIZE) {
+    binaryString += String.fromCharCode(...binary.subarray(offset, offset + CHUNK_SIZE));
+  }
+  return `data:${mediaType};base64,${btoa(binaryString)}`;
+}
+
+/** 未就绪资产的中性 loading 占位；失败资产换成本地化「资源读取失败」占位。 */
+function assetPlaceholderHtml(alt: string, failed: boolean): string {
+  const stateLabel = failed ? t('documentImport.assetFailed') : t('documentImport.assetLoading');
+  const stateClass = failed ? 'failed' : 'loading';
+  const title = escapeHtml(alt);
+  const label = escapeHtml(stateLabel);
+  return `<span class="document-import__asset-placeholder document-import__asset-placeholder--${stateClass}" role="img" aria-label="${label}">${title ? `${title} · ` : ''}${label}</span>`;
+}
+
 let rendererModule: typeof import('@jotluck/renderer') | null = null;
 const markdownElement = ref<HTMLElement | null>(null);
 const documentScroller = ref<HTMLElement | null>(null);
@@ -573,6 +615,7 @@ async function startDocumentConversion(): Promise<void> {
   conversionGeneration.value += 1;
   const generation = conversionGeneration.value;
   clearAssetUrls();
+  failedAssets.clear();
   pendingAssets.splice(0);
   conversionId.value = '';
   expectedChunkSequence.value = 1;
@@ -673,20 +716,21 @@ async function loadConversionAsset(
   try {
     const payload = await readDocumentConversionAsset(conversionId.value, event.assetId);
     if (generation !== conversionGeneration.value) return;
-    const previous = assetUrls.get(event.assetId);
-    if (previous) URL.revokeObjectURL(previous);
-    assetUrls.set(
-      event.assetId,
-      URL.createObjectURL(new Blob([new Uint8Array(payload.bytes)], { type: payload.mediaType })),
-    );
+    failedAssets.delete(event.assetId);
+    assetUrls.set(event.assetId, assetDataUrl(payload.bytes, payload.mediaType));
     await renderCurrentMarkdown();
   } catch (error) {
+    // 世代守卫：失败属于已被弃用的转换（重转/取消竞态）时，不得污染当前预览。
+    if (generation !== conversionGeneration.value) return;
+    failedAssets.add(event.assetId);
     warnings.value.push({
       type: 'warning',
       code: 'asset-read-failed',
       message: userErrorMessage(error),
       context: event.fileName,
     });
+    // 立即重渲染，把该引用从 loading 占位切换为「资源读取失败」占位。
+    await renderCurrentMarkdown();
   }
 }
 
@@ -698,6 +742,12 @@ async function renderCurrentMarkdown(): Promise<void> {
   for (const [assetId, url] of assetUrls) {
     previewMarkdown = previewMarkdown.replaceAll(`jotluck-asset://${assetId}`, url);
   }
+  // 仍以 jotluck-asset:// 引用的资源尚未就绪或已失败：换成中性占位，
+  // 避免未知 scheme 落进远程图片策略被渲染成「远程图片已阻止」。
+  previewMarkdown = previewMarkdown.replace(
+    ASSET_IMAGE_PATTERN,
+    (_match, alt: string, assetId: string) => assetPlaceholderHtml(alt, failedAssets.has(assetId)),
+  );
   const rendered = rendererModule.renderMarkdown(previewMarkdown, {
     remoteImages: remoteImagePolicy.value,
   });
@@ -823,19 +873,18 @@ async function refreshSourceOnFocus(): Promise<void> {
 }
 
 function clearAssetUrls(): void {
-  for (const url of assetUrls.values()) URL.revokeObjectURL(url);
+  // data: URL 无 object URL 生命周期，直接丢弃即可。
   assetUrls.clear();
 }
 
-function findHeadingElement(id: string): HTMLElement | undefined {
-  return [...(markdownElement.value?.querySelectorAll<HTMLElement>('[id]') ?? [])].find(
-    (element) => element.id === id,
-  );
-}
-
 function scrollHeading(id: string): void {
-  const target = findHeadingElement(id);
-  if (!target) return;
+  // 三形态归一查找（原文/heading-原文/headingIdFromText 形态），root 为阅读区
+  const target = markdownElement.value ? findHeadingAnchor(markdownElement.value, id) : undefined;
+  if (!target) {
+    // miss 不再纯静默：站内轻反馈（onMarkdownClick 已先行 preventDefault）
+    showNotebookCapabilityNotice('navigation.headingNotFound');
+    return;
+  }
   activeHeadingId.value = id;
   target.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -1203,6 +1252,26 @@ onBeforeUnmount(() => {
   color: var(--ink-secondary);
   font-size: var(--text-sm);
   line-height: var(--lh-ui);
+}
+
+.document-import__asset-placeholder {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  max-width: 100%;
+  padding: var(--space-4) var(--space-12);
+  border: var(--border-thin) dashed var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-surface);
+  color: var(--ink-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--lh-ui);
+}
+
+.document-import__asset-placeholder--failed {
+  border-color: color-mix(in oklch, var(--signal-error) 48%, var(--rule));
+  background: var(--signal-error-soft);
+  color: var(--signal-error);
 }
 
 .document-import__warnings summary {

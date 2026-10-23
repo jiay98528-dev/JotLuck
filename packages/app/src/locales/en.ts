@@ -5,6 +5,7 @@ export const messages = {
     referenceLine: 'Line {line}',
     showMore: 'Show more',
     referenceMoved: 'The reference moved. The source note is open.',
+    headingNotFound: 'Heading not found; cannot jump to it.',
   },
   common: {
     appName: 'JotLuck',
@@ -753,6 +754,8 @@ export const messages = {
     progressValue: '{phase}: {completed}/{total} {unit}',
     progressAriaComplete: 'Document conversion complete',
     waitingForContent: 'Waiting for the first stable preview block…',
+    assetLoading: 'Loading asset…',
+    assetFailed: 'Asset failed to load',
     complete: 'Conversion is complete. Choose how to edit.',
     sourceUntouched: 'Preview created no user file and did not modify the source.',
     cancelled: 'Conversion was cancelled. Temporary output will be cleaned up.',
@@ -812,6 +815,8 @@ export const messages = {
         'Text boxes or merged cells were flattened because Markdown has no equivalent layout.',
       'docx-unsupported-image':
         'EMF/WMF images remain placeholders; JotLuck does not add another image conversion engine.',
+      'docx-unsupported-link':
+        'Hyperlinks with unsupported schemes ({context}) were flattened to plain text and cannot be clicked in the preview.',
       'source-watch-unavailable':
         'Continuous source watching is unavailable; the hash is still checked on focus and before saving.',
       'pdf-images-not-imported':
@@ -1118,6 +1123,7 @@ export const messages = {
       cancel: 'Cancel',
     },
     ioError: 'Operation failed: {message}',
+    linkRestricted: 'Link navigation is unavailable in review mode; exit review to use it.',
     panel: {
       title: 'Annotations',
       empty: 'No annotations yet; edits on the right will be listed here',

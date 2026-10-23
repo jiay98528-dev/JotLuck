@@ -177,3 +177,16 @@ describe('TauriIPCService conditional text writes', () => {
     ]);
   });
 });
+
+describe('TauriIPCService external assets', () => {
+  it('reads external session assets through the tokened IPC channel', async () => {
+    const service = new TauriIPCService();
+    invokeMock.mockResolvedValueOnce('cGl4ZWw=');
+
+    await expect(service.readExternalAsset('token-a', '/pic.png')).resolves.toBe('cGl4ZWw=');
+    expect(invokeMock.mock.calls.at(-1)).toEqual([
+      'read_external_note_asset',
+      { accessToken: 'token-a', relativePath: '/pic.png' },
+    ]);
+  });
+});

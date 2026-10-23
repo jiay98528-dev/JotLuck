@@ -60,11 +60,15 @@
           :review-marks="leftMarks"
         />
         <!-- 左栏渲染态：改动块「源码显形」（红马克笔原文），其余正常渲染 -->
+        <!-- load/error 不冒泡：捕获态监听转发远程图会话句柄（同主编辑器静态预览） -->
         <!-- eslint-disable-next-line vue/no-v-html -->
         <div
           v-else
           ref="leftRenderRef"
           class="markdown-body review-left-render"
+          @click="onLeftPaneClick"
+          @load.capture="onLivePreviewRemoteImageLoad?.($event)"
+          @error.capture="onLivePreviewRemoteImageError?.($event)"
           v-html="leftRenderedHtml"
         />
       </section>
@@ -75,6 +79,7 @@
       />
       <section class="split-right" :style="{ flex: `0 0 ${100 - splitRatio}%` }">
         <!-- 右栏工作稿：渲染态走即时渲染 + 内嵌批注钩子；源码态显示源码 + 绿马克笔 -->
+        <!-- 渲染 props（W2 下沉）与主编辑器同源：wiki 跳转/死链判定、本地图解析、远程图策略与占位交互 -->
         <MarkdownEditor
           ref="rightEditorRef"
           :key="`review-right-${mode}`"
@@ -87,8 +92,16 @@
           :predictor="predictor"
           :completion-settings="completionSettings"
           :enable-autocomplete="true"
+          :on-live-preview-wiki-link-click="onLivePreviewWikiLinkClick"
           :wiki-link-exists="wikiLinkExists"
+          :wiki-link-revision="wikiLinkRevision"
           :resolve-image-src="resolveImageSrc"
+          :image-revision="imageRevision"
+          :remote-images="remoteImages"
+          :remote-image-revision="remoteImageRevision"
+          :on-live-preview-remote-image-click="onLivePreviewRemoteImageClick"
+          :on-live-preview-remote-image-load="onLivePreviewRemoteImageLoad"
+          :on-live-preview-remote-image-error="onLivePreviewRemoteImageError"
           @update:model-value="onWorkingUpdate"
         />
       </section>
@@ -185,6 +198,11 @@
  * 失败/tableRow 退化为整块绿底 tint（applyBlockTint）；聚焦改动块显示源码，
  * 由 reviewMarks 绿标覆盖。注解器为 setup 期一次创建的稳定函数 + signature，
  * 批注数据轮换走 refreshRenderedAnnotations（换数据不换扩展，IME 友好）。
+ *
+ * 渲染 props 下沉（W2）：宿主（NotebookHome）传入与主编辑器同源的全套渲染
+ * props——本地图解析（修改稿模式本地图全 404）、wiki 死链判定与跳转回调、
+ * 远程图策略（本地化 labels）与占位交互三件套；右栏 MarkdownEditor 全量
+ * 透传，左栏 v-html 经 renderLeftPane options + 点击委托同口径消费。
  */
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -205,7 +223,10 @@ import {
   mapLeftPositionToWorking,
   rightMarksFromHunks,
 } from '@/services/review-session-store';
+import { useToast } from '@/components/common/Toast.vue';
 import { annotateBlockBySourceRanges, applyBlockTint } from '@/utils/review-dom-annotator';
+import { openExternalUrl } from '@/utils/urlUtils';
+import { classifyAnchorHref } from '@/utils/preview-links';
 import type {
   RenderedBlockAnnotator,
   RenderedBlockAnnotationPayload,
@@ -222,8 +243,18 @@ const props = defineProps<{
   /** 编辑器透传（幽灵补全照常） */
   predictor?: MarkdownPredictor;
   completionSettings?: CompletionSettings;
+  /** 渲染 props（W2 下沉，与主编辑器同源）：wiki 跳转回调（普通会话 resolveWikiLink
+   *  跳转 / 外部会话受限提示由宿主统一裁决；缺省时左栏点击回退受限提示） */
+  onLivePreviewWikiLinkClick?: (note: string, anchor: null | string) => void;
   wikiLinkExists?: (note: string) => boolean;
+  wikiLinkRevision?: number;
   resolveImageSrc?: RendererOptions['resolveImageSrc'];
+  imageRevision?: number;
+  remoteImages?: RendererOptions['remoteImages'];
+  remoteImageRevision?: number;
+  onLivePreviewRemoteImageClick?: (event: MouseEvent) => boolean;
+  onLivePreviewRemoteImageLoad?: (event: Event) => boolean;
+  onLivePreviewRemoteImageError?: (event: Event) => boolean;
 }>();
 
 const emit = defineEmits<{
@@ -302,17 +333,21 @@ function renderSourceRevealBlock(
   return `<div class="review-block-del" data-hunk-id="${escapeHtml(ids)}"><pre class="review-source-reveal">${html}</pre></div>`;
 }
 
-function renderLeftPane(source: string, allHunks: readonly ReviewHunk[]): string {
+function renderLeftPane(
+  source: string,
+  allHunks: readonly ReviewHunk[],
+  options?: RendererOptions,
+): string {
   const dels = allHunks.filter(
     (hunk): hunk is ReviewHunk & { leftRange: { from: number; to: number } } =>
       hunk.type !== 'insert' && hunk.leftRange !== undefined,
   );
-  if (dels.length === 0) return renderMarkdown(source);
+  if (dels.length === 0) return renderMarkdown(source, options);
   let ast;
   try {
     ast = parseDocument(source);
   } catch {
-    return renderMarkdown(source); // AST 异常：整体渲染降级（丢失红笔，不阻断阅读）
+    return renderMarkdown(source, options); // AST 异常：整体渲染降级（丢失红笔，不阻断阅读）
   }
   const parts: string[] = [];
   for (const node of ast.blocks) {
@@ -320,12 +355,70 @@ function renderLeftPane(source: string, allHunks: readonly ReviewHunk[]): string
     const { from, to } = node.range;
     const hit = dels.filter((hunk) => hunk.leftRange.from < to && hunk.leftRange.to > from);
     const text = source.slice(from, to);
-    parts.push(hit.length > 0 ? renderSourceRevealBlock(text, from, hit) : renderMarkdown(text));
+    parts.push(
+      hit.length > 0 ? renderSourceRevealBlock(text, from, hit) : renderMarkdown(text, options),
+    );
   }
   return parts.join('\n');
 }
 
-const leftRenderedHtml = computed(() => renderLeftPane(sourceText.value, hunks.value));
+/** 左栏渲染 options（W2 下沉）：与右栏/主编辑器同源。resolve 函数身份稳定，
+ *  显式读三个 revision prop 建立响应依赖——wiki 索引/本地图/远程图授权轮换时
+ *  左栏 v-html 随之重渲染（同 MarkdownEditor 的 revision watch 口径）。 */
+const leftRenderOptions = computed<RendererOptions>(() => {
+  void props.wikiLinkRevision;
+  void props.imageRevision;
+  void props.remoteImageRevision;
+  return {
+    wikiLinkExists: props.wikiLinkExists,
+    resolveImageSrc: props.resolveImageSrc,
+    remoteImages: props.remoteImages,
+  };
+});
+
+const leftRenderedHtml = computed(() =>
+  renderLeftPane(sourceText.value, hunks.value, leftRenderOptions.value),
+);
+
+// ── 左栏 v-html 点击委托：杜绝改稿窗口被锚点整页接管 ──
+
+const toast = useToast();
+
+/**
+ * 左栏渲染态是 v-html 注入（无 Vue 事件绑定），点击走委托统一收口：
+ * 远程图占位「载入/重试」按钮 → 会话句柄裁决（同主编辑器 onPreviewClick 首行）；
+ * wiki 链接 → 跳转透传（W2 接入宿主回调，普通会话 resolveWikiLink 跳转 /
+ * 外部会话受限提示由宿主统一裁决），缺省时回退受限提示；tag → 受限提示；
+ * 绝对外链/裸域名 → preventDefault 后移交系统浏览器；其余相对路径 → 仅
+ * preventDefault 不动作。不存在「未 preventDefault 即放行」的路径。
+ */
+function onLeftPaneClick(event: MouseEvent): void {
+  if (props.onLivePreviewRemoteImageClick?.(event)) return;
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const anchor = target.closest('a');
+  if (!anchor) return;
+  if (anchor.hasAttribute('data-note')) {
+    event.preventDefault();
+    const note = anchor.getAttribute('data-note');
+    if (note && props.onLivePreviewWikiLinkClick) {
+      props.onLivePreviewWikiLinkClick(note, anchor.getAttribute('data-anchor'));
+      return;
+    }
+    toast.show(t('review.linkRestricted'), 'info', 3500);
+    return;
+  }
+  if (anchor.hasAttribute('data-tag')) {
+    event.preventDefault();
+    toast.show(t('review.linkRestricted'), 'info', 3500);
+    return;
+  }
+  const href = anchor.getAttribute('href');
+  if (!href) return;
+  event.preventDefault();
+  const hrefKind = classifyAnchorHref(href);
+  if (hrefKind !== 'relative') void openExternalUrl(href);
+}
 
 // ── 右栏渲染态钩子：未聚焦改动块的内嵌批注（投影梯） ──
 

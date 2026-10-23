@@ -54,6 +54,19 @@ describe('MockFSService sample notebook', () => {
     });
   });
 
+  it('serves external session image assets from the seeded dictionary', async () => {
+    const fs = new MockFSService(0, {
+      externalAssets: { '/pic.png': 'cGl4ZWw=', '/sub/shot.webp': 'c2hvdA==' },
+    });
+
+    await expect(fs.readExternalAsset('token', '/pic.png')).resolves.toBe('cGl4ZWw=');
+    await expect(fs.readExternalAsset('token', '/sub/shot.webp')).resolves.toBe('c2hvdA==');
+    // 字典未命中按 not_found 失败，对齐桌面端授权目录外的行为。
+    await expect(fs.readExternalAsset('token', '/missing.png')).rejects.toMatchObject({
+      payload: { code: 'not_found' },
+    });
+  });
+
   it('lists only directories and supported editable note files', async () => {
     const fs = new MockFSService(0);
 

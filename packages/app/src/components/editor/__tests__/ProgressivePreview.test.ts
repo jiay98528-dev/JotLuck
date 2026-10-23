@@ -184,5 +184,7 @@ describe('virtual reading correctness', () => {
     expect(dom.textContent).toContain('PRINT-END');
     expect(dom.querySelectorAll('p')).toHaveLength(8001);
     expect(dom.querySelectorAll('h1')).toHaveLength(2);
-  }, 60000);
+    // CPU 大户（8000 段全量渲染）：同上「长段落」用例口径——并行池负载下
+    // 单片让出远超预算，放宽等待窗口（断言不变）避免假性超时。
+  }, 120000);
 });

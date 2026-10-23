@@ -332,6 +332,167 @@ describe('ExternalReaderPage', () => {
     wrapper.unmount();
   });
 
+  it('renders pending assets as neutral placeholders and swaps in loaded data urls', async () => {
+    invoke.mockImplementation(async (command: string) => {
+      if (command === 'get_window_bootstrap') {
+        return {
+          mode: 'document-import-readonly',
+          source: {
+            fileName: '图文.docx',
+            kind: 'docx',
+            revision: { sha256: 'before', size: 128, modifiedAtMs: 1 },
+          },
+        };
+      }
+      if (command === 'start_document_conversion') return 'conversion-3';
+      if (command === 'cancel_document_conversion') return undefined;
+      if (command === 'get_document_editor_candidate') {
+        return {
+          handlerId: 'word-handler',
+          displayName: 'Microsoft Word',
+          available: true,
+          fallbackToOpenWith: false,
+        };
+      }
+      if (command === 'read_document_conversion_asset') {
+        return { bytes: [1, 2, 3], mediaType: 'image/png', fileName: 'image1.png' };
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const wrapper = mountReader();
+    await vi.waitFor(() => expect(channels).toHaveLength(1));
+    const send = channels[0]!.onmessage!;
+    send({ type: 'chunk', sequence: 1, markdown: '# 图文\n\n![封面](jotluck-asset://asset-1)\n' });
+
+    // 未就绪资产：中性 loading 占位，不得落进远程图片策略显示「已阻止」。
+    await vi.waitFor(() =>
+      expect(wrapper.find('.document-import__asset-placeholder').exists()).toBe(true),
+    );
+    const pendingPlaceholder = wrapper.get('.document-import__asset-placeholder');
+    expect(pendingPlaceholder.classes()).toContain('document-import__asset-placeholder--loading');
+    expect(pendingPlaceholder.text()).toContain('资源读取中…');
+    expect(wrapper.text()).not.toContain('远程图片已阻止');
+
+    send({
+      type: 'asset',
+      assetId: 'asset-1',
+      fileName: 'image1.png',
+      mediaType: 'image/png',
+      bytes: 3,
+    });
+    // 就绪资产必须真的渲染出来：data: URL 才能穿过渲染管线的 DOMPurify
+    // （其默认 URI 规则剥除 blob: src，object URL 从未真正存活）。
+    await vi.waitFor(() =>
+      expect(wrapper.find('article img[src="data:image/png;base64,AQID"]').exists()).toBe(true),
+    );
+    expect(wrapper.find('.document-import__asset-placeholder').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('renders failed asset reads as a localized failure placeholder', async () => {
+    invoke.mockImplementation(async (command: string) => {
+      if (command === 'get_window_bootstrap') {
+        return {
+          mode: 'document-import-readonly',
+          source: {
+            fileName: '坏图.docx',
+            kind: 'docx',
+            revision: { sha256: 'before', size: 128, modifiedAtMs: 1 },
+          },
+        };
+      }
+      if (command === 'start_document_conversion') return 'conversion-4';
+      if (command === 'cancel_document_conversion') return undefined;
+      if (command === 'get_document_editor_candidate') {
+        return {
+          handlerId: 'word-handler',
+          displayName: 'Microsoft Word',
+          available: true,
+          fallbackToOpenWith: false,
+        };
+      }
+      if (command === 'read_document_conversion_asset') {
+        throw new Error('asset gone');
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const wrapper = mountReader();
+    await vi.waitFor(() => expect(channels).toHaveLength(1));
+    const send = channels[0]!.onmessage!;
+    send({ type: 'chunk', sequence: 1, markdown: '![坏图](jotluck-asset://asset-9)\n' });
+    await flushPromises();
+
+    send({
+      type: 'asset',
+      assetId: 'asset-9',
+      fileName: 'broken.png',
+      mediaType: 'image/png',
+      bytes: 4,
+    });
+    await vi.waitFor(() =>
+      expect(wrapper.get('.document-import__asset-placeholder').classes()).toContain(
+        'document-import__asset-placeholder--failed',
+      ),
+    );
+    expect(wrapper.get('.document-import__asset-placeholder').text()).toContain('资源读取失败');
+    expect(wrapper.text()).not.toContain('远程图片已阻止');
+    // 失败同时进入格式降级说明列表。
+    expect(wrapper.text()).toContain('无法读取转换资源');
+    wrapper.unmount();
+  });
+
+  it('ignores asset read failures from a superseded conversion generation', async () => {
+    let rejectAsset: ((reason: Error) => void) | undefined;
+    invoke.mockImplementation(async (command: string) => {
+      if (command === 'get_window_bootstrap') {
+        return {
+          mode: 'document-import-readonly',
+          source: {
+            fileName: '竞态.docx',
+            kind: 'docx',
+            revision: { sha256: 'before', size: 128, modifiedAtMs: 1 },
+          },
+        };
+      }
+      if (command === 'start_document_conversion') return 'conversion-5';
+      if (command === 'read_document_conversion_asset') {
+        return new Promise((_resolve, reject) => {
+          rejectAsset = reject;
+        });
+      }
+      if (command === 'cancel_document_conversion') return undefined;
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const wrapper = mountReader();
+    await vi.waitFor(() => expect(channels).toHaveLength(1));
+    const send = channels[0]!.onmessage!;
+    send({ type: 'chunk', sequence: 1, markdown: '![竞态](jotluck-asset://asset-7)\n' });
+    await flushPromises();
+    send({
+      type: 'asset',
+      assetId: 'asset-7',
+      fileName: 'race.png',
+      mediaType: 'image/png',
+      bytes: 4,
+    });
+    await flushPromises();
+
+    // 读取未决时用户取消：世代翻页后到达的失败不得污染当前预览与警告列表。
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '取消')!
+      .trigger('click');
+    rejectAsset?.(new Error('late failure'));
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain('资源读取失败');
+    expect(wrapper.text()).not.toContain('无法读取转换资源');
+    wrapper.unmount();
+  });
+
   it('marks a completed conversion stale on focus and blocks both edit paths', async () => {
     invoke.mockImplementation(async (command: string) => {
       if (command === 'get_window_bootstrap') {

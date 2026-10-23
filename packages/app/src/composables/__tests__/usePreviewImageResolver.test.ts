@@ -12,8 +12,11 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function mockFileSystem(readBinary: IFileSystemService['readBinary']): IFileSystemService {
-  return { readBinary } as IFileSystemService;
+function mockFileSystem(
+  readBinary: IFileSystemService['readBinary'],
+  readExternalAsset?: IFileSystemService['readExternalAsset'],
+): IFileSystemService {
+  return { readBinary, readExternalAsset } as IFileSystemService;
 }
 
 describe('resolvePreviewImagePath', () => {
@@ -45,6 +48,25 @@ describe('resolvePreviewImagePath', () => {
     ]) {
       expect(resolvePreviewImagePath('/notes/day/note.md', source)).toBeNull();
     }
+  });
+
+  it('resolves Windows absolute note paths against the real parent directory', () => {
+    // 带盘符路径取真实父目录，不得拼出 “/D:/docs/...” 畸形前缀。
+    expect(resolvePreviewImagePath('D:/docs/note.md', './assets/pixel.png')).toEqual({
+      path: 'D:/docs/assets/pixel.png',
+      mime: 'image/png',
+    });
+    expect(resolvePreviewImagePath('D:\\docs\\sub\\note.md', '../photo.JPG')).toEqual({
+      path: 'D:/docs/photo.JPG',
+      mime: 'image/jpeg',
+    });
+    // 根引用落到盘根而非笔记本根标记。
+    expect(resolvePreviewImagePath('D:/docs/note.md', '/root.webp')).toEqual({
+      path: 'D:/root.webp',
+      mime: 'image/webp',
+    });
+    // 越过盘根的 traversal 仍然拒绝。
+    expect(resolvePreviewImagePath('D:/docs/note.md', '../../escape.png')).toBeNull();
   });
 });
 
@@ -147,5 +169,55 @@ describe('usePreviewImageResolver', () => {
 
     expect(readBinary).toHaveBeenCalledTimes(2);
     expect(resolver.resolveImageSrc('./assets/new.png')).toBe('data:image/png;base64,cGl4ZWw=');
+  });
+
+  it('routes external session images through the authorized asset command', async () => {
+    const readBinary = vi.fn();
+    const readExternalAsset = vi.fn().mockResolvedValue('aGVsbG8=');
+    const resolver = usePreviewImageResolver(mockFileSystem(readBinary, readExternalAsset));
+    resolver.setNotePath('/note.md', 'D:/docs', { accessToken: 'token-a' });
+
+    expect(resolver.resolveImageSrc('./assets/pixel.png')).toBeNull();
+    expect(readExternalAsset).toHaveBeenCalledWith('token-a', '/assets/pixel.png');
+    expect(readBinary).not.toHaveBeenCalled();
+    await vi.waitFor(() =>
+      expect(resolver.resolveImageSrc('./assets/pixel.png')).toBe('data:image/png;base64,aGVsbG8='),
+    );
+    expect(readExternalAsset).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidates the external image cache when the session token changes', async () => {
+    const readExternalAsset = vi
+      .fn()
+      .mockResolvedValueOnce('Zmlyc3Q=')
+      .mockResolvedValueOnce('c2Vjb25k');
+    const resolver = usePreviewImageResolver(mockFileSystem(vi.fn(), readExternalAsset));
+    resolver.setNotePath('/note.md', 'scope-a', { accessToken: 'token-a' });
+
+    resolver.resolveImageSrc('./pixel.png');
+    await vi.waitFor(() =>
+      expect(resolver.resolveImageSrc('./pixel.png')).toBe('data:image/png;base64,Zmlyc3Q='),
+    );
+
+    resolver.setNotePath('/note.md', 'scope-b', { accessToken: 'token-b' });
+    expect(resolver.resolveImageSrc('./pixel.png')).toBeNull();
+    await vi.waitFor(() => expect(readExternalAsset).toHaveBeenCalledTimes(2));
+    expect(readExternalAsset).toHaveBeenLastCalledWith('token-b', '/pixel.png');
+    expect(resolver.resolveImageSrc('./pixel.png')).toBe('data:image/png;base64,c2Vjb25k');
+  });
+
+  it('falls back to the workspace channel after the external session ends', async () => {
+    const readBinary = vi.fn().mockResolvedValue('d29yaw==');
+    const readExternalAsset = vi.fn();
+    const resolver = usePreviewImageResolver(mockFileSystem(readBinary, readExternalAsset));
+    resolver.setNotePath('/note.md', 'scope', { accessToken: 'token-a' });
+    resolver.setNotePath('/note.md', 'scope');
+
+    resolver.resolveImageSrc('./pixel.png');
+    expect(readExternalAsset).not.toHaveBeenCalled();
+    expect(readBinary).toHaveBeenCalledWith('/pixel.png');
+    await vi.waitFor(() =>
+      expect(resolver.resolveImageSrc('./pixel.png')).toBe('data:image/png;base64,d29yaw=='),
+    );
   });
 });

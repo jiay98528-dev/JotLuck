@@ -170,8 +170,8 @@
           :actions="shellActions"
           :theme-host-ui="themeHostUi"
           @select-note="onShellSelectNote"
-          @navigate-heading="onNavTreeNavigate"
-          @navigate-backlink="onBacklinkNavigate"
+          @navigate-heading="onShellNavigateHeading"
+          @navigate-backlink="onShellNavigateBacklink"
           @select-tag="onTagSelect"
           @toggle-right-wing="showRightWing = !showRightWing"
           @retry-save="retryCurrentSave"
@@ -268,6 +268,16 @@
                       :initial-snapshot="reviewSession.snapshot"
                       :predictor="completionPredictor ?? undefined"
                       :completion-settings="completionSettings"
+                      :on-live-preview-wiki-link-click="onReviewWikiLinkClick"
+                      :wiki-link-exists="wikiLinkExists"
+                      :wiki-link-revision="wikiLinkRevision"
+                      :resolve-image-src="previewImages.resolveImageSrc"
+                      :image-revision="previewImages.imageRevision.value"
+                      :remote-images="remoteImagePolicy"
+                      :remote-image-revision="remoteImages.revision.value"
+                      :on-live-preview-remote-image-click="remoteImages.handleClick"
+                      :on-live-preview-remote-image-load="remoteImages.handleLoad"
+                      :on-live-preview-remote-image-error="remoteImages.handleError"
                       @exit="onExitReviewMode"
                       @source-adopted="onReviewSourceAdopted"
                     />
@@ -1021,6 +1031,8 @@ import { usePreviewImageResolver } from '@/composables/usePreviewImageResolver';
 import { useRemoteImageSession } from '@/composables/useRemoteImageSession';
 import { useDialogFocus } from '@/composables/useDialogFocus';
 import { openExternalUrl } from '@/utils/urlUtils';
+import { findHeadingElement } from '@/utils/heading-anchor';
+import { classifyAnchorHref } from '@/utils/preview-links';
 import { revealLivePreviewSourceAt } from '@/utils/cm6-live-preview';
 import { docToString } from '@/utils/cm6-document-analysis';
 import {
@@ -1285,6 +1297,44 @@ async function onEnterReviewMode(): Promise<void> {
 
 function onExitReviewMode(): void {
   reviewSession.value = null;
+}
+
+/**
+ * 改稿态 wiki 链接点击：先退出改稿会话，再复用主编辑器跳转口径（普通会话
+ * resolveWikiLink 跳转 / 外部会话受限提示，由 useDocumentNavigation 统一裁决）。
+ * 必须先退出——ReviewWorkbench 非空时整面接管编辑区，滞留会遮蔽目标笔记、
+ * 跳转不可见；改稿进度由会话层自动暂存可随时回来继续，故不走退出确认弹窗
+ * （取舍：误触即退出换直达跳转，进度不丢）。
+ */
+function onReviewWikiLinkClick(noteTitle: string, anchor: null | string): void {
+  reviewSession.value = null;
+  void onLivePreviewWikiLinkClick(noteTitle, anchor);
+}
+
+// 改稿期间经左侧树/搜索切换到其它笔记：退出改稿会话（同 onShellSelectNote
+// 清 readonlyOpenPath 的先例）。否则工作台滞留遮蔽新笔记，且 W2 下沉的
+// 本地图解析/wiki 判定 props 会随 activePath 重挂到无关笔记上，产生错域渲染。
+watch(activePath, (path) => {
+  if (reviewSession.value !== null && path !== reviewSession.value.path) {
+    reviewSession.value = null;
+  }
+});
+
+/**
+ * 改稿期外壳导航（大纲/反链）点击：先退出改稿会话再导航。外壳点击到达时
+ * ReviewWorkbench 仍整面接管编辑区——同笔记大纲导航整链 no-op（主编辑器未
+ * 挂载、reveal 无目标），反链跳转亦依赖 activePath watch 事后清会话（自引
+ * 反链路径不触发）。先清会话让导航落在真实编辑面上；取舍同
+ * onReviewWikiLinkClick：进度由会话层自动暂存，不走退出确认弹窗。
+ */
+function onShellNavigateHeading(headingId: string, lineNumber: number): void {
+  reviewSession.value = null;
+  onNavTreeNavigate(headingId, lineNumber);
+}
+
+function onShellNavigateBacklink(entry: BacklinkEntry): void {
+  reviewSession.value = null;
+  onBacklinkNavigate(entry);
 }
 
 /** 「批准」写入源稿文件后：同步内存态并把该写入标记为本地写（watcher 免误报冲突） */
@@ -1992,10 +2042,26 @@ const imageUpload = useImageUpload(
   (failure) => toast.show(failure.message, 'error', 6000),
 );
 
+// 外部会话本地图上下文：令牌供 usePreviewImageResolver 分流到 read_external_note_asset。
+const previewImageExternalSession = computed(() => {
+  const accessToken = externalFile.value?.accessToken;
+  return isExternalSession.value && accessToken ? { accessToken } : null;
+});
+watch(
+  [
+    activeNotebookRoot,
+    // 外部会话（只读/编辑）传真实笔记路径，不再短路为 ''；相对图引用按会话目录解析。
+    () => (isExternalSession.value ? externalRelativePath.value : activePath.value),
+    previewImageExternalSession,
+  ],
+  ([root, path, externalSession]) => {
+    previewImages.setNotePath(path, root, externalSession);
+  },
+  { immediate: true },
+);
 watch(
   [activeNotebookRoot, activePath, isExternalSession],
   ([root, path, external]) => {
-    previewImages.setNotePath(external ? '' : path, root);
     remoteImages.setScope(external ? 'external-file' : root, path);
   },
   { immediate: true },
@@ -2012,16 +2078,26 @@ function onPreviewClick(event: MouseEvent): void {
   if (!(target instanceof Element)) return;
   const anchor = target.closest('a');
   const href = anchor?.getAttribute('href');
-  if (href?.startsWith('#') && progressivePreviewRef.value) {
+  if (href?.startsWith('#')) {
     event.preventDefault();
-    try {
-      progressivePreviewRef.value.scrollToHeading(decodeURIComponent(href.slice(1)));
-    } catch {
-      /* malformed anchor */
+    const rawId = href.slice(1);
+    if (progressivePreviewRef.value) {
+      try {
+        progressivePreviewRef.value.scrollToHeading(decodeURIComponent(rawId));
+      } catch {
+        /* malformed anchor */
+      }
+      return;
     }
+    // 静态预览：三形态归一查找（原文/heading-原文/headingIdFromText 形态）
+    const heading = staticPreviewRef.value
+      ? findHeadingElement(staticPreviewRef.value, rawId)
+      : undefined;
+    if (heading) heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    else toast.show(t('navigation.headingNotFound'), 'info', 3500);
     return;
   }
-  if (anchor?.hasAttribute('data-note') && progressivePreviewRef.value) {
+  if (anchor?.hasAttribute('data-note')) {
     event.preventDefault();
     void onLivePreviewWikiLinkClick(
       anchor.getAttribute('data-note')!,
@@ -2029,14 +2105,16 @@ function onPreviewClick(event: MouseEvent): void {
     );
     return;
   }
-  if (anchor?.hasAttribute('data-tag') && progressivePreviewRef.value) {
+  if (anchor?.hasAttribute('data-tag')) {
     event.preventDefault();
     onTagSelect(anchor.getAttribute('data-tag')!);
     return;
   }
-  if (!href || !/^(?:https?:\/\/|mailto:|tel:|ftp:|www\.)/i.test(href)) return;
+  if (!href) return;
+  // 有 href 的锚点先兜住 WebView 默认导航（含裸域名），再按分类决定移交系统浏览器
   event.preventDefault();
-  void openExternalUrl(href);
+  const hrefKind = classifyAnchorHref(href);
+  if (hrefKind !== 'relative') void openExternalUrl(href);
 }
 
 function onRemoteImageLoad(event: Event): void {
@@ -4280,8 +4358,13 @@ function wikiLinkExists(noteTitle: string): boolean {
   ) {
     return true;
   }
-  const tree = isExternalEditing.value ? externalFiles.value : files.value;
-  const existsInTree = tree.some((entry) => {
+  // 外部会话（只读/编辑壳）取「显式中性样式」最小方案：外部文件游离于任何
+  // 笔记本索引之外，存在性无从判定——同目录 externalFiles 仅含当前文件自身
+  // 不足为据，改挂主索引则拿无关笔记本目录当权威、错标死链。一律活链样式
+  // 渲染（不断死），点击侧 wikiRestricted 提示兜底，视觉与行为自洽。
+  if (isExternalSession.value) return true;
+  // 改稿态（notebook 会话）与主编辑器同口径：文件树 + 主索引判定
+  const existsInTree = files.value.some((entry) => {
     if (!entry.isFile) return false;
     const filename = stripSupportedNoteExtension(entry.name);
     return filename === target;
@@ -4338,6 +4421,11 @@ function updateExternalPreview(): void {
   if (isLargeDocument.value) return;
   try {
     externalPreviewHtml.value = renderMarkdown(displayContent.value, {
+      // 外部只读态同走中性口径（函数内按 isExternalSession 判定），与编辑态/大文档
+      // ProgressivePreview（progressivePreviewOptions 已含 wikiLinkExists）一致
+      wikiLinkExists,
+      // 外部会话本地图经 usePreviewImageResolver 分流（read_external_note_asset）
+      resolveImageSrc: previewImages.resolveImageSrc,
       remoteImages: remoteImagePolicy.value,
     });
     renderedPreviewSource.value = displayContent.value;
@@ -4461,7 +4549,8 @@ function scrollExternalHeading(id: string): void {
     progressivePreviewRef.value.scrollToHeading(id);
     return;
   }
-  const target = document.getElementById(id);
+  const root = staticPreviewRef.value;
+  const target = root ? findHeadingElement(root, id) : undefined;
   target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 

@@ -19,6 +19,13 @@ export interface ResolvedPreviewImagePath {
   mime: string;
 }
 
+/** 外部会话（外链文件/升级笔记本）图片读取上下文：走 read_external_note_asset。 */
+export interface ExternalPreviewImageSession {
+  accessToken: string;
+}
+
+const WINDOWS_DRIVE_PREFIX_RE = /^([A-Za-z]:)(?:\/|$)/;
+
 export function resolvePreviewImagePath(
   notePath: string,
   source: string,
@@ -39,12 +46,22 @@ export function resolvePreviewImagePath(
   const normalizedNote = notePath.replace(/\\/g, '/');
   const noteSegments = normalizedNote.split('/').filter(Boolean);
   noteSegments.pop();
-  const resolvedSegments = decoded.startsWith('/') ? [] : noteSegments;
+  // Windows 绝对 notePath（带盘符）时把盘符视作根段：相对引用在真实父目录下
+  // 解析，根引用落到盘根；避免把 “D:/docs” 拼成 “/D:/docs” 畸形路径。
+  const drivePrefix = WINDOWS_DRIVE_PREFIX_RE.exec(normalizedNote)?.[1] ?? '';
+  const resolvedSegments = decoded.startsWith('/')
+    ? drivePrefix
+      ? [drivePrefix]
+      : []
+    : noteSegments;
 
   for (const segment of decoded.split('/')) {
     if (!segment || segment === '.') continue;
     if (segment === '..') {
-      if (resolvedSegments.length === 0) return null;
+      // 盘符段是解析地板：越过盘根即拒绝（其余场景空段即拒绝）。
+      if (resolvedSegments.length === 0 || (drivePrefix && resolvedSegments.length === 1)) {
+        return null;
+      }
       resolvedSegments.pop();
       continue;
     }
@@ -53,7 +70,9 @@ export function resolvePreviewImagePath(
   }
 
   if (resolvedSegments.length === 0) return null;
-  const path = `/${resolvedSegments.join('/')}`;
+  // 盘符开头（D:/…）不再补前导斜杠；笔记本相对路径维持 “/…” 根标记。
+  const rooted = /^[A-Za-z]:$/.test(resolvedSegments[0] ?? '');
+  const path = rooted ? resolvedSegments.join('/') : `/${resolvedSegments.join('/')}`;
   const filename = resolvedSegments.at(-1) ?? '';
   const dot = filename.lastIndexOf('.');
   const mime = dot >= 0 ? IMAGE_MIME_BY_EXTENSION[filename.slice(dot).toLowerCase()] : undefined;
@@ -67,14 +86,27 @@ export function usePreviewImageResolver(fs: IFileSystemService) {
   const pending = new Map<string, Promise<void>>();
   let currentNotePath = '';
   let currentScopeKey = '';
+  let externalSession: ExternalPreviewImageSession | null = null;
   let generation = 0;
 
-  function setNotePath(notePath: string, scopeKey = ''): void {
+  function setNotePath(
+    notePath: string,
+    scopeKey = '',
+    external: ExternalPreviewImageSession | null = null,
+  ): void {
     const normalized = notePath.replace(/\\/g, '/');
     const normalizedScope = scopeKey.replace(/\\/g, '/');
-    if (normalized === currentNotePath && normalizedScope === currentScopeKey) return;
+    const nextExternal = external?.accessToken ? { accessToken: external.accessToken } : null;
+    if (
+      normalized === currentNotePath &&
+      normalizedScope === currentScopeKey &&
+      (nextExternal?.accessToken ?? '') === (externalSession?.accessToken ?? '')
+    ) {
+      return;
+    }
     currentNotePath = normalized;
     currentScopeKey = normalizedScope;
+    externalSession = nextExternal;
     generation++;
     cache.clear();
     failed.clear();
@@ -87,8 +119,11 @@ export function usePreviewImageResolver(fs: IFileSystemService) {
     if (existing) return existing;
 
     const expectedGeneration = generation;
-    const task = fs
-      .readBinary(path)
+    // 会话分流：外部会话图片走授权命令（grant 目录内解析），工作区走 readBinary。
+    const read = externalSession
+      ? fs.readExternalAsset(externalSession.accessToken, path)
+      : fs.readBinary(path);
+    const task = read
       .then((base64) => {
         if (expectedGeneration !== generation) return;
         cache.set(path, `data:${mime};base64,${base64}`);

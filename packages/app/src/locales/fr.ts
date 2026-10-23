@@ -5,6 +5,7 @@ export const messages = {
     referenceLine: 'Ligne {line}',
     showMore: 'Afficher plus',
     referenceMoved: 'La référence a changé de position. La note source est ouverte.',
+    headingNotFound: 'Titre introuvable ; impossible d’y accéder.',
   },
   common: {
     appName: 'JotLuck',
@@ -763,6 +764,8 @@ export const messages = {
     progressValue: '{phase} : {completed}/{total} {unit}',
     progressAriaComplete: 'Conversion du document terminée',
     waitingForContent: 'En attente du premier bloc stable à prévisualiser…',
+    assetLoading: 'Chargement de la ressource…',
+    assetFailed: 'Échec du chargement de la ressource',
     complete: 'Conversion terminée. Choisissez le mode d’édition.',
     sourceUntouched: 'L’aperçu n’a créé aucun fichier utilisateur et n’a pas modifié la source.',
     cancelled: 'Conversion annulée. Les données temporaires seront nettoyées.',
@@ -822,6 +825,8 @@ export const messages = {
         'Les zones de texte ou cellules fusionnées ont été aplaties, sans équivalent de mise en page Markdown.',
       'docx-unsupported-image':
         'Les images EMF/WMF restent des espaces réservés ; aucun moteur de conversion d’image supplémentaire n’est ajouté.',
+      'docx-unsupported-link':
+        'Les liens hypertextes aux schémas non pris en charge ({context}) ont été aplatis en texte simple et ne sont pas cliquables dans l’aperçu.',
       'source-watch-unavailable':
         'La surveillance continue est indisponible ; le hachage est vérifié au retour du focus et avant l’enregistrement.',
       'pdf-images-not-imported':
@@ -1147,6 +1152,8 @@ export const messages = {
       cancel: 'Annuler',
     },
     ioError: 'Échec de l’opération : {message}',
+    linkRestricted:
+      'La navigation par lien n’est pas disponible en mode révision ; quittez la révision pour l’utiliser.',
     panel: {
       title: 'Annotations',
       empty: 'Aucune annotation pour l’instant ; vos éditions à droite seront listées ici',

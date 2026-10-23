@@ -47,6 +47,7 @@ import type { RendererOptions } from '@jotluck/renderer';
 import DOMPurify from 'dompurify';
 import { translate } from '@/i18n';
 import { openExternalUrl } from '@/utils/urlUtils';
+import { findHeadingElement } from '@/utils/heading-anchor';
 import { TapGesture, isTouchInput } from './editor-pointer';
 import { caretAtPoint, inlineSourceMap, mapDomText, snapSourceBoundary } from './editor-source-map';
 import { registerSourceHitReader, nativeEditorSelection } from './cm6-interaction-selection';
@@ -1238,7 +1239,11 @@ function toggleTaskListItemAtWidget(view: EditorView, widget: Element): boolean 
   return true;
 }
 
-function handleLiveAnchorClick(anchor: HTMLAnchorElement, options: LivePreviewOptions): boolean {
+function handleLiveAnchorClick(
+  anchor: HTMLAnchorElement,
+  options: LivePreviewOptions,
+  view: EditorView,
+): boolean {
   const tag = anchor.getAttribute('data-tag');
   if (tag) {
     options.onTagClick?.(tag);
@@ -1253,6 +1258,16 @@ function handleLiveAnchorClick(anchor: HTMLAnchorElement, options: LivePreviewOp
 
   const href = anchor.getAttribute('href');
   if (href) {
+    // 站内锚点（#fragment）：编辑器 DOM 内三形态归一定位块内标题，不上抛外链
+    if (href.startsWith('#')) {
+      const heading = findHeadingElement(view.dom, href.slice(1));
+      if (heading) {
+        view.dispatch({
+          effects: EditorView.scrollIntoView(view.posAtDOM(heading), { y: 'start' }),
+        });
+      }
+      return true; // 点击已被消费，绝不落入外链分支
+    }
     if (options.onExternalLinkClick) {
       options.onExternalLinkClick(href);
     } else {
@@ -1445,7 +1460,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           }
 
           const anchor = target.closest('a') as HTMLAnchorElement | null;
-          if (anchor && handleLiveAnchorClick(anchor, options)) {
+          if (anchor && handleLiveAnchorClick(anchor, options, view)) {
             e.stopPropagation();
             e.preventDefault();
             return;

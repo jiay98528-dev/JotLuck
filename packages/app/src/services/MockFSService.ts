@@ -40,6 +40,11 @@ export interface MockFSServiceOptions {
   persist?: boolean;
   /** Explicit test seed. Normal previews still use the localized sample notebook. */
   initialFiles?: Record<string, string>;
+  /**
+   * Test-only external session image assets: grant-relative path → base64.
+   * readExternalAsset 按此字典返回；未命中按 not_found 失败（对齐桌面端）。
+   */
+  externalAssets?: Record<string, string>;
   /** Test-only recent notebook roots. Defaults to the sample notebook. */
   recentNotebooks?: readonly string[];
   /** Test-only picker result. Null models an explicit user cancellation. */
@@ -121,6 +126,7 @@ export class MockFSService implements IFileSystemService {
   private readonly latency: number;
   private readonly persistToLocalStorage: boolean;
   private readonly recentNotebooks: readonly string[];
+  private readonly externalAssets: Readonly<Record<string, string>>;
   private readonly pickerResult: NotebookHandle | null;
   private readonly pickerError: string | null;
   private readonly unavailableNotebookPaths: ReadonlySet<string>;
@@ -130,6 +136,7 @@ export class MockFSService implements IFileSystemService {
     this.persistToLocalStorage = options.persist ?? false;
     const sampleName = createSampleNotebookSeed().directoryName;
     this.recentNotebooks = options.recentNotebooks ?? ['/'];
+    this.externalAssets = options.externalAssets ?? {};
     this.pickerResult =
       options.pickerResult === undefined
         ? { rootPath: '/', name: sampleName }
@@ -250,6 +257,14 @@ export class MockFSService implements IFileSystemService {
 
   async readBinary(path: string): Promise<string> {
     return this.readFile(path);
+  }
+
+  async readExternalAsset(_accessToken: string, relativePath: string): Promise<string> {
+    await delay(this.latency);
+    const normalized = normalizePath(relativePath);
+    const asset = this.externalAssets[normalized];
+    if (asset === undefined) throw createCommandError('not_found', undefined, normalized);
+    return asset;
   }
 
   isBinaryPath(path: string): boolean {

@@ -983,3 +983,105 @@ describe('cm6 live preview focused-line ghost syntax rollout', () => {
     expect(view.state.doc.toString()).toBe(doc);
   });
 });
+
+describe('cm6 live preview anchor click routing', () => {
+  /** 挂载仅带目标 options 的 live 编辑器（同 88 行远程图测试的裸挂载模式）。 */
+  function mountWithOptions(
+    doc: string,
+    options: Parameters<typeof livePreviewExtension>[0],
+  ): EditorView {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const view = new EditorView({
+      state: EditorState.create({
+        doc,
+        selection: { anchor: doc.length },
+        extensions: [livePreviewExtension(options)],
+      }),
+      parent: host,
+    });
+    mountedViews.push(view);
+    view.focus();
+    return view;
+  }
+
+  /** 对 view.dom 内锚点派发可冒泡可取消的点击，返回事件供 defaultPrevented 断言。 */
+  function clickAnchor(selector: string, view: EditorView): MouseEvent {
+    const anchor = view.dom.querySelector<HTMLElement>(selector);
+    if (!anchor) throw new Error(`锚点未渲染：${selector}`);
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    anchor.dispatchEvent(event);
+    return event;
+  }
+
+  it('# 锚点点击：编辑器 DOM 内归一定位滚动，不上抛外链', async () => {
+    const doc = ['# 标题甲', '', '[跳转](#标题甲)', '', '尾段'].join('\n');
+    // marked 18 渲染链接时对 href 做 encodeURI——中文锚点变百分号编码，
+    // 这正是三形态归一（decode 原文形态）要弥合的 href/id 失配。
+    const headingHref = `#${encodeURI('标题甲')}`;
+    const onExternalLinkClick = vi.fn();
+    const view = mountWithOptions(doc, { onExternalLinkClick });
+
+    await vi.waitFor(() => {
+      expect(view.dom.querySelector(`a[href="${headingHref}"]`)).not.toBeNull();
+      expect(view.dom.querySelector('[id="heading-标题甲"]')).not.toBeNull();
+    });
+
+    const dispatchSpy = vi.spyOn(view, 'dispatch');
+    const event = clickAnchor(`a[href="${headingHref}"]`, view);
+
+    expect(event.defaultPrevented, '# 锚点点击应被消费（preventDefault）').toBe(true);
+    expect(onExternalLinkClick).not.toHaveBeenCalled();
+    // 归一定位命中：dispatch 的 effects 含 scrollIntoView（StateEffect 公开
+    // 判定走实例方法 .is(type)——@codemirror/state 6.x 无 .effect 属性）
+    const effects = dispatchSpy.mock.calls.flatMap((call) => {
+      const spec = call[0]?.effects;
+      if (!spec) return [];
+      return Array.isArray(spec) ? spec : [spec];
+    });
+    expect(effects.length).toBeGreaterThan(0);
+    // EditorView.scrollIntoView 是返回 StateEffect 的静态方法而非效果类型本身，
+    // 不可直接作 .is() 的参数（恒假）——以探针效果的 .type 取真实类型身份再比对
+    const scrollEffectType = (EditorView.scrollIntoView(0) as unknown as { type: unknown }).type;
+    const scrolled = (effects as Array<{ is?: (type: unknown) => boolean }>).some((effect) =>
+      effect.is?.(scrollEffectType),
+    );
+    expect(scrolled, '应经 EditorView.scrollIntoView 效果滚动定位').toBe(true);
+    dispatchSpy.mockRestore();
+  });
+
+  it('# 锚点三形态全 miss：no-op 返回但仍消费点击，不落入外链分支', async () => {
+    const doc = ['# 标题甲', '', '[空锚](#不存在的标题)', '', '尾段'].join('\n');
+    const missHref = `#${encodeURI('不存在的标题')}`;
+    const onExternalLinkClick = vi.fn();
+    const view = mountWithOptions(doc, { onExternalLinkClick });
+
+    await vi.waitFor(() => {
+      expect(view.dom.querySelector(`a[href="${missHref}"]`)).not.toBeNull();
+    });
+
+    const dispatchSpy = vi.spyOn(view, 'dispatch');
+    const event = clickAnchor(`a[href="${missHref}"]`, view);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(onExternalLinkClick).not.toHaveBeenCalled();
+    expect(dispatchSpy).not.toHaveBeenCalled();
+    dispatchSpy.mockRestore();
+  });
+
+  it('绝对外链点击仍走 onExternalLinkClick（防 14 号 spec 回归）', async () => {
+    const doc = ['# 标题甲', '', '[外](https://example.com)', '', '尾段'].join('\n');
+    const onExternalLinkClick = vi.fn();
+    const view = mountWithOptions(doc, { onExternalLinkClick });
+
+    await vi.waitFor(() => {
+      expect(view.dom.querySelector('a[href="https://example.com"]')).not.toBeNull();
+    });
+
+    const event = clickAnchor('a[href="https://example.com"]', view);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(onExternalLinkClick).toHaveBeenCalledOnce();
+    expect(onExternalLinkClick).toHaveBeenCalledWith('https://example.com');
+  });
+});
