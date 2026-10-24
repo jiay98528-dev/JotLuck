@@ -88,23 +88,35 @@ describe('@jotluck/renderer markdown boundaries', () => {
     expect(html).not.toContain('javascript:');
   });
 
-  it('strips blob object URLs while still stripping script protocols', () => {
-    // 资产图走 data:URL（ExternalReaderPage 经 read_document_conversion_asset 换装）；
-    // blob: 恒剥除——清洗器回归 DOMPurify 默认拒收（object URL 方案废弃），
-    // 可执行协议在同一通道内仍被拒绝（不弱化既有契约）。
-    const blob = renderMarkdown('![asset](blob:asset-1)', {
-      resolveImageSrc: (source) => (source.startsWith('blob:') ? source : null),
+  it('keeps opt-in blob object URLs on img while stripping script protocols by default and opt-in', () => {
+    // 资产图走 blob: object URL（ExternalReaderPage 经 read_document_conversion_asset
+    // 二进制回流 → URL.createObjectURL 换装短引用）。清洗器默认剥除 blob:（不传
+    // flag 恒 fail-closed）；仅显式 allowBlobImageSources 时放行 img src 的合法
+    // blob: 形态（字符类校验），javascript: 与非法 blob: 形态在同通道无论开关均仍剥。
+    const allowed = renderMarkdown('![asset](blob:asset-1)', {
+      allowBlobImageSources: true,
     });
-    expect(blob).toContain('alt="asset"');
-    expect(blob).not.toContain('blob:');
-    expect(blob).not.toContain('src=');
+    expect(allowed).toContain('alt="asset"');
+    expect(allowed).toContain('src="blob:asset-1"');
 
-    const malicious = renderMarkdown('![evil](blob:asset-1)', {
-      resolveImageSrc: () => 'javascript:alert(1)',
+    const malicious = renderMarkdown('![evil](javascript:alert(1))', {
+      allowBlobImageSources: true,
     });
     expect(malicious).toContain('alt="evil"');
     expect(malicious).not.toContain('javascript:');
     expect(malicious).not.toContain('src=');
+
+    const malformed = renderMarkdown('![bad](blob:evil%22onerror)', {
+      allowBlobImageSources: true,
+    });
+    expect(malformed).toContain('alt="bad"');
+    expect(malformed).not.toContain('blob:evil');
+    expect(malformed).not.toContain('src=');
+
+    const byDefault = renderMarkdown('![asset](blob:asset-1)');
+    expect(byDefault).toContain('alt="asset"');
+    expect(byDefault).not.toContain('blob:');
+    expect(byDefault).not.toContain('src=');
   });
 
   it('does not leak a rejected local image path into rendered HTML', () => {

@@ -1,7 +1,6 @@
 import type { Channel } from '@tauri-apps/api/core';
 import type {
   ConditionalWriteResult,
-  DocumentConversionAssetPayload,
   DocumentConversionEvent,
   ExternalOpenedFile,
   PromotedNotebookPayload,
@@ -11,6 +10,7 @@ import type {
   WindowBootstrapPayload,
 } from '@/types';
 import { invokeCommand } from './TauriIPCService';
+import { createCommandError } from './command-errors';
 
 /**
  * 窗口会话与文档导入 IPC 收口层（window_session + document_import 全族）。
@@ -101,15 +101,26 @@ export async function cancelDocumentConversion(conversionId: string): Promise<vo
   return invokeCommand<void>('cancel_document_conversion', { conversionId });
 }
 
-/** 读取转换产物资源（图片等二进制，按字节数组回流）。 */
-export async function readDocumentConversionAsset(
+/**
+ * 读取转换产物资源（图片等二进制）。
+ *
+ * Rust 侧以 tauri::ipc::Response 二进制回流，invoke 直接收到 ArrayBuffer
+ * （无 JSON number[] 编码放大）；防御性兼容 number[] 形态。统一归一为
+ * ArrayBuffer-backed Uint8Array——ArrayBuffer 分支是零拷贝视图，供 Blob
+ * 直接收编（TS 5.7+ BlobPart 不收 SharedArrayBuffer 视图）。非法形态按
+ * operation_failed 归一抛 CommandError（fail-closed，不把未知结构漏给调用方）。
+ */
+export async function readDocumentConversionAssetBytes(
   conversionId: string,
   assetId: string,
-): Promise<DocumentConversionAssetPayload> {
-  return invokeCommand<DocumentConversionAssetPayload>('read_document_conversion_asset', {
+): Promise<Uint8Array<ArrayBuffer>> {
+  const raw = await invokeCommand<ArrayBuffer | number[]>('read_document_conversion_asset', {
     conversionId,
     assetId,
   });
+  if (raw instanceof ArrayBuffer) return new Uint8Array(raw);
+  if (Array.isArray(raw)) return Uint8Array.from(raw);
+  throw createCommandError('operation_failed', undefined, 'unexpected asset payload shape');
 }
 
 /** 把转换出的 Markdown 另存为副本（系统保存对话框；取消返回 null）。 */

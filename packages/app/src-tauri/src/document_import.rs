@@ -1,4 +1,4 @@
-use crate::command_error::CommandResult;
+use crate::command_error::{CommandErrorPayload, CommandResult};
 use crate::fs_ops::{
     commit_staged_text_file, stage_text_file, ExternalAccessGrants, ExternalFileHandle,
     FileMutationCoordinator,
@@ -95,14 +95,6 @@ pub enum DocumentConversionEvent {
     },
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DocumentAssetPayload {
-    pub bytes: Vec<u8>,
-    pub media_type: String,
-    pub file_name: String,
-}
-
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveConvertedDocumentDialogRequest {
@@ -116,7 +108,6 @@ pub struct SaveConvertedDocumentDialogRequest {
 pub(crate) struct ConvertedAsset {
     pub id: String,
     pub file_name: String,
-    pub media_type: String,
     pub path: PathBuf,
     pub bytes: u64,
 }
@@ -379,9 +370,13 @@ pub fn start_document_conversion(
     imports: State<'_, DocumentImportState>,
 ) -> CommandResult<String> {
     let source = sessions.document_source_for(window.label())?;
-    for previous in imports.remove_for_window(window.label()) {
-        previous.cancel();
-    }
+    // 重转前置清理必须与窗口关闭路径同一收口：前任任务可能已是终态
+    // （completed 后 mark_stale，任务线程早已退出），仅 cancel() 不会删目录，
+    // 「完成→过期→重转」循环每轮泄漏一份私有临时目录（源快照+资产，
+    // 单份最高约 250 MiB）。cleanup_for_window 在 cancel 后同步 remove_dir_all；
+    // 运行中前任若因 worker 句柄尚未释放删不净，其任务线程退出时的
+    // cleanup_terminal_job 会再删一次兜底。
+    imports.cleanup_for_window(window.label());
 
     let id = Uuid::new_v4().simple().to_string();
     let temp_dir = document_import_temp_root().join(&id);
@@ -427,20 +422,18 @@ pub fn cancel_document_conversion(
     Ok(())
 }
 
-#[tauri::command]
-pub fn read_document_conversion_asset(
-    window: WebviewWindow,
-    conversion_id: String,
-    asset_id: String,
-    imports: State<'_, DocumentImportState>,
-) -> CommandResult<DocumentAssetPayload> {
-    let job = imports.job_for(&conversion_id, window.label())?;
+/// 读取已注册转换资产的原始字节：长度与注册时不符即拒绝（防注册后篡改）。
+/// 独立于 #[tauri::command] 以便直接对锁/读盘/校验逻辑做单测。
+fn read_conversion_asset_bytes(
+    job: &ConversionJob,
+    asset_id: &str,
+) -> Result<Vec<u8>, CommandErrorPayload> {
     let asset = job
         .data
         .lock()
         .map_err(|_| "document conversion state lock poisoned".to_string())?
         .assets
-        .get(&asset_id)
+        .get(asset_id)
         .cloned()
         .ok_or_else(|| "document conversion asset was not found".to_string())?;
     let bytes = fs::read(&asset.path)
@@ -448,11 +441,20 @@ pub fn read_document_conversion_asset(
     if bytes.len() as u64 != asset.bytes {
         return Err("converted asset changed after registration".into());
     }
-    Ok(DocumentAssetPayload {
-        bytes,
-        media_type: asset.media_type,
-        file_name: asset.file_name,
-    })
+    Ok(bytes)
+}
+
+#[tauri::command]
+pub fn read_document_conversion_asset(
+    window: WebviewWindow,
+    conversion_id: String,
+    asset_id: String,
+    imports: State<'_, DocumentImportState>,
+) -> CommandResult<tauri::ipc::Response> {
+    let job = imports.job_for(&conversion_id, window.label())?;
+    Ok(tauri::ipc::Response::new(read_conversion_asset_bytes(
+        &job, &asset_id,
+    )?))
 }
 
 #[tauri::command]
@@ -984,7 +986,6 @@ fn run_conversion_job_inner(
                 let asset = ConvertedAsset {
                     id: asset_id.clone(),
                     file_name: file_name.clone(),
-                    media_type: media_type.clone(),
                     path: asset_path,
                     bytes,
                 };
@@ -3124,6 +3125,99 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    fn job_with_registered_asset(root: &Path, asset_bytes: &[u8]) -> ConversionJob {
+        let source_path = root.join("source.docx");
+        fs::write(&source_path, b"source-read-only").unwrap();
+        let asset_path = root
+            .join("conversion-temp")
+            .join("assets")
+            .join("image.png");
+        fs::create_dir_all(asset_path.parent().unwrap()).unwrap();
+        fs::write(&asset_path, asset_bytes).unwrap();
+        let asset = ConvertedAsset {
+            id: "asset-1".to_string(),
+            file_name: "image.png".to_string(),
+            path: asset_path,
+            bytes: asset_bytes.len() as u64,
+        };
+        ConversionJob {
+            id: "conversion-read-asset".to_string(),
+            owner_window_label: "document-window".to_string(),
+            source: DocumentImportSource {
+                absolute_path: source_path.clone(),
+                file_name: "source.docx".to_string(),
+                kind: ImportedDocumentKind::Docx,
+                revision: source_revision(&source_path).unwrap(),
+            },
+            temp_dir: root.join("conversion-temp"),
+            cancelled: AtomicBool::new(false),
+            terminal: AtomicBool::new(true),
+            child: Mutex::new(None),
+            windows_job: Mutex::new(None),
+            data: Mutex::new(ConversionData {
+                assets: HashMap::from([("asset-1".to_string(), asset)]),
+                ..ConversionData::default()
+            }),
+            channel: Channel::new(|_| Ok(())),
+            watcher: Mutex::new(None),
+        }
+    }
+
+    #[test]
+    fn read_conversion_asset_bytes_returns_disk_bytes_verbatim() {
+        let root = temp_test_directory("read-asset-bytes");
+        // 覆盖全部 256 个字节值，验证二进制通道无编码损耗
+        let expected: Vec<u8> = (0..=255u8).collect();
+        let job = job_with_registered_asset(&root, &expected);
+        let asset_path = root
+            .join("conversion-temp")
+            .join("assets")
+            .join("image.png");
+
+        let bytes = read_conversion_asset_bytes(&job, "asset-1").unwrap();
+        assert_eq!(bytes, fs::read(&asset_path).unwrap());
+        assert_eq!(bytes, expected);
+
+        // 命令返回的 IPC 响应必须是原始字节负载（零拷贝二进制通道，非 JSON number[]）
+        use tauri::ipc::IpcResponse;
+        let response = tauri::ipc::Response::new(bytes.clone());
+        assert!(matches!(
+            response.body(),
+            Ok(tauri::ipc::InvokeResponseBody::Raw(body)) if body == bytes
+        ));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn read_conversion_asset_bytes_rejects_unknown_asset_with_not_found() {
+        let root = temp_test_directory("read-asset-missing");
+        let job = job_with_registered_asset(&root, b"converted-image");
+
+        let error = read_conversion_asset_bytes(&job, "missing-asset").unwrap_err();
+        assert_eq!(error.code, "not_found");
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn read_conversion_asset_bytes_rejects_asset_tampered_after_registration() {
+        let root = temp_test_directory("read-asset-tampered");
+        let job = job_with_registered_asset(&root, b"converted-image");
+        // 注册后在磁盘上篡改资产文件（长度变化）必须被拒绝
+        let asset_path = root
+            .join("conversion-temp")
+            .join("assets")
+            .join("image.png");
+        fs::write(&asset_path, b"tampered-image-payload").unwrap();
+
+        let error = read_conversion_asset_bytes(&job, "asset-1").unwrap_err();
+        assert_eq!(error.code, "operation_failed");
+        assert_eq!(
+            error.diagnostic.as_deref(),
+            Some("converted asset changed after registration")
+        );
+        fs::remove_dir_all(&root).unwrap();
+    }
+
     #[test]
     fn completed_document_save_creates_a_new_markdown_copy_with_assets() {
         let root = temp_test_directory("save-new-target");
@@ -3143,7 +3237,6 @@ mod tests {
         let asset = ConvertedAsset {
             id: "asset-1".to_string(),
             file_name: "image.png".to_string(),
-            media_type: "image/png".to_string(),
             path: asset_path,
             bytes: 15,
         };

@@ -294,7 +294,10 @@ export function renderMarkdown(source: string, options?: RendererOptions): strin
 
 /** Sanitize untrusted worker HTML before and after applying host image policy. */
 export function finalizePreparedHtml(rawHtml: string, options?: RendererOptions): string {
-  let initiallyCleanHtml = sanitize(rawHtml);
+  // blob: 放行必须在两趟清洗同时声明：首趟剥离会让 applyImagePolicy 见到的
+  // img 已无 src，第二趟再放行也于事无补；javascript: 等协议两趟均不受开关影响。
+  const allowBlobImageSources = options?.allowBlobImageSources === true;
+  let initiallyCleanHtml = sanitize(rawHtml, { allowBlobImageSources });
   if (options?.wikiLinkExists && initiallyCleanHtml.includes('data-note=')) {
     const template = document.createElement('template');
     template.innerHTML = initiallyCleanHtml;
@@ -303,7 +306,10 @@ export function finalizePreparedHtml(rawHtml: string, options?: RendererOptions)
     }
     initiallyCleanHtml = template.innerHTML;
   }
-  const cleanHtml = sanitize(applyImagePolicy(initiallyCleanHtml, options), true);
+  const cleanHtml = sanitize(applyImagePolicy(initiallyCleanHtml, options), {
+    remoteImageControls: true,
+    allowBlobImageSources,
+  });
 
   return cleanHtml;
 }

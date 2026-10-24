@@ -79,12 +79,6 @@ export type DocumentConversionEvent =
   | { type: 'cancelled' }
   | { type: 'error'; code: string; message: string };
 
-export interface DocumentConversionAssetPayload {
-  bytes: number[];
-  mediaType: string;
-  fileName: string;
-}
-
 export interface SaveConvertedDocumentDialogRequest {
   defaultFileName: string;
   dialogTitle: string;

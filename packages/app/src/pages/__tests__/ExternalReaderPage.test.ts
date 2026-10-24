@@ -1,7 +1,8 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ExternalReaderPage from '../ExternalReaderPage.vue';
 import { getWindowBootstrap, invalidateWindowBootstrap } from '../../services/windowSession';
+import { installObjectUrlStub, type ObjectUrlStub } from '../../test/object-url-stub';
 
 const { invoke, replace, isTauri, shellOpen, Channel, channels } = vi.hoisted(() => {
   const channelInstances: Array<{ onmessage?: (event: unknown) => void }> = [];
@@ -40,6 +41,10 @@ function mountReader() {
 }
 
 describe('ExternalReaderPage', () => {
+  // jsdom 29.1.1 实证缺失 URL.createObjectURL/revokeObjectURL：object URL
+  // 生命周期断言统一走注桩（mint 形如 blob:mock-N，可穿过真实清洗器字符类）。
+  let urlStub: ObjectUrlStub;
+
   beforeEach(() => {
     invoke.mockReset();
     replace.mockReset();
@@ -50,6 +55,11 @@ describe('ExternalReaderPage', () => {
     shellOpen.mockReset();
     channels.splice(0);
     document.title = 'JotLuck';
+    urlStub = installObjectUrlStub();
+  });
+
+  afterEach(() => {
+    urlStub.restore();
   });
 
   it('renders txt as literal pre-wrapped text without interpreting HTML or Markdown', async () => {
@@ -332,7 +342,7 @@ describe('ExternalReaderPage', () => {
     wrapper.unmount();
   });
 
-  it('renders pending assets as neutral placeholders and swaps in loaded data urls', async () => {
+  it('renders pending assets as neutral placeholders and swaps in loaded object urls', async () => {
     invoke.mockImplementation(async (command: string) => {
       if (command === 'get_window_bootstrap') {
         return {
@@ -355,7 +365,8 @@ describe('ExternalReaderPage', () => {
         };
       }
       if (command === 'read_document_conversion_asset') {
-        return { bytes: [1, 2, 3], mediaType: 'image/png', fileName: 'image1.png' };
+        // Rust 二进制回流形态：invoke 直接收到 ArrayBuffer（服务层归一为 Uint8Array）。
+        return new Uint8Array([1, 2, 3]).buffer;
       }
       throw new Error(`unexpected command: ${command}`);
     });
@@ -381,13 +392,17 @@ describe('ExternalReaderPage', () => {
       mediaType: 'image/png',
       bytes: 3,
     });
-    // 就绪资产必须真的渲染出来：data: URL 才能穿过渲染管线的 DOMPurify
-    // （其默认 URI 规则剥除 blob: src，object URL 从未真正存活）。
+    // 就绪资产端到端穿透真实清洗管线：页面 → composable（object URL 短引用）→
+    // renderMarkdown(allowBlobImageSources) → 双趟 DOMPurify 全真跑，img src
+    // 为桩 URL（blob:mock-1）。
     await vi.waitFor(() =>
-      expect(wrapper.find('article img[src="data:image/png;base64,AQID"]').exists()).toBe(true),
+      expect(wrapper.find('article img[src="blob:mock-1"]').exists()).toBe(true),
     );
     expect(wrapper.find('.document-import__asset-placeholder').exists()).toBe(false);
+    expect(urlStub.live).toEqual(new Set(['blob:mock-1']));
     wrapper.unmount();
+    // 卸载路径统一 revoke，object URL 不泄漏。
+    expect(urlStub.revoked).toEqual(['blob:mock-1']);
   });
 
   it('renders failed asset reads as a localized failure placeholder', async () => {
@@ -445,7 +460,8 @@ describe('ExternalReaderPage', () => {
 
   it('ignores asset read failures from a superseded conversion generation', async () => {
     let rejectAsset: ((reason: Error) => void) | undefined;
-    invoke.mockImplementation(async (command: string) => {
+    let resolveAsset: ((bytes: ArrayBuffer) => void) | undefined;
+    invoke.mockImplementation(async (command: string, args?: { assetId?: string }) => {
       if (command === 'get_window_bootstrap') {
         return {
           mode: 'document-import-readonly',
@@ -458,7 +474,13 @@ describe('ExternalReaderPage', () => {
       }
       if (command === 'start_document_conversion') return 'conversion-5';
       if (command === 'read_document_conversion_asset') {
-        return new Promise((_resolve, reject) => {
+        // asset-7：未决失败（既有守卫面）；asset-8：未决成功（晚到 mint 面补测）。
+        if (args?.assetId === 'asset-8') {
+          return new Promise<ArrayBuffer>((resolve) => {
+            resolveAsset = resolve;
+          });
+        }
+        return new Promise<never>((_resolve, reject) => {
           rejectAsset = reject;
         });
       }
@@ -469,7 +491,11 @@ describe('ExternalReaderPage', () => {
     const wrapper = mountReader();
     await vi.waitFor(() => expect(channels).toHaveLength(1));
     const send = channels[0]!.onmessage!;
-    send({ type: 'chunk', sequence: 1, markdown: '![竞态](jotluck-asset://asset-7)\n' });
+    send({
+      type: 'chunk',
+      sequence: 1,
+      markdown: '![竞态](jotluck-asset://asset-7)\n![晚到](jotluck-asset://asset-8)\n',
+    });
     await flushPromises();
     send({
       type: 'asset',
@@ -478,16 +504,24 @@ describe('ExternalReaderPage', () => {
       mediaType: 'image/png',
       bytes: 4,
     });
+    send({
+      type: 'asset',
+      assetId: 'asset-8',
+      fileName: 'late.png',
+      mediaType: 'image/png',
+      bytes: 4,
+    });
     await flushPromises();
 
     // 哨兵（L9）：世代守卫的前提是读取确已发起——若组件回归致
-    // read_external_conversion_asset 根本不发起，rejectAsset 恒 undefined，
+    // read_document_conversion_asset 根本不发起，rejectAsset 恒 undefined，
     // 下面的可选链拒绝被静默跳过、负向断言空转变绿。先行钉死前置。
     expect(
       invoke.mock.calls.some(([command]) => command === 'read_document_conversion_asset'),
       '资产读取应已发起（否则本用例空转，世代守卫未被验证）',
     ).toBe(true);
     expect(rejectAsset).toBeDefined();
+    expect(resolveAsset).toBeDefined();
 
     // 读取未决时用户取消：世代翻页后到达的失败不得污染当前预览与警告列表。
     await wrapper
@@ -499,7 +533,18 @@ describe('ExternalReaderPage', () => {
 
     expect(wrapper.text()).not.toContain('资源读取失败');
     expect(wrapper.text()).not.toContain('无法读取转换资源');
+
+    // 晚到成功（revoke-spy）：世代已翻页，刚 mint 的 object URL 必须被立即
+    // 撤销——不进入渲染、不留存活引用，卸载后再 reset 也不会重复撤销。
+    resolveAsset?.(new Uint8Array([1]).buffer);
+    await flushPromises();
+    expect(urlStub.created).toEqual(['blob:mock-1']);
+    expect(urlStub.revoked).toEqual(['blob:mock-1']);
+    expect(urlStub.live).toEqual(new Set());
+    expect(wrapper.find('article img[src="blob:mock-1"]').exists()).toBe(false);
+    expect(wrapper.find('article img').exists()).toBe(false);
     wrapper.unmount();
+    expect(urlStub.revoked).toEqual(['blob:mock-1']);
   });
 
   it('marks a completed conversion stale on focus and blocks both edit paths', async () => {

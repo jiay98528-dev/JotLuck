@@ -328,7 +328,7 @@ import {
   enableExternalEdit,
   getWindowBootstrap,
   promoteExternalFileToNotebook,
-  readDocumentConversionAsset,
+  readDocumentConversionAssetBytes,
   readExternalNoteFile,
   refreshDocumentSourceRevision,
   saveConvertedDocumentAs,
@@ -340,6 +340,7 @@ import {
   openDocumentSourceInEditor,
 } from '@/services/windowsIntegrationService';
 import { useDialogFocus } from '@/composables/useDialogFocus';
+import { useConversionAssets } from '@/composables/useConversionAssets';
 import { useRemoteImageSession } from '@/composables/useRemoteImageSession';
 
 const router = useRouter();
@@ -391,14 +392,30 @@ const editorCandidatePending = ref(false);
 const editDialogOpen = ref(false);
 const editDialogStep = ref<'choices' | 'confirm-save'>('choices');
 const editDialogRef = ref<HTMLElement | null>(null);
-const assetUrls = new Map<string, string>();
-/** 读取失败的资产 id：渲染时改为「资源读取失败」占位，而不是落到远程图片策略。 */
-const failedAssets = new Set<string>();
-const pendingAssets: Array<Extract<DocumentConversionEvent, { type: 'asset' }>> = [];
 let renderRevision = 0;
 
+/**
+ * 资产图链路（零拷贝）：Rust 二进制回流（tauri::ipc::Response → ArrayBuffer，
+ * 1x）→ Blob 包装 → URL.createObjectURL 短引用 → 渲染时只拼短串；重转/卸载
+ * 时 reset() 统一 revokeObjectURL。落盘 markdown 仍是 jotluck-asset:// 占位符。
+ * 渲染清洗器默认剥除 blob:，本页经 allowBlobImageSources 显式放行 img src
+ * （sanitize 钩子做字符类校验；javascript: 等协议同通道无论开关均仍拒）。
+ */
+const conversionAssets = useConversionAssets({
+  readAsset: (conversionId, assetId) => readDocumentConversionAssetBytes(conversionId, assetId),
+  getGeneration: () => conversionGeneration.value,
+  onAssetFailed: (_assetId, fileName, error) => {
+    warnings.value.push({
+      type: 'warning',
+      code: 'asset-read-failed',
+      message: userErrorMessage(error),
+      context: fileName,
+    });
+  },
+});
+
 /** 转换产物引用的完整图片语法（worker 生成形态：内联图 + 可选标题段）。 */
-const ASSET_IMAGE_PATTERN = /!\[([^\]]*)\]\(jotluck-asset:\/\/([^\s)]+)(?:\s+"[^"]*")?\)/g;
+const ASSET_IMAGE_PATTERN = /!\[([^\]]*)\]\(jotluck-asset:\/\/([^\s)]+)(\s+"[^"]*")?\)/g;
 
 function escapeHtml(value: string): string {
   return value
@@ -406,21 +423,6 @@ function escapeHtml(value: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-/**
- * 资产字节转 data: URL（分块拼接避免 String.fromCharCode 栈溢出）。
- * 刻意不用 blob: object URL——渲染管线的 DOMPurify 默认 URI 规则会剥除
- * blob: src（仅 data: 有 img 白名单分支），object URL 从未真正显示过。
- */
-function assetDataUrl(bytes: number[], mediaType: string): string {
-  const binary = Uint8Array.from(bytes);
-  let binaryString = '';
-  const CHUNK_SIZE = 0x8000;
-  for (let offset = 0; offset < binary.length; offset += CHUNK_SIZE) {
-    binaryString += String.fromCharCode(...binary.subarray(offset, offset + CHUNK_SIZE));
-  }
-  return `data:${mediaType};base64,${btoa(binaryString)}`;
 }
 
 /** 未就绪资产的中性 loading 占位；失败资产换成本地化「资源读取失败」占位。 */
@@ -614,9 +616,8 @@ async function startDocumentConversion(): Promise<void> {
   if (!isDocumentImport.value) return;
   conversionGeneration.value += 1;
   const generation = conversionGeneration.value;
-  clearAssetUrls();
-  failedAssets.clear();
-  pendingAssets.splice(0);
+  // 换代起点：撤销上一代全部 object URL 并清空 pending/failed 状态（幂等）。
+  conversionAssets.reset();
   conversionId.value = '';
   expectedChunkSequence.value = 1;
   content.value = '';
@@ -646,8 +647,7 @@ async function startDocumentConversion(): Promise<void> {
       return;
     }
     conversionId.value = startedConversionId;
-    const queued = pendingAssets.splice(0);
-    for (const asset of queued) void loadConversionAsset(asset, generation);
+    conversionAssets.flushPendingAssets(startedConversionId);
   } catch (error) {
     if (generation !== conversionGeneration.value) return;
     conversionStatus.value = 'error';
@@ -681,8 +681,10 @@ async function handleConversionEvent(event: DocumentConversionEvent): Promise<vo
       await renderCurrentMarkdown();
       break;
     case 'asset':
-      if (!conversionId.value) pendingAssets.push(event);
-      else await loadConversionAsset(event, conversionGeneration.value);
+      // conversionId 未就位（IPC 未返回）时先入队，就位后由 startDocumentConversion
+      // 统一 flush；读取完成的重渲染由 conversionAssets.revision 驱动。
+      if (!conversionId.value) conversionAssets.enqueueAsset(event);
+      else void conversionAssets.loadAsset(event, conversionId.value);
       break;
     case 'warning':
       warnings.value.push(event);
@@ -708,48 +710,23 @@ async function handleConversionEvent(event: DocumentConversionEvent): Promise<vo
   }
 }
 
-async function loadConversionAsset(
-  event: Extract<DocumentConversionEvent, { type: 'asset' }>,
-  generation: number,
-): Promise<void> {
-  if (!conversionId.value) return;
-  try {
-    const payload = await readDocumentConversionAsset(conversionId.value, event.assetId);
-    if (generation !== conversionGeneration.value) return;
-    failedAssets.delete(event.assetId);
-    assetUrls.set(event.assetId, assetDataUrl(payload.bytes, payload.mediaType));
-    await renderCurrentMarkdown();
-  } catch (error) {
-    // 世代守卫：失败属于已被弃用的转换（重转/取消竞态）时，不得污染当前预览。
-    if (generation !== conversionGeneration.value) return;
-    failedAssets.add(event.assetId);
-    warnings.value.push({
-      type: 'warning',
-      code: 'asset-read-failed',
-      message: userErrorMessage(error),
-      context: event.fileName,
-    });
-    // 立即重渲染，把该引用从 loading 占位切换为「资源读取失败」占位。
-    await renderCurrentMarkdown();
-  }
-}
-
 async function renderCurrentMarkdown(): Promise<void> {
   if (isPlainText.value || !content.value) return;
   const revision = ++renderRevision;
   rendererModule ??= await import('@jotluck/renderer');
-  let previewMarkdown = content.value;
-  for (const [assetId, url] of assetUrls) {
-    previewMarkdown = previewMarkdown.replaceAll(`jotluck-asset://${assetId}`, url);
-  }
-  // 仍以 jotluck-asset:// 引用的资源尚未就绪或已失败：换成中性占位，
-  // 避免未知 scheme 落进远程图片策略被渲染成「远程图片已阻止」。
-  previewMarkdown = previewMarkdown.replace(
+  // 资产占位符单趟换装：就绪 → object URL 短引用（保留可选标题段）；未就绪/
+  // 已失败 → 中性占位，避免未知 scheme 落进远程图片策略被渲染成「远程图片已阻止」。
+  const previewMarkdown = content.value.replace(
     ASSET_IMAGE_PATTERN,
-    (_match, alt: string, assetId: string) => assetPlaceholderHtml(alt, failedAssets.has(assetId)),
+    (_match, alt: string, assetId: string, title?: string) => {
+      const url = conversionAssets.resolve(assetId);
+      if (url !== null) return `![${alt}](${url}${title ?? ''})`;
+      return assetPlaceholderHtml(alt, conversionAssets.hasFailed(assetId));
+    },
   );
   const rendered = rendererModule.renderMarkdown(previewMarkdown, {
     remoteImages: remoteImagePolicy.value,
+    allowBlobImageSources: true,
   });
   if (revision !== renderRevision) return;
   html.value = rendered;
@@ -765,7 +742,8 @@ async function cancelConversion(): Promise<void> {
   const activeConversionId = conversionId.value;
   conversionGeneration.value += 1;
   conversionStatus.value = 'cancelled';
-  pendingAssets.splice(0);
+  // 取消不 reset：已 mint 的 object URL 保留展示已转换部分；未 flush 的队列
+  // 事件随世代守卫失效（重转时 startDocumentConversion 开头的 reset 会清空）。
   if (!activeConversionId) return;
   try {
     await cancelDocumentConversion(activeConversionId);
@@ -870,11 +848,6 @@ async function refreshSourceOnFocus(): Promise<void> {
   } catch {
     // The file watcher remains the primary signal; focus revalidation is best effort.
   }
-}
-
-function clearAssetUrls(): void {
-  // data: URL 无 object URL 生命周期，直接丢弃即可。
-  assetUrls.clear();
 }
 
 function scrollHeading(id: string): void {
@@ -983,14 +956,15 @@ onMounted(() => {
   void load();
 });
 
-watch(remoteImages.revision, () => {
+watch([remoteImages.revision, conversionAssets.revision], () => {
   if (!isPlainText.value && content.value) void renderCurrentMarkdown();
 });
 
 onBeforeUnmount(() => {
   conversionGeneration.value += 1;
   window.removeEventListener('focus', refreshSourceOnFocus);
-  clearAssetUrls();
+  // 卸载路径统一撤销 object URL（幂等）；在飞读取的晚到结果由世代守卫丢弃。
+  conversionAssets.reset();
   if (conversionStatus.value === 'running' && conversionId.value) {
     void cancelDocumentConversion(conversionId.value);
   }

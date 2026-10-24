@@ -35,6 +35,11 @@ export interface RendererOptions {
   resolveImageSrc?: (source: string) => string | null;
   /** Privacy-preserving policy for remote images. Missing policy remains fail-closed. */
   remoteImages?: RemoteImagePolicy;
+  /**
+   * Allow blob: object URLs as <img src> through sanitization (character-class
+   * validated). Missing flag remains fail-closed: blob: src is stripped.
+   */
+  allowBlobImageSources?: boolean;
 }
 
 /** Result of rendering Markdown to HTML */

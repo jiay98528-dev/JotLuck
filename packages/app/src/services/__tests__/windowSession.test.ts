@@ -5,6 +5,7 @@ import {
   getWindowBootstrap,
   invalidateWindowBootstrap,
   promoteExternalFileToNotebook,
+  readDocumentConversionAssetBytes,
   startDocumentConversion,
 } from '../windowSession';
 
@@ -196,5 +197,46 @@ describe('windowSession document import passthrough', () => {
     expect(invoke).toHaveBeenCalledWith('cancel_document_conversion', {
       conversionId: 'conversion-9',
     });
+  });
+
+  it('normalizes an ArrayBuffer asset response into a Uint8Array view', async () => {
+    // Rust 二进制回流（tauri::ipc::Response）：invoke 直接收到 ArrayBuffer。
+    invoke.mockResolvedValue(new Uint8Array([1, 2, 3]).buffer);
+
+    await expect(readDocumentConversionAssetBytes('conversion-1', 'asset-1')).resolves.toEqual(
+      new Uint8Array([1, 2, 3]),
+    );
+    expect(invoke).toHaveBeenCalledWith('read_document_conversion_asset', {
+      conversionId: 'conversion-1',
+      assetId: 'asset-1',
+    });
+  });
+
+  it('normalizes a number[] asset response via Uint8Array.from', async () => {
+    // 防御兼容：非二进制通道回落 JSON number[] 形态。
+    invoke.mockResolvedValue([9, 8, 7]);
+
+    await expect(readDocumentConversionAssetBytes('conversion-2', 'asset-2')).resolves.toEqual(
+      new Uint8Array([9, 8, 7]),
+    );
+  });
+
+  it('rejects unexpected asset payload shapes as operation_failed', async () => {
+    invoke.mockResolvedValue({ bytes: 'nope' });
+
+    await expect(readDocumentConversionAssetBytes('conversion-3', 'asset-3')).rejects.toMatchObject(
+      {
+        name: 'CommandError',
+        payload: { code: 'operation_failed' },
+      },
+    );
+  });
+
+  it('normalizes asset IPC failures into CommandError', async () => {
+    invoke.mockRejectedValue(new Error('ipc down'));
+
+    await expect(readDocumentConversionAssetBytes('conversion-4', 'asset-4')).rejects.toMatchObject(
+      { name: 'CommandError', diagnostic: 'ipc down' },
+    );
   });
 });

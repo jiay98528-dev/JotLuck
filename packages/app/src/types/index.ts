@@ -159,7 +159,6 @@ export type {
   SaveExternalNoteAsRequest,
   DocumentProgressUnit,
   DocumentConversionEvent,
-  DocumentConversionAssetPayload,
   SaveConvertedDocumentDialogRequest,
   DocumentEditorCandidate,
   DocumentEditorLaunchResult,
