@@ -47,7 +47,7 @@ import type { RendererOptions } from '@jotluck/renderer';
 import DOMPurify from 'dompurify';
 import { translate } from '@/i18n';
 import { openExternalUrl } from '@/utils/urlUtils';
-import { findHeadingElement } from '@/utils/heading-anchor';
+import { findHeadingElement, headingAnchorCandidates } from '@/utils/heading-anchor';
 import { classifyAnchorHref } from '@/utils/preview-links';
 import { TapGesture, isTouchInput } from './editor-pointer';
 import { caretAtPoint, inlineSourceMap, mapDomText, snapSourceBoundary } from './editor-source-map';
@@ -87,6 +87,9 @@ function renderBlock(
     wikiLinkExists: options.wikiLinkExists,
     resolveImageSrc: options.resolveImageSrc,
     remoteImages: options.remoteImages,
+    // 外部会话本地图为 blob: objectURL——透传清洗器放行开关（宿主经
+    // MarkdownEditor 传入；非外部会话恒 false，渲染输出零变化）。
+    allowBlobImageSources: options.allowBlobImageSources === true,
   };
   if (refDefs.size === 0) return renderMarkdown(raw, renderOptions);
   const prefix = [...refDefs.values()].join('\n');
@@ -180,6 +183,8 @@ interface LivePreviewOptions {
   wikiLinkExists?: (note: string) => boolean;
   resolveImageSrc?: RendererOptions['resolveImageSrc'];
   remoteImages?: RendererOptions['remoteImages'];
+  /** 外部会话 blob: 资产图的清洗器放行开关（透传 renderMarkdown）。 */
+  allowBlobImageSources?: boolean;
   onRemoteImageClick?: (event: MouseEvent) => boolean;
   onRemoteImageLoad?: (event: Event) => boolean;
   onRemoteImageError?: (event: Event) => boolean;
@@ -1240,6 +1245,38 @@ function toggleTaskListItemAtWidget(view: EditorView, widget: Element): boolean 
   return true;
 }
 
+/**
+ * #fragment → 标题源码位置（AST 路径）：headingAnchorCandidates 三形态候选
+ * 逐一比对 AST 标题节点的 id（与渲染同管线 headingIdFromText(text,
+ * occurrence)）与归一前文本，按文档序取首命中的块起始位；全 miss 返回 null。
+ * AST 经 getDocumentAst 取（documentAnalysisFacet/exactCache 缓存复用，
+ * 大文档不产生重复解析）。容器内嵌标题（引用/列表内）不在顶层 blocks——
+ * 由调用点的已物化 DOM 兜底，与纯 DOM 旧路径能力不弱化。
+ */
+function findHeadingSourcePos(view: EditorView, rawId: string): number | null {
+  const candidates = headingAnchorCandidates(rawId);
+  if (candidates.length === 0) return null;
+  const ast = getDocumentAst(view.state);
+  for (const block of ast.blocks) {
+    if (block.type !== 'heading') continue;
+    if (candidates.includes(block.id) || candidates.includes(block.text)) {
+      return block.range.from;
+    }
+  }
+  return null;
+}
+
+/** #fragment 全 miss 的轻反馈：与静态预览面同文案（navigation.headingNotFound）。
+ *  Toast 组件较重且仅主窗口挂载，miss 路径才动态加载（urlUtils 同构先例）；
+ *  加载失败（测试环境等）静默降级，不影响点击消费语义。 */
+function reportLiveHeadingNotFound(): void {
+  void import('@/components/common/Toast.vue')
+    .then(({ useToast }) => {
+      useToast().show(translate('navigation.headingNotFound'), 'info', 3500);
+    })
+    .catch(() => {});
+}
+
 function handleLiveAnchorClick(
   anchor: HTMLAnchorElement,
   options: LivePreviewOptions,
@@ -1259,13 +1296,25 @@ function handleLiveAnchorClick(
 
   const href = anchor.getAttribute('href');
   if (href) {
-    // 站内锚点（#fragment）：编辑器 DOM 内三形态归一定位块内标题，不上抛外链
+    // 站内锚点（#fragment）：AST 解析定位标题源码位置——不依赖已物化的
+    // 渲染 DOM（旧 DOM 路径对屏外未物化标题恒 miss）；AST 全 miss 再落
+    // 已物化 DOM 兜底（覆盖容器内嵌标题），仍 miss 给 headingNotFound。
     if (href.startsWith('#')) {
-      const heading = findHeadingElement(view.dom, href.slice(1));
-      if (heading) {
+      const rawId = href.slice(1);
+      const sourcePos = findHeadingSourcePos(view, rawId);
+      if (sourcePos !== null) {
         view.dispatch({
-          effects: EditorView.scrollIntoView(view.posAtDOM(heading), { y: 'start' }),
+          effects: EditorView.scrollIntoView(sourcePos, { y: 'start' }),
         });
+      } else {
+        const heading = findHeadingElement(view.dom, rawId);
+        if (heading) {
+          view.dispatch({
+            effects: EditorView.scrollIntoView(view.posAtDOM(heading), { y: 'start' }),
+          });
+        } else {
+          reportLiveHeadingNotFound();
+        }
       }
       return true; // 点击已被消费，绝不落入外链分支
     }

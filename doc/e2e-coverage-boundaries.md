@@ -66,3 +66,19 @@ F-19 的完整链路（DOCX/PDF/Excel → 隔离只读预览 → 启动编辑双
 - 事实：`document_import.rs` 转换警告遍历 `document.hyperlinks` 全集，该字段由 docx-rs 按 rels 的 HYPERLINK_TYPE 全量填充，与正文是否引用无关——孤儿 rels、仅存在于被丢弃页眉/页脚中的链接都会触发 scheme 警告误报。渲染层实际过滤在 `find_docx_hyperlink_target`，Markdown 产物不受影响，仅警告文案可能多列 scheme。
 - 不修理由：精确修法需在正文遍历中记录被引用的 rId 并把警告发射移到块循环之后，属转换 worker 生产路径的结构性改动，对纯提示性问题不成比例。
 - 后续若修：未来触碰 convert_docx 时顺带做「正文引用集 ∩ rels 全集」交集即可。
+
+## 追加处置记录（2026-10-24，Flash 评审 17 项发现处置批「记录不修」项 L1/L3）
+
+静态评审 17 项发现经复核裁决：四条确认项与低危 L2/L4-L13 已修复；本节记录两条**记录不修**项（与上文 2026-10-23 批记录的 L6/L8 同主题，本批为独立复核口径的补充与再确认，不推翻既有定性）。
+
+### L1 · DOCX 导入链接警告按 rels 全集发射且表格归因失真（纯信息性）
+
+- 事实（复核确认，较 2026-10-23 批 L8 更深一层）：`document_import.rs` 遍历 `document.hyperlinks` 全量过滤 `!is_safe_link_target` 发射 `docx-unsupported-link`；经查 docx-rs 0.4.22 源码（`src/reader/read_docx.rs` HYPERLINK_TYPE 条目装配），hyperlinks 由 document.xml.rels **全量填充、与正文是否引用无关**——孤立 rels 条目（如遗留 ftp:/file: 关系）会在零条可见链接被降级的情况下触发警告，确为误报路径。**表格归因失真亦属实**：`render_docx_table` 只走 `collect_docx_plain_text`，表格内一切链接（含 https）均拍平为纯文本，警告文案「unsupported schemes were flattened」以方案为唯一归因不完全准确。
+- 不修理由：纯信息性警告面，无数据损害（渲染层实际过滤在 `find_docx_hyperlink_target`，Markdown 产物不受影响）。正确修法需渲染期跟踪实际遇到的 unsafe scheme（类似 `referenced_assets` 先例），且表格/脚注路径不走 `render_docx_value`、需专门设计，还要改动现有断言 rels 全量上下文的测试（`document_import.rs` 断言 `context == "file, ftp"` 的用例）——非低风险顺手改。
+- 后续若修：与 2026-10-23 批 L8 的「正文引用集 ∩ rels 全集」交集方案合并实施，表格/脚注路径单独补渲染期 scheme 跟踪。
+
+### L3 · on_navigation localhost 任意端口口径（兜底守卫的已知权衡）
+
+- 事实（复核确认，与 2026-10-23 批 L6 同一守卫）：`lib.rs` `allows_webview_navigation` 放行任意端口的 http/https/tauri + tauri.localhost|localhost。但与该批评定「宽于注释口径」不同，本批复核认定**代码与文档一致**：`build_window` 注释与 `webview_navigation_guard_allows_only_app_origins` 测试（明示「Linux 生产源与 Vite 开发服务器（端口任意）都在 localhost 上」并断言 localhost:5173 放行）均已显式记录并锁定任意端口口径，非超注释用途。
+- 不可收窄论证：Linux 生产源端口动态、dev server 由 Vite 分配，二者均无法静态枚举；运行时门控也只能覆盖 Windows/macOS 生产态（Linux 生产态必须保留任意端口 localhost）。收窄属对「前端已拦截、此处仅深度兜底」守卫的边际加固，且需改动锁定该行为的既有测试——不可低风险收窄。
+- 已知残余面（接受并记录）：本机恶意进程占据 localhost 端口时，WebView 可导航至该源——作为兜底守卫的已知权衡，与 L6 批记录的利用前提苛刻定性一致（需先绕过全部前端点击拦截）。

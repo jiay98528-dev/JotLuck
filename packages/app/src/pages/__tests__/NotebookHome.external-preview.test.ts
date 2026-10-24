@@ -3,6 +3,7 @@ import { mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { MockFSService } from '@/services/MockFSService';
 import type { JotLuckE2EBridge, JotLuckE2EOpenedFile } from '@/utils/e2e-bridge';
+import { installObjectUrlStub, type ObjectUrlStub } from '../../test/object-url-stub';
 import NotebookHome from '../NotebookHome.vue';
 
 /**
@@ -15,8 +16,9 @@ import NotebookHome from '../NotebookHome.vue';
  *
  * 修复口径：imageRevision watch 在 isExternalReadonly 时调用 updateExternalPreview
  * （与大文档 :revision 含 imageRevision 的 ProgressivePreview 范式对齐）。
- * 本用例走真实挂载链路断言：readExternalAsset 发起 → data:URL 出现在
- * 外部只读 article 内。红 = 回归（watch 分流断裂或首屏 load 链断裂）。
+ * 本用例走真实挂载链路断言：readExternalAsset 发起（二进制 Uint8Array 回流）
+ * → Blob objectURL 出现在外部只读 article 内（渲染面须显式放行 blob:）。
+ * 红 = 回归（watch 分流断裂或首屏 load 链断裂或 blob 放行缺口）。
  */
 
 // vitest MODE 非 e2e，peekJotLuckE2EBridge 原实现恒 null；部分 mock 固定回
@@ -34,13 +36,18 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ replace: routerReplaceMock })
 
 const NOTE_ABSOLUTE_PATH = 'D:/notes/外部图.md';
 const NOTE_CONTENT = '# 外部图\n\n![本地图](pic.png)\n';
-const ASSET_BASE64 = 'cGl4ZWw=';
+/** 'pix' 字节：对齐桌面端 tauri::ipc::Response 二进制回流契约。 */
+const ASSET_BYTES = new Uint8Array([0x70, 0x69, 0x78]);
 
 describe('NotebookHome 外部只读壳本地图渲染链（imageRevision → externalPreviewHtml）', () => {
   let wrapper: VueWrapper | null = null;
   let readExternalAssetSpy: MockInstance<typeof MockFSService.prototype.readExternalAsset>;
+  let urlStub: ObjectUrlStub;
 
   beforeAll(() => {
+    // jsdom 缺失 URL.createObjectURL/revokeObjectURL：外部会话资产图经 Blob
+    // mint objectURL，必须显式注桩（blob:mock-1 形态可穿过清洗器字符类校验）。
+    urlStub = installObjectUrlStub();
     // accessToken 不在 JotLuckE2EOpenedFile 类型面（桥接类型未声明），但页面
     // normalizeOpenedFilePayload 运行时会消费 record.accessToken——本地图经
     // usePreviewImageResolver 分流到 readExternalAsset 依赖它，交集类型保留。
@@ -57,7 +64,7 @@ describe('NotebookHome 外部只读壳本地图渲染链（imageRevision → ext
     // 命中即证明「首屏渲染后主动发起资产读取」这半条链路。
     readExternalAssetSpy = vi
       .spyOn(MockFSService.prototype, 'readExternalAsset')
-      .mockResolvedValue(ASSET_BASE64);
+      .mockResolvedValue(ASSET_BYTES);
     wrapper = mount(NotebookHome, {
       global: {
         plugins: [createPinia()],
@@ -77,10 +84,11 @@ describe('NotebookHome 外部只读壳本地图渲染链（imageRevision → ext
     wrapper = null;
     readExternalAssetSpy.mockRestore();
     bridgeHolder.bridge = null;
+    urlStub.restore();
     document.body.replaceChildren();
   });
 
-  it('外部只读态：资产读取发起且 imageRevision 翻页驱动 externalPreviewHtml 换出 data:URL', async () => {
+  it('外部只读态：资产读取发起且 imageRevision 翻页驱动 externalPreviewHtml 换出 blob:URL', async () => {
     if (!wrapper) throw new Error('挂载未就绪');
     // 启动链：mockOpenedFile → initNotebook → enterExternalFileSession → 外部只读壳渲染
     await vi.waitFor(() => {
@@ -100,11 +108,12 @@ describe('NotebookHome 外部只读壳本地图渲染链（imageRevision → ext
     });
 
     // 断言二（revision 回灌链）：load 完成 → imageRevision++ → watch 分流
-    // updateExternalPreview → article 换出 data:URL src。无 watch 分流时红。
+    // updateExternalPreview → article 换出 blob:URL src（objectURL 零拷贝形态，
+    // 渲染面经 allowBlobImageSources 显式放行）。无 watch 分流或放行缺口时红。
     await vi.waitFor(() => {
       const img = wrapper!.find('.external-preview img[alt="本地图"]');
       expect(img.exists(), '外部只读 article 应渲染出本地图 <img>').toBe(true);
-      expect(img.attributes('src')).toBe(`data:image/png;base64,${ASSET_BASE64}`);
+      expect(img.attributes('src')).toBe('blob:mock-1');
     });
   });
 });

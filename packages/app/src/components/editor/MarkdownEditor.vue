@@ -80,6 +80,8 @@ const props = withDefaults(
     wikiLinkRevision?: number;
     resolveImageSrc?: RendererOptions['resolveImageSrc'];
     imageRevision?: number;
+    /** 外部会话 blob: 资产图的清洗器放行开关（透传 livePreviewExtension）。 */
+    allowBlobImageSources?: boolean;
     remoteImages?: RendererOptions['remoteImages'];
     remoteImageRevision?: number;
     onLivePreviewRemoteImageClick?: (event: MouseEvent) => boolean;
@@ -115,6 +117,7 @@ const props = withDefaults(
     wikiLinkRevision: 0,
     resolveImageSrc: undefined,
     imageRevision: 0,
+    allowBlobImageSources: false,
     remoteImages: undefined,
     remoteImageRevision: 0,
     onLivePreviewRemoteImageClick: undefined,
@@ -397,6 +400,7 @@ function createState(doc: string) {
               onWikiLinkClick: props.onLivePreviewWikiLinkClick,
               wikiLinkExists: props.wikiLinkExists,
               resolveImageSrc: props.resolveImageSrc,
+              allowBlobImageSources: props.allowBlobImageSources,
               remoteImages: props.remoteImages,
               onRemoteImageClick: props.onLivePreviewRemoteImageClick,
               onRemoteImageLoad: props.onLivePreviewRemoteImageLoad,
@@ -600,6 +604,7 @@ function refreshLivePreview(): void {
             onWikiLinkClick: props.onLivePreviewWikiLinkClick,
             wikiLinkExists: props.wikiLinkExists,
             resolveImageSrc: props.resolveImageSrc,
+            allowBlobImageSources: props.allowBlobImageSources,
             remoteImages: props.remoteImages,
             onRemoteImageClick: props.onLivePreviewRemoteImageClick,
             onRemoteImageLoad: props.onLivePreviewRemoteImageLoad,

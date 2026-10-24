@@ -45,7 +45,10 @@ describe('SettingsDialog locale switching', () => {
       currentSelect.value = locale;
       currentSelect.dispatchEvent(new window.Event('change', { bubbles: true }));
       await flushPromises();
-      await vi.waitFor(() => expect(getCurrentLocale()).toBe(locale));
+      // setLocale 内 loadLocale 走 locale chunk 动态 import（i18n/index.ts），
+      // 全量并发负载下可能超出 waitFor 默认 1s 窗口（单独运行恒绿、全量
+      // 偶发超时）——放宽等待窗口，断言集（切换生效/焦点不动/持久化/文案）不变。
+      await vi.waitFor(() => expect(getCurrentLocale()).toBe(locale), { timeout: 5_000 });
 
       expect(document.activeElement).toBe(currentSelect);
       expect(localStorage.getItem('jotluck:locale:v1')).toBe(locale);

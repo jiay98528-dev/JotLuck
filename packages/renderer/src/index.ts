@@ -133,7 +133,7 @@ function appendRemoteImageCopy(
 }
 
 function createRemoteImagePlaceholder(
-  image: HTMLImageElement,
+  image: HTMLImageElement | HTMLInputElement,
   remote: Extract<ClassifiedRemoteImage, { kind: 'https' | 'http' | 'invalid' }>,
   policy?: RemoteImagePolicy,
 ): HTMLElement {
@@ -173,12 +173,12 @@ function createRemoteImagePlaceholder(
 }
 
 function createAllowedRemoteImage(
-  image: HTMLImageElement,
+  image: HTMLImageElement | HTMLInputElement,
   remote: Extract<ClassifiedRemoteImage, { kind: 'https' }>,
   labels: RemoteImageLabels,
   scopeId: string,
 ): HTMLElement {
-  const allowedImage = image.cloneNode(true) as HTMLImageElement;
+  const allowedImage = image.cloneNode(true) as typeof image;
   const wrapper = document.createElement('span');
   wrapper.className = 'remote-image remote-image--loading';
   wrapper.dataset.remoteImageSource = remote.source;
@@ -200,7 +200,13 @@ function createAllowedRemoteImage(
 function applyImagePolicy(html: string, options?: RendererOptions): string {
   const template = document.createElement('template');
   template.innerHTML = html;
-  for (const image of template.content.querySelectorAll('img')) {
+  // raw HTML 的 input[type=image]（表单图像按钮）与 <img> 同为图片请求面，
+  // 必须同策略处理——https 远程图同样走 decide/占位，不留绕过缺口；无 alt
+  // 时占位标题沿用 img 口径（labels.unnamed），input 的 alt 语义与 img 一致。
+  // [type=image i] 大小写不敏感匹配，防 type="IMAGE" 变体绕过。
+  for (const image of template.content.querySelectorAll<HTMLImageElement | HTMLInputElement>(
+    'img, input[type=image i]',
+  )) {
     const source = image.getAttribute('src') ?? '';
     if (!source) continue;
     const remote = classifyRemoteImage(source);
@@ -222,6 +228,11 @@ function applyImagePolicy(html: string, options?: RendererOptions): string {
       image.replaceWith(createRemoteImagePlaceholder(image, remote, options?.remoteImages));
       continue;
     }
+    // data:/blob: 是自包含 URL，无需宿主解析——短路保留原 src。此前会被
+    // 无条件喂给 resolveImageSrc，返回 null 即 removeAttribute('src') 剥图；
+    // 唯一生产 resolver 的 passthrough 前置放行掩盖了这一点，任何缺
+    // passthrough 的 resolver 都会静默剥除 blob:/data: 资产图。
+    if (/^(?:data|blob):/i.test(source)) continue;
     if (!options?.resolveImageSrc) continue;
     let resolved: string | null = null;
     try {

@@ -56,7 +56,8 @@ function createNavigationHarness() {
     // 签名带 path 形参：主流程用例以 mockImplementation 改写换笔记语义
     onShellSelectNote: vi.fn(async (_path: string) => {}),
     currentBacklinks: ref<BacklinkEntry[]>([]),
-    isExternalEditing: ref(false),
+    // 外部会话全域（readonly + edit-shell）：wiki 点击守卫统一拦截的注入位
+    isExternalSession: ref(false),
     guidedSampleSession: ref<GuidedSampleSession | null>(null),
   };
   const nav = useDocumentNavigation(deps);
@@ -269,5 +270,30 @@ describe('useDocumentNavigation navigateDocument 主流程', () => {
     expect(deps.toast.show).toHaveBeenCalledWith('navigation.referenceMoved', 'info', 3500);
     expect(view.dispatch).toHaveBeenCalledTimes(2); // 未新增
     expect(deps.onShellSelectNote).toHaveBeenCalledTimes(1); // 同笔记不再切换
+  });
+});
+
+describe('useDocumentNavigation 外部会话 wiki 点击守卫', () => {
+  it('外部 readonly 会话：wiki 点击统一 wikiRestricted 提示，不查主索引不导航', async () => {
+    // L6：守卫此前只拦 edit-shell（isExternalEditing）——外部 readonly 点击会
+    // 落入 resolveWikiLink 拿无关笔记本索引误导航。注入位已扩为外部会话全域
+    // （readonly + edit-shell），本用例锁定 readonly 态同样拦截。
+    const { nav, deps } = createNavigationHarness();
+    deps.isExternalSession.value = true;
+
+    await nav.onLivePreviewWikiLinkClick('无关笔记', null);
+
+    expect(deps.toast.show).toHaveBeenCalledWith('notebook.external.wikiRestricted', 'info', 3500);
+    expect(deps.onShellSelectNote).not.toHaveBeenCalled();
+  });
+
+  it('工作区会话：wiki 点击不受守卫影响，正常落入解析/miss 提示链', async () => {
+    const { nav, deps } = createNavigationHarness();
+    deps.isExternalSession.value = false;
+
+    await nav.onLivePreviewWikiLinkClick('不存在的笔记', null);
+
+    // indexStore 无索引服务：落 noteNotFound miss 提示（未被 wikiRestricted 截胡）。
+    expect(deps.toast.show).toHaveBeenCalledWith('notebook.error.noteNotFound', 'warning', 3000);
   });
 });

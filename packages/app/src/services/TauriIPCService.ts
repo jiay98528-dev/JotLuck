@@ -23,7 +23,7 @@ import type {
 } from '@/types';
 import { isMarkdownLikeFile } from '@/utils/note-files';
 import { translate } from '@/i18n';
-import { normalizeCommandError } from './command-errors';
+import { createCommandError, normalizeCommandError } from './command-errors';
 import { createSampleNotebookSeed } from './SampleSeed';
 
 /**
@@ -233,8 +233,20 @@ export class TauriIPCService implements IFileSystemService {
     return invokeCommand<string>('read_binary_file', { relativePath: path });
   }
 
-  async readExternalAsset(accessToken: string, relativePath: string): Promise<string> {
-    return invokeCommand<string>('read_external_note_asset', { accessToken, relativePath });
+  async readExternalAsset(
+    accessToken: string,
+    relativePath: string,
+  ): Promise<Uint8Array<ArrayBuffer>> {
+    // Rust 侧以 tauri::ipc::Response 二进制回流，invoke 直接收到 ArrayBuffer
+    //（无 JSON number[] 编码放大）；防御性兼容 number[] 形态。归一为
+    // ArrayBuffer-backed Uint8Array 供 Blob 零拷贝收编（windowSession 同构）。
+    const raw = await invokeCommand<ArrayBuffer | number[]>('read_external_note_asset', {
+      accessToken,
+      relativePath,
+    });
+    if (raw instanceof ArrayBuffer) return new Uint8Array(raw);
+    if (Array.isArray(raw)) return Uint8Array.from(raw);
+    throw createCommandError('operation_failed', undefined, 'unexpected asset payload shape');
   }
 
   isBinaryPath(path: string): boolean {

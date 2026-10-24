@@ -114,10 +114,16 @@ async function switchMode(page: Page, target: ViewMode): Promise<void> {
 
 /** 即时模式：光标钉在文档首行（标题行），保证后续段落行全部以 live block 渲染。 */
 async function settleLiveCursorAtDocStart(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    window.__jotluck_e2e?.editor?.focus?.();
-    window.__jotluck_e2e?.editor?.setCursor?.(0);
+  // 探针夹具前提自证：bridge editor.setCursor 未命中时静默跳过会让 live 模式
+  // 前提（光标在首行）不成立、后续断言以错误原因通过——此处显式断言命中。
+  const hit = await page.evaluate(() => {
+    const editor = window.__jotluck_e2e?.editor;
+    editor?.focus?.();
+    if (typeof editor?.setCursor !== 'function') return false;
+    editor.setCursor(0);
+    return true;
   });
+  expect(hit, 'e2e bridge editor.setCursor 未命中，live 探针夹具失效').toBe(true);
   await page.waitForTimeout(500);
 }
 

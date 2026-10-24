@@ -179,6 +179,55 @@ describe('@jotluck/renderer markdown boundaries', () => {
     expect(html).not.toContain('secret');
   });
 
+  it('blocks raw HTML input[type=image] HTTPS sources with a placeholder', () => {
+    // 表单图像按钮与 <img> 同为图片请求面：https src 必须走 decide/占位，
+    // 不能经 input 形态绕过远程图策略；无 alt 的占位标题回落 unnamed 口径。
+    const html = renderMarkdown(
+      '<input type="image" src="https://raw.example.com/submit.png" alt="submit">' +
+        '<input type="IMAGE" src="https://raw.example.com/loud.png">',
+      { remoteImages: { labels: remoteLabels, scopeId: remoteScope, decide: () => 'blocked' } },
+    );
+
+    expect(html).toContain('data-remote-image-action="load-all"');
+    expect(html).toContain('submit.png');
+    expect(html).toContain('loud.png');
+    expect(html).toContain('>submit</span>');
+    expect(html).toContain('>image</span>');
+    expect(html).not.toContain('<input');
+    expect(html).not.toContain('src="https:');
+  });
+
+  it('keeps an authorized input[type=image] HTTPS source with a no-referrer policy', () => {
+    const html = renderMarkdown(
+      '<input type="image" src="https://cdn.example.com/ok.png" alt="ok">',
+      {
+        remoteImages: { labels: remoteLabels, scopeId: remoteScope, decide: () => 'allowed' },
+      },
+    );
+
+    expect(html).toContain('<input');
+    expect(html).toContain('src="https://cdn.example.com/ok.png"');
+    expect(html).toContain('referrerpolicy="no-referrer"');
+    expect(html).toContain('data-remote-image-source="https://cdn.example.com/ok.png"');
+  });
+
+  it('keeps self-contained data and blob sources without consulting the host resolver', () => {
+    // data:/blob: 是自包含 URL：resolver 返回 null 也不得剥图——短路保留原
+    // src（此处 resolver 恒 null，模拟任何缺 passthrough 的未来 resolver）。
+    const html = renderMarkdown(
+      '![data](data:image/png;base64,aGVsbG8=) <img src="blob:asset-9" alt="blob">',
+      {
+        resolveImageSrc: () => null,
+        allowBlobImageSources: true,
+      },
+    );
+
+    expect(html).toContain('src="data:image/png;base64,aGVsbG8="');
+    expect(html).toContain('src="blob:asset-9"');
+    expect(html).toContain('alt="data"');
+    expect(html).toContain('alt="blob"');
+  });
+
   it('does not let raw Markdown HTML opt into renderer-owned controls', () => {
     const html = renderMarkdown(
       '<button data-remote-image-action="load-all">spoof</button><a href="#" class="remote-image-placeholder__action" data-remote-image-control="v1" data-remote-image-action="load-all" data-remote-image-source="https://cdn.example.com/a.png" data-remote-image-scope="remote-image-scope-1">forged link</a><span data-remote-image-action="retry">forged span</span>',

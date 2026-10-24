@@ -26,12 +26,20 @@ const DEFAULT_DELAY = 50;
 
 /**
  * 与 Rust read_external_note_asset 契约对齐的资产门（fs_ops.rs resolve_asset）：
- * 仅位图扩展名白名单（svg 可携带脚本，刻意排除）+ 解码后 5MB 上限。
+ * 仅位图扩展名白名单（svg 可携带脚本，刻意排除）+ 5MB 上限。
  */
 const SUPPORTED_ASSET_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']);
 const MAX_EXTERNAL_ASSET_BYTES = 5 * 1024 * 1024;
 
-/** base64 解码后字节数（忽略空白；padding 计入折减）。 */
+/** base64 → 原始字节（测试种子以 base64 书写便捷；读取通道统一 Uint8Array）。 */
+function base64ToBytes(base64: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(base64.replace(/\s+/g, ''));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+/** base64 解码后字节数（忽略空白；padding 计入折减）——超限预检不解码。 */
 function base64DecodedBytes(base64: string): number {
   const compact = base64.replace(/\s+/g, '');
   const padding = compact.endsWith('==') ? 2 : compact.endsWith('=') ? 1 : 0;
@@ -56,9 +64,12 @@ export interface MockFSServiceOptions {
   initialFiles?: Record<string, string>;
   /**
    * Test-only external session image assets: grant-relative path → base64.
-   * 与桌面端契约对齐：仅位图扩展名白名单（svg/其余拒绝）、解码后 5MB 上限
-   * （file_too_large）、未命中 not_found。残余差异：窗口属主 token 校验与
-   * grant 目录位图白名单对字典型 mock 不建模（_accessToken 仅占位）。
+   * 与桌面端契约对齐：仅位图扩展名白名单（svg/其余拒绝）、5MB 上限
+   * （file_too_large）。未命中按 operation_failed 失败——对齐桌面端
+   * resolve_asset miss 的实际错误面（"external note does not exist" 经
+   * CommandErrorPayload 分类器落 operation_failed，command_error.rs 无
+   * "does not exist" 关键词）。残余差异：窗口属主 token 校验与 grant 目录
+   * 位图白名单对字典型 mock 不建模（_accessToken 仅占位）。
    */
   externalAssets?: Record<string, string>;
   /** Test-only recent notebook roots. Defaults to the sample notebook. */
@@ -275,7 +286,10 @@ export class MockFSService implements IFileSystemService {
     return this.readFile(path);
   }
 
-  async readExternalAsset(_accessToken: string, relativePath: string): Promise<string> {
+  async readExternalAsset(
+    _accessToken: string,
+    relativePath: string,
+  ): Promise<Uint8Array<ArrayBuffer>> {
     await delay(this.latency);
     const normalized = normalizePath(relativePath);
     // 扩展名白名单对齐 Rust resolve_asset（svg/其余扩展拒绝；大小写不敏感）
@@ -284,12 +298,16 @@ export class MockFSService implements IFileSystemService {
       throw createCommandError('operation_failed', undefined, normalized);
     }
     const asset = this.externalAssets[normalized];
-    if (asset === undefined) throw createCommandError('not_found', undefined, normalized);
+    // 字典未命中对齐桌面端 resolve_asset miss 的实际错误面：Rust 侧返回
+    // "external note does not exist: {path}"，经 CommandErrorPayload 分类器
+    // （command_error.rs not_found 关键词不含 "does not exist"）落
+    // operation_failed——mock 同码，防前端按 not_found 分叉出桌面没有的行为。
+    if (asset === undefined) throw createCommandError('operation_failed', undefined, normalized);
     // 解码后字节上限对齐 Rust MAX_EXTERNAL_ASSET_BYTES（file_too_large）
     if (base64DecodedBytes(asset) > MAX_EXTERNAL_ASSET_BYTES) {
       throw createCommandError('file_too_large', undefined, normalized);
     }
-    return asset;
+    return base64ToBytes(asset);
   }
 
   isBinaryPath(path: string): boolean {

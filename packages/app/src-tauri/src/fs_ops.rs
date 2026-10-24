@@ -1400,16 +1400,17 @@ pub fn read_external_note_file_snapshot(
     read_external_note_snapshot(&target).map_err(Into::into)
 }
 
-/// Read one image asset beside an external session file (base64 payload).
+/// Read one image asset beside an external session file (raw binary payload).
 /// 鉴权与文本族一致（窗口令牌）；resolve 限定在会话文件所在目录，仅放行
-/// 位图扩展名，大小上限对齐前端 MAX_IMAGE_BYTES。
+/// 位图扩展名，大小上限对齐前端 MAX_IMAGE_BYTES。经 tauri::ipc::Response
+/// 二进制回流（零拷贝通道，无 base64 33% 膨胀——同 read_document_conversion_asset）。
 #[tauri::command]
 pub fn read_external_note_asset(
     window: WebviewWindow,
     access_token: String,
     relative_path: String,
     access: State<ExternalAccessGrants>,
-) -> CommandResult<String> {
+) -> CommandResult<tauri::ipc::Response> {
     assert_external_owner(&window, &access, &access_token)?;
     let target = access.resolve_asset(&access_token, &relative_path)?;
     read_external_asset_content(&target)
@@ -1420,15 +1421,15 @@ fn read_external_note_asset_with_access(
     absolute_path: &str,
     relative_asset: &str,
     access: &ExternalAccessGrants,
-) -> CommandResult<String> {
+) -> CommandResult<tauri::ipc::Response> {
     let handle = access.grant_for_existing_file(absolute_path, "test")?;
     let target = access.resolve_asset(&handle.access_token, relative_asset)?;
     read_external_asset_content(&target)
 }
 
-fn read_external_asset_content(target: &Path) -> CommandResult<String> {
+fn read_external_asset_content(target: &Path) -> CommandResult<tauri::ipc::Response> {
     read_external_asset_bytes(target)
-        .map(|bytes| general_purpose::STANDARD.encode(bytes))
+        .map(tauri::ipc::Response::new)
         .map_err(Into::into)
 }
 
@@ -2567,15 +2568,18 @@ mod tests {
         let access = ExternalAccessGrants::new();
 
         // 白名单大小写不敏感；grant root 即会话文件所在目录，旁系图片可读。
-        assert_eq!(
-            read_external_note_asset_with_access(
-                target.to_string_lossy().as_ref(),
-                "/pic.PNG",
-                &access
-            )
-            .unwrap(),
-            general_purpose::STANDARD.encode([1u8, 2, 3])
-        );
+        // 命令返回原始字节负载（零拷贝二进制通道，非 base64/JSON number[]）。
+        use tauri::ipc::IpcResponse;
+        let response = read_external_note_asset_with_access(
+            target.to_string_lossy().as_ref(),
+            "/pic.PNG",
+            &access,
+        )
+        .unwrap();
+        assert!(matches!(
+            response.body(),
+            Ok(tauri::ipc::InvokeResponseBody::Raw(body)) if body == vec![1u8, 2, 3]
+        ));
         // 会话目录内的子目录图片同样放行（canonical 包含检查兜底逃逸）。
         assert!(
             read_external_note_asset_with_access(
@@ -2652,12 +2656,16 @@ mod tests {
         file.set_len(MAX_EXTERNAL_ASSET_BYTES + 1).unwrap();
         let access = ExternalAccessGrants::new();
 
-        let error = read_external_note_asset_with_access(
+        // tauri::ipc::Response 未实现 Debug（unwrap_err 需要），用 match 取错误；
+        // Ok 分支直接 panic，断言强度不弱于 unwrap_err。
+        let error = match read_external_note_asset_with_access(
             target.to_string_lossy().as_ref(),
             "/huge.png",
             &access,
-        )
-        .unwrap_err();
+        ) {
+            Err(error) => error,
+            Ok(_) => panic!("expected oversized asset read to fail"),
+        };
         assert_eq!(error.code, "file_too_large");
         assert!(error
             .diagnostic

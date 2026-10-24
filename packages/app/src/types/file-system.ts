@@ -81,11 +81,13 @@ export interface IFileSystemService {
   /** Read binary file (returns base64 encoded string) */
   readBinary(path: string): Promise<string>;
   /**
-   * Read one image asset beside an external session file (base64 payload).
+   * Read one image asset beside an external session file (raw binary payload).
    * `relativePath` resolves inside the granted directory of `accessToken`
-   * (read_external_note_asset)；桌面走 IPC，Web/E2E 走 mock 字典。
+   * (read_external_note_asset)；桌面走 IPC 二进制通道（tauri::ipc::Response
+   * 零拷贝，无 base64 膨胀），Web/E2E 走 mock 字典。统一归一为
+   * ArrayBuffer-backed Uint8Array（供 Blob 零拷贝收编）。
    */
-  readExternalAsset(accessToken: string, relativePath: string): Promise<string>;
+  readExternalAsset(accessToken: string, relativePath: string): Promise<Uint8Array<ArrayBuffer>>;
   /** Check if path corresponds to a known binary file type */
   isBinaryPath(path: string): boolean;
   deleteFile(path: string): Promise<void>;

@@ -75,7 +75,8 @@ export interface UseDocumentNavigationOptions {
   t: (key: string, params?: Record<string, unknown>) => string;
   onShellSelectNote: (path: string) => Promise<void>;
   currentBacklinks: Ref<BacklinkEntry[]>;
-  isExternalEditing: Ref<boolean>;
+  /** 外部会话全域（readonly + edit-shell 两种态）：wiki 点击守卫统一拦截 */
+  isExternalSession: Ref<boolean>;
   guidedSampleSession: Ref<GuidedSampleSession | null>;
 }
 
@@ -138,7 +139,7 @@ export function useDocumentNavigation(
     t,
     onShellSelectNote,
     currentBacklinks,
-    isExternalEditing,
+    isExternalSession,
     guidedSampleSession,
   } = options;
 
@@ -413,7 +414,11 @@ export function useDocumentNavigation(
     noteTitle: string,
     anchor: null | string,
   ): Promise<void> {
-    if (isExternalEditing.value) {
+    // 外部会话全域（readonly + edit-shell）统一 wikiRestricted 提示：外部
+    // readonly 点击若落入 resolveWikiLink 会拿无关笔记本索引误导航或误报
+    // noteNotFound——渲染侧 4371 行注释自述的「点击侧兜底」在 readonly 不
+    // 成立，故守卫在两种外部态都在此收口。
+    if (isExternalSession.value) {
       toast.show(t('notebook.external.wikiRestricted'), 'info', 3500);
       return;
     }

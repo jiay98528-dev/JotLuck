@@ -176,7 +176,7 @@ fn build_window(app: &tauri::AppHandle, label: &str) -> Result<WebviewWindow, St
     // tauri.localhost，macOS/iOS 为 tauri://localhost，Linux 生产源与 Vite 开发
     // 服务器同为 localhost（localhost 任意端口：Linux 生产源端口不定、dev
     // server 端口由 Vite 分配，见 allows_webview_navigation 测试注释）——其余
-    // 一切导航一律阻断。
+    // 导航一律阻断（about:/blob: 的 scheme 级豁免及论证见该函数注释）。
     let builder = builder.on_navigation(allows_webview_navigation);
     // CDP 环境变量重注入（Windows）：提权进程（CI runner 全程高完整性）中
     // WebView2Loader 会丢弃 WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS 环境变量——
@@ -198,6 +198,18 @@ fn build_window(app: &tauri::AppHandle, label: &str) -> Result<WebviewWindow, St
 
 /// WebView 导航白名单判定：仅应用自身源可通过（见 build_window 注释）。
 fn allows_webview_navigation(url: &tauri::Url) -> bool {
+    // about:/blob: 按 scheme 豁免（不带 origin 复查）：wry 0.55.1 的
+    // on_navigation 主/子框架共用同一回调，而 Windows WebView2 只对主框架
+    // 触发该事件——PDF 导出预览经 iframe srcdoc（about:srcdoc）与文档资产
+    // blob: object URL 在 macOS/Linux 会被本守卫取消，砍掉 PDF 导出。
+    // 豁免安全性：不宽于 Windows 现状（Windows 上子框架导航根本不经本
+    // 回调，全部放行）。已接受的豁免面 = 顶层 about:/blob: 兜底缺口：若
+    // 应用内脚本被诱导发起顶层 about:/blob: 导航，此守卫不再拦截——前端
+    // 导航拦截仍是第一道防线，about: 无远端载荷、blob: 仅本应用进程可
+    // 创建且生命周期受控，残余风险已知并接受。
+    if matches!(url.scheme(), "about" | "blob") {
+        return true;
+    }
     let host = url.host_str().unwrap_or_default();
     matches!(url.scheme(), "http" | "https" | "tauri")
         && matches!(host, "tauri.localhost" | "localhost")
@@ -521,6 +533,13 @@ mod tests {
             // Linux 生产源与 Vite 开发服务器（端口任意）都在 localhost 上。
             "http://localhost/",
             "http://localhost:5173/",
+            // about:/blob: scheme 级豁免（PDF 导出 iframe srcdoc 与资产
+            // object URL，见函数注释）：豁免只看 scheme，blob: 携带任意
+            // origin 序列化均放行——不宽于 Windows（子框架不经守卫）现状。
+            "about:blank",
+            "about:srcdoc",
+            "blob:tauri.localhost/6bd34a1f-9e5e-4a1f-8e8c-e6f6e6e6e6e6",
+            "blob:https://example.com/id",
         ];
         for source in allowed {
             assert!(
@@ -533,7 +552,6 @@ mod tests {
             "http://evil.example/note.md",
             "file:///C:/Windows/win.ini",
             "data:text/html,<script>",
-            "blob:https://example.com/id",
             "javascript:alert(1)",
             "tauri://evil.example/",
             "http://tauri.localhost.evil.com/",

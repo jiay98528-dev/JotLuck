@@ -202,4 +202,49 @@ describe('useConversionAssets', () => {
       vi.useRealTimers();
     }
   });
+
+  it('keeps a re-queued new-generation task when the old task settles late (inflight race)', async () => {
+    // 竞态窗口：旧代读取在飞时页面 reset()（重转换代，资产 id 跨重转稳定）
+    // → 新代对同一 assetId 重新入队 → 旧任务 finally 不得误删新代条目——
+    // 否则在飞去重失效（后续重复事件并发重读）、双完成覆写 urls 且旧
+    // object URL 泄漏。修复口径：inflight 持任务身份，finally 比对后删除。
+    const { session, readAsset, onAssetFailed, bumpGeneration } = makeSession();
+    const reads: Array<(bytes: Uint8Array<ArrayBuffer>) => void> = [];
+    readAsset.mockImplementation(
+      () =>
+        new Promise<Uint8Array<ArrayBuffer>>((resolve) => {
+          reads.push(resolve);
+        }),
+    );
+
+    // 旧代任务在飞（generation=1），随后换代 reset()+世代翻转并重新入队。
+    const oldTask = session.loadAsset(makeAssetEvent('asset-1'), 'conv-1');
+    expect(reads).toHaveLength(1);
+    session.reset();
+    bumpGeneration();
+    const newTask = session.loadAsset(makeAssetEvent('asset-1'), 'conv-2');
+    expect(reads).toHaveLength(2);
+    expect(readAsset).toHaveBeenLastCalledWith('conv-2', 'asset-1');
+
+    // 旧代读取完成：世代守卫撤销其 URL，不写集；新代条目必须仍在飞
+    //（旧任务 finally 不得误删新任务的 inflight 登记）。
+    reads[0]?.(new Uint8Array([9]));
+    await oldTask;
+    expect(urlStub.created).toEqual(['blob:mock-1']);
+    expect(urlStub.revoked).toContain('blob:mock-1');
+    expect(session.resolve('asset-1')).toBeNull();
+
+    // 新代读取完成：正常 mint 登记且不被旧任务 finally 干扰。
+    reads[1]?.(new Uint8Array([7]));
+    await newTask;
+    expect(urlStub.created).toEqual(['blob:mock-1', 'blob:mock-2']);
+    expect(urlStub.live).toEqual(new Set(['blob:mock-2']));
+    await vi.waitFor(() => expect(session.resolve('asset-1')).toBe('blob:mock-2'));
+
+    // 在飞去重已随新任务完成恢复：新代内重复事件不触发第三次读取。
+    readAsset.mockClear();
+    await session.loadAsset(makeAssetEvent('asset-1'), 'conv-2');
+    expect(readAsset).not.toHaveBeenCalled();
+    expect(onAssetFailed).not.toHaveBeenCalled();
+  });
 });

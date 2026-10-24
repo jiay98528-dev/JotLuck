@@ -17,6 +17,7 @@
  *  固定窗口而非防抖后移——资产流持续到达时防抖会无限推迟首图渲染。 */
 const REVISION_COALESCE_WINDOW_MS = 150;
 import { ref, type Ref } from 'vue';
+import { mintObjectUrl, revokeObjectUrl } from '@/utils/object-urls';
 
 /** worker asset 事件的页面侧关注面（与 DocumentConversionEvent asset 分支同形）。 */
 export interface ConversionAssetEvent {
@@ -62,29 +63,19 @@ export interface ConversionAssetsSession {
 }
 
 /**
- * URL API 调用点动态读 globalThis：不在模块加载期捕获引用，宿主差异与
- * 测试注桩（jsdom 29.1.1 实证缺失 createObjectURL/revokeObjectURL）都以
- * 调用时取值为准。
+ * object URL mint/revoke 已收拢至 utils/object-urls（两条资产链共用），
+ * 动态读 globalThis.URL 的理由与 jsdom 注桩口径见该模块注释。
  */
-function mintObjectUrl(bytes: Uint8Array<ArrayBuffer>, mediaType: string): string {
-  const api = (globalThis as { URL?: typeof URL }).URL;
-  if (!api || typeof api.createObjectURL !== 'function') {
-    throw new Error('URL.createObjectURL unavailable in this host.');
-  }
-  return api.createObjectURL(new Blob([bytes], { type: mediaType }));
-}
-
-function revokeObjectUrl(url: string): void {
-  // 缺失时无从撤销（该宿主也无从 mint）；不因 teardown 路径抛错阻断页面。
-  const api = (globalThis as { URL?: { revokeObjectURL?: (url: string) => void } }).URL;
-  api?.revokeObjectURL?.(url);
-}
 
 export function useConversionAssets(options: UseConversionAssetsOptions): ConversionAssetsSession {
   const revision = ref(0);
   const urls = new Map<string, string>();
   const failed = new Set<string>();
-  const inflight = new Set<string>();
+  // 在飞任务登记：Map 持任务身份，finally 比对后才删除——reset() 清空后新代
+  // 对同一 assetId 重新入队时，旧代任务的 finally 不得误删新代条目（否则在飞
+  // 去重失效、双完成覆写 urls 且旧 object URL 泄漏；usePreviewImageResolver
+  // pending Map 同构先例）。
+  const inflight = new Map<string, Promise<void>>();
   const pending: ConversionAssetEvent[] = [];
   let revisionTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -107,29 +98,37 @@ export function useConversionAssets(options: UseConversionAssetsOptions): Conver
     // 在飞去重（双事件并发）与已就绪去重（同 id 重复事件不再 mint，防旧 URL 泄漏）；
     // 失败资产不拦：重试语义保留。
     if (urls.has(assetId) || inflight.has(assetId)) return;
-    inflight.add(assetId);
     const startedGeneration = options.getGeneration();
-    try {
-      const bytes = await options.readAsset(conversionId, assetId);
-      // bytes 在手即 mint（短串），世代守卫在其后：翻页后到达的成功必须立即
-      // 撤销刚 mint 的引用，防止 object URL 泄漏；不写集、不触发失败回调。
-      const url = mintObjectUrl(bytes, event.mediaType);
-      if (startedGeneration !== options.getGeneration()) {
-        revokeObjectUrl(url);
-        return;
-      }
-      urls.set(assetId, url);
-      failed.delete(assetId);
-      scheduleRevisionBump();
-    } catch (error) {
-      // 世代守卫：失败属于已被弃用的转换（重转/取消/卸载竞态）时，不得污染当前预览。
-      if (startedGeneration !== options.getGeneration()) return;
-      failed.add(assetId);
-      options.onAssetFailed(assetId, event.fileName, error);
-      scheduleRevisionBump();
-    } finally {
-      inflight.delete(assetId);
-    }
+    const task = options
+      .readAsset(conversionId, assetId)
+      .then((bytes) => {
+        // bytes 在手即 mint（短串），世代守卫在其后：翻页后到达的成功必须立即
+        // 撤销刚 mint 的引用，防止 object URL 泄漏；不写集、不触发失败回调。
+        const url = mintObjectUrl(bytes, event.mediaType);
+        if (startedGeneration !== options.getGeneration()) {
+          revokeObjectUrl(url);
+          return;
+        }
+        urls.set(assetId, url);
+        failed.delete(assetId);
+        scheduleRevisionBump();
+      })
+      .catch((error: unknown) => {
+        // 世代守卫：失败属于已被弃用的转换（重转/取消/卸载竞态）时，不得污染当前预览。
+        if (startedGeneration !== options.getGeneration()) return;
+        failed.add(assetId);
+        options.onAssetFailed(assetId, event.fileName, error);
+        scheduleRevisionBump();
+      })
+      .finally(() => {
+        // 任务身份比对：只有当登记的仍是本任务时才删除——reset() 换代后新代
+        // 已对同一 assetId 登记新任务，旧代 finally 不得误删（竞态窗口：读取
+        // 在飞时页面重转 → 新代重新入队 → 旧任务完成；usePreviewImageResolver
+        // pending Map 同构先例）。
+        if (inflight.get(assetId) === task) inflight.delete(assetId);
+      });
+    inflight.set(assetId, task);
+    return task;
   }
 
   return {

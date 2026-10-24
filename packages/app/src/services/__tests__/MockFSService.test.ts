@@ -59,11 +59,18 @@ describe('MockFSService sample notebook', () => {
       externalAssets: { '/pic.png': 'cGl4ZWw=', '/sub/shot.webp': 'c2hvdA==' },
     });
 
-    await expect(fs.readExternalAsset('token', '/pic.png')).resolves.toBe('cGl4ZWw=');
-    await expect(fs.readExternalAsset('token', '/sub/shot.webp')).resolves.toBe('c2hvdA==');
-    // 字典未命中按 not_found 失败，对齐桌面端授权目录外的行为。
+    // 字典种子为 base64，读取通道统一 Uint8Array（对齐桌面端二进制回流契约）。
+    // 'cGl4ZWw=' → 'pixel'，'c2hvdA==' → 'shot'。
+    await expect(fs.readExternalAsset('token', '/pic.png')).resolves.toEqual(
+      new Uint8Array([0x70, 0x69, 0x78, 0x65, 0x6c]),
+    );
+    await expect(fs.readExternalAsset('token', '/sub/shot.webp')).resolves.toEqual(
+      new Uint8Array([0x73, 0x68, 0x6f, 0x74]),
+    );
+    // 字典未命中按 operation_failed 失败——对齐桌面端 resolve_asset miss 的实际
+    // 错误面（"does not exist" 经 CommandErrorPayload 分类器落 operation_failed）。
     await expect(fs.readExternalAsset('token', '/missing.png')).rejects.toMatchObject({
-      payload: { code: 'not_found' },
+      payload: { code: 'operation_failed' },
     });
   });
 
@@ -90,8 +97,10 @@ describe('MockFSService sample notebook', () => {
     await expect(fs.readExternalAsset('token', '/huge.png')).rejects.toMatchObject({
       payload: { code: 'file_too_large' },
     });
-    // 白名单扩展大小写不敏感
-    await expect(fs.readExternalAsset('token', '/photo.JPG')).resolves.toBe('cGl4ZWw=');
+    // 白名单扩展大小写不敏感（'cGl4ZWw=' → 'pixel'）
+    await expect(fs.readExternalAsset('token', '/photo.JPG')).resolves.toEqual(
+      new Uint8Array([0x70, 0x69, 0x78, 0x65, 0x6c]),
+    );
   });
 
   it('lists only directories and supported editable note files', async () => {

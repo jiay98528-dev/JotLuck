@@ -2,6 +2,14 @@ import { markdown } from '@codemirror/lang-markdown';
 import { EditorState, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+// # 锚点全 miss 的 headingNotFound 轻反馈经动态 import Toast.vue 弹出——
+// mock 拦截该动态加载并使反馈可断言（urlUtils.test 同构先例）。
+const { toastShow } = vi.hoisted(() => ({ toastShow: vi.fn() }));
+vi.mock('@/components/common/Toast.vue', () => ({
+  useToast: () => ({ show: toastShow }),
+}));
+
 import {
   __parseLiveBlocksForTest,
   exitLivePreviewOnEscape,
@@ -1050,7 +1058,7 @@ describe('cm6 live preview anchor click routing', () => {
     dispatchSpy.mockRestore();
   });
 
-  it('# 锚点三形态全 miss：no-op 返回但仍消费点击，不落入外链分支', async () => {
+  it('# 锚点三形态全 miss：不滚动不外抛，给 headingNotFound 轻反馈', async () => {
     const doc = ['# 标题甲', '', '[空锚](#不存在的标题)', '', '尾段'].join('\n');
     const missHref = `#${encodeURI('不存在的标题')}`;
     const onExternalLinkClick = vi.fn();
@@ -1061,11 +1069,75 @@ describe('cm6 live preview anchor click routing', () => {
     });
 
     const dispatchSpy = vi.spyOn(view, 'dispatch');
+    toastShow.mockClear();
     const event = clickAnchor(`a[href="${missHref}"]`, view);
 
     expect(event.defaultPrevented).toBe(true);
     expect(onExternalLinkClick).not.toHaveBeenCalled();
     expect(dispatchSpy).not.toHaveBeenCalled();
+    // 与静态预览面同口径：miss 给 headingNotFound 轻提示（不静默 no-op）。
+    // toast 经动态 import Toast.vue 异步送达，waitFor 等待微任务 flush。
+    await vi.waitFor(() =>
+      expect(toastShow).toHaveBeenCalledWith('未找到对应标题，无法跳转。', 'info', 3500),
+    );
+    dispatchSpy.mockRestore();
+  });
+
+  it('# 锚点命中未物化 DOM 的标题（屏外/焦点源码态）：AST 解析定位仍可滚动', async () => {
+    // 目标标题块处于焦点源码态——DOM 内无标题元素（等效长文档视口外块
+    // 未物化的场景，旧 DOM 查找路径恒 miss）；链接块为渲染态可点击。
+    // AST 路径按三形态候选匹配 heading 节点 id 得源码位置后滚动。
+    const doc = ['# 屏外标题', '', '[跳转](#屏外标题)', '', '尾段'].join('\n');
+    const headingHref = `#${encodeURI('屏外标题')}`;
+    const onExternalLinkClick = vi.fn();
+    const host = document.createElement('div');
+    document.body.append(host);
+    const view = new EditorView({
+      state: EditorState.create({
+        doc,
+        // 光标钉在标题行：标题块源码态（未物化），链接块渲染态。
+        selection: { anchor: 0 },
+        extensions: [livePreviewExtension({ onExternalLinkClick })],
+      }),
+      parent: host,
+    });
+    mountedViews.push(view);
+    view.focus();
+
+    await vi.waitFor(() => {
+      expect(view.dom.querySelector(`a[href="${headingHref}"]`)).not.toBeNull();
+    });
+    // 前置锁定：目标标题确实不在已物化 DOM 中（否则测不到 AST 路径）。
+    expect(view.dom.querySelector('[id="heading-屏外标题"]')).toBeNull();
+
+    const dispatchSpy = vi.spyOn(view, 'dispatch');
+    toastShow.mockClear();
+    const event = clickAnchor(`a[href="${headingHref}"]`, view);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(onExternalLinkClick).not.toHaveBeenCalled();
+    // AST 命中：dispatch 的 effects 含滚动到标题源码位置。scrollIntoView 的
+    // effect 载荷是 ScrollTarget（range.anchor/head + y 策略），无顶层 from——
+    // 源位置断言取 range.anchor，并钉死 y:'start'（标题滚到视口顶）。
+    const effects = dispatchSpy.mock.calls.flatMap((call) => {
+      const spec = call[0]?.effects;
+      if (!spec) return [];
+      return Array.isArray(spec) ? spec : [spec];
+    });
+    const scrollEffectType = (EditorView.scrollIntoView(0) as unknown as { type: unknown }).type;
+    const scrolledToSource = (
+      effects as Array<{
+        is?: (type: unknown) => boolean;
+        value?: { range?: { anchor?: number }; y?: string };
+      }>
+    ).some(
+      (effect) =>
+        effect.is?.(scrollEffectType) &&
+        effect.value?.range?.anchor === 0 &&
+        effect.value?.y === 'start',
+    );
+    expect(scrolledToSource, '应经 AST 源位 dispatch scrollIntoView').toBe(true);
+    expect(toastShow).not.toHaveBeenCalled();
     dispatchSpy.mockRestore();
   });
 

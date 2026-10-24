@@ -179,14 +179,31 @@ describe('TauriIPCService conditional text writes', () => {
 });
 
 describe('TauriIPCService external assets', () => {
-  it('reads external session assets through the tokened IPC channel', async () => {
+  it('reads external session assets through the tokened binary IPC channel', async () => {
     const service = new TauriIPCService();
-    invokeMock.mockResolvedValueOnce('cGl4ZWw=');
+    // Rust 侧 tauri::ipc::Response 二进制回流：invoke 收到 ArrayBuffer。
+    const payload = new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer;
+    invokeMock.mockResolvedValueOnce(payload);
 
-    await expect(service.readExternalAsset('token-a', '/pic.png')).resolves.toBe('cGl4ZWw=');
+    await expect(service.readExternalAsset('token-a', '/pic.png')).resolves.toEqual(
+      new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+    );
     expect(invokeMock.mock.calls.at(-1)).toEqual([
       'read_external_note_asset',
       { accessToken: 'token-a', relativePath: '/pic.png' },
     ]);
+  });
+
+  it('defensively normalizes legacy number[] payloads and fails closed on odd shapes', async () => {
+    const service = new TauriIPCService();
+    invokeMock.mockResolvedValueOnce([1, 2, 3]);
+    await expect(service.readExternalAsset('token-a', '/pic.png')).resolves.toEqual(
+      new Uint8Array([1, 2, 3]),
+    );
+
+    invokeMock.mockResolvedValueOnce('aGVsbG8=');
+    await expect(service.readExternalAsset('token-a', '/pic.png')).rejects.toMatchObject({
+      payload: { code: 'operation_failed' },
+    });
   });
 });

@@ -154,7 +154,10 @@
             <details v-if="isDocumentImport && warnings.length" class="document-import__warnings">
               <summary>{{ t('documentImport.warningCount', { count: warnings.length }) }}</summary>
               <ul>
-                <li v-for="warning in warnings" :key="`${warning.code}:${warning.context ?? ''}`">
+                <li
+                  v-for="(warning, index) in warnings"
+                  :key="`${index}:${warning.code}:${warning.context ?? ''}`"
+                >
                   {{ localizedWarning(warning) }}
                 </li>
               </ul>
@@ -907,7 +910,11 @@ function onMarkdownClick(event: MouseEvent): void {
   if (!href) return;
   event.preventDefault();
   if (href.startsWith('#')) {
-    scrollHeading(decodeURIComponent(href.slice(1)));
+    // 直传原始 id：headingAnchorCandidates 内置安全单次解码（decode 失败回退
+    // 原文）——外层再 decodeURIComponent 属多余且对 #100% 类畸形锚点会裸抛
+    // URIError（此处是全库唯一无防护的调用点）；改直传后畸形锚点降级为
+    // headingNotFound 轻提示（scrollHeading 既有 miss 路径），良构锚点逐字节等价。
+    scrollHeading(href.slice(1));
     return;
   }
   if (/^(?:https?:\/\/|mailto:|tel:|ftp:|www\.)/i.test(href)) {

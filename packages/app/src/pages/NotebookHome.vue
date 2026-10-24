@@ -273,6 +273,7 @@
                       :wiki-link-revision="wikiLinkRevision"
                       :resolve-image-src="previewImages.resolveImageSrc"
                       :image-revision="previewImages.imageRevision.value"
+                      :allow-blob-image-sources="previewImageExternalSession !== null"
                       :remote-images="remoteImagePolicy"
                       :remote-image-revision="remoteImages.revision.value"
                       :on-live-preview-remote-image-click="remoteImages.handleClick"
@@ -367,6 +368,7 @@
                             :wiki-link-exists="wikiLinkExists"
                             :wiki-link-revision="wikiLinkRevision"
                             :resolve-image-src="previewImages.resolveImageSrc"
+                            :allow-blob-image-sources="previewImageExternalSession !== null"
                             :image-revision="previewImages.imageRevision.value"
                             :remote-images="remoteImagePolicy"
                             :remote-image-revision="remoteImages.revision.value"
@@ -469,6 +471,7 @@
                         :wiki-link-exists="wikiLinkExists"
                         :wiki-link-revision="wikiLinkRevision"
                         :resolve-image-src="previewImages.resolveImageSrc"
+                        :allow-blob-image-sources="previewImageExternalSession !== null"
                         :image-revision="previewImages.imageRevision.value"
                         :remote-images="remoteImagePolicy"
                         :remote-image-revision="remoteImages.revision.value"
@@ -4397,6 +4400,9 @@ function updateSplitPreview(): void {
         wikiLinkExists,
         resolveImageSrc: previewImages.resolveImageSrc,
         remoteImages: remoteImagePolicy.value,
+        // 外部会话本地图走 blob: objectURL（read_external_note_asset 二进制
+        // 回流），清洗器须显式放行合法 blob: 形态，否则 img src 被剥。
+        allowBlobImageSources: previewImageExternalSession.value !== null,
       });
       renderedPreviewSource.value = content;
       if (
@@ -4434,6 +4440,8 @@ function updateExternalPreview(): void {
       // 外部会话本地图经 usePreviewImageResolver 分流（read_external_note_asset）
       resolveImageSrc: previewImages.resolveImageSrc,
       remoteImages: remoteImagePolicy.value,
+      // 外部会话本地图为 blob: objectURL——须显式放行合法 blob: 形态。
+      allowBlobImageSources: previewImageExternalSession.value !== null,
     });
     renderedPreviewSource.value = displayContent.value;
     void nextTick(() => {
@@ -4979,7 +4987,8 @@ const {
   t,
   onShellSelectNote,
   currentBacklinks,
-  isExternalEditing,
+  // 外部会话全域（readonly + edit-shell）：wiki 点击守卫两种外部态统一拦截
+  isExternalSession,
   guidedSampleSession,
 });
 
@@ -5023,6 +5032,9 @@ const progressivePreviewOptions = computed(() => ({
   wikiLinkExists,
   resolveImageSrc: previewImages.resolveImageSrc,
   remoteImages: remoteImagePolicy.value,
+  // 外部会话本地图为 blob: objectURL（read_external_note_asset 二进制回流）：
+  // 大文档渐进渲染同须显式放行合法 blob: 形态，否则 img src 被清洗器剥除。
+  allowBlobImageSources: previewImageExternalSession.value !== null,
 }));
 
 function onTagSelect(tagName: string): void {

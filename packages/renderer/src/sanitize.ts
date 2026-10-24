@@ -13,12 +13,14 @@ const REMOTE_IMAGE_RESERVED_ATTRS = [
 ] as const;
 
 /**
- * URI 协议白名单沿用 DOMPurify 3.x 默认 IS_ALLOWED_URI（http/https/mailto/tel/
- * callto/sms/cid/xmpp/matrix 等），不再覆写。资产图走 blob: object URL（文档导入
- * reader 经 read_document_conversion_asset 二进制回流换装短引用）；blob: 默认
- * 剥除，仅调用方显式 allowBlobImageSources 时放行 img src 的合法形态（见
+ * URI 协议白名单沿用 DOMPurify 3.x 默认 IS_ALLOWED_URI，不再覆写。注意其
+ * 准确口径：(f|ht)tps? 交替分支放行 http/https/ftp/ftps（ftp 系与 http 系
+ * 同列在默认白名单内，非被拒协议）；mailto/tel/callto/sms/cid/xmpp/matrix
+ * 等同列放行。资产图走 blob: object URL（文档导入 reader 经
+ * read_document_conversion_asset 二进制回流换装短引用）；blob: 默认剥除，
+ * 仅调用方显式 allowBlobImageSources 时放行 img src 的合法形态（见
  * BLOB_URL_RE 字符类校验），其余标签属性一律仍按默认拒收。data: 由
- * DATA_URI_TAGS 默认放行；javascript:/file:/ftp: 等其余协议仍被拒绝。
+ * DATA_URI_TAGS 默认放行；javascript:/file: 等其余协议被拒绝。
  */
 
 const purifyConfig = {

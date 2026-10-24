@@ -97,6 +97,7 @@
           :wiki-link-revision="wikiLinkRevision"
           :resolve-image-src="resolveImageSrc"
           :image-revision="imageRevision"
+          :allow-blob-image-sources="allowBlobImageSources"
           :remote-images="remoteImages"
           :remote-image-revision="remoteImageRevision"
           :on-live-preview-remote-image-click="onLivePreviewRemoteImageClick"
@@ -252,6 +253,8 @@ const props = defineProps<{
   wikiLinkRevision?: number;
   resolveImageSrc?: RendererOptions['resolveImageSrc'];
   imageRevision?: number;
+  /** 外部会话 blob: 资产图的清洗器放行开关（透传编辑器/左栏渲染）。 */
+  allowBlobImageSources?: boolean;
   remoteImages?: RendererOptions['remoteImages'];
   remoteImageRevision?: number;
   onLivePreviewRemoteImageClick?: (event: MouseEvent) => boolean;
@@ -375,6 +378,8 @@ const leftRenderOptions = computed<RendererOptions>(() => {
     wikiLinkExists: props.wikiLinkExists,
     resolveImageSrc: props.resolveImageSrc,
     remoteImages: props.remoteImages,
+    // 外部会话本地图为 blob: objectURL：同须显式放行合法 blob: 形态。
+    allowBlobImageSources: props.allowBlobImageSources === true,
   };
 });
 

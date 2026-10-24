@@ -1,5 +1,6 @@
 import { ref } from 'vue';
 import type { IFileSystemService } from '@/types';
+import { mintObjectUrl, revokeObjectUrl } from '@/utils/object-urls';
 
 const IMAGE_MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
   '.png': 'image/png',
@@ -108,6 +109,9 @@ export function usePreviewImageResolver(fs: IFileSystemService) {
     currentScopeKey = normalizedScope;
     externalSession = nextExternal;
     generation++;
+    // 缓存里可能持有 blob: object URL（外部会话分支）——换代前统一撤销，
+    // 防 object URL 泄漏；data: URL 撤销是无害 no-op（data: URL 无此需求）。
+    for (const url of cache.values()) revokeObjectUrl(url);
     cache.clear();
     failed.clear();
     pending.clear();
@@ -118,15 +122,38 @@ export function usePreviewImageResolver(fs: IFileSystemService) {
     const existing = pending.get(path);
     if (existing) return existing;
 
+    // 外部会话 svg 预拒：桌面闸门（fs_ops.rs resolve_asset 位图白名单）刻意
+    // 排除可携带脚本的 svg——不预拒则每次引用必发必败 IPC 后静默裂图（load
+    // catch 无占位通道）。视同 unsupported 直接登记失败，不发必败请求；工作
+    // 区分支（readBinary 无白名单）svg 合法渲染不受影响。
+    if (externalSession && mime === 'image/svg+xml') {
+      failed.add(path);
+      imageRevision.value++;
+      return Promise.resolve();
+    }
+
     const expectedGeneration = generation;
-    // 会话分流：外部会话图片走授权命令（grant 目录内解析），工作区走 readBinary。
-    const read = externalSession
+    // 会话分流：外部会话图片走授权命令（grant 目录内解析；IPC 二进制回流 →
+    // Blob 零拷贝 objectURL，无 base64 33% 膨胀——read_document_conversion_asset
+    // 同构链路）；工作区走 readBinary（base64 → data: URL 维持原状，无泄漏面）。
+    const read: Promise<Uint8Array<ArrayBuffer> | string> = externalSession
       ? fs.readExternalAsset(externalSession.accessToken, path)
       : fs.readBinary(path);
     const task = read
-      .then((base64) => {
-        if (expectedGeneration !== generation) return;
-        cache.set(path, `data:${mime};base64,${base64}`);
+      .then((payload) => {
+        if (typeof payload === 'string') {
+          if (expectedGeneration !== generation) return;
+          cache.set(path, `data:${mime};base64,${payload}`);
+        } else {
+          // bytes 在手即 mint（短串），世代守卫在其后：换代后到达的成功必须
+          // 立即撤销刚 mint 的引用防泄漏（useConversionAssets 同构先例）。
+          const url = mintObjectUrl(payload, mime);
+          if (expectedGeneration !== generation) {
+            revokeObjectUrl(url);
+            return;
+          }
+          cache.set(path, url);
+        }
         failed.delete(path);
         imageRevision.value++;
       })
