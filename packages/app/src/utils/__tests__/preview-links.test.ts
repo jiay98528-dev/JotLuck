@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { classifyAnchorHref } from '../preview-links';
 
-describe('classifyAnchorHref 预览锚点五分类', () => {
+describe('classifyAnchorHref 预览锚点三分类', () => {
   it('https/http 绝对外链 → external', () => {
     expect(classifyAnchorHref('https://example.com/a?b=1')).toBe('external');
     expect(classifyAnchorHref('http://example.com')).toBe('external');
@@ -31,5 +31,14 @@ describe('classifyAnchorHref 预览锚点五分类', () => {
     expect(classifyAnchorHref('../up/one.md')).toBe('relative');
     expect(classifyAnchorHref('/rooted/path')).toBe('relative');
     expect(classifyAnchorHref('#anchor')).toBe('relative');
+  });
+
+  it('危险协议 → relative：回归锁定外抛通道拒收（不得随白名单放宽变 external）', () => {
+    // 现状两正则均不匹配 → relative（调用方仅 preventDefault 不动作）。
+    // 若 ABSOLUTE_URL_RE 将来放宽协议，javascript: 会变 external →
+    // openExternalUrl → openWithSystem('javascript:…')，本断言先行钉死。
+    expect(classifyAnchorHref('javascript:alert(1)')).toBe('relative');
+    expect(classifyAnchorHref('data:text/html,<script>alert(1)</script>')).toBe('relative');
+    expect(classifyAnchorHref('vbscript:msgbox(1)')).toBe('relative');
   });
 });

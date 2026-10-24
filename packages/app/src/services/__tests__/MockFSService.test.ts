@@ -67,6 +67,33 @@ describe('MockFSService sample notebook', () => {
     });
   });
 
+  it('mirrors the desktop asset gate: bitmap-only whitelist and 5MB decode cap', async () => {
+    // 解码后恰超 5MB（1747627 组 × 3 字节 = 5242881 > 5242880）
+    const oversize = 'A'.repeat(Math.ceil((5 * 1024 * 1024 + 1) / 3) * 4);
+    const fs = new MockFSService(0, {
+      externalAssets: {
+        '/vector.svg': 'PHN2Zy8+',
+        '/payload.txt': 'dGV4dA==',
+        '/huge.png': oversize,
+        '/photo.JPG': 'cGl4ZWw=',
+      },
+    });
+
+    // svg（可携带脚本，桌面端刻意排除）与其余扩展名拒绝（operation_failed）
+    await expect(fs.readExternalAsset('token', '/vector.svg')).rejects.toMatchObject({
+      payload: { code: 'operation_failed' },
+    });
+    await expect(fs.readExternalAsset('token', '/payload.txt')).rejects.toMatchObject({
+      payload: { code: 'operation_failed' },
+    });
+    // 超限按 file_too_large 拒绝（对齐 fs_ops.rs MAX_EXTERNAL_ASSET_BYTES）
+    await expect(fs.readExternalAsset('token', '/huge.png')).rejects.toMatchObject({
+      payload: { code: 'file_too_large' },
+    });
+    // 白名单扩展大小写不敏感
+    await expect(fs.readExternalAsset('token', '/photo.JPG')).resolves.toBe('cGl4ZWw=');
+  });
+
   it('lists only directories and supported editable note files', async () => {
     const fs = new MockFSService(0);
 

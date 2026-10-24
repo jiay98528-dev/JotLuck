@@ -2066,7 +2066,14 @@ watch(
   },
   { immediate: true },
 );
-watch(previewImages.imageRevision, () => refreshSplitPreviewIfVisible());
+// 外部只读态（非大文档）消费 externalPreviewHtml（v-html 无 :revision 驱动），
+// imageRevision 变化须主动重渲染：覆盖 setNotePath 清缓存后的首图加载发起
+// （渲染经 resolveImageSrc 触发 load → 完成后 revision 再翻 → 链式重渲染出
+// data:URL），对齐大文档 ProgressivePreview :revision 含 imageRevision 的范式。
+watch(previewImages.imageRevision, () => {
+  if (isExternalReadonly.value) updateExternalPreview();
+  else refreshSplitPreviewIfVisible();
+});
 watch(remoteImages.revision, () => {
   if (isExternalReadonly.value) updateExternalPreview();
   else refreshSplitPreviewIfVisible();

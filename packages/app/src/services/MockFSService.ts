@@ -24,6 +24,20 @@ const STORAGE_KEY = 'jotluck-mockfs';
 const STORAGE_VERSION = 4;
 const DEFAULT_DELAY = 50;
 
+/**
+ * 与 Rust read_external_note_asset 契约对齐的资产门（fs_ops.rs resolve_asset）：
+ * 仅位图扩展名白名单（svg 可携带脚本，刻意排除）+ 解码后 5MB 上限。
+ */
+const SUPPORTED_ASSET_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']);
+const MAX_EXTERNAL_ASSET_BYTES = 5 * 1024 * 1024;
+
+/** base64 解码后字节数（忽略空白；padding 计入折减）。 */
+function base64DecodedBytes(base64: string): number {
+  const compact = base64.replace(/\s+/g, '');
+  const padding = compact.endsWith('==') ? 2 : compact.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor(compact.length / 4) * 3 - padding);
+}
+
 interface StoredFile {
   content: string;
   mtime: number;
@@ -42,7 +56,9 @@ export interface MockFSServiceOptions {
   initialFiles?: Record<string, string>;
   /**
    * Test-only external session image assets: grant-relative path → base64.
-   * readExternalAsset 按此字典返回；未命中按 not_found 失败（对齐桌面端）。
+   * 与桌面端契约对齐：仅位图扩展名白名单（svg/其余拒绝）、解码后 5MB 上限
+   * （file_too_large）、未命中 not_found。残余差异：窗口属主 token 校验与
+   * grant 目录位图白名单对字典型 mock 不建模（_accessToken 仅占位）。
    */
   externalAssets?: Record<string, string>;
   /** Test-only recent notebook roots. Defaults to the sample notebook. */
@@ -262,8 +278,17 @@ export class MockFSService implements IFileSystemService {
   async readExternalAsset(_accessToken: string, relativePath: string): Promise<string> {
     await delay(this.latency);
     const normalized = normalizePath(relativePath);
+    // 扩展名白名单对齐 Rust resolve_asset（svg/其余扩展拒绝；大小写不敏感）
+    const extension = normalized.slice(normalized.lastIndexOf('.') + 1).toLowerCase();
+    if (!SUPPORTED_ASSET_EXTENSIONS.has(extension)) {
+      throw createCommandError('operation_failed', undefined, normalized);
+    }
     const asset = this.externalAssets[normalized];
     if (asset === undefined) throw createCommandError('not_found', undefined, normalized);
+    // 解码后字节上限对齐 Rust MAX_EXTERNAL_ASSET_BYTES（file_too_large）
+    if (base64DecodedBytes(asset) > MAX_EXTERNAL_ASSET_BYTES) {
+      throw createCommandError('file_too_large', undefined, normalized);
+    }
     return asset;
   }
 

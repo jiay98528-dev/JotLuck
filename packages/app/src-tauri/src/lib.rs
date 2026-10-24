@@ -174,7 +174,9 @@ fn build_window(app: &tauri::AppHandle, label: &str) -> Result<WebviewWindow, St
     // 导航守卫（wry on_navigation 深度兜底）：前端已拦截锚点/脚本导航并移交
     // 系统浏览器，此处只放行应用自身源——生产 Windows/Android 为 http(s)://
     // tauri.localhost，macOS/iOS 为 tauri://localhost，Linux 生产源与 Vite 开发
-    // 服务器同为 localhost——其余一切导航一律阻断。
+    // 服务器同为 localhost（localhost 任意端口：Linux 生产源端口不定、dev
+    // server 端口由 Vite 分配，见 allows_webview_navigation 测试注释）——其余
+    // 一切导航一律阻断。
     let builder = builder.on_navigation(allows_webview_navigation);
     // CDP 环境变量重注入（Windows）：提权进程（CI runner 全程高完整性）中
     // WebView2Loader 会丢弃 WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS 环境变量——

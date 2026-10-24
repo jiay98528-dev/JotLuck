@@ -29,7 +29,7 @@ vi.mock('@/components/common/Toast.vue', async (importOriginal) => {
 
 import ReviewWorkbench from '../ReviewWorkbench.vue';
 
-/** 左栏源稿：外链/裸域名/wiki/标签/相对路径五类锚点各占一段。 */
+/** 左栏源稿：外链/裸域名/wiki/标签/相对路径/#锚点（含空锚）各类锚点各占一段。 */
 const SOURCE = [
   '# 改稿标题',
   '',
@@ -38,9 +38,12 @@ const SOURCE = [
   '维基：[[其他笔记]] 收尾，标签 #标签一',
   '',
   '相对路径：[相对](notes/other.md)',
+  '',
+  '站内锚点：[到标题](#改稿标题)、[失配锚](#不存在的标题) 与 [空锚](#)',
 ].join('\n');
 
 const LINK_RESTRICTED_ZH = '改稿模式下不能跳转链接；请退出改稿后再使用。';
+const HEADING_NOT_FOUND_ZH = '未找到对应标题，无法跳转。';
 
 /**
  * 全文件共享单次挂载：Workbench 含双栏编辑器（CM6）等重子树，逐用例
@@ -49,7 +52,15 @@ const LINK_RESTRICTED_ZH = '改稿模式下不能跳转链接；请退出改稿�
  */
 let wrapper: VueWrapper | null = null;
 
+// jsdom 无 scrollIntoView 实现：原型级 mock 供 # 锚点命中分支断言（afterAll
+// 用 Reflect.deleteProperty 删净还原，防原型污染外溢）。
+const scrollIntoViewMock = vi.fn();
+const prototypeWithScroll = HTMLElement.prototype as HTMLElement & {
+  scrollIntoView?: (options?: ScrollIntoViewOptions) => void;
+};
+
 beforeAll(() => {
+  prototypeWithScroll.scrollIntoView = scrollIntoViewMock;
   wrapper = mount(ReviewWorkbench, {
     props: {
       fs: {} as IFileSystemService,
@@ -63,6 +74,9 @@ beforeAll(() => {
 afterAll(() => {
   wrapper?.unmount();
   wrapper = null;
+  // Reflect.deleteProperty 绕开 TS2790（lib.dom 的 Element.scrollIntoView 为必选
+  // 方法，delete 操作数类型不合法）；jsdom 原型本无该属性，删净防外溢。
+  Reflect.deleteProperty(prototypeWithScroll, 'scrollIntoView');
   document.body.replaceChildren();
 });
 
@@ -80,6 +94,7 @@ describe('ReviewWorkbench 左栏 v-html 点击收口', () => {
   beforeEach(() => {
     openExternalUrlMock.mockReset();
     toastShowMock.mockReset();
+    scrollIntoViewMock.mockReset();
   });
 
   it('渲染态左栏注入 v-html 且五类锚点齐备', () => {
@@ -138,6 +153,57 @@ describe('ReviewWorkbench 左栏 v-html 点击收口', () => {
     expect(event.defaultPrevented).toBe(true);
     expect(openExternalUrlMock).not.toHaveBeenCalled();
     expect(toastShowMock).not.toHaveBeenCalled();
+  });
+
+  // marked 18 对 href 做 encodeURI：中文锚点变百分号编码（同 cm6 测试注释）
+  const headingHref = `#${encodeURI('改稿标题')}`;
+  const missingHref = `#${encodeURI('不存在的标题')}`;
+
+  it('# 锚点命中：左栏容器内三形态归一滚动（preventDefault，不外抛不 toast）', () => {
+    if (!wrapper) throw new Error('共享挂载未就绪');
+    const heading = wrapper.find('.review-left-render [id="heading-改稿标题"]');
+    expect(heading.exists(), '左栏应渲染出标题锚点 id').toBe(true);
+    const event = clickAnchor(`a[href="${headingHref}"]`);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(scrollIntoViewMock).toHaveBeenCalledOnce();
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    expect(openExternalUrlMock).not.toHaveBeenCalled();
+    expect(toastShowMock).not.toHaveBeenCalled();
+  });
+
+  it('# 锚点三形态 miss：headingNotFound 轻反馈（不再纯静默 no-op）', () => {
+    const event = clickAnchor(`a[href="${missingHref}"]`);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(scrollIntoViewMock).not.toHaveBeenCalled();
+    expect(openExternalUrlMock).not.toHaveBeenCalled();
+    expect(toastShowMock).toHaveBeenCalledOnce();
+    expect(toastShowMock).toHaveBeenCalledWith(HEADING_NOT_FOUND_ZH, 'info', 3500);
+  });
+
+  it('# 空锚（href="#"）：L3 空锚短路恒 miss → headingNotFound，不误滚纯标点标题', () => {
+    const event = clickAnchor('a[href="#"]');
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(scrollIntoViewMock).not.toHaveBeenCalled();
+    expect(toastShowMock).toHaveBeenCalledOnce();
+    expect(toastShowMock).toHaveBeenCalledWith(HEADING_NOT_FOUND_ZH, 'info', 3500);
+  });
+
+  it('右栏 #tag 点击回调（L5 透传）：与左栏 data-tag 同口径受限 toast', () => {
+    if (!wrapper) throw new Error('共享挂载未就绪');
+    const editor = wrapper.findComponent(MarkdownEditor);
+    expect(editor.exists()).toBe(true);
+    const handler = editor.props('onLivePreviewTagClick');
+    expect(typeof handler, '右栏应透传 onLivePreviewTagClick（缺省时点击被静默吞掉）').toBe(
+      'function',
+    );
+
+    (handler as (tag: string) => void)('标签一');
+    expect(toastShowMock).toHaveBeenCalledOnce();
+    expect(toastShowMock).toHaveBeenCalledWith(LINK_RESTRICTED_ZH, 'info', 3500);
+    expect(openExternalUrlMock).not.toHaveBeenCalled();
   });
 });
 
@@ -299,5 +365,7 @@ describe('ReviewWorkbench 渲染 props 下沉（W2）', () => {
     expect(editor.props('onLivePreviewRemoteImageClick')).toBe(remoteClick);
     expect(editor.props('onLivePreviewRemoteImageLoad')).toBe(remoteLoad);
     expect(editor.props('onLivePreviewRemoteImageError')).toBe(remoteError);
+    // L5：#tag 受限口径回调由 Workbench 自备（非宿主透传），与左栏 data-tag 同源
+    expect(typeof editor.props('onLivePreviewTagClick')).toBe('function');
   });
 });

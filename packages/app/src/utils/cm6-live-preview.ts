@@ -48,6 +48,7 @@ import DOMPurify from 'dompurify';
 import { translate } from '@/i18n';
 import { openExternalUrl } from '@/utils/urlUtils';
 import { findHeadingElement } from '@/utils/heading-anchor';
+import { classifyAnchorHref } from '@/utils/preview-links';
 import { TapGesture, isTouchInput } from './editor-pointer';
 import { caretAtPoint, inlineSourceMap, mapDomText, snapSourceBoundary } from './editor-source-map';
 import { registerSourceHitReader, nativeEditorSelection } from './cm6-interaction-selection';
@@ -1268,6 +1269,9 @@ function handleLiveAnchorClick(
       }
       return true; // 点击已被消费，绝不落入外链分支
     }
+    // 相对路径（无协议）不外抛：openExternalUrl/normalizeUrl 会误拼 https://
+    // 打开错误域名，与静态预览/改稿左栏口径一致——仅吞点击不动作。
+    if (classifyAnchorHref(href) === 'relative') return true;
     if (options.onExternalLinkClick) {
       options.onExternalLinkClick(href);
     } else {

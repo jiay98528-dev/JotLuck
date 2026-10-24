@@ -36,6 +36,12 @@ describe('headingAnchorCandidates 三形态候选', () => {
   it('非法百分号序列解码失败回退原文，不抛错', () => {
     expect(headingAnchorCandidates('50%')).toEqual(['50%', 'heading-50%', 'heading-50']);
   });
+
+  it('空锚：候选恒空（L3——不落 heading-heading 形态与纯标点标题撞车）', () => {
+    // 空 base 经 headingIdFromText 落 'heading-heading'，恰为 '## ???' 类纯标点
+    // 标题的渲染 id；空锚必须恒空候选，否则误滚到该标题。
+    expect(headingAnchorCandidates('')).toEqual([]);
+  });
 });
 
 describe('findHeadingElement DOM 归一查找', () => {
@@ -73,5 +79,24 @@ describe('findHeadingElement DOM 归一查找', () => {
   it('CSS 特殊字符 id（点号）不会被当选择器语法误解析', () => {
     const root = containerWith('<h2 id="heading-v1.2">v1.2</h2>');
     expect(findHeadingElement(root, 'v1.2')).toBe(root.querySelector('h2'));
+  });
+
+  it('空锚 DOM 查找恒 miss：纯标点标题存在也不误命中（L3）', () => {
+    const root = containerWith('<h2 id="heading-heading">???</h2>');
+    expect(findHeadingElement(root, '')).toBeUndefined();
+  });
+
+  it('候选含孤立 CR/FF/VT：不抛错且定义为 miss（不中断点击消费）', () => {
+    const root = containerWith('<h2 id="heading-别的">别的</h2>');
+    // 控制字符候选直接跳过：querySelector 坏串抛错的路径被前置摘除
+    expect(() => findHeadingElement(root, '标\r题')).not.toThrow();
+    expect(findHeadingElement(root, '标\r题')).toBeUndefined();
+    expect(() => findHeadingElement(root, '标\f题')).not.toThrow();
+    expect(findHeadingElement(root, '标\f题')).toBeUndefined();
+    expect(() => findHeadingElement(root, '标\u000B题')).not.toThrow();
+    expect(findHeadingElement(root, '标\u000B题')).toBeUndefined();
+    // 归一形态（headingIdFromText 把 \s 折叠为连字符）命中不受跳过影响
+    const normalized = containerWith('<h2 id="heading-标-题">标题</h2>');
+    expect(findHeadingElement(normalized, '标\r题')).toBe(normalized.querySelector('h2'));
   });
 });

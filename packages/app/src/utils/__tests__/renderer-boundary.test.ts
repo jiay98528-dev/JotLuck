@@ -88,13 +88,16 @@ describe('@jotluck/renderer markdown boundaries', () => {
     expect(html).not.toContain('javascript:');
   });
 
-  it('renders app-created blob object URLs while still stripping script protocols', () => {
-    // 文档导入资产经 URL.createObjectURL 换装为 blob:；CSP img-src 已放行 blob:，
-    // 清洗器须与之一致。可执行协议在同一通道内仍被拒绝（不弱化既有契约）。
+  it('strips blob object URLs while still stripping script protocols', () => {
+    // 资产图走 data:URL（ExternalReaderPage 经 read_document_conversion_asset 换装）；
+    // blob: 恒剥除——清洗器回归 DOMPurify 默认拒收（object URL 方案废弃），
+    // 可执行协议在同一通道内仍被拒绝（不弱化既有契约）。
     const blob = renderMarkdown('![asset](blob:asset-1)', {
       resolveImageSrc: (source) => (source.startsWith('blob:') ? source : null),
     });
-    expect(blob).toContain('src="blob:asset-1"');
+    expect(blob).toContain('alt="asset"');
+    expect(blob).not.toContain('blob:');
+    expect(blob).not.toContain('src=');
 
     const malicious = renderMarkdown('![evil](blob:asset-1)', {
       resolveImageSrc: () => 'javascript:alert(1)',

@@ -23,13 +23,13 @@
  *      （activePath → /基础.md、阅读预览出现目标笔记唯一标记；判定思路同
  *      09-wiki-link.spec.ts 的「目标笔记内容出现」）。
  *
- * ⚠ ④ 为【预期红】：onPreviewClick（packages/app/src/pages/NotebookHome.vue）的
- *   data-note 分支被 `&& progressivePreviewRef.value` 门控，而 ProgressivePreview
- *   仅在 isLargeDocument（>120KB，services/document-analysis.ts）时挂载；普通体量
- *   笔记的阅读/分栏静态预览中点击 wikilink 是 no-op（<a> 无 href，也无 preventDefault
- *   之外的任何动作）。本用例先在即时视图做同链路对照（对照组，应绿——14 号 spec
- *   test 02 已证明该路径可跳转），再在阅读视图点击（实验组，预期红=发现真问题）。
- *   红属预期发现，禁止为绿灯弱化断言。
+ * ⚠ ④ 为【修复后常绿断言】：onPreviewClick（packages/app/src/pages/
+ *   NotebookHome.vue）的 data-note 分支曾被 `progressivePreviewRef.value` 门控
+ *   （仅 isLargeDocument >120KB 挂载 ProgressivePreview），普通体量笔记的阅读/
+ *   分栏静态预览点击 wikilink 为 no-op——该缺陷已修复（94d537d 渲染交互矩阵），
+ *   分支不再门控。本用例现为回归守卫：静态预览点击 wikilink 应跳转，红=回归。
+ *   即时视图对照（应绿）先行验证夹具/索引/导航链路本身可用。
+ *   禁止为绿灯弱化断言。
  *
  * 搭建方式参考 e2e/helpers/test-utils.ts 与 40/43 号 spec 的
  * mockNotebook.initialFiles + 文件树打开链路；三视图切换参考
@@ -88,13 +88,22 @@ async function currentViewMode(page: Page): Promise<ViewMode> {
 }
 
 async function switchMode(page: Page, target: ViewMode): Promise<void> {
-  for (let i = 0; i < 3; i++) {
-    if (target === 'read' && (await page.locator('.reader-workbench').count()) > 0) return;
-    if (target === 'split' && (await page.locator('.split-pane').count()) > 0) return;
+  const targetReached = async (): Promise<boolean> => {
+    if (target === 'read') return (await page.locator('.reader-workbench').count()) > 0;
+    if (target === 'split') return (await page.locator('.split-pane').count()) > 0;
     // live：两种预览容器都不在 → 即时模式
-    if (target === 'live' && (await currentViewMode(page)) === 'live') return;
+    return (await currentViewMode(page)) === 'live';
+  };
+  for (let i = 0; i < 3; i++) {
+    if (await targetReached()) break;
     await page.locator('.view-mode-toggle').click();
-    await page.waitForTimeout(400);
+    // 有界条件等待（L11）：慢机上目标容器可能晚于固定盲等出现，直接再点按
+    // 会越过目标模式（三态循环）停在错误状态——此处等待目标容器出现（或
+    // 2s 超时吞掉）再决定下一次点按，保留 3 次点击上限与终验不变。
+    await expect
+      .poll(targetReached, { timeout: 2_000 })
+      .toBe(true)
+      .catch(() => undefined);
   }
   expect(await currentViewMode(page), `切换到 ${target} 视图失败`).toBe(target);
 }
@@ -274,9 +283,9 @@ test.describe('98 元素探针（chromium）', () => {
 
   // ================================================================
   // ④ wiki 链接 [[基础]]：阅读预览点击后编辑器/视图发生跳转
-  // ⚠ 阅读视图（实验组）为预期红：onPreviewClick 的 data-note 分支被
-  //   `progressivePreviewRef.value` 门控（仅 >120KB 大文档挂载 ProgressivePreview），
-  //   普通笔记静态预览中点击 wikilink 为 no-op。即时视图对照组应绿。
+  // ✅ 修复后常绿断言（94d537d 起 data-note 分支不再被 progressivePreviewRef
+  //   门控）：静态阅读预览点击 wikilink 应跳转。即时视图对照组夹具校验应绿；
+  //   实验组红=回归（禁止为绿灯弱化断言）。
   // ================================================================
   test('PROBE-④-wiki链接阅读预览点击后编辑器视图发生跳转', async ({ page }) => {
     // —— 对照组：即时视图点击同一条 wikilink，验证夹具/索引/导航链路本身可用 ——
@@ -313,7 +322,7 @@ test.describe('98 元素探针（chromium）', () => {
       '目标存在的 wikilink 不应带死链类',
     ).toHaveCount(0);
 
-    // —— 实验组：点击后应跳转到 基础.md（预期红：静态预览点击实为 no-op）——
+    // —— 实验组（回归守卫）：点击后应跳转到 基础.md；红=回归 ——
     await wikiLink.first().click();
     await expect
       .poll(async () => normalizeNotePath(await activePathNow(page)), {

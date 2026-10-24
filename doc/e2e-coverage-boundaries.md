@@ -44,3 +44,25 @@ F-19 的完整链路（DOCX/PDF/Excel → 隔离只读预览 → 启动编辑双
 
 - 事实：转换白名单 `is_safe_link_target`（document_import.rs）只放行 https/http/mailto/`#` 前缀目标；Word 内部书签链接（`w:anchor`，无 `#` 形态）在转换期即降级为纯文字，不产生 `[x](#锚点)`。
 - 处置：渲染端点击查找已由 W1 `heading-anchor` 三形态归一（原文 / `heading-原文` / `headingIdFromText`）承接——凡以 `#标题文本` 形态进入 Markdown 的锚点均可点击滚动，**该子集标注闭合**；`_TocNNN` 位置书签无对应标题 id，属**转换层增强项**（把书签链接改写为所在标题文本锚点，W1 归一即可直接消费），不阻塞发布。
+
+## 追加处置记录（2026-10-24，静态 debug 报告「记录不修」项 L6/L7/L8）
+
+修复线静态 debug 报告复核确认成立、但本批**记录不修**的三条残留项处置如下（不影响上文各节定性）。
+
+### L6 · on_navigation 导航白名单宽于「应用自身源」口径（低危）
+
+- 事实：`packages/app/src-tauri/src/lib.rs` `allows_webview_navigation` 放行 scheme ∈ {http, https, tauri} ∧ host ∈ {tauri.localhost, localhost} 的**任意端口**组合——较 `build_window` 注释宣称的「只放行应用自身源」更宽（https+localhost 组合在口径内确无用途；dev 为 http://localhost:5173，Win/macOS 生产为 tauri.localhost）。任意端口系被 `webview_navigation_guard_allows_only_app_origins` 测试显式锁定的有意行为（注释明写「端口任意」），与 build_window 旧注释自相矛盾——本批已顺手消歧该注释（补「localhost 任意端口：Linux 生产源端口不定+dev server」）。
+- 不修理由：(1) 兜底非首道防线——on_navigation 之前有前端三层点击拦截（NotebookHome 静态预览 / ReviewWorkbench 左栏 / cm6-live-preview live 视图），触发兜底需绕过全部前端拦截的导航向量且本机恰有恶意 localhost 服务监听，利用前提苛刻；(2) 修复非低风险顺手——端口收窄可能弄坏 Linux 生产窗口加载（其生产源也是 localhost 但端口未在仓库内固定记录，本机无法验证收窄安全性），「至少收窄端口」在 Linux 生产源端口未知时不成立。
+- 后续若修：最小安全步是剔除 https+localhost 组合并同步改 `lib.rs` 导航守卫测试，但需 Linux 实测窗口加载配合。
+
+### L7 · 外部会话读类命令无会话世代门（安全加固备忘）
+
+- 事实：`fs_ops.rs` 读类命令（read_external_markdown_file / read_external_note_file / read_external_note_file_snapshot / read_external_note_asset）仅做 assert_external_owner + grant 过期/能力/范围校验，无会话世代门；写类命令才有 assert_external_edit。新资产通道 resolve_asset 确将读面扩至 grant 根全目录位图（含子目录）。
+- 不修理由：这是被测试钉住的**有意存量语义**——`promoted_grant_never_becomes_a_sibling_write_backdoor` 显式断言升级笔记本后旧 token 目录级读取放行，`commit_prepared_notebook_promotion` 设计上仅撤写保留读。本地单用户威胁模型下：grant 窗口隔离 + 30 分钟闲置过期（每次使用续期）+ 读面限于用户主动打开的目录 + 位图白名单 + 5MB 上限兜底，危险方向（写）已有会话门。加读类世代门需改 4 条 IPC 命令契约并破坏「升级后可读」既有设计。
+- 加固备忘（后续安全线候选）：模式切换时撤读能力；或资产读取不再续期 grant。
+
+### L8 · DOCX 导入警告按 rels 全集而非正文引用集（纯提示性）
+
+- 事实：`document_import.rs` 转换警告遍历 `document.hyperlinks` 全集，该字段由 docx-rs 按 rels 的 HYPERLINK_TYPE 全量填充，与正文是否引用无关——孤儿 rels、仅存在于被丢弃页眉/页脚中的链接都会触发 scheme 警告误报。渲染层实际过滤在 `find_docx_hyperlink_target`，Markdown 产物不受影响，仅警告文案可能多列 scheme。
+- 不修理由：精确修法需在正文遍历中记录被引用的 rId 并把警告发射移到块循环之后，属转换 worker 生产路径的结构性改动，对纯提示性问题不成比例。
+- 后续若修：未来触碰 convert_docx 时顺带做「正文引用集 ∩ rels 全集」交集即可。

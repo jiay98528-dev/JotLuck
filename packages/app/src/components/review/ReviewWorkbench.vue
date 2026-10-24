@@ -102,6 +102,7 @@
           :on-live-preview-remote-image-click="onLivePreviewRemoteImageClick"
           :on-live-preview-remote-image-load="onLivePreviewRemoteImageLoad"
           :on-live-preview-remote-image-error="onLivePreviewRemoteImageError"
+          :on-live-preview-tag-click="onLivePreviewTagClick"
           @update:model-value="onWorkingUpdate"
         />
       </section>
@@ -227,6 +228,7 @@ import { useToast } from '@/components/common/Toast.vue';
 import { annotateBlockBySourceRanges, applyBlockTint } from '@/utils/review-dom-annotator';
 import { openExternalUrl } from '@/utils/urlUtils';
 import { classifyAnchorHref } from '@/utils/preview-links';
+import { findHeadingElement } from '@/utils/heading-anchor';
 import type {
   RenderedBlockAnnotator,
   RenderedBlockAnnotationPayload,
@@ -389,6 +391,7 @@ const toast = useToast();
  * 远程图占位「载入/重试」按钮 → 会话句柄裁决（同主编辑器 onPreviewClick 首行）；
  * wiki 链接 → 跳转透传（W2 接入宿主回调，普通会话 resolveWikiLink 跳转 /
  * 外部会话受限提示由宿主统一裁决），缺省时回退受限提示；tag → 受限提示；
+ * # 锚点 → 左栏容器内三形态归一滚动（miss 给 headingNotFound 轻反馈）；
  * 绝对外链/裸域名 → preventDefault 后移交系统浏览器；其余相对路径 → 仅
  * preventDefault 不动作。不存在「未 preventDefault 即放行」的路径。
  */
@@ -416,8 +419,29 @@ function onLeftPaneClick(event: MouseEvent): void {
   const href = anchor.getAttribute('href');
   if (!href) return;
   event.preventDefault();
+  // 站内锚点（#fragment）：左栏容器内三形态归一定位（原文/heading-原文/
+  // headingIdFromText 形态，与静态预览 NotebookHome/阅读页同口径），miss 给
+  // headingNotFound 轻反馈——不再落入下方 classify 的 relative 静默 no-op。
+  if (href.startsWith('#')) {
+    const heading = leftRenderRef.value
+      ? findHeadingElement(leftRenderRef.value, href.slice(1))
+      : undefined;
+    if (heading) heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    else toast.show(t('navigation.headingNotFound'), 'info', 3500);
+    return;
+  }
   const hrefKind = classifyAnchorHref(href);
   if (hrefKind !== 'relative') void openExternalUrl(href);
+}
+
+/**
+ * 右栏 live 视图 #tag 点击（L5 透传）：改稿台无搜索面板，与左栏 data-tag
+ * 同口径给受限提示——不透传时 cm6 会 stopPropagation+preventDefault 静默
+ * 吞掉点击（options.onTagClick 缺省仍 return true），三面口径就此统一。
+ */
+function onLivePreviewTagClick(tag: string): void {
+  void tag;
+  toast.show(t('review.linkRestricted'), 'info', 3500);
 }
 
 // ── 右栏渲染态钩子：未聚焦改动块的内嵌批注（投影梯） ──

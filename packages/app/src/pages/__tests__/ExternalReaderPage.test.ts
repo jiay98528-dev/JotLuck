@@ -480,6 +480,15 @@ describe('ExternalReaderPage', () => {
     });
     await flushPromises();
 
+    // 哨兵（L9）：世代守卫的前提是读取确已发起——若组件回归致
+    // read_external_conversion_asset 根本不发起，rejectAsset 恒 undefined，
+    // 下面的可选链拒绝被静默跳过、负向断言空转变绿。先行钉死前置。
+    expect(
+      invoke.mock.calls.some(([command]) => command === 'read_document_conversion_asset'),
+      '资产读取应已发起（否则本用例空转，世代守卫未被验证）',
+    ).toBe(true);
+    expect(rejectAsset).toBeDefined();
+
     // 读取未决时用户取消：世代翻页后到达的失败不得污染当前预览与警告列表。
     await wrapper
       .findAll('button')

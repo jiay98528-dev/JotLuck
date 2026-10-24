@@ -1084,4 +1084,21 @@ describe('cm6 live preview anchor click routing', () => {
     expect(onExternalLinkClick).toHaveBeenCalledOnce();
     expect(onExternalLinkClick).toHaveBeenCalledWith('https://example.com');
   });
+
+  it('相对路径链接：吞点击不外抛（不误拼 https 打开错误域名，与静态面口径统一）', async () => {
+    const doc = ['# 标题甲', '', '[相对](notes/other.md)', '', '尾段'].join('\n');
+    const onExternalLinkClick = vi.fn();
+    const view = mountWithOptions(doc, { onExternalLinkClick });
+
+    await vi.waitFor(() => {
+      expect(view.dom.querySelector('a[href="notes/other.md"]')).not.toBeNull();
+    });
+
+    const event = clickAnchor('a[href="notes/other.md"]', view);
+
+    // 仅消费点击（preventDefault），不回调外链、不 openExternalUrl——否则
+    // normalizeUrl 会拼出 https://notes/other.md 打开错误域名。
+    expect(event.defaultPrevented).toBe(true);
+    expect(onExternalLinkClick).not.toHaveBeenCalled();
+  });
 });
