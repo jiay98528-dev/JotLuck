@@ -543,6 +543,12 @@ import {
   DEFAULT_COMPLETION_SETTINGS,
   type CompletionSettings,
 } from '@/services/CompletionSettings';
+import {
+  getEditorSettings,
+  subscribeEditorSettings,
+  updateEditorSettings,
+  type EditorSettings,
+} from '@/services/editor-settings';
 import type { CompletionTrainingMeta } from '@/services/CompletionTrainingService';
 import { useDialogFocus } from '@/composables/useDialogFocus';
 import { requestWelcomeReplay } from '@/utils/welcome';
@@ -636,12 +642,39 @@ const associationGroups = computed(
   () => associationStatus.value?.groups ?? unsupportedAssociationGroups,
 );
 
-const fontSize = ref(16);
-const lineHeight = ref(1.6);
-const tabSize = ref(2);
-const wordWrap = ref(true);
-const autoSaveEnabled = ref(true);
-const autoSaveDelay = ref(3000);
+// 编辑器/自动保存六控件：读写一律走 editor-settings 服务（localStorage 持久化 +
+// 事件广播）；本地仅持镜像 ref，控件模板经 writable computed 读写镜像。
+const editorSettings = ref<EditorSettings>(getEditorSettings());
+const unsubscribeEditorSettings = subscribeEditorSettings((next) => {
+  editorSettings.value = { ...next };
+});
+
+/** 控件写路径：字面量键合并进服务（钳制 + 持久化 + 广播），订阅回灌保证 UI 与存储一致 */
+const fontSize = computed({
+  get: () => editorSettings.value.fontSize,
+  set: (value: number) => void updateEditorSettings({ fontSize: value }),
+});
+const lineHeight = computed({
+  get: () => editorSettings.value.lineHeight,
+  set: (value: number) => void updateEditorSettings({ lineHeight: value }),
+});
+const tabSize = computed({
+  get: () => editorSettings.value.tabSize,
+  set: (value: number) => void updateEditorSettings({ tabSize: value }),
+});
+const wordWrap = computed({
+  get: () => editorSettings.value.wordWrap,
+  set: (value: boolean) => void updateEditorSettings({ wordWrap: value }),
+});
+const autoSaveEnabled = computed({
+  get: () => editorSettings.value.autoSaveEnabled,
+  set: (value: boolean) => void updateEditorSettings({ autoSaveEnabled: value }),
+});
+const autoSaveDelay = computed({
+  get: () => editorSettings.value.autoSaveDelay,
+  set: (value: number) => void updateEditorSettings({ autoSaveDelay: value }),
+});
+onBeforeUnmount(() => unsubscribeEditorSettings());
 
 const autoCompleteEnabled = ref(props.completionSettings.enabled);
 const backgroundTraining = ref(props.completionSettings.backgroundTraining);

@@ -21,13 +21,20 @@
  *  - 保存地板（原 500/300ms await）改为仅约束 isSaving 指示器熄灭时机，
  *    settle/isDirty 清零/flush 返回不再被地板阻塞；
  *  - scheduleSave 幂等自清（体内先 clearTimeout 再排程）；
+ *  - scheduleSave 收编自动保存设置：autoSaveEnabled 门 + autoSaveDelay 钳制
+ *    （边界与设置页滑杆同源，非法值兜底 600ms；isSaving 指示器熄灭地板不受影响）；
  *  - 删除声明未消费的死参数 isExternalSession / isAutosavePausedForDiskIssue。
  */
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import type { Ref } from 'vue';
 import type { ConditionalWriteResult, IFileSystemService } from '@/types';
 import type { useIndexStore } from '@/stores/notebookIndex';
 import { createUserMessageError } from '@/services/command-errors';
+import {
+  AUTOSAVE_DELAY_DEFAULT,
+  AUTOSAVE_DELAY_MAX,
+  AUTOSAVE_DELAY_MIN,
+} from '@/services/editor-settings';
 import { normalizePath, notebookRootsEqual } from '@/utils/notebook-paths';
 import type { ToastAPI } from '@/components/common/Toast.vue';
 
@@ -80,6 +87,11 @@ export interface UseSavePipelineOptions {
   notebookDataGeneration: () => number;
   /** E2E 强制保存失败注入（get/set 活引用） */
   forcedE2ESaveFailure: ForcedE2ESaveFailureHandle;
+  // ── 自动保存设置（设置页「自动保存」区下发） ──
+  /** 总开关：关闭时编辑仍标脏，但不再排程自动落盘（手动保存不受影响） */
+  autoSaveEnabled: Ref<boolean>;
+  /** 延迟毫秒（实时读值；管线内按设置页滑杆边界钳制并兜底默认 600） */
+  autoSaveDelayMs: () => number;
   // ── 布尔派生（computed/ref 注入） ──
   isExternalEditing: Ref<boolean>;
   isExternalReadonly: Ref<boolean>;
@@ -121,8 +133,8 @@ export interface UseSavePipelineReturn {
   contentRevision: Ref<number>;
   /** 本地写纪元（原 let；watcher 区分本地写与外部改写） */
   localWriteEpoch: Ref<number>;
-  /** 排程自动保存定时器（内部持有句柄，重复排程顶替旧句柄） */
-  scheduleSave(callback: () => void, delay: number): void;
+  /** 排程自动保存（读设置：开关门 + 延迟钳制；内部持有句柄，重复排程顶替旧句柄） */
+  scheduleSave(callback: () => void): void;
   /** 取消已排程保存（clearTimeout + 置 null，幂等） */
   cancelScheduledSave(): void;
   clearSaveIssue(): void;
@@ -162,6 +174,8 @@ export function useSavePipeline(options: UseSavePipelineOptions): UseSavePipelin
     indexStore,
     notebookDataGeneration,
     forcedE2ESaveFailure,
+    autoSaveEnabled,
+    autoSaveDelayMs,
     isExternalEditing,
     isExternalReadonly,
     isGuidedSampleSession,
@@ -194,10 +208,25 @@ export function useSavePipeline(options: UseSavePipelineOptions): UseSavePipelin
   // 在途保存单例（原模块级 let，仅迁移函数引用——不暴露）
   let currentSavePromise: Promise<boolean> | null = null;
 
-  function scheduleSave(callback: () => void, delay: number): void {
+  function scheduleSave(callback: () => void): void {
     // 幂等自清：排程前先撤销旧句柄，消除对调用方自律先 cancelScheduledSave 的依赖
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(callback, delay);
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    // 自动保存门（设置页「启用自动保存」）：关闭时撤销旧排程并不再新排；
+    // 开关运行中翻转时已排程任务按本分支即时失效，编辑内容保留待手动保存
+    if (!autoSaveEnabled.value) return;
+    saveTimer = setTimeout(callback, clampAutoSaveDelayMs(autoSaveDelayMs()));
+  }
+
+  /**
+   * 延迟钳制：与设置页滑杆边界（500–10000ms）同源，非法值兜底默认 600ms。
+   * 注意与「isSaving 指示器熄灭地板」（500/300ms 展示语义）互不相干，地板逻辑不受影响。
+   */
+  function clampAutoSaveDelayMs(delay: number): number {
+    if (!Number.isFinite(delay)) return AUTOSAVE_DELAY_DEFAULT;
+    return Math.min(AUTOSAVE_DELAY_MAX, Math.max(AUTOSAVE_DELAY_MIN, Math.round(delay)));
   }
 
   function cancelScheduledSave(): void {
@@ -206,6 +235,17 @@ export function useSavePipeline(options: UseSavePipelineOptions): UseSavePipelin
       saveTimer = null;
     }
   }
+
+  // 运行中关闸：撤销已排程的自动保存定时器（后续排程由 scheduleSave 的门拦截；
+  // 已写入磁盘的内容不受影响，未保存内容保留 isDirty 待手动保存/关前冲刷）。
+  // sync 冲刷使关闸同步即时生效——设置页开关一翻，在飞定时器当拍撤销。
+  watch(
+    autoSaveEnabled,
+    (enabled) => {
+      if (!enabled) cancelScheduledSave();
+    },
+    { flush: 'sync' },
+  );
 
   function clearSaveIssue(): void {
     saveIssue.value = null;

@@ -79,6 +79,10 @@ function createPipeline() {
       get: () => forcedE2ESaveFailure,
       set: (value) => (forcedE2ESaveFailure = value),
     },
+    // 自动保存设置（设置页下发，接线后为必填）：测试取默认口径——开 + 600ms
+    // （对齐接线前 600ms 硬编码调度值，保持既有用例的排程语义不变）
+    autoSaveEnabled: ref(true),
+    autoSaveDelayMs: () => 600,
     isExternalEditing,
     isExternalReadonly,
     isGuidedSampleSession,

@@ -55,7 +55,11 @@ export function jotluckPlaceholder(text: string): Extension {
   return cmPlaceholder(text);
 }
 
-export function jotluckExtensions(sourceOnly = false): Extension[] {
+/**
+ * jotluck 基础扩展集。wrap=false 时不含 lineWrapping（由调用方经 Compartment
+ * 自行动态切换自动换行）；默认 true 维持历史行为（恒换行）。
+ */
+export function jotluckExtensions(sourceOnly = false, wrap = true): Extension[] {
   return [
     // The host owns Enter/Backspace (shared syntax, tasks, IME and one-step undo).
     // The language's high-priority markup keymap would bypass that arbitration.
@@ -63,14 +67,16 @@ export function jotluckExtensions(sourceOnly = false): Extension[] {
     history(),
     highlightActiveLine(),
     keymap.of([...defaultKeymap, ...historyKeymap]),
-    EditorView.lineWrapping,
+    ...(wrap ? [EditorView.lineWrapping] : []),
     syntaxHighlighting(sourceOnly ? sourceOnlyHighlightStyle : JotLuckHighlightStyle),
     EditorView.theme(
       {
         '&': {
-          fontSize: '16px',
+          // 字号/行高经宿主 CSS 变量下发（设置页「编辑器」区）；未设变量时
+          // 回落到接线前常量（16px / --lh-body），独立消费方视觉不变
+          fontSize: 'var(--editor-font-size, 16px)',
           fontFamily: 'var(--ff-body)',
-          lineHeight: 'var(--lh-body)',
+          lineHeight: 'var(--editor-line-height, var(--lh-body))',
           color: 'var(--ink-primary)',
           backgroundColor: 'transparent',
         },

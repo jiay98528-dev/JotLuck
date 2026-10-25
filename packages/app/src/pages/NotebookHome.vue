@@ -364,6 +364,10 @@
                             :show-line-numbers="!isLargeDocument"
                             :live-preview="false"
                             :source-only="true"
+                            :font-size="editorSettings.fontSize"
+                            :line-height="editorSettings.lineHeight"
+                            :word-wrap="editorSettings.wordWrap"
+                            :tab-size="editorSettings.tabSize"
                             :pending-format="pendingFormatAction"
                             :wiki-link-exists="wikiLinkExists"
                             :wiki-link-revision="wikiLinkRevision"
@@ -464,6 +468,10 @@
                         "
                         :show-line-numbers="false"
                         :live-preview="true"
+                        :font-size="editorSettings.fontSize"
+                        :line-height="editorSettings.lineHeight"
+                        :word-wrap="editorSettings.wordWrap"
+                        :tab-size="editorSettings.tabSize"
                         :pending-format="pendingFormatAction"
                         :on-live-preview-external-link-click="onLivePreviewExternalLinkClick"
                         :on-live-preview-tag-click="onLivePreviewTagClick"
@@ -1045,6 +1053,11 @@ import {
   type CompletionSettings,
 } from '@/services/CompletionSettings';
 import {
+  getEditorSettings,
+  subscribeEditorSettings,
+  type EditorSettings,
+} from '@/services/editor-settings';
+import {
   CompletionTrainingService,
   DEFAULT_TRAINING_META,
   loadTrainingMeta,
@@ -1269,6 +1282,9 @@ const toast = useToast();
 const notebookName = ref('');
 const activeNotebookRoot = ref('');
 const completionSettings = ref<CompletionSettings>(getCompletionSettings());
+// 编辑器/自动保存设置（设置页六控件）：页面读取并下发——编辑器四项进
+// MarkdownEditor props，自动保存两项进 useSavePipeline（门 + 延迟）。
+const editorSettings = ref<EditorSettings>(getEditorSettings());
 
 // ── 改稿（审批/批注）模式 ─────────────────────────────────────────
 /** 活动改稿会话；非 null 时编辑面被 ReviewWorkbench 整面接管 */
@@ -1371,6 +1387,7 @@ function refreshCompletionEngineHealth(): void {
   completionEngineHealth.value = completionPredictor.value?.getPublicEngineDiagnostics() ?? null;
 }
 let unsubscribeCompletionSettings: (() => void) | null = null;
+let unsubscribeEditorSettings: (() => void) | null = null;
 let unsubscribeTrainingMeta: (() => void) | null = null;
 let completionTrainer: CompletionTrainingService | null = null;
 let unlistenWindowClose: (() => void) | null = null;
@@ -2232,9 +2249,9 @@ function onSplitContentUpdate(content: string): void {
       const savingPath = activePath.value;
       const savingRoot = activeNotebookRoot.value;
       const savingGeneration = notebookDataGeneration;
+      // 延迟与开关统一由 useSavePipeline 读编辑器设置（原 600ms 硬编码收编）
       scheduleSave(
         () => void debouncedSave(savingPath, content, revision, savingRoot, savingGeneration),
-        600,
       );
     }
   }
@@ -2326,6 +2343,9 @@ const {
     get: () => forcedE2ESaveFailure,
     set: (value) => (forcedE2ESaveFailure = value),
   },
+  // 自动保存设置（设置页「自动保存」区）：开关门 + 实时延迟（管线内钳制）
+  autoSaveEnabled: computed(() => editorSettings.value.autoSaveEnabled),
+  autoSaveDelayMs: () => editorSettings.value.autoSaveDelay,
   isExternalEditing,
   isExternalReadonly,
   isGuidedSampleSession,
@@ -4638,9 +4658,9 @@ function onContentUpdate(content: string): void {
     const savingPath = activePath.value;
     const savingRoot = activeNotebookRoot.value;
     const savingGeneration = notebookDataGeneration;
+    // 延迟与开关统一由 useSavePipeline 读编辑器设置（原 600ms 硬编码收编）
     scheduleSave(
       () => void debouncedSave(savingPath, content, revision, savingRoot, savingGeneration),
-      600,
     );
   }
 }
@@ -4657,7 +4677,8 @@ function onExternalContentUpdate(content: string): void {
     cancelScheduledSave();
     if (isAutosavePausedForDiskIssue()) return;
     const savingFile = { ...externalFile.value };
-    scheduleSave(() => void debouncedExternalSave(content, savingFile, revision), 600);
+    // 延迟与开关统一由 useSavePipeline 读编辑器设置（原 600ms 硬编码收编）
+    scheduleSave(() => void debouncedExternalSave(content, savingFile, revision));
   }
 }
 
@@ -5629,6 +5650,11 @@ onMounted(async () => {
     completionPredictor.value?.configure(settings);
     if (!isExternalSession.value && settings.backgroundTraining) scheduleBackgroundTraining();
   });
+  // 编辑器设置变更（设置页六控件）：镜像刷新即全链生效——编辑器 props 响应式
+  // 重配、保存管线经 getter 实时读取，无需任何手工失效处理
+  unsubscribeEditorSettings = subscribeEditorSettings((settings) => {
+    editorSettings.value = settings;
+  });
   unsubscribeTrainingMeta = subscribeTrainingMeta(
     (meta) => {
       completionTrainingMeta.value = meta;
@@ -5665,6 +5691,7 @@ onUnmounted(() => {
   if (watcherRefreshTimer) clearTimeout(watcherRefreshTimer);
   if (splitDragCleanup) splitDragCleanup();
   unsubscribeCompletionSettings?.();
+  unsubscribeEditorSettings?.();
   unsubscribeTrainingMeta?.();
   completionTrainer?.cancelCurrentRun();
   completionTrainer = null;

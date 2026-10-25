@@ -1,5 +1,12 @@
 <template>
-  <div ref="editorHost" class="markdown-editor" />
+  <div
+    ref="editorHost"
+    class="markdown-editor"
+    :style="{
+      '--editor-font-size': `${fontSize}px`,
+      '--editor-line-height': String(lineHeight),
+    }"
+  />
 </template>
 
 <script setup lang="ts">
@@ -24,6 +31,8 @@ import { documentAnalysisExtension, docToString } from '@/utils/cm6-document-ana
 import type { DocumentLocation } from '@/utils/document-location';
 import { EditorView, lineNumbers, keymap } from '@codemirror/view';
 import { EditorState, Compartment } from '@codemirror/state';
+import type { Extension } from '@codemirror/state';
+import { indentUnit } from '@codemirror/language';
 import { isolateHistory } from '@codemirror/commands';
 import { jotluckExtensions, jotluckPlaceholder } from '@/utils/cm6-extensions';
 import {
@@ -67,6 +76,14 @@ const props = withDefaults(
     showLineNumbers?: boolean;
     livePreview?: boolean;
     sourceOnly?: boolean;
+    /** 设置页「编辑器」区下发：字号 px（经宿主 CSS 变量 --editor-font-size） */
+    fontSize?: number;
+    /** 设置页「编辑器」区下发：行高倍数（经宿主 CSS 变量 --editor-line-height） */
+    lineHeight?: number;
+    /** 设置页「编辑器」区下发：自动换行（wrapCompartment 运行中重配） */
+    wordWrap?: boolean;
+    /** 设置页「编辑器」区下发：Tab 宽度（tabSize facet + indentUnit 运行中重配） */
+    tabSize?: number;
     pendingFormat?: FormatAction | null;
     placeholder?: string;
     enableAutocomplete?: boolean;
@@ -104,6 +121,11 @@ const props = withDefaults(
     showLineNumbers: false,
     livePreview: false,
     sourceOnly: false,
+    // 默认值对齐接线前实际行为（16px / --lh-body 1.8 / 恒换行 / Tab=2 空格）
+    fontSize: 16,
+    lineHeight: 1.8,
+    wordWrap: true,
+    tabSize: 2,
     pendingFormat: null,
     placeholder: undefined,
     enableAutocomplete: true,
@@ -139,6 +161,15 @@ const livePreviewCompartment = new Compartment();
 const autocompleteCompartment = new Compartment();
 const readOnlyCompartment = new Compartment();
 const placeholderCompartment = new Compartment();
+// 设置页「编辑器」区：自动换行与 Tab 宽度运行中重配
+const wrapCompartment = new Compartment();
+const tabSizeCompartment = new Compartment();
+
+/** Tab 宽度扩展：tabSize facet（列宽计数/渲染）+ indentUnit（Tab 键缩进插入）同源 */
+function editorTabSizeExtensions(tabSize: number): Extension[] {
+  const unit = Number.isInteger(tabSize) && tabSize > 0 ? tabSize : 2;
+  return [EditorState.tabSize.of(unit), indentUnit.of(' '.repeat(unit))];
+}
 
 // NotebookHome owns the predictor in the product path. The fallback keeps the
 // component independently mountable in unit tests and isolated previews.
@@ -382,7 +413,10 @@ function createState(doc: string) {
           run: (v) => (v.state.readOnly ? false : smartCancelOnEscape(v)),
         },
       ]),
-      ...jotluckExtensions(props.sourceOnly),
+      ...jotluckExtensions(props.sourceOnly, false),
+      // 自动换行与 Tab 宽度经独立 Compartment 支持「设置页改值→运行中重配」
+      wrapCompartment.of(props.wordWrap === false ? [] : EditorView.lineWrapping),
+      tabSizeCompartment.of(editorTabSizeExtensions(props.tabSize)),
       // 改稿模式源码态马克笔：空集合时零渲染输出，对非改稿调用方无副作用。
       reviewMarksExtension(),
       // 查找替换：静态扩展（不支持 Compartment 动态切换）；search() 默认面板
@@ -543,6 +577,21 @@ watch(
     if (!view) return;
     view.dispatch({
       effects: lineNumberCompartment.reconfigure(visible ? lineNumbers() : []),
+    });
+  },
+);
+
+// 设置页「编辑器」区：自动换行/Tab 宽度运行中重配（字号/行高走宿主 CSS 变量响应式生效，
+// 无需触碰编辑器状态）。tabSize 重配保留文档与选区（reconfigure 仅替换扩展内容）。
+watch(
+  () => [props.wordWrap, props.tabSize] as const,
+  ([wordWrap, tabSize]) => {
+    if (!view) return;
+    view.dispatch({
+      effects: [
+        wrapCompartment.reconfigure(wordWrap === false ? [] : EditorView.lineWrapping),
+        tabSizeCompartment.reconfigure(editorTabSizeExtensions(tabSize)),
+      ],
     });
   },
 );
