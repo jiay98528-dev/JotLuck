@@ -413,6 +413,17 @@ function onLeftPaneClick(event: MouseEvent): void {
       props.onLivePreviewWikiLinkClick(note, anchor.getAttribute('data-anchor'));
       return;
     }
+    // 空 note = 同页锚点（[[#锚]]）：与 #fragment 同口径在左栏容器内三形态
+    // 归一定位（不出改稿上下文），不再落 linkRestricted 误提示。
+    const samePageAnchor = anchor.getAttribute('data-anchor');
+    if (samePageAnchor) {
+      const heading = leftRenderRef.value
+        ? findHeadingElement(leftRenderRef.value, samePageAnchor)
+        : undefined;
+      if (heading) heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      else toast.show(t('navigation.headingNotFound'), 'info', 3500);
+      return;
+    }
     toast.show(t('review.linkRestricted'), 'info', 3500);
     return;
   }

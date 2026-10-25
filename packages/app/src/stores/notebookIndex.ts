@@ -8,7 +8,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { IFileSystemService } from '@/types';
-import { IndexService } from '@/services/IndexService';
+import { IndexService, indexLimitMessage } from '@/services/IndexService';
 import type { SearchEngine } from '@/services/SearchEngine';
 import { useSearchStore } from '@/stores/search';
 import { localizeUserError } from '@/services/command-errors';
@@ -64,7 +64,10 @@ export const useIndexStore = defineStore('index', () => {
       if (generation !== initializeGeneration) return;
       // eslint-disable-next-line no-console
       console.error('[indexStore] index initialization failed:', e);
-      error.value = localizeUserError(e, 'errors.indexUnavailable');
+      // 超限异常透出抛出点已翻译的 program.indexTooLarge 文案；其余异常落
+      // errors.indexUnavailable 通用兜底。error 态由命令面板空态消费，
+      // 不再静默（此前 error 零 UI 消费、超限也只显示误导性「无匹配」）。
+      error.value = indexLimitMessage(e) ?? localizeUserError(e, 'errors.indexUnavailable');
       status.value = 'error';
     }
   }

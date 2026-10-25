@@ -32,6 +32,7 @@ import type { ToastAPI } from '@/components/common/Toast.vue';
 import { editorSource } from '@/utils/editor-source';
 import { relocateBacklink, type DocumentLocation } from '@/utils/document-location';
 import { revealLivePreviewSourceAt } from '@/utils/cm6-live-preview';
+import { headingAnchorCandidates } from '@/utils/heading-anchor';
 import { normalizePath } from '@/utils/notebook-paths';
 
 /** 编辑器实例导航句柄（页面 MarkdownEditorExposed 的导航子集，注入方保持不变） */
@@ -354,11 +355,16 @@ export function useDocumentNavigation(
         to = occurrence.to;
       } else if (target.headingId || target.anchor) {
         const items = result.ast.blocks.filter((block) => block.type === 'heading');
+        // 三形态候选弥合（heading-anchor）：原文 / heading-原文 / 归一形态逐一
+        // 比对标题 id 与原文——直传原文锚点（[[#基础]]）与渲染归一 id 两侧失配
+        // 在此收口；headingFrom 定位（大纲树）优先级不变。
+        const candidates = headingAnchorCandidates(target.headingId ?? target.anchor ?? '');
         const heading =
           target.headingFrom !== undefined
             ? items.find((item) => item.range.from === target.headingFrom)
-            : (items.find((item) => item.id === (target.headingId ?? target.anchor)) ??
-              items.find((item) => item.text.trim() === target.anchor?.trim()));
+            : (items.find(
+                (item) => candidates.includes(item.id) || candidates.includes(item.text.trim()),
+              ) ?? null);
         if (!heading) return;
         from = to = heading.range.from;
         headingId = heading.id;
@@ -414,6 +420,13 @@ export function useDocumentNavigation(
     noteTitle: string,
     anchor: null | string,
   ): Promise<void> {
+    // 空 note + 锚文本 = 同页锚点（[[#锚]] 全形态）：目标在当前文档标题集内，
+    // 按 headingAnchorCandidates 三形态定位跳转，不查跨库索引、不弹
+    // 「未找到笔记」；跳转不出本文档，外部会话守卫（下方）也不适用于此形态。
+    if (!noteTitle && anchor) {
+      await navigateDocument({ path: activePath.value, anchor });
+      return;
+    }
     // 外部会话全域（readonly + edit-shell）统一 wikiRestricted 提示：外部
     // readonly 点击若落入 resolveWikiLink 会拿无关笔记本索引误导航或误报
     // noteNotFound——渲染侧 4371 行注释自述的「点击侧兜底」在 readonly 不

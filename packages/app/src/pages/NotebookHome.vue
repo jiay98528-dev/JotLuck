@@ -2890,7 +2890,13 @@ async function restartNotebookWatcher(rootPath: string): Promise<void> {
 
 function onWindowFocusRetryWatcherStart(): void {
   const pending = watcherStartRetryOnFocus;
-  if (!pending) return;
+  if (!pending) {
+    // 外部只读会话没有 watcher 生命周期（不监听目录）：窗口重新聚焦时无副作用
+    // 重读快照——外部程序改盘后的陈旧内容零感知在此兜底；edit 会话有保存侧
+    // 冲突兜底（stale revision 拒写），维持现状不在此重读。
+    if (isExternalReadonly.value) void refreshExternalReadonlySnapshot();
+    return;
+  }
   watcherStartRetryOnFocus = null;
   if (
     pending.generation !== notebookWatchGeneration ||
@@ -2901,6 +2907,37 @@ function onWindowFocusRetryWatcherStart(): void {
     return;
   }
   void restartNotebookWatcher(pending.rootPath);
+}
+
+/**
+ * 外部只读会话聚焦重读（EX）：无副作用重读当前外部文件快照，内容或修订
+ * 变化才换出预览（标题/统计/文件面同步）；重读失败保持现状——聚焦兜底
+ * 不弹错、不清空已渲染内容。会话/文件在 await 间隙被切换则放弃写入。
+ */
+async function refreshExternalReadonlySnapshot(): Promise<void> {
+  const openedFile = externalFile.value;
+  if (!openedFile || externalSessionMode.value !== 'readonly') return;
+  const expectedRevision = currentDiskRevision.value;
+  try {
+    const snapshot = await readExternalNoteFileSnapshot(openedFile);
+    if (
+      externalFile.value !== openedFile ||
+      externalSessionMode.value !== 'readonly' ||
+      isDirty.value
+    ) {
+      return;
+    }
+    if (snapshot.revision === expectedRevision && snapshot.content === currentContent.value) return;
+    contentRevision.value++;
+    currentContent.value = snapshot.content;
+    currentDiskRevision.value = snapshot.revision;
+    exposeOnlyCurrentExternalFile(openedFile, snapshot.content);
+    updateHeadings(snapshot.content);
+    updateEditorStats(snapshot.content);
+    updateExternalPreview();
+  } catch {
+    // 重读失败静默保持现状（如授权过期）：下次聚焦再试。
+  }
 }
 
 let initialNotebookGateError = '';

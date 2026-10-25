@@ -19,6 +19,8 @@ export const useSearchStore = defineStore('search', () => {
   const searchHistory = ref<string[]>([]);
   const selectedIndex = ref(-1);
   const workspaceRevision = ref(0);
+  /** 外部预设查询（如标签点击 → tag:xxx）：面板打开时一次性消费，防误恢复旧查询。 */
+  const presetQuery = ref<string | null>(null);
 
   const resultCount = computed(() => results.value.length);
   const hasResults = computed(() => results.value.length > 0);
@@ -72,12 +74,23 @@ export const useSearchStore = defineStore('search', () => {
     isVisible.value = false;
     error.value = null;
     selectedIndex.value = -1;
+    presetQuery.value = null;
   }
 
   function open(queryText?: string): void {
-    if (queryText) query.value = queryText;
+    if (queryText) {
+      query.value = queryText;
+      presetQuery.value = queryText;
+    }
     isVisible.value = true;
     loadHistory();
+  }
+
+  /** 面板打开时一次性消费外部预设查询（消费后回落 null，防二次恢复）。 */
+  function consumePresetQuery(): string | null {
+    const value = presetQuery.value;
+    presetQuery.value = null;
+    return value;
   }
 
   function close(): void {
@@ -118,6 +131,7 @@ export const useSearchStore = defineStore('search', () => {
     loadHistory,
     resetWorkspaceState,
     open,
+    consumePresetQuery,
     close,
     selectNext,
     selectPrev,

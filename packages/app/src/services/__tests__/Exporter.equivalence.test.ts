@@ -303,9 +303,13 @@ describe('exporter characterization baseline (slice D)', () => {
   it('edge: escaped pipe stays 2 cells across csv / xlsx / docx', async () => {
     const md = '| a\\|b | c |\n| --- | --- |\n| 1 | 2 |';
 
-    // CSV：单元格保留 `\|` 源码切片（无逗号/引号/换行故不触发转义）
+    // CSV：单元格保留 `\|` 源码切片（无逗号/引号/换行故不触发转义）；
+    // BOM 前缀以字节级断言（Blob.text() 的 UTF-8 解码按规范剥除前导
+    // U+FEFF，text() 口径下内容串不含 BOM，快照维持无 BOM 形态）。
     const csvResult = await exportNote(md, 'edge-pipe-csv', { format: ExportFormat.CSV });
     expect(csvResult.success).toBe(true);
+    const csvBytes = new Uint8Array(await capturedBlob!.arrayBuffer());
+    expect([csvBytes[0], csvBytes[1], csvBytes[2]]).toEqual([0xef, 0xbb, 0xbf]);
     expect(await capturedDownloadText()).toBe('a\\|b,c\n1,2');
 
     // XLSX：表格矩阵形状

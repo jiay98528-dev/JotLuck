@@ -1014,6 +1014,9 @@ async function exportXlsx(
 // CSV — table extraction to CSV
 // ============================================================================
 
+/** UTF-8 BOM：Excel 双击打开 CSV 需 BOM 才按 UTF-8 解码（无 BOM 中文乱码）。 */
+const CSV_BOM_PREFIX = '\uFEFF';
+
 function exportCsv(md: string, fileName: string, options?: Partial<ExportOptions>): ExportResult {
   const opts = buildInternalOpts(options);
   const processed = preprocessMarkdown(md, opts);
@@ -1022,7 +1025,7 @@ function exportCsv(md: string, fileName: string, options?: Partial<ExportOptions
   if (tables.length === 0) {
     // No tables — export the whole content as a single-cell CSV
     triggerDownload(
-      escapeCsvCell(processed),
+      CSV_BOM_PREFIX + escapeCsvCell(processed),
       `${fileName}.csv`,
       'text/csv;charset=UTF-8',
       options?.signal,
@@ -1030,13 +1033,15 @@ function exportCsv(md: string, fileName: string, options?: Partial<ExportOptions
     return { success: true, format: ExportFormat.CSV, fileName: `${fileName}.csv` };
   }
 
-  const csvContent = tables
-    .map((table) => {
-      const headerRow = table.headers.map((c) => escapeCsvCell(c)).join(',');
-      const dataRows = table.rows.map((row) => row.map((c) => escapeCsvCell(c)).join(','));
-      return [headerRow, ...dataRows].join('\n');
-    })
-    .join('\n\n');
+  const csvContent =
+    CSV_BOM_PREFIX +
+    tables
+      .map((table) => {
+        const headerRow = table.headers.map((c) => escapeCsvCell(c)).join(',');
+        const dataRows = table.rows.map((row) => row.map((c) => escapeCsvCell(c)).join(','));
+        return [headerRow, ...dataRows].join('\n');
+      })
+      .join('\n\n');
 
   triggerDownload(csvContent, `${fileName}.csv`, 'text/csv;charset=UTF-8', options?.signal);
   return { success: true, format: ExportFormat.CSV, fileName: `${fileName}.csv` };

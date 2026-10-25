@@ -116,4 +116,29 @@ describe('NotebookHome 外部只读壳本地图渲染链（imageRevision → ext
       expect(img.attributes('src')).toBe('blob:mock-1');
     });
   });
+
+  it('外部只读态：窗口聚焦无副作用重读快照，盘上内容变化换出新预览（EX）', async () => {
+    if (!wrapper) throw new Error('挂载未就绪');
+    await vi.waitFor(() => {
+      expect(wrapper!.find('.external-preview').exists()).toBe(true);
+      expect(wrapper!.find('.external-preview').text()).toContain('外部图');
+    });
+    const before = wrapper!.find('.external-preview').text();
+    expect(before).not.toContain('聚焦后新段落');
+
+    // 外部程序改盘（web 运行时快照源 = e2e 桥 externalFiles）
+    const files = bridgeHolder.bridge?.externalFiles;
+    if (!files) throw new Error('externalFiles 夹具缺失');
+    files[NOTE_ABSOLUTE_PATH] = '# 外部图\n\n聚焦后新段落\n';
+
+    // 窗口重新聚焦：onWindowFocusRetryWatcherStart 不再排除只读外部会话，
+    // 触发 refreshExternalReadonlySnapshot 无副作用重读（revision 变化 → 换出）。
+    window.dispatchEvent(new Event('focus'));
+
+    await vi.waitFor(() => {
+      expect(wrapper!.find('.external-preview').text()).toContain('聚焦后新段落');
+    });
+    // 重读后无错误面（静默兜底，不弹 externalError）
+    expect(wrapper!.find('.external-state--error').exists()).toBe(false);
+  });
 });

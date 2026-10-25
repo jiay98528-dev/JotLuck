@@ -1310,6 +1310,29 @@ function reportLiveHeadingNotFound(): void {
     .catch(() => {});
 }
 
+/** 站内锚点滚动：AST 三形态定位标题源码位置，全 miss 落已物化 DOM 兜底，
+ *  仍 miss 给 headingNotFound 轻提示。返回是否已消费点击。 */
+function scrollLiveToHeadingAnchor(view: EditorView, rawId: string): boolean {
+  // AST 解析定位标题源码位置——不依赖已物化的渲染 DOM（旧 DOM 路径对屏外
+  // 未物化标题恒 miss）；AST 全 miss 再落已物化 DOM 兜底（覆盖容器内嵌标题）。
+  const sourcePos = findHeadingSourcePos(view, rawId);
+  if (sourcePos !== null) {
+    view.dispatch({
+      effects: EditorView.scrollIntoView(sourcePos, { y: 'start' }),
+    });
+    return true;
+  }
+  const heading = findHeadingElement(view.dom, rawId);
+  if (heading) {
+    view.dispatch({
+      effects: EditorView.scrollIntoView(view.posAtDOM(heading), { y: 'start' }),
+    });
+    return true;
+  }
+  reportLiveHeadingNotFound();
+  return true;
+}
+
 function handleLiveAnchorClick(
   anchor: HTMLAnchorElement,
   options: LivePreviewOptions,
@@ -1321,10 +1344,16 @@ function handleLiveAnchorClick(
     return true;
   }
 
-  const note = anchor.getAttribute('data-note');
-  if (note) {
-    options.onWikiLinkClick?.(note, anchor.getAttribute('data-anchor'));
-    return true;
+  if (anchor.hasAttribute('data-note')) {
+    const note = anchor.getAttribute('data-note');
+    if (note) {
+      options.onWikiLinkClick?.(note, anchor.getAttribute('data-anchor'));
+      return true;
+    }
+    // 空 note = 同页锚点（[[#锚]]）：与 #fragment 同路径就地滚动，不外抛
+    // onWikiLinkClick（宿主侧会落跨库解析/「未找到笔记」误报）。
+    const samePageAnchor = anchor.getAttribute('data-anchor');
+    if (samePageAnchor) return scrollLiveToHeadingAnchor(view, samePageAnchor);
   }
 
   const href = anchor.getAttribute('href');
@@ -1333,22 +1362,7 @@ function handleLiveAnchorClick(
     // 渲染 DOM（旧 DOM 路径对屏外未物化标题恒 miss）；AST 全 miss 再落
     // 已物化 DOM 兜底（覆盖容器内嵌标题），仍 miss 给 headingNotFound。
     if (href.startsWith('#')) {
-      const rawId = href.slice(1);
-      const sourcePos = findHeadingSourcePos(view, rawId);
-      if (sourcePos !== null) {
-        view.dispatch({
-          effects: EditorView.scrollIntoView(sourcePos, { y: 'start' }),
-        });
-      } else {
-        const heading = findHeadingElement(view.dom, rawId);
-        if (heading) {
-          view.dispatch({
-            effects: EditorView.scrollIntoView(view.posAtDOM(heading), { y: 'start' }),
-          });
-        } else {
-          reportLiveHeadingNotFound();
-        }
-      }
+      scrollLiveToHeadingAnchor(view, href.slice(1));
       return true; // 点击已被消费，绝不落入外链分支
     }
     // 相对路径（无协议）不外抛：openExternalUrl/normalizeUrl 会误拼 https://

@@ -1,6 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { MockFSService } from '@/services/MockFSService';
+import { translate } from '@/i18n';
+import { IndexService } from '@/services/IndexService';
 import { useIndexStore } from '../notebookIndex';
 
 describe('useIndexStore initialization races', () => {
@@ -45,5 +47,48 @@ describe('useIndexStore initialization races', () => {
     expect(store.tags).toEqual([]);
     expect(store.recentNotes).toEqual([]);
     expect(store.getIndexService()).toBeNull();
+  });
+});
+
+describe('useIndexStore 失败态呈现（IX：超限与异常两路）', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    setActivePinia(createPinia());
+  });
+
+  it('超限异常：error 透出 program.indexTooLarge 译文，status 落 error', async () => {
+    // 与 IndexService 抛出形态一致：marker 前缀 + 抛出点已翻译的超限文案
+    const limitMessage = translate('program.indexTooLarge', { limit: 2000 });
+    const buildSpy = vi
+      .spyOn(IndexService.prototype, 'buildFullIndex')
+      .mockRejectedValue(new Error(`JOTLUCK_INDEX_LIMIT_EXCEEDED: ${limitMessage}`));
+    try {
+      const store = useIndexStore();
+      await store.initialize(new MockFSService(0), true);
+
+      expect(store.status).toBe('error');
+      // 超限标记后的译文原样透出，不被 errors.indexUnavailable 兜底抹平
+      expect(store.error).toBe(limitMessage);
+      // 失败后不残留半截索引服务
+      expect(store.getIndexService()).toBeNull();
+    } finally {
+      buildSpy.mockRestore();
+    }
+  });
+
+  it('非上限异常：error 落 errors.indexUnavailable 本地化兜底，status 落 error', async () => {
+    const buildSpy = vi
+      .spyOn(IndexService.prototype, 'buildFullIndex')
+      .mockRejectedValue(new Error('boom'));
+    try {
+      const store = useIndexStore();
+      await store.initialize(new MockFSService(0), true);
+
+      expect(store.status).toBe('error');
+      expect(store.error).toBe(translate('errors.indexUnavailable'));
+      expect(store.getIndexService()).toBeNull();
+    } finally {
+      buildSpy.mockRestore();
+    }
   });
 });

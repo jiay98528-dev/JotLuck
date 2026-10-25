@@ -297,3 +297,70 @@ describe('useDocumentNavigation 外部会话 wiki 点击守卫', () => {
     expect(deps.toast.show).toHaveBeenCalledWith('notebook.error.noteNotFound', 'warning', 3000);
   });
 });
+
+describe('useDocumentNavigation 同页锚点（[[#锚]] 空 note 形态 / LB）', () => {
+  function primeSamePageHarness(anchorText: string, headingId: string, headingText: string) {
+    const { nav, deps, analysisStub } = createNavigationHarness();
+    analysisStub.result = {
+      ast: {
+        source: deps.currentContent.value,
+        blocks: [
+          {
+            type: 'heading',
+            id: headingId,
+            range: { from: 0, to: 4 },
+            text: headingText,
+          },
+        ],
+      },
+      wikiLinks: [],
+    } as unknown as DocumentAnalysisResult;
+    const progressive = {
+      cancelNavigation: vi.fn(),
+      scrollToHeading: vi.fn(),
+      navigateToRange: vi.fn(),
+    };
+    deps.progressivePreviewRef.value = progressive as unknown as ProgressivePreviewNavigation;
+    return { nav, deps, progressive, anchorText };
+  }
+
+  it('空 note + 锚文本：同页跳转到标题，不查索引、不弹「未找到笔记」', async () => {
+    const { nav, deps, progressive } = primeSamePageHarness('目标', 'heading-目标', '目标');
+
+    await nav.onLivePreviewWikiLinkClick('', '目标');
+
+    // 同页导航：不切笔记、不 miss 提示，渐进预览滚到标题渲染 id。
+    expect(deps.onShellSelectNote).not.toHaveBeenCalled();
+    expect(deps.toast.show).not.toHaveBeenCalled();
+    expect(progressive.scrollToHeading).toHaveBeenCalledWith('heading-目标');
+    expect(nav.activeDocumentPosition.value).toBe(0);
+  });
+
+  it('外部会话同页锚点不被 wikiRestricted 截胡（跳转不出本文档）', async () => {
+    const { nav, deps, progressive } = primeSamePageHarness('目标', 'heading-目标', '目标');
+    deps.isExternalSession.value = true;
+
+    await nav.onLivePreviewWikiLinkClick('', '目标');
+
+    expect(deps.toast.show).not.toHaveBeenCalledWith(
+      'notebook.external.wikiRestricted',
+      'info',
+      3500,
+    );
+    expect(progressive.scrollToHeading).toHaveBeenCalledWith('heading-目标');
+  });
+
+  it('三形态候选弥合：原文与归一 id 失配（空白/标点差异）也能命中标题', async () => {
+    // 旧查找（id/原文精确相等）对 'A  B 标题!'（双空格）与 id 'heading-a-b-标题'
+    // 双双 miss；三形态候选经 headingIdFromText 归一命中。
+    const { nav, progressive } = primeSamePageHarness(
+      'A  B 标题!',
+      'heading-a-b-标题',
+      'A B 标题!',
+    );
+
+    await nav.onLivePreviewWikiLinkClick('', 'A  B 标题!');
+
+    expect(progressive.scrollToHeading).toHaveBeenCalledWith('heading-a-b-标题');
+  });
+});

@@ -239,9 +239,13 @@ const searchPlaceholder = computed(() => t('command.placeholder'));
 // fb-1: 索引构建中时空态文案区分（useSearch 在 ready 时自动重放查询）
 const isIndexBuilding = computed(() => indexStore.status === 'building');
 
-const emptyStateMessage = computed(() =>
-  isIndexBuilding.value ? t('command.indexBuilding') : t('command.noMatch'),
-);
+// 索引失败态（超限/不可用）空态透出 store 的本地化错误文案，替代误导性
+// 「无匹配」——用户需要知道是索引坏了，而不是真的没有结果。
+const emptyStateMessage = computed(() => {
+  if (isIndexBuilding.value) return t('command.indexBuilding');
+  if (indexStore.status === 'error' && indexStore.error) return indexStore.error;
+  return t('command.noMatch');
+});
 
 // ============================================================
 // Methods
@@ -253,9 +257,9 @@ function close(): void {
 
 function onQueryChange(): void {
   selectedIndex.value = 0;
-  if (query.value.trim().length > 0) {
-    searchWithDebounce(query.value);
-  }
+  // 空串同样打通 useSearch 清空分支（setQuery('') + clearResults）——
+  // 此前空串不调用导致「清空搜索框但旧结果残留」。
+  searchWithDebounce(query.value);
 }
 
 function selectResult(result: SearchResult): void {
@@ -371,13 +375,16 @@ watch(
   async (isVisible) => {
     if (isVisible) {
       window.addEventListener('keydown', handleWindowKeydown, true);
-      // 如果有外部预设查询（如标签点击 → tag:xxx），
-      // 同步到输入框并立即执行搜索；否则正常打开空白面板。
-      if (searchStore.query) {
-        query.value = searchStore.query;
-        searchWithDebounce(query.value);
+      // 外部预设查询（如标签点击 → tag:xxx）经 searchStore.open 一次性登记：
+      // 面板打开时消费预设并立即执行搜索；无预设则打开空白面板——store 里
+      // 残留的上一轮查询与结果一并清空，不再自动恢复旧查询重放。
+      const preset = searchStore.consumePresetQuery();
+      if (preset) {
+        query.value = preset;
+        searchWithDebounce(preset);
       } else {
         query.value = '';
+        searchWithDebounce('');
       }
       selectedIndex.value = 0;
       await nextTick();

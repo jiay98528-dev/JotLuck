@@ -893,10 +893,17 @@ function onMarkdownClick(event: MouseEvent): void {
   const anchor = target.closest('a');
   if (!anchor || !markdownElement.value?.contains(anchor)) return;
 
-  const note = anchor.getAttribute('data-note');
-  if (note) {
+  if (anchor.hasAttribute('data-note')) {
     event.preventDefault();
-    showNotebookCapabilityNotice('externalReader.wikiNavigation', { note });
+    const note = anchor.getAttribute('data-note');
+    if (note) {
+      showNotebookCapabilityNotice('externalReader.wikiNavigation', { note });
+      return;
+    }
+    // 空 note = 同页锚点（[[#锚]]）：与 #fragment 同路径滚动定位，不出文档，
+    // 不算跨库导航，不走 wikiNavigation 能力提示。
+    const samePageAnchor = anchor.getAttribute('data-anchor');
+    if (samePageAnchor) scrollHeading(samePageAnchor);
     return;
   }
   const tag = anchor.getAttribute('data-tag');

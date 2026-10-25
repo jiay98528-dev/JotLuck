@@ -321,6 +321,8 @@ export const messages = {
       localExport: 'Local export',
       imagePlaceholder: '[Image: {alt}]',
       failedLog: 'Sharing failed',
+      pdfOnlyLocalHint:
+        'PDF is only available via Local export, which produces a real .pdf file. System share, email, and clipboard cannot carry a complete PDF file and are disabled.',
     },
     template: {
       title: 'New note',

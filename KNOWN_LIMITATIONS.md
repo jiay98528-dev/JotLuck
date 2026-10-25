@@ -66,10 +66,16 @@ behavior boundaries.
 - Opening `.md` / `.markdown` / `.mdx` / `.txt` from Windows starts a single-file read-only
   session. It intentionally does not scan the parent directory as a notebook.
   Editing must be explicitly enabled and saves only the current file.
+- External single-file sessions do not watch the file on disk. In read-only sessions the
+  note snapshot is re-read without side effects each time the window regains focus, so
+  externally modified content becomes visible on focus. Edit sessions keep their loaded
+  view and do not auto-reload (unsaved edits must not be clobbered); a file changed on
+  disk since it was read is caught at save time by the stale-revision conditional write,
+  which refuses to overwrite and asks the user to reload or save a copy instead.
 - Opening `.docx` / `.pdf` / `.xlsx` / `.xls` starts an isolated read-only import
-  session. The preview maps recoverable document semantics to Markdown; it does
-  not reproduce Office or PDF layout pixel-for-pixel, perform PDF OCR, or edit
-  the source document in place. Scanned, encrypted, or textless PDFs cannot be
+  session. The preview maps recoverable document semantics to Markdown; it does not
+  reproduce Office or PDF layout pixel-for-pixel, perform PDF OCR, or edit the
+  source document in place. Scanned, encrypted, or textless PDFs cannot be
   previewed as text. Unsupported document structures produce explicit warnings.
 - Saving an imported document creates a new `.md` file and, when needed, a new
   assets directory. JotLuck never overwrites the source document. A stale source

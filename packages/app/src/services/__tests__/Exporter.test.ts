@@ -49,6 +49,10 @@ describe('Exporter CSV safety', () => {
     });
 
     expect(capturedBlob).not.toBeNull();
+    // BOM 断言（字节级）：Blob.text() 的 UTF-8 解码按规范剥除前导 U+FEFF，
+    // 首字符断言必须落在 arrayBuffer 原始字节上（EF BB BF）。
+    const bytes = new Uint8Array(await capturedBlob!.arrayBuffer());
+    expect([bytes[0], bytes[1], bytes[2]]).toEqual([0xef, 0xbb, 0xbf]);
     const csv = await capturedBlob!.text();
     expect(csv).toContain("'=cmd");
     expect(csv).toContain("'+sum");
@@ -62,6 +66,9 @@ describe('Exporter CSV safety', () => {
     });
 
     expect(capturedBlob).not.toBeNull();
+    // BOM 前缀（字节级）+ 单元格转义（text() 剥 BOM 后的完整内容比对）
+    const bytes = new Uint8Array(await capturedBlob!.arrayBuffer());
+    expect([bytes[0], bytes[1], bytes[2]]).toEqual([0xef, 0xbb, 0xbf]);
     expect(await capturedBlob!.text()).toBe(`"'=HYPERLINK(""https://example.test"")"`);
   });
 

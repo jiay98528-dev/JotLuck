@@ -317,6 +317,8 @@ export const messages = {
       localExport: '로컬 내보내기',
       imagePlaceholder: '[이미지: {alt}]',
       failedLog: '공유 실패',
+      pdfOnlyLocalHint:
+        'PDF는 실제 .pdf 파일을 생성하는 로컬 내보내기만 지원합니다. 시스템 공유·이메일·클립보드는 완전한 PDF을 전달할 수 없어 비활성화되었습니다.',
     },
     template: {
       title: '새 노트',

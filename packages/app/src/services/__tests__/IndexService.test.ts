@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { IndexService } from '../IndexService';
+import { IndexService, indexLimitMessage } from '../IndexService';
 import { MockFSService } from '../MockFSService';
 
 describe('IndexService notebook traversal', () => {
@@ -103,6 +103,28 @@ describe('IndexService per-path mutation ordering', () => {
 
     expect(service.getAllDocuments()['/recreated.md']?.title).toBe('Recreated current');
     expect(service.getEngine().search({ text: 'stalerecreatedtoken' })).toEqual([]);
+  });
+});
+
+describe('IndexService scan failure propagation (IX)', () => {
+  it('rethrows non-limit scan errors so the store can surface an explicit error state', async () => {
+    // 修复前：scanDirectory 吞掉非上限异常 → buildFullIndex 正常返回 →
+    // 索引状态误落 ready（静默空/半截索引）。现在目录级读取失败显式上抛。
+    const fs = new MockFSService(0, { persist: false });
+    vi.spyOn(fs, 'listDirectory').mockRejectedValue(new Error('permission denied'));
+    const service = new IndexService(fs);
+
+    await expect(service.buildFullIndex()).rejects.toThrow('permission denied');
+  });
+
+  it('indexLimitMessage extracts the translated limit message, null otherwise', () => {
+    expect(
+      indexLimitMessage(
+        new Error('JOTLUCK_INDEX_LIMIT_EXCEEDED: 当前文件夹包含超过 2000 个笔记文件'),
+      ),
+    ).toBe('当前文件夹包含超过 2000 个笔记文件');
+    expect(indexLimitMessage(new Error('boom'))).toBeNull();
+    expect(indexLimitMessage('JOTLUCK_INDEX_LIMIT_EXCEEDED: ')).toBeNull();
   });
 });
 

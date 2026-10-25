@@ -70,6 +70,9 @@
                 v-for="ch in channels"
                 :key="ch.ch"
                 class="option-card"
+                :class="{ 'option-card--disabled': ch.disabled }"
+                :disabled="ch.disabled"
+                :aria-disabled="ch.disabled"
                 @click="doShare(ch.ch)"
               >
                 <!-- eslint-disable-next-line vue/no-v-html -->
@@ -77,6 +80,9 @@
                 <span class="option-name">{{ ch.name }}</span>
               </button>
             </div>
+            <!-- PDF 只能经本地导出产出真 PDF 文件：系统分享/邮件/剪贴板拿到的
+                 是 md 原文字节，产出损坏 PDF——禁用 + 引导文案（SH）。 -->
+            <p v-if="isPdfFormat" class="channel-hint">{{ t('dialogs.share.pdfOnlyLocalHint') }}</p>
           </template>
         </div>
 
@@ -180,30 +186,42 @@ interface ChannelEntry {
   ch: ShareChannel;
   name: string;
   icon: string;
+  /** PDF 形态下非本地导出渠道禁用（防 md 字节假 PDF 流入系统分享/邮件/剪贴板） */
+  disabled?: boolean;
 }
 
-const channels = computed<ChannelEntry[]>(() => [
-  {
-    ch: ShareChannel.SYSTEM_SHARE,
-    name: t('dialogs.share.system'),
-    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>',
-  },
-  {
-    ch: ShareChannel.EMAIL,
-    name: t('dialogs.share.email'),
-    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="2 4 12 13 22 4"/></svg>',
-  },
-  {
-    ch: ShareChannel.CLIPBOARD,
-    name: t('dialogs.share.clipboard'),
-    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/></svg>',
-  },
-  {
-    ch: ShareChannel.LOCAL_EXPORT,
-    name: t('dialogs.share.localExport'),
-    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 8l-6-6H8a2 2 0 00-2 2v16a2 2 0 002 2h8"/><polyline points="12 10 12 20"/><polyline points="9 17 12 20 15 17"/><path d="M16 2v6h6"/></svg>',
-  },
-]);
+// PDF 经 getFormattedContent 拿到的是 md 原文——仅本地导出渠道会走 exportNote
+// 产真 PDF 文件，其余渠道产出损坏 PDF，显式禁用并给引导文案。
+const isPdfFormat = computed(() => selectedFormat.value === ExportFormat.PDF);
+
+const channels = computed<ChannelEntry[]>(() => {
+  const disableNonLocal = isPdfFormat.value;
+  return [
+    {
+      ch: ShareChannel.SYSTEM_SHARE,
+      name: t('dialogs.share.system'),
+      disabled: disableNonLocal,
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>',
+    },
+    {
+      ch: ShareChannel.EMAIL,
+      name: t('dialogs.share.email'),
+      disabled: disableNonLocal,
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="2 4 12 13 22 4"/></svg>',
+    },
+    {
+      ch: ShareChannel.CLIPBOARD,
+      name: t('dialogs.share.clipboard'),
+      disabled: disableNonLocal,
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/></svg>',
+    },
+    {
+      ch: ShareChannel.LOCAL_EXPORT,
+      name: t('dialogs.share.localExport'),
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 8l-6-6H8a2 2 0 00-2 2v16a2 2 0 002 2h8"/><polyline points="12 10 12 20"/><polyline points="9 17 12 20 15 17"/><path d="M16 2v6h6"/></svg>',
+    },
+  ];
+});
 
 // ============================================================
 // Methods
@@ -221,6 +239,9 @@ function resetState(): void {
 
 async function doShare(channel: ShareChannel): Promise<void> {
   if (!hasContent.value) return;
+  // 防误用硬闸（与渠道卡 disabled 同口径）：PDF 仅允许本地导出——其余渠道
+  // 拿到 getFormattedContent 的 md 原文字节会产出损坏 PDF。
+  if (isPdfFormat.value && channel !== ShareChannel.LOCAL_EXPORT) return;
 
   const content = getFormattedContent();
   const title = props.noteTitle || t('common.untitledNote');
@@ -455,6 +476,25 @@ watch(
 
 .option-card:active {
   transform: scale(0.97);
+}
+
+/* PDF 形态下禁用的非本地导出渠道：视觉降权 + 指针禁用（原生 disabled 语义） */
+.option-card--disabled {
+  opacity: var(--opacity-inactive, 0.5);
+  cursor: not-allowed;
+}
+
+.option-card--disabled:hover {
+  border-color: var(--rule);
+  background: var(--paper-surface);
+  color: var(--ink-secondary);
+}
+
+.channel-hint {
+  margin: var(--space-12) 0 0;
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  line-height: var(--lh-ui);
 }
 
 .option-icon {

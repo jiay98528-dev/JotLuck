@@ -318,6 +318,8 @@ export const messages = {
       localExport: 'ローカルへエクスポート',
       imagePlaceholder: '[画像：{alt}]',
       failedLog: '共有に失敗',
+      pdfOnlyLocalHint:
+        'PDF はローカルエクスポートのみ対応（実際の .pdf ファイルを生成します）。システム共有・メール・クリップボードでは完全な PDF を送れないため無効化しています。',
     },
     template: {
       title: '新しいノート',

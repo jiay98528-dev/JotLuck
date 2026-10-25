@@ -320,6 +320,8 @@ export const messages = {
       localExport: '本地导出',
       imagePlaceholder: '[图片：{alt}]',
       failedLog: '分享失败',
+      pdfOnlyLocalHint:
+        'PDF 仅支持「本地导出」生成 .pdf 文件；系统分享、邮件与剪贴板无法传输完整 PDF 文件，已禁用。',
     },
     template: {
       title: '新建笔记',

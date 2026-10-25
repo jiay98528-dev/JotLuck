@@ -25,6 +25,20 @@ const MAX_INDEXED_NOTE_FILES = 2000;
 const INDEX_LIMIT_ERROR = 'JOTLUCK_INDEX_LIMIT_EXCEEDED';
 const INDEX_FILE_CONCURRENCY = 16;
 
+/**
+ * 上限异常消息提取：异常文本含 INDEX_LIMIT_ERROR 标记时返回冒号后的
+ * 用户可读译文（program.indexTooLarge 已在抛出点翻译），否则返回 null。
+ * 供 indexStore 把超限原因透出到 UI，不被通用 errors.indexUnavailable 兜底抹平。
+ */
+export function indexLimitMessage(error: unknown): string | null {
+  const text = String(error);
+  const marker = `${INDEX_LIMIT_ERROR}:`;
+  const at = text.indexOf(marker);
+  if (at < 0) return null;
+  const message = text.slice(at + marker.length).trim();
+  return message || null;
+}
+
 async function runLimited<T>(
   items: T[],
   limit: number,
@@ -291,9 +305,13 @@ export class IndexService {
         }
       }
     } catch (e) {
-      if (String(e).includes(INDEX_LIMIT_ERROR)) throw e;
+      // 显式失败：异常（含上限）一律上抛——吞掉会让 buildFullIndex 正常返回、
+      // 索引状态误落 ready（静默空/半截索引）；上层 indexStore.initialize catch
+      // 后置 error 态并把消息透出到命令面板空态。单文件级失败仍由 indexFile
+      // 自行吞掉（返回 null），目录级读取失败才是这里的失败语义。
       // eslint-disable-next-line no-console
       console.error('[IndexService] scanDirectory failed:', e);
+      throw e;
     }
   }
 

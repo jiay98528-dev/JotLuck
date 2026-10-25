@@ -325,6 +325,8 @@ export const messages = {
       localExport: 'Exportation locale',
       imagePlaceholder: '[Image : {alt}]',
       failedLog: 'Échec du partage',
+      pdfOnlyLocalHint:
+        'Le PDF n’est disponible que via l’exportation locale, qui produit un vrai fichier .pdf. Le partage système, l’e-mail et le presse-papiers ne peuvent pas transporter un PDF complet et sont désactivés.',
     },
     template: {
       title: 'Nouvelle note',
