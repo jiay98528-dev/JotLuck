@@ -54,4 +54,19 @@ describe('useVersionCheck', () => {
     expect(versionCheck.error.value).toBe(translate('settings.updates.failed'));
     expect(versionCheck.error.value).not.toContain('invalid release tag');
   });
+
+  it('reports a failed check and skips caching when releases/latest answers 404', async () => {
+    // 仓库暂无正式 release 时 releases/latest 返回 404：如实呈现检查失败且不写缓存
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+    const { useVersionCheck } = await import('../useVersionCheck');
+    const versionCheck = useVersionCheck();
+
+    await versionCheck.checkNow();
+
+    expect(versionCheck.error.value).toBe(translate('settings.updates.failed'));
+    expect(versionCheck.hasUpdate.value).toBe(false);
+    expect(versionCheck.latestVersion.value).toBe('');
+    expect(localStorage.getItem('jotluck:version:latestInfo')).toBeNull();
+    expect(localStorage.getItem('jotluck:version:lastCheck')).toBeNull();
+  });
 });

@@ -535,7 +535,6 @@ import { useI18n } from 'vue-i18n';
 import {
   APP_ISSUES_URL,
   APP_LICENSE_URL,
-  APP_RELEASES_API_URL,
   APP_REPOSITORY_URL,
   APP_VERSION,
   APP_VERSION_LABEL,
@@ -565,6 +564,8 @@ import {
   type ReinkSettings,
 } from '@/services/completion/reink-settings';
 import type { ReinkSetupStatus } from '@/composables/useReinkEngineSetup';
+import { useVersionCheck } from '@/composables/useVersionCheck';
+import { isSemVerNewer } from '@/utils/semver';
 
 const { t } = useI18n();
 const { locale, localeDefinitions, setLocale } = useLocale();
@@ -649,9 +650,12 @@ const personalization = ref(props.completionSettings.personalization);
 const AUTO_CHECK_KEY = 'jotluck:version:autoCheck';
 const AUTO_INSTALL_KEY = 'jotluck:version:autoInstall';
 const autoCheckUpdates = ref(localStorage.getItem(AUTO_CHECK_KEY) === 'true');
-const checking = ref(false);
 const updateStatus = ref('');
 const appVersion = APP_VERSION_LABEL;
+// 更新检查统一走 useVersionCheck：与通知/缓存共用同一份单例状态与
+// normalizeReleaseVersion+isSemVerNewer 判定口径，避免双实现漂移。
+const versionCheck = useVersionCheck();
+const checking = versionCheck.checking;
 
 const aboutLinks = computed(() => [
   { label: t('settings.about.repository'), url: APP_REPOSITORY_URL },
@@ -858,27 +862,18 @@ async function openAssociationSettings(): Promise<void> {
 
 async function onCheckUpdate(): Promise<void> {
   if (checking.value) return;
-  checking.value = true;
   updateStatus.value = '';
-  try {
-    const resp = await fetch(APP_RELEASES_API_URL);
-    if (!resp.ok) {
-      updateStatus.value = t('settings.updates.failed');
-      return;
-    }
-    const data = await resp.json();
-    const latest = data.tag_name || data.name || '';
-    const current = APP_VERSION;
-    const cleanVersion = (value: string) => value.replace(/^v/, '');
-    updateStatus.value =
-      latest && cleanVersion(latest) !== current
-        ? t('settings.updates.newVersion', { version: latest })
-        : t('settings.updates.latest');
-  } catch {
-    updateStatus.value = t('settings.updates.failed');
-  } finally {
-    checking.value = false;
+  // checkNow 内部：normalizeReleaseVersion 剥 v/V 前缀、isSemVerNewer 严格 SemVer
+  // 比较（-preview 等预发布标签不再假阳性），并写入 24h 缓存、联动全局更新通知。
+  await versionCheck.checkNow();
+  if (versionCheck.error.value) {
+    // releases/latest 404（仓库暂无正式 release）等失败如实呈现检查失败
+    updateStatus.value = versionCheck.error.value;
+    return;
   }
+  updateStatus.value = isSemVerNewer(versionCheck.latestVersion.value, APP_VERSION)
+    ? t('settings.updates.newVersion', { version: versionCheck.latestVersion.value })
+    : t('settings.updates.latest');
 }
 
 function onReplayWelcome(): void {
