@@ -104,7 +104,11 @@ function parseTrainingMeta(raw: string): CompletionTrainingMeta | null {
   if (successCount === null || failureCount === null) return null;
   return {
     version: TRAINING_META_VERSION,
-    status: parsed.status,
+    // 陈旧 training 态复位：training 是进程内运行时状态，不可能跨会话存活——
+    // 上次运行随窗口关闭中断后，持久化的 training 会让设置页永久显示
+    // 「训练中」。载入即归位 idle（trainedPaths 等事实保留）；在途运行的状态
+    // 由内存对象直写，不经此路径。
+    status: parsed.status === 'training' ? 'idle' : parsed.status,
     trainedPaths,
     fileCount: Object.keys(trainedPaths).length,
     updatedAt: parsed.updatedAt,

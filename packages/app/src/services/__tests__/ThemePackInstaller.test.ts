@@ -100,6 +100,85 @@ describe('ThemePackInstaller', () => {
     expect(issues.map((issue) => issue.code)).toContain('missing-code-entrypoint');
   });
 
+  it('rejects imported ids that collide with builtin or market registry themes (L17)', () => {
+    for (const reservedId of ['paper', 'jotluck.constellation', 'jotluck.halo-canvas']) {
+      const issues = validateThemePackage({ manifest: manifest({ id: reservedId }) });
+      expect(issues.map((issue) => issue.code)).toContain('reserved-id');
+    }
+
+    // 冒用保留 id 的包不得落盘安装
+    expect(() =>
+      installLocalThemePackage({
+        manifest: manifest({ id: 'paper' }),
+        css: "[data-theme-id='paper'] { --accent: red; }",
+      }),
+    ).toThrow(translate('theme.validation.reservedId', { id: 'paper' }));
+
+    // 非保留 id 不受影响
+    expect(validateThemePackage({ manifest: manifest() }).map((issue) => issue.code)).not.toContain(
+      'reserved-id',
+    );
+  });
+
+  it('rejects previewImages that are external urls, protocols, or non-relative paths (L18)', () => {
+    const bad = [
+      'https://evil.example/pixel.png',
+      'http://tracker.example/a.png',
+      'data:image/png;base64,AAAA',
+      'blob:mock-1',
+      '/absolute/preview.png',
+      'C:\\preview\\a.png',
+      'preview/../theme.css',
+      'assets\\a.png',
+      42,
+    ];
+    for (const value of bad) {
+      const issues = validateThemePackage({
+        manifest: manifest({ previewImages: [value] as unknown as string[] }),
+      });
+      expect(
+        issues.map((issue) => issue.code),
+        `value: ${String(value)}`,
+      ).toContain('invalid-preview-image');
+    }
+
+    expect(
+      validateThemePackage({
+        manifest: manifest({ previewImages: 'preview/a.png' as unknown as string[] }),
+      }).map((issue) => issue.code),
+    ).toContain('invalid-preview-images');
+
+    // 包内相对资源放行
+    expect(
+      validateThemePackage({ manifest: manifest({ previewImages: ['preview/shot.png'] }) }),
+    ).toEqual([]);
+  });
+
+  it('strips unsafe previewImages from stored packages on install and load (L18)', () => {
+    // 直接落盘一个修复前形态的存量包（外链 + 包内相对混排），读取侧须剥离外链
+    const stored = {
+      manifest: manifest({ previewImages: ['https://evil.example/p.png', 'preview/ok.png'] }),
+      css: '',
+      installedAt: 1,
+    };
+    localStorage.setItem('jotluck:themes:installed:v2', JSON.stringify([stored]));
+
+    const loaded = loadInstalledThemePacks();
+
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0]?.previewImages).toEqual(['preview/ok.png']);
+    expect(loaded[0]?.manifest.previewImages).toEqual(['preview/ok.png']);
+
+    // 全外链包剥离后为 undefined，不落空数组占位
+    localStorage.setItem(
+      'jotluck:themes:installed:v2',
+      JSON.stringify([
+        { ...stored, manifest: manifest({ previewImages: ['https://evil.example/x.png'] }) },
+      ]),
+    );
+    expect(loadInstalledThemePacks()[0]?.previewImages).toBeUndefined();
+  });
+
   it('installs, loads, and removes a local theme', () => {
     const pack = installLocalThemePackage({
       manifest: manifest(),

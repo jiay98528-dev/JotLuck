@@ -5425,6 +5425,13 @@ function onUpdateCompletionSettings(settings: CompletionSettings): void {
   saveCompletionSettings(settings);
   completionPredictor.value?.configure(settings);
   if (settings.backgroundTraining) scheduleBackgroundTraining();
+  else {
+    // 关闭后台训练须同时撤掉待发定时器与在跑 run：只改开关不取消，旧 run 会
+    // 继续逐批读写并回写 meta，且其中断后遗留的 training 态无人复位（L16）。
+    if (backgroundTrainingTimer) clearTimeout(backgroundTrainingTimer);
+    backgroundTrainingTimer = null;
+    completionTrainer?.cancelCurrentRun();
+  }
 }
 
 function onClearCompletionData(): void {

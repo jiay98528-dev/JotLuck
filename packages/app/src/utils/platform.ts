@@ -58,17 +58,3 @@ export function isMac(): boolean {
 export function isLinux(): boolean {
   return cachedPlatform === 'linux';
 }
-
-const CTRL_TOKEN = /\bCtrl\s*\+\s*([A-Za-z0-9]+)/gu;
-
-/**
- * Rewrite `Ctrl+X` style labels for the running OS. macOS renders Command;
- * Windows/Linux keep Ctrl. Accepts full strings like `Bold (Ctrl+B)`.
- */
-export function formatShortcut(
-  label: string,
-  platform: PlatformOS | null = cachedPlatform,
-): string {
-  if (platform !== 'macos') return label;
-  return label.replace(CTRL_TOKEN, '⌘$1');
-}

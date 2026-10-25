@@ -3,6 +3,7 @@ import { EditorSelection, EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import type { IFileSystemService } from '@/types';
 import {
+  escapeImageAlt,
   useImageUpload,
   type ImageUploadCleanupFailure,
   type ImageUploadOwner,
@@ -103,6 +104,32 @@ describe('useImageUpload', () => {
     );
     expect(upload.pendingCount.value).toBe(0);
     expect(upload.isUploading.value).toBe(false);
+  });
+
+  it('文件名含 ] 或 ]( 时 alt 经方括号转义，语法不再字面损坏（L4）', async () => {
+    const fs = createFileSystem();
+    const view = createView('start', 5);
+    const owner: ImageUploadOwner = {
+      workspaceEpoch: 7,
+      notePath: '/note.md',
+      view,
+    };
+    const upload = useImageUpload(fs, () => owner);
+
+    upload.handlePaste(pasteEvent(imageFile('shot[1](x).png')));
+    await upload.waitForIdle();
+
+    // alt 内的 [ ] \ 均前置反斜杠转义：`]` 不再提前闭合图片语法吞掉链接目标
+    // （图片语法定界 [ ] 保持字面，括号在 alt 内无害保留原样）
+    const document = view.state.doc.toString();
+    expect(document.startsWith('start![shot\\[1\\](x)](./assets/')).toBe(true);
+    expect(document).toMatch(/\]\(\.\/assets\/img_\d+_[a-z0-9]+\.png\)$/);
+  });
+
+  it('escapeImageAlt：纯文本 alt 原样保留，括号/反斜杠逐一转义', () => {
+    expect(escapeImageAlt('pixel')).toBe('pixel');
+    expect(escapeImageAlt('a[b]c')).toBe('a\\[b\\]c');
+    expect(escapeImageAlt('back\\slash')).toBe('back\\\\slash');
   });
 
   it('严格串行两个上传，第一个完成后第二个仍令 busy 保持为真', async () => {

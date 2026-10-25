@@ -185,7 +185,7 @@ export const messages = {
       italicTitle: 'Italique',
       strikethrough: 'Barré',
       inlineCode: 'Code en ligne',
-      inlineCodeTitle: 'Code en ligne (Ctrl+`)',
+      inlineCodeTitle: 'Code en ligne',
       link: 'Lien',
       linkTitle: 'Lien',
       clear: 'Effacer la mise en forme',
@@ -473,6 +473,8 @@ export const messages = {
     },
     customFallback: 'Modèle personnalisé',
     invalidPath: 'Le chemin du modèle se trouve hors du dossier géré',
+    fileExists:
+      'Un modèle nommé « {name} » existe déjà. Choisissez un autre nom ou supprimez d’abord l’ancien modèle.',
     diary: {
       name: 'Journal',
       description: 'Un journal quotidien avec date et liste de tâches',
@@ -590,6 +592,11 @@ export const messages = {
       packageIssues: '{issues}',
       officialCssUnscoped: 'Le CSS du thème officiel n’est pas limité à sa racine : {selector}',
       runtimeCssUnscoped: 'Le CSS du thème n’est pas limité à sa racine : {selector}',
+      reservedId:
+        'L’identifiant de thème « {id} » est réservé aux thèmes officiels et ne peut pas être utilisé par un thème importé.',
+      invalidPreviewImages: 'manifest.previewImages doit être un tableau de chaînes.',
+      invalidPreviewImage:
+        'Les images d’aperçu doivent être des ressources relatives au paquet ( commençant par preview/ ou assets/ ) : {value}',
     },
     center: {
       appearance: 'Apparence',

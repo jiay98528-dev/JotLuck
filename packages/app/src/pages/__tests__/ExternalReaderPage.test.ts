@@ -122,6 +122,12 @@ describe('ExternalReaderPage', () => {
     ]);
     expect(wrapper.find('h1').text()).toBe('safe.md');
     expect(wrapper.find('article h1').text()).toBe('Safe');
+    // L8：外部文件无索引可判存在性——wiki 链一律活链样式（不带死链类），
+    // 点击侧 wikiNavigation 提示兜底（下方断言），与 NotebookHome 口径对齐。
+    const wikiLink = wrapper.find('article a[data-note="Related"]');
+    expect(wikiLink.exists()).toBe(true);
+    expect(wikiLink.classes()).not.toContain('wikilink--dead');
+    expect(wikiLink.classes()).toContain('wikilink');
     expect(wrapper.find('article img').attributes('onerror')).toBeUndefined();
     expect(wrapper.find('img[alt="JotLuck"]').attributes('src')).toContain('128x128');
     expect(wrapper.text()).toContain('大纲');

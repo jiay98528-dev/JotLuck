@@ -178,7 +178,7 @@ export const messages = {
       italicTitle: '기울임꼴',
       strikethrough: '취소선',
       inlineCode: '인라인 코드',
-      inlineCodeTitle: '인라인 코드 (Ctrl+`)',
+      inlineCodeTitle: '인라인 코드',
       link: '링크',
       linkTitle: '링크',
       clear: '서식 지우기',
@@ -463,6 +463,8 @@ export const messages = {
     },
     customFallback: '사용자 템플릿',
     invalidPath: '템플릿 경로가 관리 디렉터리 밖에 있습니다',
+    fileExists:
+      '같은 이름의 템플릿 “{name}”이(가) 이미 있습니다. 다른 이름을 사용하거나 먼저 기존 템플릿을 삭제하세요.',
     diary: {
       name: '일기',
       description: '날짜와 할 일 목록이 있는 일일 일기',
@@ -577,6 +579,10 @@ export const messages = {
       packageIssues: '{issues}',
       officialCssUnscoped: '공식 테마 CSS가 테마 루트 범위로 제한되지 않았습니다: {selector}',
       runtimeCssUnscoped: '테마 CSS가 테마 루트 범위로 제한되지 않았습니다: {selector}',
+      reservedId: '테마 id “{id}”는 공식 테마 예약 id이므로 가져온 테마에 사용할 수 없습니다.',
+      invalidPreviewImages: 'manifest.previewImages는 문자열 배열이어야 합니다.',
+      invalidPreviewImage:
+        '미리보기 이미지는 패키지 내 상대 리소스(preview/ 또는 assets/ 시작)만 허용됩니다: {value}',
     },
     center: {
       appearance: '모양',

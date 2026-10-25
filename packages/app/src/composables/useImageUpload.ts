@@ -82,6 +82,14 @@ function uniqueName(mime: string): string {
   return `img_${ts}_${rand}${extForMime(mime)}`;
 }
 
+/**
+ * alt 文本的 Markdown 方括号转义：文件名含 ] 或 ]( 时未转义的 alt 会提前
+ * 闭合并吞掉链接目标，损坏语法字面落盘。反斜杠先行转义防二次转义歧义。
+ */
+export function escapeImageAlt(alt: string): string {
+  return alt.replace(/[\\[\]]/g, (char) => `\\${char}`);
+}
+
 /** 在任务开始时捕获的位置插入 Markdown 图片语法。 */
 function insertImageMarkdown(
   owner: ImageUploadOwnerSnapshot,
@@ -265,7 +273,7 @@ export function useImageUpload(
     }
 
     const relPath = relativeMarkdownPath(job.owner.notePath, path);
-    const alt = job.file.name.replace(/\.[^.]+$/, '');
+    const alt = escapeImageAlt(job.file.name.replace(/\.[^.]+$/, ''));
     try {
       const previousInsertion = lastInsertion;
       const cursor =

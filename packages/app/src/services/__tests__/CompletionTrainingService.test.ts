@@ -343,6 +343,64 @@ describe('CompletionTrainingService', () => {
     expect(predictor.hasDocumentContribution('/late.md')).toBe(false);
   });
 
+  it('cancelCurrentRun 后旧 run 不回写终态，遗留 training 态载入即复位 idle（L16）', async () => {
+    let resolveRead: ((value: string) => void) | undefined;
+    const fs = mockFs({});
+    vi.mocked(fs.readFile).mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveRead = resolve;
+        }),
+    );
+    const predictor = new MarkdownPredictor();
+    const service = new CompletionTrainingService(fs, predictor);
+    const run = service.trainNotebook([
+      { path: '/late.md', name: 'late.md', isFile: true, isDirectory: false, size: 40, mtime: 1 },
+    ]);
+    await vi.waitFor(() => expect(fs.readFile).toHaveBeenCalledWith('/late.md'));
+    // run 启动即落 training：模拟用户此刻关闭后台训练（cancelCurrentRun）
+    const persistedDuringRun = JSON.parse(
+      localStorage.getItem(trainingMetaKeyForScope()) as string,
+    ) as { status: string };
+    expect(persistedDuringRun.status).toBe('training');
+
+    service.cancelCurrentRun();
+    resolveRead?.('延迟读取的正文。');
+    await run;
+
+    // 取消后 run 不再回写 done/partial 终态；持久层遗留陈旧 training，
+    // 载入口径将其复位 idle（否则设置页永久显示「训练中」）。
+    const persistedAfterRun = JSON.parse(
+      localStorage.getItem(trainingMetaKeyForScope()) as string,
+    ) as { status: string };
+    expect(persistedAfterRun.status).toBe('training');
+    expect(loadTrainingMeta().status).toBe('idle');
+    expect(loadTrainingMeta().trainedPaths).toEqual({});
+  });
+
+  it('启动载入将陈旧 training 态复位 idle，trainedPaths 等事实字段保留（L16）', () => {
+    localStorage.setItem(
+      trainingMetaKeyForScope(),
+      JSON.stringify({
+        version: 2,
+        status: 'training',
+        trainedPaths: { '/a.md': { mtime: 1, size: 10 } },
+        updatedAt: 123,
+        successCount: 2,
+        failureCount: 0,
+        failedPaths: {},
+        lastRunId: 'run-1',
+      }),
+    );
+
+    const meta = loadTrainingMeta();
+
+    expect(meta.status).toBe('idle');
+    expect(meta.trainedPaths['/a.md']).toEqual({ mtime: 1, size: 10 });
+    expect(meta.lastRunId).toBe('run-1');
+    expect(meta.successCount).toBe(2);
+  });
+
   it('rejects a delayed training read after the predictor changes workspace without an explicit cancel', async () => {
     let resolveRead: ((value: string) => void) | undefined;
     const fs = mockFs({});

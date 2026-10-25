@@ -18,7 +18,6 @@ vi.mock('@/utils/platform', () => ({
   getPlatformOS: async () => 'windows',
   initializePlatform: async () => 'windows',
   getPlatformOSSync: () => 'windows',
-  formatShortcut: (label: string) => label,
 }));
 
 describe('SettingsDialog Windows file associations', () => {

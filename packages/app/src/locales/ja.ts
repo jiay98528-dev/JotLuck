@@ -179,7 +179,7 @@ export const messages = {
       italicTitle: '斜体',
       strikethrough: '取り消し線',
       inlineCode: 'インラインコード',
-      inlineCodeTitle: 'インラインコード (Ctrl+`)',
+      inlineCodeTitle: 'インラインコード',
       link: 'リンク',
       linkTitle: 'リンク',
       clear: '書式をクリア',
@@ -463,6 +463,8 @@ export const messages = {
     },
     customFallback: 'カスタムテンプレート',
     invalidPath: 'テンプレートのパスが管理対象ディレクトリ外です',
+    fileExists:
+      '同名のテンプレート「{name}」が既に存在します。別の名前を使うか、先に旧テンプレートを削除してください。',
     diary: {
       name: '日記',
       description: '日付とタスクリストを含む毎日の日記',
@@ -580,6 +582,11 @@ export const messages = {
       packageIssues: '{issues}',
       officialCssUnscoped: '公式テーマ CSS がテーマのルートに限定されていません：{selector}',
       runtimeCssUnscoped: 'テーマ CSS がテーマのルートに限定されていません：{selector}',
+      reservedId:
+        'テーマ id「{id}」は公式テーマの予約 id のため、インポートテーマには使用できません。',
+      invalidPreviewImages: 'manifest.previewImages は文字列の配列である必要があります。',
+      invalidPreviewImage:
+        'プレビュー画像はパッケージ内相対リソース（preview/ または assets/ 起点）のみ許可されます：{value}',
     },
     center: {
       appearance: '外観',

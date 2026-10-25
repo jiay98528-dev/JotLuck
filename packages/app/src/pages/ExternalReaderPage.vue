@@ -743,6 +743,10 @@ async function renderCurrentMarkdown(): Promise<void> {
   const rendered = rendererModule.renderMarkdown(previewMarkdown, {
     remoteImages: remoteImagePolicy.value,
     allowBlobImageSources: true,
+    // 外部文件游离于任何笔记本索引之外，存在性无从判定：不传 resolver 时
+    // 渲染扩展会把全部 wiki 链染成 wikilink--dead 死链。与 NotebookHome 外部
+    // 会话「一律活链样式、点击侧 wikiNavigation 提示兜底」口径对齐。
+    wikiLinkExists: () => true,
   });
   if (revision !== renderRevision) return;
   html.value = rendered;

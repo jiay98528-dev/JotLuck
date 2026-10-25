@@ -7,7 +7,7 @@ vi.mock('@tauri-apps/api/core', () => ({
   isTauri: () => true,
 }));
 
-import { formatShortcut, getPlatformOS } from '../platform';
+import { getPlatformOS } from '../platform';
 
 describe('platform detection', () => {
   beforeEach(() => {
@@ -24,12 +24,5 @@ describe('platform detection', () => {
   it('falls back to navigator detection when the invoke fails', async () => {
     invokeMock.mockRejectedValue(new Error('unavailable'));
     await expect(getPlatformOS()).resolves.toBeTypeOf('string');
-  });
-
-  it('rewrites Ctrl tokens to Command only on macOS', () => {
-    expect(formatShortcut('加粗 (Ctrl+B)', 'macos')).toBe('加粗 (⌘B)');
-    expect(formatShortcut('加粗 (Ctrl+B)', 'windows')).toBe('加粗 (Ctrl+B)');
-    expect(formatShortcut('加粗 (Ctrl+B)', 'linux')).toBe('加粗 (Ctrl+B)');
-    expect(formatShortcut('Ctrl + Shift + P', 'macos')).toBe('⌘Shift + P');
   });
 });

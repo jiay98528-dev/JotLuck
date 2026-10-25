@@ -90,6 +90,21 @@ describe('TemplateEngine file-backed custom templates', () => {
     expect(rootEntries.some((entry) => entry.name === '.jotluck')).toBe(false);
   });
 
+  it('同名模板不再静默覆盖：另存冲突报 fileExists 且旧内容保持原样（L14）', async () => {
+    const fs = new MockFSService(0, { persist: false });
+
+    await saveCustomTemplateToFiles(fs, '周会', '第一版', '# 第一版内容\n');
+    await expect(saveCustomTemplateToFiles(fs, '周会', '第二版', '# 第二版内容\n')).rejects.toThrow(
+      '同名模板已存在：周会',
+    );
+
+    // 旧模板内容未被覆盖；改名后可正常另存
+    const kept = await fs.readFile(`${CUSTOM_TEMPLATE_DIR}/周会.md`);
+    expect(kept).toContain('# 第一版内容');
+    const renamed = await saveCustomTemplateToFiles(fs, '周会-新', '第二版', '# 第二版内容\n');
+    expect(renamed.id).toBe(`${CUSTOM_TEMPLATE_DIR}/周会-新.md`);
+  });
+
   it('migrates legacy localStorage templates once and removes the old hidden content key', async () => {
     const fs = new MockFSService(0, { persist: false });
     localStorage.setItem(

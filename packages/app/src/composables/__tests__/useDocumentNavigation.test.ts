@@ -363,4 +363,38 @@ describe('useDocumentNavigation 同页锚点（[[#锚]] 空 note 形态 / LB）'
 
     expect(progressive.scrollToHeading).toHaveBeenCalledWith('heading-a-b-标题');
   });
+
+  it('同页锚点三形态全 miss：headingNotFound 轻反馈，不再静默 no-op（L7）', async () => {
+    const { nav, deps, progressive } = primeSamePageHarness('目标', 'heading-目标', '目标');
+
+    await nav.onLivePreviewWikiLinkClick('', '不存在的锚');
+
+    expect(deps.toast.show).toHaveBeenCalledWith('navigation.headingNotFound', 'info', 3500);
+    expect(progressive.scrollToHeading).not.toHaveBeenCalled();
+  });
+
+  it('跨笔记锚点 miss：换笔记后标题找不到同样 headingNotFound，不静默返回（L7）', async () => {
+    const { nav, deps, analysisStub } = createNavigationHarness();
+    // 目标笔记已就绪但没有任何标题：锚点候选必然全 miss
+    analysisStub.result = {
+      ast: { source: deps.currentContent.value, blocks: [] },
+      wikiLinks: [],
+    } as unknown as DocumentAnalysisResult;
+    deps.onShellSelectNote.mockImplementation(async (path: string) => {
+      deps.activePath.value = path;
+    });
+    const progressive = {
+      cancelNavigation: vi.fn(),
+      scrollToHeading: vi.fn(),
+      navigateToRange: vi.fn(),
+    };
+    deps.progressivePreviewRef.value = progressive as unknown as ProgressivePreviewNavigation;
+
+    await nav.navigateDocument({ path: '/root/notes/b.md', anchor: '不存在的锚' });
+
+    expect(deps.onShellSelectNote).toHaveBeenCalledWith('/root/notes/b.md');
+    expect(deps.toast.show).toHaveBeenCalledWith('navigation.headingNotFound', 'info', 3500);
+    expect(progressive.scrollToHeading).not.toHaveBeenCalled();
+    expect(progressive.navigateToRange).not.toHaveBeenCalled();
+  });
 });

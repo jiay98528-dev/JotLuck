@@ -19,7 +19,6 @@ vi.mock('@/utils/platform', () => ({
   getPlatformOS: async () => 'linux',
   initializePlatform: async () => 'linux',
   getPlatformOSSync: () => 'linux',
-  formatShortcut: (label: string) => label,
 }));
 
 /**

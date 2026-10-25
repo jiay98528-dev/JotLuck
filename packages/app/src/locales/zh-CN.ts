@@ -179,7 +179,7 @@ export const messages = {
       italicTitle: '斜体',
       strikethrough: '删除线',
       inlineCode: '行内代码',
-      inlineCodeTitle: '行内代码 (Ctrl+`)',
+      inlineCodeTitle: '行内代码',
       link: '链接',
       linkTitle: '链接',
       clear: '清除格式',
@@ -462,6 +462,7 @@ export const messages = {
     },
     customFallback: '自定义模板',
     invalidPath: '模板路径不在受控目录内',
+    fileExists: '同名模板已存在：{name}。请换个名称，或先删除旧模板。',
     diary: {
       name: '日记',
       description: '每日日记模板，包含日期和待办列表',
@@ -575,6 +576,9 @@ export const messages = {
       packageIssues: '{issues}',
       officialCssUnscoped: '官方主题 CSS 未限定在当前主题根节点：{selector}',
       runtimeCssUnscoped: '主题 CSS 未限定在当前主题根节点：{selector}',
+      reservedId: '主题 id “{id}” 是官方保留 id，不能用于导入主题。',
+      invalidPreviewImages: 'manifest.previewImages 必须是字符串数组。',
+      invalidPreviewImage: '预览图只允许包内相对资源（preview/ 或 assets/ 开头）：{value}',
     },
     center: {
       appearance: '外观',

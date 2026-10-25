@@ -8,7 +8,7 @@ import type {
   ThemeUxRecipeMap,
   ThemeValidationIssue,
 } from '@/types/theme-pack';
-import { APP_THEME_VERSION } from './ThemeRegistry';
+import { APP_THEME_VERSION, getAllRegistryThemePacks } from './ThemeRegistry';
 import { findUnscopedCssSelector } from './theme-css-scope';
 import { isSemVerAtLeast } from '@/utils/semver';
 import { translate } from '@/i18n';
@@ -91,6 +91,33 @@ interface StoredThemePackage {
 
 type ThemeZipInput = Blob | ArrayBuffer | Uint8Array;
 
+/** registry（内置 + 本地市场）主题 id 集合：导入包不得冒用（劫持官方槽位）。 */
+function registryThemeIds(): Set<string> {
+  return new Set(getAllRegistryThemePacks().map((pack) => pack.manifest.id));
+}
+
+/**
+ * 包内相对资源判定（L18）：仅接受 preview/ 或 assets/ 开头、无反斜杠/.. 逃逸
+ * 的相对路径。http(s)/data:/blob: 协议、绝对路径（/x、C:\x）与目录逃逸一律
+ * 拒绝——previewImages 会原样进 <img src>，外链值违背本地离线网络口径。
+ */
+function isPackageRelativeAssetPath(value: string): boolean {
+  return (
+    /^(preview|assets)\//i.test(value) &&
+    !value.includes('\\') &&
+    !value.includes('..') &&
+    !/^[a-z]+:/i.test(value)
+  );
+}
+
+/** 剥离仍带外链/越界值的 previewImages（防修复前已落盘的存量包回流 img src）。 */
+function sanitizePreviewImages(values: string[] | undefined): string[] | undefined {
+  const safe = (values ?? []).filter(
+    (value) => typeof value === 'string' && isPackageRelativeAssetPath(value),
+  );
+  return safe.length > 0 ? safe : undefined;
+}
+
 export async function installThemePack(input: ThemeZipInput): Promise<InstalledThemePack> {
   return installLocalThemePackage(await parseThemePack(input));
 }
@@ -162,6 +189,39 @@ export function validateThemePackage(input: ThemePackageInput): ThemeValidationI
       message: translate('theme.validation.invalidId'),
       path: 'manifest.id',
     });
+  }
+  // 内置/本地市场 id 保留校验（L17）：主题合并列表里 installed 后写会顶替同 id
+  // 的 registry 包——导入包冒用 'paper' 等 id 即可劫持官方主题槽位，须拒绝。
+  if (manifest.id && registryThemeIds().has(manifest.id)) {
+    issues.push({
+      code: 'reserved-id',
+      message: translate('theme.validation.reservedId', { id: manifest.id }),
+      path: 'manifest.id',
+    });
+  }
+  // previewImages 仅放行包内相对资源（L18）：http(s)/data:/blob: 协议、绝对
+  // 路径与 .. 逃逸值会原样进 <img src> 外联任意域，违背本地离线网络口径。
+  const previewImages = manifest.previewImages;
+  if (previewImages !== undefined) {
+    if (!Array.isArray(previewImages)) {
+      issues.push({
+        code: 'invalid-preview-images',
+        message: translate('theme.validation.invalidPreviewImages'),
+        path: 'manifest.previewImages',
+      });
+    } else {
+      for (const image of previewImages) {
+        if (typeof image !== 'string' || !isPackageRelativeAssetPath(image)) {
+          issues.push({
+            code: 'invalid-preview-image',
+            message: translate('theme.validation.invalidPreviewImage', {
+              value: String(image),
+            }),
+            path: 'manifest.previewImages',
+          });
+        }
+      }
+    }
   }
   if (manifest.themeApi !== 2) {
     issues.push({
@@ -437,7 +497,12 @@ export function installLocalThemePackage(input: ThemePackageInput): InstalledThe
   }
 
   const stored: StoredThemePackage = {
-    manifest: input.manifest,
+    // 存量防线：即便校验被绕过/旧版本落盘，写入与读取两侧都剥离外链
+    // previewImages，保证任何路径都到不了 <img src>。
+    manifest: {
+      ...input.manifest,
+      previewImages: sanitizePreviewImages(input.manifest.previewImages),
+    },
     css: input.css ?? '',
     ux: input.ux,
     codeBundles: input.codeBundles,
@@ -472,11 +537,16 @@ function loadStoredThemePackages(): StoredThemePackage[] {
 
 function storedToInstalled(stored: StoredThemePackage): InstalledThemePack {
   return {
-    manifest: stored.manifest,
+    // 读取侧同步剥离（含 manifest 字段）：修复前已落盘的存量包可能仍带外链
+    // 值，ThemeDialog 的 previewImage() 会回落 manifest.previewImages，两处都要干净。
+    manifest: {
+      ...stored.manifest,
+      previewImages: sanitizePreviewImages(stored.manifest.previewImages),
+    },
     css: stored.css,
     source: 'imported',
     installedAt: stored.installedAt,
-    previewImages: stored.manifest.previewImages,
+    previewImages: sanitizePreviewImages(stored.manifest.previewImages),
     ux: stored.ux,
     codeBundles: stored.codeBundles,
   };

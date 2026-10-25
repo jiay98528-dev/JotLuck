@@ -25,6 +25,11 @@ import { createSampleNotebookSeed } from '@/services/SampleSeed';
 import { getBuiltInTemplates, renderTemplate } from '@/services/TemplateEngine';
 import { getAllThemeModules } from '@/themes/registry';
 import { getLocalMarketModules } from '@/themes/market/local-catalog';
+import { messages as zhCN } from '@/locales/zh-CN';
+import { messages as en } from '@/locales/en';
+import { messages as ja } from '@/locales/ja';
+import { messages as ko } from '@/locales/ko';
+import { messages as fr } from '@/locales/fr';
 import type { SupportedLocale } from '@/types';
 
 const locales: SupportedLocale[] = ['zh-CN', 'en', 'ja', 'ko', 'fr'];
@@ -160,6 +165,21 @@ describe('localized program content', () => {
     expect(themes.every((theme) => theme.meta.bestFor.length > 0)).toBe(true);
     expect(themes.every((theme) => theme.meta.visualFeatures.length > 0)).toBe(true);
     expect(JSON.stringify(themes)).not.toMatch(/(?:theme|settings|common)\.[a-z]/u);
+  });
+
+  it('toolbar 文案不得宣称不存在的键位；真实存在的 Ctrl+K 保留（X9）', () => {
+    // inlineCodeTitle 曾在五语言宣称 Ctrl+`——全仓无此绑定（行内代码仅工具栏
+    // 按钮），属幽灵快捷键文案；与 boldTitle 同口径回落纯标签。
+    const catalogs = { 'zh-CN': zhCN, en, ja, ko, fr } as const;
+    for (const [locale, catalog] of Object.entries(catalogs)) {
+      const title = catalog.editor.toolbar.inlineCodeTitle;
+      expect(title, `${locale} inlineCodeTitle`).not.toContain('Ctrl');
+      expect(title, `${locale} inlineCodeTitle`).toBe(catalog.editor.toolbar.inlineCode);
+    }
+
+    // 对照组：搜索快捷键 Ctrl+K 是真实绑定，宣称保留不受本次清理影响。
+    expect(zhCN.notebook.actions.searchWithShortcut).toContain('Ctrl+K');
+    expect(en.notebook.actions.searchWithShortcut).toContain('Ctrl+K');
   });
 
   it('keeps stable machine placeholders while localizing natural-language wrappers', async () => {

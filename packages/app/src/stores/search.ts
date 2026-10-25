@@ -56,9 +56,24 @@ export const useSearchStore = defineStore('search', () => {
   function loadHistory(): void {
     try {
       const raw = localStorage.getItem(HISTORY_KEY);
-      if (raw) searchHistory.value = JSON.parse(raw) as string[];
+      if (!raw) return;
+      const parsed: unknown = JSON.parse(raw);
+      // 损坏值（非数组/非字符串元素）校验后整体弃置：否则 searchHistory 落
+      // 非数组，addToHistory 的 filter 每次搜索都抛 TypeError。
+      if (Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')) {
+        searchHistory.value = parsed;
+      } else {
+        searchHistory.value = [];
+        localStorage.removeItem(HISTORY_KEY);
+      }
     } catch {
-      /* ok */
+      // JSON 解析失败同样弃置重置，防止损坏持久化值卡死历史功能。
+      searchHistory.value = [];
+      try {
+        localStorage.removeItem(HISTORY_KEY);
+      } catch {
+        /* ok */
+      }
     }
   }
 

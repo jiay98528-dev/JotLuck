@@ -365,7 +365,13 @@ export function useDocumentNavigation(
             : (items.find(
                 (item) => candidates.includes(item.id) || candidates.includes(item.text.trim()),
               ) ?? null);
-        if (!heading) return;
+        // 锚点 miss 不再静默返回：跨笔记锚点（[[笔记#锚]]）与大纲树定位失配
+        // 同为「标题找不到」，与文内锚点两处先例（ReviewWorkbench /
+        // cm6-live-preview）同口径给 headingNotFound 轻反馈。
+        if (!heading) {
+          toast.show(t('navigation.headingNotFound'), 'info', 3500);
+          return;
+        }
         from = to = heading.range.from;
         headingId = heading.id;
       }

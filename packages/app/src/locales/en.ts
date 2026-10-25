@@ -182,7 +182,7 @@ export const messages = {
       italicTitle: 'Italic',
       strikethrough: 'Strikethrough',
       inlineCode: 'Inline code',
-      inlineCodeTitle: 'Inline code (Ctrl+`)',
+      inlineCodeTitle: 'Inline code',
       link: 'Link',
       linkTitle: 'Link',
       clear: 'Clear formatting',
@@ -468,6 +468,8 @@ export const messages = {
     },
     customFallback: 'Custom template',
     invalidPath: 'The template path is outside the managed directory',
+    fileExists:
+      'A template named “{name}” already exists. Choose another name or delete the old template first.',
     diary: {
       name: 'Journal',
       description: 'A daily journal with a date and task list',
@@ -584,6 +586,11 @@ export const messages = {
       packageIssues: '{issues}',
       officialCssUnscoped: 'Official theme CSS is not scoped to its theme root: {selector}',
       runtimeCssUnscoped: 'Theme CSS is not scoped to its theme root: {selector}',
+      reservedId:
+        'Theme id “{id}” is reserved for official themes and cannot be used by an imported theme.',
+      invalidPreviewImages: 'manifest.previewImages must be an array of strings.',
+      invalidPreviewImage:
+        'Preview images must be package-relative assets (starting with preview/ or assets/): {value}',
     },
     center: {
       appearance: 'Appearance',

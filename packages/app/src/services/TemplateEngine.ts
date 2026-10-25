@@ -282,7 +282,17 @@ export async function saveCustomTemplateToFiles(
 ): Promise<TemplateItem> {
   await ensureCustomTemplateDirectory(fs);
   const path = customTemplatePath(name);
-  await fs.writeFile(path, serializeCustomTemplate(name, description, content));
+  // 同名模板不再静默覆盖：条件创建（expectedRevision=null，与新建笔记的
+  // createTextFile 同模式）——已存在即报 fileExists 明确错误，由调用方提示
+  // 用户改名或先删除旧模板。
+  const result = await fs.writeFileIfUnchanged(
+    path,
+    serializeCustomTemplate(name, description, content),
+    null,
+  );
+  if (result.status === 'conflict') {
+    throw createUserMessageError('templates.fileExists', { name });
+  }
   return {
     id: path,
     name,
