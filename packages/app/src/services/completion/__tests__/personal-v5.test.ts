@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { MarkdownPredictor } from '../../MarkdownPredictor';
 import { serialize, type NGramTable } from '@/utils/ngram-engine';
 import { scopedCompletionStorageKey } from '../learning-repository';
+import { resetCompletionMetricsForTests } from '../metrics';
+import { resetLearningSignalsForTests } from '../learning-signals';
 
 function table(context: string, next: string, count: number): NGramTable {
   return new Map([[context, new Map([[next, count]])]]);
@@ -20,7 +22,12 @@ function legacyV4Model(): string {
 }
 
 describe('personal completion persistence v5', () => {
-  beforeEach(() => localStorage.clear());
+  // 空闲批量层为模块级累积态：逐测清空，隔离上个用例未落盘的信号/指标。
+  beforeEach(() => {
+    localStorage.clear();
+    resetCompletionMetricsForTests();
+    resetLearningSignalsForTests();
+  });
 
   it('migrates v4 acceptance into a 0.5-weight legacyAccepted partition', () => {
     const scope = 'workspace-v5';

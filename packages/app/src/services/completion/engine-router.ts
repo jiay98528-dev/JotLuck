@@ -628,7 +628,10 @@ function validateAndStampPublicResponse(
         visibilityThreshold < 0 ||
         visibilityThreshold > 1
       ) {
-        return null;
+        // 非有限或越界的校准值只作废当前候选，对齐本函数其余 continue 拒绝语义；
+        // 一元写作引擎误入 code 路由时阈值恒为 NaN，整响应作废会浪费该次推理
+        // 的全部结果并让调用方空等回退。
+        continue;
       }
       if (calibratedVisibility < visibilityThreshold) continue;
     }

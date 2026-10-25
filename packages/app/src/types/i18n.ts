@@ -25,6 +25,8 @@ export type AppErrorCode =
   | 'disk_full'
   | 'notebook_not_open'
   | 'index_unavailable'
+  | 'external_grant_expired'
+  | 'conversion_stale'
   | 'operation_failed';
 
 export interface CommandErrorPayload {

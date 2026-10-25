@@ -15,10 +15,13 @@ import {
   resetBaselineLoaderForTests,
   type PredictorIndexData,
 } from '../MarkdownPredictor';
-import { loadCompletionMetrics } from '../completion/metrics';
+import { loadCompletionMetrics, resetCompletionMetricsForTests } from '../completion/metrics';
 import { buildCompletionContext } from '../completion/context';
 import { DEFAULT_COMPLETION_SETTINGS } from '../CompletionSettings';
-import { learningSignalsStorageKey } from '../completion/learning-signals';
+import {
+  learningSignalsStorageKey,
+  resetLearningSignalsForTests,
+} from '../completion/learning-signals';
 import {
   flushCompletionStorageMutationsForTests,
   scopedCompletionStorageKey,
@@ -127,6 +130,10 @@ function setupLocalStorageMock() {
       Object.keys(store).forEach((k) => delete store[k]);
     }),
   });
+  // 空闲批量层为模块级累积态：换新 localStorage 桩时同步清空未落盘的
+  // 信号/指标，保持与旧「每次全新存储」语义一致的用例隔离。
+  resetCompletionMetricsForTests();
+  resetLearningSignalsForTests();
   return store;
 }
 
@@ -893,7 +900,7 @@ describe('MarkdownPredictor', () => {
       expect(metrics.syntaxTypes['ngram:l1:general']?.rejected).toBe(1);
     });
 
-    it('persists learning signals and exposes a boost for accepted strong contexts', () => {
+    it('persists learning signals and exposes a boost for accepted strong contexts', async () => {
       const p = createPredictor(2);
       priv(p).l1 = new Map([['ab', new Map([['x', 1]])]]);
 
@@ -907,6 +914,8 @@ describe('MarkdownPredictor', () => {
 
       const third = p.getGhostText(2, 'ab');
       expect(third?.learningBoost).toBeGreaterThan(0);
+      // 学习信号走空闲批量落盘：到达落盘时点后必须包含已接受事件。
+      await flushCompletionStorageMutationsForTests();
       expect(localStorage.getItem(learningSignalsStorageKey())).toContain('accepted');
     });
 
@@ -940,12 +949,13 @@ describe('MarkdownPredictor', () => {
       expect(localStorage.getItem(SCOPED_ACCEPTED_LEXICON_KEY)).toContain('note');
     });
 
-    it('clears learning signals with local learning data', () => {
+    it('clears learning signals with local learning data', async () => {
       const p = createPredictor(2);
       priv(p).l1 = new Map([['ab', new Map([['x', 1]])]]);
 
       const result = p.getGhostText(2, 'ab');
       p.acceptCompletion('ab', result!.text);
+      await flushCompletionStorageMutationsForTests();
       expect(localStorage.getItem(learningSignalsStorageKey())).not.toBeNull();
 
       p.clearLearningData();

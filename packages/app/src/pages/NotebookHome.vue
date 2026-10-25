@@ -4617,6 +4617,11 @@ async function openExternalParentAsNotebook(): Promise<void> {
       toast.show(t('notebook.toast.targetUnavailable'), 'error', 6000);
     } else {
       externalError.value = message;
+      // 编辑壳模板不渲染 externalError：静默失败会切断「加入笔记」反馈链，
+      // 此处必须以 toast 给出可见错误（含授权过期 external_grant_expired 专属文案）。
+      if (externalSessionMode.value === 'edit-shell') {
+        toast.show(message, 'error', 6000);
+      }
     }
   } finally {
     loading.value = false;

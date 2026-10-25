@@ -474,6 +474,57 @@ describe('completion engine router', () => {
     expect(result.candidates).toEqual([]);
   });
 
+  it('skips one-unit Writing beams per candidate on the Code route instead of voiding the response', async () => {
+    const router = new CompletionEngineRouter();
+    const generate = vi.fn<CompletionPublicEngine['generate']>(async (request) =>
+      publicResponse(request, [
+        {
+          candidateId: 'one-unit-code-beam',
+          text: 'fetch',
+          confidence: 0.9,
+          modelScore: 0.9,
+          gateScore: 0.9,
+          language: 'en',
+        },
+      ]),
+    );
+    await router.installPublicEngine(
+      publicEngine(generate, {
+        id: PUBLIC_V25_ONE_UNIT_WRITING_ENGINE_ID,
+        // 与真实一元写作引擎一致：仅 writing 路由有有限阈值，code 路由返回 NaN。
+        calibrateVisibility: ({ modelScore }) => modelScore,
+        visibilityThreshold: ({ route }) => (route === 'writing' ? 0.2 : Number.NaN),
+      }),
+    );
+
+    const result = await router.generatePublic(
+      {
+        workspaceScope: 'workspace-a',
+        documentVersion: 'doc-one-unit-code',
+        cursorPos: 7,
+        contextTail: 'client.',
+        contextSuffix: '()',
+        languageHint: 'en',
+        blockType: 'code',
+        codeLanguage: 'typescript',
+        codeLexicalContext: 'code',
+        cursorBoundary: 'punctuation',
+        maxCandidates: 32,
+        deadlineAt: Date.now() + 100,
+      },
+      router.getEpoch(),
+      performance.now() + 100,
+    );
+
+    // 推理确实发生（资格门未拦下一元引擎×code 组合），但 NaN 阈值只作废候选本身。
+    expect(generate).toHaveBeenCalledOnce();
+    expect(result.candidates).toEqual([]);
+    // 响应被接受而非整包作废：不触发回退/超时标记，本地候选管线不被额外拖延。
+    expect(result.usedEngineId).toBe(PUBLIC_V25_ONE_UNIT_WRITING_ENGINE_ID);
+    expect(result.fellBack).toBe(false);
+    expect(result.timedOut).toBe(false);
+  });
+
   it('refuses to install a V2.5 engine without both manifest calibration functions', async () => {
     const router = new CompletionEngineRouter();
     const generate = vi.fn(async (request: PublicEngineGenerateRequest) =>

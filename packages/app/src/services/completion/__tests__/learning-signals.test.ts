@@ -6,12 +6,14 @@ import {
   LEARNING_SIGNALS_STORAGE_KEY,
   learningSignalsStorageKey,
   loadLearningSignals,
+  persistLearningSignalEvent,
   recordSignalAccepted,
   recordSignalRejected,
   recordSignalRetained,
   recordSignalShown,
   saveLearningSignals,
 } from '../learning-signals';
+import { flushCompletionStorageMutationsForTests } from '../learning-repository';
 import type { CompletionCandidate, CompletionContext } from '../types';
 
 function setupLocalStorageMock() {
@@ -204,5 +206,61 @@ describe('learning signals', () => {
     });
     expect(localStorage.getItem(LEARNING_SIGNALS_STORAGE_KEY)).toBeNull();
     expect(localStorage.getItem(learningSignalsStorageKey('notebook-a'))).not.toBeNull();
+  });
+
+  it('merges consecutive signal events into a single storage write at the idle flush point', async () => {
+    const key = getLearningSignalKey(candidate(), context());
+    persistLearningSignalEvent('batch', key, 'shown');
+    persistLearningSignalEvent('batch', key, 'shown');
+    persistLearningSignalEvent('batch', key, 'accepted', 8);
+
+    // 批量窗口内：读侧已可见最新计数，但目标键尚未产生任何落盘写。
+    expect(loadLearningSignals('batch').entries[key]).toMatchObject({
+      shown: 2,
+      accepted: 1,
+    });
+    const targetWrites = () =>
+      vi
+        .mocked(localStorage.setItem)
+        .mock.calls.filter(([itemKey]) => itemKey === learningSignalsStorageKey('batch'));
+    expect(targetWrites()).toHaveLength(0);
+
+    await flushCompletionStorageMutationsForTests();
+
+    // 三次事件合并为单次写，且内容包含全部累积计数。
+    expect(targetWrites()).toHaveLength(1);
+    const persisted = JSON.parse(
+      localStorage.getItem(learningSignalsStorageKey('batch')) as string,
+    ) as {
+      entries: Record<string, { shown: number; accepted: number }>;
+    };
+    expect(persisted.entries[key]).toMatchObject({ shown: 2, accepted: 1 });
+  });
+
+  it('drops unflushed signal events instead of resurrecting them after a clear', async () => {
+    const key = getLearningSignalKey(candidate(), context());
+    persistLearningSignalEvent('resurrect', key, 'shown');
+    clearLearningSignals('resurrect');
+    await flushCompletionStorageMutationsForTests();
+
+    expect(localStorage.getItem(learningSignalsStorageKey('resurrect'))).toBeNull();
+    expect(loadLearningSignals('resurrect').entries[key]).toBeUndefined();
+  });
+
+  it('flushes pending signal events before the page is hidden or unloaded', async () => {
+    const key = getLearningSignalKey(candidate(), context());
+    persistLearningSignalEvent('pagehide', key, 'shown');
+    expect(localStorage.getItem(learningSignalsStorageKey('pagehide'))).toBeNull();
+
+    window.dispatchEvent(new Event('pagehide'));
+
+    const persisted = JSON.parse(
+      localStorage.getItem(learningSignalsStorageKey('pagehide')) as string,
+    ) as {
+      entries: Record<string, { shown: number }>;
+    };
+    expect(persisted.entries[key]).toMatchObject({ shown: 1 });
+    // 排空空闲批量，避免累积态泄漏到后续用例。
+    await flushCompletionStorageMutationsForTests();
   });
 });

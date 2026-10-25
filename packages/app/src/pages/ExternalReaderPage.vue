@@ -37,6 +37,15 @@
             </Button>
           </template>
           <template v-else-if="!errorMessage">
+            <!-- 动作失败（如授权过期）只降级为行内提示：按钮必须保留，充当重试入口。 -->
+            <p
+              v-if="actionError"
+              class="external-reader__action-error"
+              role="alert"
+              data-testid="external-reader-action-error"
+            >
+              {{ actionError }}
+            </p>
             <Button variant="secondary" size="sm" :loading="actionPending" @click="promote">
               {{ t('externalReader.addToNotes') }}
             </Button>
@@ -354,6 +363,9 @@ const content = ref('');
 const html = ref('');
 const loading = ref(true);
 const errorMessage = ref('');
+// 顶栏动作（加入笔记/启用编辑）失败与载入失败分流：动作失败保留按钮重试，
+// 载入失败才隐藏操作区。
+const actionError = ref('');
 const documentActionError = ref('');
 type ReaderNoticeKey =
   | 'externalReader.wikiNavigation'
@@ -576,6 +588,7 @@ const slotProps = computed(() => ({
 async function load(): Promise<void> {
   loading.value = true;
   errorMessage.value = '';
+  actionError.value = '';
   documentActionError.value = '';
   try {
     const bootstrap = await getWindowBootstrap();
@@ -941,12 +954,14 @@ function onBacklinkNavigate(): void {
 
 async function enableEdit(): Promise<void> {
   actionPending.value = true;
+  actionError.value = '';
   try {
     // 成功即失效冷启动缓存（收口层内完成），避免工作台初始化读到只读旧态。
     await enableExternalEdit();
     await router.replace('/workspace');
   } catch (error) {
-    errorMessage.value = userErrorMessage(error);
+    // 动作失败不得写 errorMessage：那会让顶栏操作整块消失、失去重试入口。
+    actionError.value = userErrorMessage(error);
   } finally {
     actionPending.value = false;
   }
@@ -954,12 +969,13 @@ async function enableEdit(): Promise<void> {
 
 async function promote(): Promise<void> {
   actionPending.value = true;
+  actionError.value = '';
   try {
     // 成功即失效冷启动缓存（收口层内完成），避免工作台初始化读到只读旧态。
     await promoteExternalFileToNotebook();
     await router.replace('/workspace');
   } catch (error) {
-    errorMessage.value = userErrorMessage(error);
+    actionError.value = userErrorMessage(error);
   } finally {
     actionPending.value = false;
   }
@@ -1066,6 +1082,14 @@ onBeforeUnmount(() => {
 
 .external-reader__stats {
   margin-right: var(--space-4);
+}
+
+.external-reader__action-error {
+  margin: 0;
+  max-width: min(40vw, 420px);
+  color: var(--signal-error);
+  font-size: var(--text-xs);
+  line-height: var(--lh-ui);
 }
 
 .external-reader__professional-edit {

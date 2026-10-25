@@ -1,9 +1,11 @@
 import type { CompletionCandidate, CompletionSourceLayer } from './types';
 import {
+  enqueueCompletionIdleWrite,
   normalizeCompletionScope,
   parseJsonSafely,
   readStorage,
   removeStorage,
+  resetCompletionIdleWritesForTests,
   runCompletionStorageMutation,
   scopedCompletionStorageKey,
   writeStorage,
@@ -12,6 +14,12 @@ import {
 const LEGACY_METRICS_KEY = 'jotluck:autocomplete:providerMetrics:v1';
 const GLOBAL_METRICS_KEY = 'jotluck:autocomplete:providerMetrics:v2';
 const MAX_LATENCY_SAMPLES = 40;
+
+/**
+ * 空闲批量层：指标事件先累积在内存，落盘推迟到空闲时点。键为规范化 scope，
+ * 读侧（loadCompletionMetrics）优先返回未落盘的内存态，语义保持一致。
+ */
+const pendingMetricsStores = new Map<string, MetricsStore>();
 
 export interface ProviderMetrics {
   shown: number;
@@ -137,9 +145,17 @@ export function loadCompletionMetrics(scope = 'unscoped'): MetricsStore {
   return loadMetrics(scope);
 }
 
+/** 测试隔离专用：清空未落盘累积态与挂起的空闲任务。生产代码禁止调用。 */
+export function resetCompletionMetricsForTests(): void {
+  pendingMetricsStores.clear();
+  resetCompletionIdleWritesForTests();
+}
+
 export function clearCompletionMetrics(scope = 'unscoped'): void {
   const normalizedScope = normalizeCompletionScope(scope);
   runCompletionStorageMutation(`metrics:${normalizedScope}`, () => {
+    // 丢弃未落盘的累积态，防止空闲任务在清除后把旧数据写回。
+    pendingMetricsStores.delete(normalizedScope);
     removeStorage(
       completionMetricsStorageKey(normalizedScope),
       scopedCompletionStorageKey(normalizedScope, 'metrics:v2'),
@@ -156,22 +172,31 @@ function updateMetrics(
   updater: (metrics: ProviderMetrics) => void,
 ): void {
   const normalizedScope = normalizeCompletionScope(scope);
-  runCompletionStorageMutation(`metrics:${normalizedScope}`, () => {
-    const store = loadMetrics(normalizedScope);
-    updater((store.providers[providerId] ??= createProviderMetrics()));
-    updater(
-      (store.layers[getLayerMetricsKey(providerId, sourceLayer)] ??= createProviderMetrics()),
-    );
-    updater(
-      (store.syntaxTypes[getSyntaxMetricsKey(providerId, sourceLayer, syntaxType)] ??=
-        createProviderMetrics()),
-    );
-    store.updatedAt = Date.now();
-    writeStorage(completionMetricsStorageKey(normalizedScope), JSON.stringify(store));
+  // 内存累积替代每键全量读改写；多次事件合并为一次空闲落盘。
+  const store = pendingMetricsStores.get(normalizedScope) ?? loadMetrics(normalizedScope);
+  updater((store.providers[providerId] ??= createProviderMetrics()));
+  updater((store.layers[getLayerMetricsKey(providerId, sourceLayer)] ??= createProviderMetrics()));
+  updater(
+    (store.syntaxTypes[getSyntaxMetricsKey(providerId, sourceLayer, syntaxType)] ??=
+      createProviderMetrics()),
+  );
+  store.updatedAt = Date.now();
+  pendingMetricsStores.set(normalizedScope, store);
+  enqueueCompletionIdleWrite(`metrics:${normalizedScope}`, () => {
+    runCompletionStorageMutation(`metrics:${normalizedScope}`, () => {
+      // 清除操作可能已丢弃累积态；任务运行时再次确认，避免复活已清数据。
+      const pending = pendingMetricsStores.get(normalizedScope);
+      if (!pending) return;
+      pendingMetricsStores.delete(normalizedScope);
+      writeStorage(completionMetricsStorageKey(normalizedScope), JSON.stringify(pending));
+    });
   });
 }
 
 function loadMetrics(scope: string): MetricsStore {
+  // 读侧优先返回未落盘的内存累积态，避免批量窗口内读到过期计数。
+  const pending = pendingMetricsStores.get(normalizeCompletionScope(scope));
+  if (pending) return cloneMetricsStore(pending);
   const targetKey = completionMetricsStorageKey(scope);
   const targetRaw = readStorage(targetKey);
   const current = normalizeMetricsStore(parseJsonSafely(targetRaw), false);
@@ -269,6 +294,24 @@ function createMetricsStore(): MetricsStore {
     layers: {},
     syntaxTypes: {},
     updatedAt: 0,
+  };
+}
+
+/** 读侧返回快照（含延迟采样数组），避免调用方意外改动内存累积态。 */
+function cloneMetricsStore(store: MetricsStore): MetricsStore {
+  const cloneMap = (source: Record<string, ProviderMetrics>): Record<string, ProviderMetrics> => {
+    const cloned: Record<string, ProviderMetrics> = {};
+    for (const [key, value] of Object.entries(source)) {
+      cloned[key] = { ...value, latencies: [...value.latencies] };
+    }
+    return cloned;
+  };
+  return {
+    version: store.version,
+    providers: cloneMap(store.providers),
+    layers: cloneMap(store.layers),
+    syntaxTypes: cloneMap(store.syntaxTypes),
+    updatedAt: store.updatedAt,
   };
 }
 

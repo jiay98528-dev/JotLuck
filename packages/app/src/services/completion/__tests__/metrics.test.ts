@@ -8,6 +8,7 @@ import {
   recordProviderRetained,
   recordProviderShown,
 } from '../metrics';
+import { flushCompletionStorageMutationsForTests } from '../learning-repository';
 import type { CompletionCandidate } from '../types';
 
 function setupLocalStorageMock() {
@@ -50,7 +51,7 @@ describe('completion metrics', () => {
     expect(localStorage.getItem(completionMetricsStorageKey('a'))).toBeNull();
   });
 
-  it('records provider, layer and syntax metrics in one scope only', () => {
+  it('records provider, layer and syntax metrics in one scope only', async () => {
     recordProviderShown(candidate(), 12.4, 'a');
     recordProviderAccepted('ngram', 'l2', 'general', 8, 'a');
     recordProviderRetained('ngram', 'l2', 'general', 8, 'a');
@@ -72,6 +73,8 @@ describe('completion metrics', () => {
       rejected: 1,
     });
     expect(loadCompletionMetrics('b').providers).toEqual({});
+    // 排空空闲批量，避免累积态泄漏到后续用例。
+    await flushCompletionStorageMutationsForTests();
   });
 
   it('migrates v2 global metrics and normalizes invalid values', () => {
@@ -108,13 +111,56 @@ describe('completion metrics', () => {
     expect(localStorage.getItem('jotluck:autocomplete:providerMetrics:v2')).toBeNull();
   });
 
-  it('clears only the selected notebook scope', () => {
+  it('clears only the selected notebook scope', async () => {
     recordProviderShown(candidate(), 5, 'a');
     recordProviderShown(candidate(), 6, 'b');
+    // 先到达空闲落盘时点，再验证清除只影响目标 scope 的持久化键。
+    await flushCompletionStorageMutationsForTests();
 
     clearCompletionMetrics('a');
 
     expect(localStorage.getItem(completionMetricsStorageKey('a'))).toBeNull();
     expect(localStorage.getItem(completionMetricsStorageKey('b'))).not.toBeNull();
+  });
+
+  it('merges repeated metric records into a single storage write at the idle flush point', async () => {
+    recordProviderShown(candidate(), 5, 'batch');
+    recordProviderShown(candidate(), 6, 'batch');
+    recordProviderAccepted('ngram', 'l2', 'general', 4, 'batch');
+
+    // 批量窗口内：读侧已可见最新计数，但目标键尚未产生任何落盘写。
+    expect(loadCompletionMetrics('batch').providers.ngram).toMatchObject({
+      shown: 2,
+      accepted: 1,
+    });
+    const targetWrites = () =>
+      vi
+        .mocked(localStorage.setItem)
+        .mock.calls.filter(([key]) => key === completionMetricsStorageKey('batch'));
+    expect(targetWrites()).toHaveLength(0);
+
+    await flushCompletionStorageMutationsForTests();
+
+    // 三次记录合并为单次写，且内容包含全部累积计数。
+    expect(targetWrites()).toHaveLength(1);
+    const persisted = JSON.parse(
+      localStorage.getItem(completionMetricsStorageKey('batch')) as string,
+    ) as {
+      providers: Record<string, { shown: number; accepted: number; latencies: number[] }>;
+    };
+    expect(persisted.providers.ngram).toMatchObject({
+      shown: 2,
+      accepted: 1,
+      latencies: [5, 6],
+    });
+  });
+
+  it('drops unflushed metrics instead of resurrecting them after a clear', async () => {
+    recordProviderShown(candidate(), 5, 'resurrect');
+    clearCompletionMetrics('resurrect');
+    await flushCompletionStorageMutationsForTests();
+
+    expect(localStorage.getItem(completionMetricsStorageKey('resurrect'))).toBeNull();
+    expect(loadCompletionMetrics('resurrect').providers).toEqual({});
   });
 });

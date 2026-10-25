@@ -145,6 +145,7 @@ import type {
 import {
   normalizeCompletionScope,
   getStorageKeyRevision,
+  hasPendingCompletionIdleWrite,
   hasPendingCompletionStorageMutation,
   readStorage,
   removeStorage,
@@ -1383,9 +1384,13 @@ export class MarkdownPredictor {
         (key) => getStorageKeyRevision(key) !== (this.observedStorageRevisions.get(key) ?? 0),
       );
     const signalsKey = learningSignalsStorageKey(this.storageScope);
+    // 空闲批量窗口内，本 Tab 的信号事件尚未写盘、revision 不变；靠待写标记
+    // 触发重读（loadLearningSignals 会返回内存累积态），保证学习加成立即可见。
+    const signalsPending = hasPendingCompletionIdleWrite(`signals:${this.storageScope}`);
     const signalsChanged =
-      !hasPendingCompletionStorageMutation(`signals:${this.storageScope}`) &&
-      getStorageKeyRevision(signalsKey) !== (this.observedStorageRevisions.get(signalsKey) ?? 0);
+      signalsPending ||
+      (!hasPendingCompletionStorageMutation(`signals:${this.storageScope}`) &&
+        getStorageKeyRevision(signalsKey) !== (this.observedStorageRevisions.get(signalsKey) ?? 0));
 
     if (personalChanged) this.loadFromLocalStorage();
     if (signalsChanged) this.learningSignals = loadLearningSignals(this.storageScope);

@@ -1,9 +1,11 @@
 import type { CompletionCandidate, CompletionContext } from './types';
 import {
+  enqueueCompletionIdleWrite,
   normalizeCompletionScope,
   parseJsonSafely,
   readStorage,
   removeStorage,
+  resetCompletionIdleWritesForTests,
   runCompletionStorageMutation,
   scopedCompletionStorageKey,
   writeStorage,
@@ -13,6 +15,12 @@ import {
 export const LEARNING_SIGNALS_STORAGE_KEY = 'jotluck:autocomplete:learningSignals:v1';
 
 const MAX_SIGNAL_ENTRIES = 800;
+
+/**
+ * 空闲批量层：事件先累积在内存，落盘推迟到空闲时点。键为规范化 scope，
+ * 读侧（loadLearningSignals）优先返回未落盘的内存态，语义保持一致。
+ */
+const pendingSignalStores = new Map<string, LearningSignalStore>();
 
 export interface LearningSignalEntry {
   shown: number;
@@ -42,6 +50,9 @@ export function learningSignalsStorageKey(scope = 'unscoped'): string {
 }
 
 export function loadLearningSignals(scope = 'unscoped'): LearningSignalStore {
+  // 读侧优先返回未落盘的内存累积态，避免批量窗口内读到过期计数。
+  const pending = pendingSignalStores.get(normalizeCompletionScope(scope));
+  if (pending) return cloneLearningSignalStore(pending);
   const targetKey = learningSignalsStorageKey(scope);
   const current = normalizeStore(parseJsonSafely(readStorage(targetKey)), false);
   if (current) return pruneLearningSignals(current);
@@ -67,6 +78,12 @@ export function saveLearningSignals(store: LearningSignalStore, scope = 'unscope
   writeStorage(learningSignalsStorageKey(scope), JSON.stringify(pruneLearningSignals(store)));
 }
 
+/** 测试隔离专用：清空未落盘累积态与挂起的空闲任务。生产代码禁止调用。 */
+export function resetLearningSignalsForTests(): void {
+  pendingSignalStores.clear();
+  resetCompletionIdleWritesForTests();
+}
+
 export function persistLearningSignalEvent(
   scope: string,
   key: string,
@@ -81,16 +98,30 @@ export function persistLearningSignalEvent(
   savedChars = 0,
 ): void {
   const normalizedScope = normalizeCompletionScope(scope);
-  runCompletionStorageMutation(`signals:${normalizedScope}`, () => {
-    let latest = loadLearningSignals(normalizedScope);
-    latest = recordSignalEvent(latest, key, event, savedChars);
-    saveLearningSignals(latest, normalizedScope);
+  // 内存累积替代每键全量读改写；多次事件合并为一次空闲落盘。
+  const latest = recordSignalEvent(
+    pendingSignalStores.get(normalizedScope) ?? loadLearningSignals(normalizedScope),
+    key,
+    event,
+    savedChars,
+  );
+  pendingSignalStores.set(normalizedScope, latest);
+  enqueueCompletionIdleWrite(`signals:${normalizedScope}`, () => {
+    runCompletionStorageMutation(`signals:${normalizedScope}`, () => {
+      // 清除操作可能已丢弃累积态；任务运行时再次确认，避免复活已清数据。
+      const pending = pendingSignalStores.get(normalizedScope);
+      if (!pending) return;
+      pendingSignalStores.delete(normalizedScope);
+      saveLearningSignals(pending, normalizedScope);
+    });
   });
 }
 
 export function clearLearningSignals(scope = 'unscoped'): void {
   const normalizedScope = normalizeCompletionScope(scope);
   runCompletionStorageMutation(`signals:${normalizedScope}`, () => {
+    // 丢弃未落盘的累积态，防止空闲任务在清除后把旧数据写回。
+    pendingSignalStores.delete(normalizedScope);
     removeStorage(
       learningSignalsStorageKey(normalizedScope),
       scopedCompletionStorageKey(normalizedScope, 'learning-signals:v2'),
@@ -106,6 +137,15 @@ export function createLearningSignalStore(): LearningSignalStore {
     entries: {},
     updatedAt: 0,
   };
+}
+
+/** 读侧返回快照，避免调用方持有并意外改动内存累积态。 */
+function cloneLearningSignalStore(store: LearningSignalStore): LearningSignalStore {
+  const entries: Record<string, LearningSignalEntry> = {};
+  for (const [key, value] of Object.entries(store.entries)) {
+    entries[key] = { ...value };
+  }
+  return { version: store.version, entries, updatedAt: store.updatedAt };
 }
 
 export function getLearningSignalKey(

@@ -547,6 +547,87 @@ describe('ExternalReaderPage', () => {
     expect(urlStub.revoked).toEqual(['blob:mock-1']);
   });
 
+  it('keeps top-bar actions retryable when promote fails with a structured grant-expired code', async () => {
+    invoke.mockImplementation(async (command: string) => {
+      if (command === 'get_window_bootstrap') {
+        return {
+          mode: 'external-readonly',
+          openedFile: {
+            absolutePath: 'D:/notes/expired.md',
+            relativePath: '/expired.md',
+            accessToken: 'token',
+          },
+        };
+      }
+      if (command === 'read_external_note_file') return '# Expired';
+      if (command === 'promote_external_file_to_notebook') {
+        // Rust wire 形态：结构化错误码上线，diagnostic 被 skip_serializing 不出现。
+        throw { code: 'external_grant_expired' };
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const wrapper = mountReader();
+    await vi.waitFor(() => expect(wrapper.find('article h1').text()).toBe('Expired'));
+
+    const findAdd = () =>
+      wrapper.findAll('button').find((button) => button.text() === '添加到笔记');
+    await findAdd()!.trigger('click');
+    await flushPromises();
+
+    // 动作失败不得整块隐藏顶栏操作：错误行内可见（EC 专属文案可达）。
+    expect(wrapper.get('[data-testid="external-reader-action-error"]').text()).toBe(
+      '当前外部文件的写入授权已失效。',
+    );
+    // 正文不被错误面替换，重试入口（同按钮）保留。
+    expect(wrapper.find('article h1').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('无法打开文件');
+
+    await findAdd()!.trigger('click');
+    await flushPromises();
+    expect(
+      invoke.mock.calls.filter(([command]) => command === 'promote_external_file_to_notebook'),
+    ).toHaveLength(2);
+    wrapper.unmount();
+  });
+
+  it('keeps the enable-edit retry entry when enabling edit fails with a structured code', async () => {
+    invoke.mockImplementation(async (command: string) => {
+      if (command === 'get_window_bootstrap') {
+        return {
+          mode: 'external-readonly',
+          openedFile: {
+            absolutePath: 'D:/notes/locked.md',
+            relativePath: '/locked.md',
+            accessToken: 'token',
+          },
+        };
+      }
+      if (command === 'read_external_note_file') return '# Locked';
+      if (command === 'enable_external_edit') {
+        throw { code: 'external_grant_expired' };
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const wrapper = mountReader();
+    await vi.waitFor(() => expect(wrapper.find('article h1').text()).toBe('Locked'));
+
+    const findEnable = () =>
+      wrapper.findAll('button').find((button) => button.text() === '启用编辑');
+    await findEnable()!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="external-reader-action-error"]').text()).toBe(
+      '当前外部文件的写入授权已失效。',
+    );
+    // 「添加到笔记」与「启用编辑」都保留：重试入口不断链。
+    expect(findEnable()).toBeDefined();
+    expect(wrapper.findAll('button').some((button) => button.text() === '添加到笔记')).toBe(true);
+    expect(wrapper.find('article h1').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it('marks a completed conversion stale on focus and blocks both edit paths', async () => {
     invoke.mockImplementation(async (command: string) => {
       if (command === 'get_window_bootstrap') {
