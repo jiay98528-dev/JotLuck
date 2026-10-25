@@ -66,3 +66,30 @@ export function findHeadingElement(root: ParentNode, rawId: string): HTMLElement
   }
   return undefined;
 }
+
+/** ProgressivePreview 锚点滚动面（暴露子集）：渐进路径解析只依赖这两个方法。 */
+export interface ProgressiveHeadingScroller {
+  scrollToHeading(id: string): boolean;
+  cancelNavigation(): void;
+}
+
+/**
+ * 渐进路径锚点解析（E5）：ProgressivePreview.scrollToHeading 只匹配渲染 id
+ * 形态（AST headingIdFromText），宿主直传原文锚文本必然 miss——大文档文内
+ * 锚点静默失效。按三形态候选逐一尝试，首中即停；全 miss 冲刷 pendingHeading
+ * （cancelNavigation），防未决导航残留劫持后续 paint/交互。
+ */
+export function scrollProgressivePreviewHeading(
+  preview: ProgressiveHeadingScroller,
+  rawId: string,
+): boolean {
+  let matched = false;
+  for (const candidate of headingAnchorCandidates(rawId)) {
+    if (preview.scrollToHeading(candidate)) {
+      matched = true;
+      break;
+    }
+  }
+  if (!matched) preview.cancelNavigation();
+  return matched;
+}

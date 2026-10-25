@@ -1042,7 +1042,8 @@ import { usePreviewImageResolver } from '@/composables/usePreviewImageResolver';
 import { useRemoteImageSession } from '@/composables/useRemoteImageSession';
 import { useDialogFocus } from '@/composables/useDialogFocus';
 import { openExternalUrl } from '@/utils/urlUtils';
-import { findHeadingElement } from '@/utils/heading-anchor';
+import { findHeadingElement, scrollProgressivePreviewHeading } from '@/utils/heading-anchor';
+import { resetStaticPreviewScroll } from '@/utils/static-preview-scroll';
 import { classifyAnchorHref } from '@/utils/preview-links';
 import { revealLivePreviewSourceAt } from '@/utils/cm6-live-preview';
 import { docToString } from '@/utils/cm6-document-analysis';
@@ -1092,7 +1093,11 @@ import {
   stripSupportedNoteExtension,
   supportedNoteExtensionsLabel,
 } from '@/utils/note-files';
-import { getDraftMarkdownFileName } from '@/utils/draft-file-name';
+import {
+  getDraftMarkdownFileName,
+  invalidFileNameError,
+  sanitizeFileBasename,
+} from '@/utils/draft-file-name';
 import { getJotLuckE2EBridge, peekJotLuckE2EBridge } from '@/utils/e2e-bridge';
 import { summarizeActiveFileChanges } from '@/utils/file-change-events';
 import {
@@ -2109,11 +2114,9 @@ function onPreviewClick(event: MouseEvent): void {
     event.preventDefault();
     const rawId = href.slice(1);
     if (progressivePreviewRef.value) {
-      try {
-        progressivePreviewRef.value.scrollToHeading(decodeURIComponent(rawId));
-      } catch {
-        /* malformed anchor */
-      }
+      // 渐进路径同样按三形态候选弥合（scrollToHeading 只认渲染 id 形态，
+      // 原文直传必然 miss）；全 miss 冲刷 pendingHeading 防残留。
+      scrollProgressivePreviewHeading(progressivePreviewRef.value, rawId);
       return;
     }
     // 静态预览：三形态归一查找（原文/heading-原文/headingIdFromText 形态）
@@ -4327,6 +4330,12 @@ async function confirmNewFile(): Promise<void> {
   if (!requireBoundWorkspace(t('notebook.actions.newFile'))) return;
   const name = newFileName.value.trim();
   if (!name) return;
+  // 入口守卫：/ 与 Windows 非法字符提前报具体错误（不再静默建目录/底层模糊报错）
+  const invalidNameError = invalidFileNameError(name);
+  if (invalidNameError) {
+    toast.show(invalidNameError, 'warning', 3000);
+    return;
+  }
   if (!isSupportedNoteFile(name)) {
     toast.show(
       t('notebook.error.unsupportedFiles', { formats: supportedNoteExtensionsText }),
@@ -4975,6 +4984,17 @@ const readerWorkbenchRef = ref<HTMLElement | null>(null);
 const staticPreviewRef = ref<HTMLElement | null>(null);
 const renderedPreviewSource = ref<string | null>(null);
 
+// 切笔记滚动复位（E6）：渐进路径经 :key 重挂载天然回顶；静态 v-html 路径
+// 容器复用不重建——沿 ProgressivePreview 同一 key 感知笔记切换，复位滚容器。
+watch(
+  () => `${activeNotebookRoot.value}:${shellActivePath.value}:${externalFilePath.value}`,
+  () => {
+    if (isLargeDocument.value) return;
+    resetStaticPreviewScroll(readerWorkbenchRef.value, staticPreviewRef.value);
+  },
+  { flush: 'post' },
+);
+
 // --- Document position and navigation ---（导航块原样迁出至 useDocumentNavigation，工单 B3）
 const {
   activeDocumentPosition,
@@ -5109,7 +5129,8 @@ async function onDeleteCustomTemplate(id: string): Promise<void> {
 async function onTemplateSelect(_tpl: unknown, content: string): Promise<void> {
   if (!requireBoundWorkspace(t('notebook.actions.createFromTemplate'))) return;
   const titleMatch = content.match(/^#\s+(.+)$/m);
-  const name = titleMatch?.[1]?.trim() || t('notebook.actions.newNote');
+  // H1 标题经基名消毒再拼路径：模板里的 / 与 Windows 非法字符不再静默建目录
+  const name = sanitizeFileBasename(titleMatch?.[1]?.trim() ?? '') || t('notebook.actions.newNote');
   const path = `/${name}.md`;
   showTemplate.value = false;
   isNoteSwitching.value = true;
@@ -5147,7 +5168,11 @@ async function onTemplateSelect(_tpl: unknown, content: string): Promise<void> {
 
 async function onCreateBlank(): Promise<void> {
   if (!requireBoundWorkspace(t('notebook.actions.newNote'))) return;
-  const today = new Date().toISOString().slice(0, 10);
+  // 本地口径日期键：与模板 {{date}} 同轴（toISOString 是 UTC，本地零点前后会错日）
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate(),
+  ).padStart(2, '0')}`;
   const path = `/${t('notebook.file.blankName', { date: today })}`;
   const content = t('notebook.file.blankContent');
   showTemplate.value = false;

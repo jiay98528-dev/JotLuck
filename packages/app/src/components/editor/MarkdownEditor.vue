@@ -191,6 +191,9 @@ const internallyEmittedValues = new Set<string>();
 let activePendingAction: FormatAction | null = null;
 let pendingInlineMarkers: readonly [string, string] | null = null;
 let deferredPendingAction: FormatAction | null = null;
+/** 段落预设应用后的光标锚点：选区离开锚点才视为"用户已移走"，防止应用
+ *  预设自身的 dispatch 触发 selectionchange 误清待格式态。 */
+let pendingFormatAnchor: number | null = null;
 let locationFrame: number | null = null;
 let userScrolling = false;
 
@@ -499,6 +502,20 @@ function finishPendingInline(): void {
   }
 }
 
+/**
+ * 段落预设待格式态泄漏清理（E4）：预设（标题/引用）置 pending 后不随交互
+ * 清理，下一次任意位置 Enter 会被劫持为裸换行、短路智能续格式。指针落下
+ * （编辑器内外皆算"移走"）或选区离开预设锚点时清空；inline 动作语义保持
+ * 现状（其定界符对与位置绑定，Enter 退出语义不变）。
+ */
+function clearStaleParagraphPendingFormat(): void {
+  if (!activePendingAction || isInlineFormatAction(activePendingAction)) return;
+  activePendingAction = null;
+  pendingInlineMarkers = null;
+  pendingFormatAnchor = null;
+  emit('pending-format-ended');
+}
+
 function applyPendingFormat(action: FormatAction | null): void {
   if (!view) return;
 
@@ -513,10 +530,14 @@ function applyPendingFormat(action: FormatAction | null): void {
 
   if (activePendingAction && pendingInlineMarkers) finishPendingInline();
 
+  const previousAction = activePendingAction;
   activePendingAction = action === 'clear' ? null : action;
   pendingInlineMarkers = null;
+  pendingFormatAnchor = null;
   if (!activePendingAction) {
-    view.focus();
+    // 清理型回灌（如交互清理后宿主把 prop 置 null）：先前无活动态时不抢焦点
+    //（用户可能正点击编辑器之外的面板）。
+    if (previousAction) view.focus();
     return;
   }
 
@@ -532,6 +553,8 @@ function applyPendingFormat(action: FormatAction | null): void {
     const preset = activePendingAction as ParagraphPreset;
     const edit = applyParagraphPreset(view.state.doc.toString(), cursor, cursor, preset, true);
     view.dispatch({ changes: edit.changes, selection: edit.selection });
+    // 段落预设锚点 = 应用后的光标位：选区仍在锚点说明是本应用的回声事件
+    pendingFormatAnchor = view.state.selection.main.head;
   }
   view.focus();
 }
@@ -554,6 +577,7 @@ function handlePendingFormatEnter(editorView: EditorView): boolean {
     });
     activePendingAction = null;
     pendingInlineMarkers = null;
+    pendingFormatAnchor = null;
     emit('pending-format-ended');
     return true;
   }
@@ -566,6 +590,7 @@ function handlePendingFormatEnter(editorView: EditorView): boolean {
   });
   activePendingAction = null;
   pendingInlineMarkers = null;
+  pendingFormatAnchor = null;
   emit('pending-format-ended');
   return true;
 }
@@ -857,6 +882,8 @@ function onInteractionPointerDown(event: PointerEvent): void {
     )
   )
     return;
+  // 交互指针落下（格式 UI 之外皆算"移走"）：清理段落预设待格式态
+  clearStaleParagraphPendingFormat();
   if (!view.contentDOM.contains(target)) {
     clearInteractionSelection(view);
     emit('selection-change', null);
@@ -885,6 +912,11 @@ function onSelectionChange(): void {
     (!view.hasFocus && !view.contentDOM.contains(document.getSelection()?.anchorNode ?? null))
   )
     return;
+  // 选区变化离开预设锚点（点击他处/方向键/输入推进）：清理段落预设待格式态。
+  // 锚点相等时为 applyPendingFormat 自身 dispatch 的回声，保留待格式态。
+  if (pendingFormatAnchor !== null && view.state.selection.main.head !== pendingFormatAnchor) {
+    clearStaleParagraphPendingFormat();
+  }
   const sel = rememberEditorSelection(view);
   if (sel.native) notifyCursor(view);
   emit('selection-change', { from: sel.from, to: sel.to });

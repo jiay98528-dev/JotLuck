@@ -367,6 +367,7 @@ export const messages = {
     noMatchHint: '別のキーワードをお試しください',
     fileActions: 'ファイル操作',
     rename: '名前を変更',
+    renameInvalid: 'ファイル名に使用できない文字：{chars}',
     openReadonly: '読み取り専用で開く',
     delete: '削除',
   },
@@ -1044,6 +1045,7 @@ export const messages = {
       workspaceBusy: 'ノートブックを切り替え中のため、{action}は一時的に利用できません。',
       chooseNotebookFirst: 'ノートブックフォルダーを選択してから「{action}」を実行してください。',
       unsupportedFiles: '対応するのは {formats} ファイルだけです',
+      invalidFileName: 'ファイル名に使用できない文字：{chars}',
       noteNotFound: 'ノートが見つかりません：{title}',
     },
     toast: {

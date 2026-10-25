@@ -370,6 +370,7 @@ export const messages = {
     noMatchHint: 'Try another search',
     fileActions: 'File actions',
     rename: 'Rename',
+    renameInvalid: 'File names cannot contain: {chars}',
     openReadonly: 'Open read-only',
     delete: 'Delete',
   },
@@ -1058,6 +1059,7 @@ export const messages = {
       workspaceBusy: 'The notebook is switching, so {action} is temporarily unavailable.',
       chooseNotebookFirst: 'Choose a notebook folder before you {action}.',
       unsupportedFiles: 'Only {formats} files are supported',
+      invalidFileName: 'File names cannot contain: {chars}',
       noteNotFound: 'Note not found: {title}',
     },
     toast: {

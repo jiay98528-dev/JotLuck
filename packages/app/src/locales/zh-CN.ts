@@ -369,6 +369,7 @@ export const messages = {
     noMatchHint: '尝试其他关键词',
     fileActions: '文件操作',
     rename: '重命名',
+    renameInvalid: '文件名不能包含：{chars}',
     openReadonly: '以只读打开',
     delete: '删除',
   },
@@ -880,6 +881,7 @@ export const messages = {
       workspaceBusy: '正在切换笔记本，暂时不能{action}。',
       chooseNotebookFirst: '请先选择笔记本文件夹，再{action}。',
       unsupportedFiles: '仅支持 {formats} 文件',
+      invalidFileName: '文件名不能包含以下字符：{chars}',
       noteNotFound: '未找到笔记：{title}',
     },
     toast: {

@@ -18,6 +18,12 @@ export const CUSTOM_TEMPLATE_DIR = '/.jotluck/templates';
 
 const PADDED = (n: number): string => String(n).padStart(2, '0');
 
+/** 本地口径日期键（YYYY-MM-DD）：{{date}}/{{datetime}}/{{weekRange}} 与
+ *  {{time}} 等本地 getter 占位符同轴——此前 toISOString() 混用 UTC，会在
+ *  本地零点前后产出"昨天/明天"的错日文件名与模板头。 */
+const localDateKey = (d: Date): string =>
+  `${d.getFullYear()}-${PADDED(d.getMonth() + 1)}-${PADDED(d.getDate())}`;
+
 export function renderTemplate(
   template: string,
   date: Date = new Date(),
@@ -30,9 +36,14 @@ export function renderTemplate(
   weekEnd.setDate(weekStart.getDate() + 6);
 
   return template
-    .replace(/\{\{date\}\}/g, date.toISOString().slice(0, 10))
+    .replace(/\{\{date\}\}/g, localDateKey(date))
     .replace(/\{\{time\}\}/g, `${PADDED(date.getHours())}:${PADDED(date.getMinutes())}`)
-    .replace(/\{\{datetime\}\}/g, date.toISOString().replace('T', ' ').slice(0, 19))
+    .replace(
+      /\{\{datetime\}\}/g,
+      `${localDateKey(date)} ${PADDED(date.getHours())}:${PADDED(date.getMinutes())}:${PADDED(
+        date.getSeconds(),
+      )}`,
+    )
     .replace(/\{\{year\}\}/g, String(date.getFullYear()))
     .replace(/\{\{month\}\}/g, PADDED(date.getMonth() + 1))
     .replace(/\{\{day\}\}/g, PADDED(date.getDate()))
@@ -47,10 +58,7 @@ export function renderTemplate(
       // i18n-dynamic-key: dayKeys is a closed tuple matching templates.weekdays.
       translateForLocale(locale, `templates.weekdays.${dayKeys[date.getDay()]}`),
     )
-    .replace(
-      /\{\{weekRange\}\}/g,
-      `${weekStart.toISOString().slice(0, 10)} ~ ${weekEnd.toISOString().slice(0, 10)}`,
-    );
+    .replace(/\{\{weekRange\}\}/g, `${localDateKey(weekStart)} ~ ${localDateKey(weekEnd)}`);
 }
 
 export function previewTemplate(

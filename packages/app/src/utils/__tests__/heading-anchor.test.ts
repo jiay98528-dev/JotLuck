@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { headingAnchorCandidates, findHeadingElement } from '../heading-anchor';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  headingAnchorCandidates,
+  findHeadingElement,
+  scrollProgressivePreviewHeading,
+} from '../heading-anchor';
 
 describe('headingAnchorCandidates 三形态候选', () => {
   it('中文标题：原文直通形态与归一形态去重合并', () => {
@@ -98,5 +102,48 @@ describe('findHeadingElement DOM 归一查找', () => {
     // 归一形态（headingIdFromText 把 \s 折叠为连字符）命中不受跳过影响
     const normalized = containerWith('<h2 id="heading-标-题">标题</h2>');
     expect(findHeadingElement(normalized, '标\r题')).toBe(normalized.querySelector('h2'));
+  });
+});
+
+describe('scrollProgressivePreviewHeading 渐进路径锚点解析（E5）', () => {
+  function fakePreview(hitIds: string[]) {
+    return {
+      scrollToHeading: vi.fn((id: string) => hitIds.includes(id)),
+      cancelNavigation: vi.fn(),
+    };
+  }
+
+  it('原文直传 miss 后按三形态候选续试：归一形态命中即停', () => {
+    // scrollToHeading 只认渲染 id 形态：原文/heading-原文 miss，第三形态命中
+    const preview = fakePreview(['heading-a-b-标题']);
+    const matched = scrollProgressivePreviewHeading(preview, 'A B 标题!');
+
+    expect(matched).toBe(true);
+    expect(preview.scrollToHeading).toHaveBeenCalledTimes(3);
+    expect(preview.scrollToHeading).toHaveBeenNthCalledWith(1, 'A B 标题!');
+    expect(preview.scrollToHeading).toHaveBeenNthCalledWith(2, 'heading-A B 标题!');
+    expect(preview.scrollToHeading).toHaveBeenNthCalledWith(3, 'heading-a-b-标题');
+    // 命中即停：不调 cancelNavigation，未决导航（pendingHeading）保留
+    expect(preview.cancelNavigation).not.toHaveBeenCalled();
+  });
+
+  it('前一形态命中即停：不浪费后续候选', () => {
+    const preview = fakePreview(['基础']);
+    expect(scrollProgressivePreviewHeading(preview, '%E5%9F%BA%E7%A1%80')).toBe(true);
+    expect(preview.scrollToHeading).toHaveBeenCalledTimes(1);
+    expect(preview.cancelNavigation).not.toHaveBeenCalled();
+  });
+
+  it('三形态全 miss：冲刷 pendingHeading（cancelNavigation）并返回 false', () => {
+    const preview = fakePreview([]);
+    expect(scrollProgressivePreviewHeading(preview, '不存在的标题')).toBe(false);
+    expect(preview.cancelNavigation).toHaveBeenCalledTimes(1);
+  });
+
+  it('空锚：恒 miss 且仍冲刷未决导航', () => {
+    const preview = fakePreview([]);
+    expect(scrollProgressivePreviewHeading(preview, '')).toBe(false);
+    expect(preview.scrollToHeading).not.toHaveBeenCalled();
+    expect(preview.cancelNavigation).toHaveBeenCalledTimes(1);
   });
 });

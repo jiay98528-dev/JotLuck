@@ -374,6 +374,7 @@ export const messages = {
     noMatchHint: 'Essayez un autre mot-clé',
     fileActions: 'Actions du fichier',
     rename: 'Renommer',
+    renameInvalid: 'Les noms de fichiers ne peuvent pas contenir : {chars}',
     openReadonly: 'Ouvrir en lecture seule',
     delete: 'Supprimer',
   },
@@ -1080,6 +1081,7 @@ export const messages = {
         'Le carnet est en cours de changement ; « {action} » est temporairement indisponible.',
       chooseNotebookFirst: 'Choisissez un dossier de carnet avant « {action} ».',
       unsupportedFiles: 'Seuls les fichiers {formats} sont pris en charge',
+      invalidFileName: 'Les noms de fichiers ne peuvent pas contenir : {chars}',
       noteNotFound: 'Note introuvable : {title}',
     },
     toast: {

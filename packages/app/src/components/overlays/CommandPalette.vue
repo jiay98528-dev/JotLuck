@@ -311,6 +311,9 @@ function scrollSelectedIntoView(): void {
 // ============================================================
 
 function handleKeydown(e: KeyboardEvent): void {
+  // IME 组合守卫（对齐 MarkdownEditor 既有先例）：组合期 Enter 是确认候选、
+  // Escape 是取消组合，都不属于面板导航——不误选、不误关。
+  if (e.isComposing || e.keyCode === 229) return;
   switch (e.key) {
     case 'Escape':
       e.preventDefault();
@@ -351,6 +354,8 @@ function handleKeydown(e: KeyboardEvent): void {
  * while results are updating. Keep the visible overlay as the final close owner.
  */
 function handleWindowKeydown(event: KeyboardEvent): void {
+  // IME 组合守卫同 handleKeydown：组合期 Escape 取消的是输入法组合，不是面板
+  if (event.isComposing || event.keyCode === 229) return;
   if (!props.visible || event.key !== 'Escape') return;
   event.preventDefault();
   event.stopPropagation();

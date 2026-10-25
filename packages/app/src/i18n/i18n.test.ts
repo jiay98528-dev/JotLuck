@@ -163,6 +163,7 @@ describe('localized program content', () => {
   });
 
   it('keeps stable machine placeholders while localizing natural-language wrappers', async () => {
+    // 2026-06-03 为周三：本地口径下 weekStart/weekEnd 为 05-31（周日）/06-06（周六）
     const date = new Date(2026, 5, 3, 9, 7, 8);
     await setLocale('en', { persist: false });
     const rendered = renderTemplate(
@@ -171,8 +172,13 @@ describe('localized program content', () => {
       'en',
     );
 
-    expect(rendered).toContain(date.toISOString().slice(0, 10));
+    // 本地口径（E1）：Date 由本地分量构造，占位符输出须与本地日历一致——
+    // 此前 {{date}}/{{datetime}}/{{weekRange}} 走 toISOString（UTC）会在
+    // 本地零点前后错日；{{time}} 本就本地，现同轴。
+    expect(rendered).toContain('2026-06-03');
     expect(rendered).toContain('09:07');
+    expect(rendered).toContain('2026-06-03 09:07:08');
+    expect(rendered).toContain('2026-05-31 ~ 2026-06-06');
     expect(rendered).toContain('Wednesday');
     expect(rendered).not.toContain('{{');
   });

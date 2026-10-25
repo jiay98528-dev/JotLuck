@@ -5,7 +5,7 @@ import {
   documentAnalysisReady,
 } from './cm6-document-analysis';
 import { isLargeDocument } from '@/services/document-analysis';
-import type { DocumentAst, BlockNode } from '@jotluck/renderer';
+import type { DocumentAst, BlockNode, ListItemKind } from '@jotluck/renderer';
 /**
  * cm6-live-preview — CodeMirror 6 块级即时渲染
  *
@@ -339,6 +339,17 @@ function keyFamilyOf(raw: string): string {
   return raw.substring(0, 32);
 }
 
+/**
+ * 列表家族：AST ListItemNode 只有 kind/delimiter（renderer continuation 才有
+ * family 字段）。ordered kind 恒有序；task 带有序定界符（`1. [x]`）为 GFM
+ * 有序任务（family=ordered）——此前按 kind 误判 unordered，丢序号丢 checkbox
+ * 且拆组致相邻序号重排。
+ */
+function listItemFamily(node: { kind: ListItemKind; delimiter?: string }): 'ordered' | 'unordered' {
+  if (node.kind === 'ordered') return 'ordered';
+  return node.kind === 'task' && node.delimiter !== undefined ? 'ordered' : 'unordered';
+}
+
 function groupKey(lineNumber: number): string {
   return `G${lineNumber}`;
 }
@@ -640,11 +651,17 @@ function parseLiveBlocks(
     if (node.type === 'listItem' && !render) {
       const raw = normalizedLine(node.lineFrom);
       const markerSlice = ast.source.slice(node.markerRange.from, node.markerRange.to);
+      // 家族以 AST family 口径分派（GFM 有序任务 `1. [x]` 属 ordered）：
+      // 有序家族 ')' 定界降级 paragraph；有序任务保序号+checkbox（taskListItem
+      // + itemIndex）；无序家族维持现行奇偶（仅 `- [ ]`/`- [x]` 判任务）。
+      const family = listItemFamily(node);
       const type: BlockType =
-        node.kind === 'ordered'
+        family === 'ordered'
           ? node.delimiter === ')'
             ? 'paragraph'
-            : 'orderedListItem'
+            : node.kind === 'task' && /^\d+[.)] \[[ x]\]$/.test(markerSlice)
+              ? 'taskListItem'
+              : 'orderedListItem'
           : node.kind === 'task' && /^[-－] \[[ x]\]$/.test(markerSlice)
             ? 'taskListItem'
             : 'unorderedListItem';
@@ -658,7 +675,8 @@ function parseLiveBlocks(
         markerRange: node.markerRange,
         // 内容区间（标记后空白之后）——注解投影用；与 render 路径同源（AST contentRange）
         contentRange: node.contentRange,
-        itemIndex: node.itemIndex,
+        // 序号仅有序家族携带（无序任务不带 itemIndex，与 render 路径口径一致）
+        ...(family === 'ordered' ? { itemIndex: node.itemIndex } : {}),
         groupKey: `G${node.groupRange.from}`,
         position:
           node.range.from === node.groupRange.from
@@ -672,12 +690,12 @@ function parseLiveBlocks(
       continue;
     }
     if (node.type === 'listItem') {
-      const family = node.kind === 'ordered' ? 'ordered' : 'unordered';
+      const family = listItemFamily(node);
       let end = idx + 1;
       while (end < nodes.length) {
         const next = nodes[end]!;
         if (next.type !== 'listItem') break;
-        if ((next.kind === 'ordered' ? 'ordered' : 'unordered') !== family) break;
+        if (listItemFamily(next) !== family) break;
         end++;
       }
       // 降级为 paragraph 的行会把组截断为「段」；段为最终组，
@@ -720,7 +738,12 @@ function parseLiveBlocks(
         itemIndex++;
         let blockType: BlockType = 'unorderedListItem';
         if (family === 'ordered') {
-          blockType = 'orderedListItem';
+          // 有序任务（`1. [x]` 小写 x/空格）渲染为带序号的任务项；其余为纯有序项
+          const markerSlice = ast.source.slice(item.markerRange.from, item.markerRange.to);
+          blockType =
+            item.kind === 'task' && /^\d+[.)] \[[ x]\]$/.test(markerSlice)
+              ? 'taskListItem'
+              : 'orderedListItem';
         } else if (item.kind === 'task') {
           // 现行奇偶：仅「- [ ] / - [x]」（dash Bullet + 小写 x/空格）为任务项；
           // 其余 task（[X] 或 * / + Bullet）降级为无序项。全角 － 与旧归一化行为一致仍判任务。
@@ -868,22 +891,29 @@ function renderBlockHtml(
 
       case 'unorderedListItem':
       case 'taskListItem': {
-        // Strip outer <ul> wrapper — each item is independently rendered,
+        // Strip outer list wrapper — each item is independently rendered,
         // CSS ::before pseudo-elements + adjacent selectors connect them visually.
         const raw = renderBlock(block.raw, block.type, refDefs, options);
-        const checked = /^\s*[-*+]\s+\[[xX]\]\s/.test(block.raw);
+        // 勾选态两形：无序 `- [x]` 与有序 `1. [x]`（有序任务同型分派见 parseLiveBlocks）
+        const checked =
+          /^\s*[-*+]\s+\[[xX]\]\s/.test(block.raw) || /^\s*\d+[.)]\s+\[[xX]\]\s/.test(block.raw);
         const toggleLabel = checked
           ? translate('program.taskIncomplete')
           : translate('program.taskComplete');
         const toggle = `<input type="checkbox" class="cm-task-toggle" aria-label="${escapeAttr(toggleLabel)}" ${checked ? 'checked ' : ''}/>`;
         const inner = raw
-          .replace(/<\/?ul>\n?/g, '')
+          .replace(/<\/?[ou]l[^>]*>\n?/g, '')
           .replace(/<\/?li>/g, '')
           .replace(/<input[^>]*>/i, '')
           .trim();
+        // 有序任务：序号列保留 N.（itemIndex 仅有序家族携带），复选框随其后
+        const ordinal =
+          block.itemIndex !== undefined
+            ? `<span class="cm-list-marker">${block.itemIndex}.</span>`
+            : '';
         const marker =
           block.type === 'taskListItem'
-            ? toggle
+            ? `${ordinal}${toggle}`
             : '<span class="cm-list-marker" aria-hidden="true">•</span>';
         return wrapBlockHtml(
           `<span class="cm-list-marker-slot">${marker}</span><span class="cm-list-content">${inner || '&nbsp;'}</span>`,
@@ -896,8 +926,11 @@ function renderBlockHtml(
         // Marked produces <ol><li>content</li></ol>, we want "N. content".
         const raw = renderBlock(block.raw, 'paragraph', refDefs, options);
         const text = raw
-          .replace(/<\/?ol>\n?/g, '')
+          .replace(/<\/?ol[^>]*>\n?/g, '')
           .replace(/<\/?li>/g, '')
+          // GFM 任务项（如降级为大写 X 的 `1. [X]`）marked 会内联 disabled
+          // 复选框——纯有序项内容里剥除，防残留只读控件
+          .replace(/<input[^>]*>/i, '')
           .replace(/^<p>/, '')
           .replace(/<\/p>\n?$/, '');
         const num = block.itemIndex ?? 1;
@@ -1230,14 +1263,14 @@ function toggleTaskListItemAtWidget(view: EditorView, widget: Element): boolean 
       ? view.state.doc.lineAt(block.from)
       : view.state.doc.lineAt(view.posAtDOM(widget));
   const lineText = line.text;
-  const uncheckedRe = /^(\s*[-*+]\s+)\[ \]\s?/;
-  const checkedRe = /^(\s*[-*+]\s+)\[x\]\s?/;
+  // 任务勾选切换两形：无序 `- [ ]`/`- [x]` 与有序 `1. [ ]`/`1. [x]`（GFM 有序任务）
+  const taskRe = /^(\s*(?:[-*+]|\d+[.)])\s+)\[([ x])\]\s?/;
+  const taskMatch = taskRe.exec(lineText);
 
   let newText = lineText;
-  if (uncheckedRe.test(lineText)) {
-    newText = lineText.replace(uncheckedRe, '$1[x] ');
-  } else if (checkedRe.test(lineText)) {
-    newText = lineText.replace(checkedRe, '$1[ ] ');
+  if (taskMatch) {
+    const next = taskMatch[2] === ' ' ? 'x' : ' ';
+    newText = lineText.replace(taskRe, `$1[${next}] `);
   }
 
   if (newText === lineText) return false;

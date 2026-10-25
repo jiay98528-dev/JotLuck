@@ -414,18 +414,27 @@
                   <span v-if="renamingPath !== node.entry.path" class="tree-name">
                     {{ node.entry.name }}
                   </span>
-                  <input
-                    v-else
-                    :ref="setRenameInputRef"
-                    v-model="renameValue"
-                    class="tree-rename-input"
-                    type="text"
-                    spellcheck="false"
-                    @keydown.enter.stop.prevent="commitRename"
-                    @keydown.escape.stop.prevent="cancelRename"
-                    @blur="commitRename"
-                    @click.stop
-                  />
+                  <template v-else>
+                    <input
+                      :ref="setRenameInputRef"
+                      v-model="renameValue"
+                      class="tree-rename-input"
+                      :class="{ 'tree-rename-input--invalid': renameError }"
+                      type="text"
+                      spellcheck="false"
+                      :aria-invalid="renameError ? 'true' : undefined"
+                      :aria-label="renameError || undefined"
+                      @keydown.enter.stop.prevent="commitRename"
+                      @keydown.escape.stop.prevent="cancelRename"
+                      @blur="commitRename"
+                      @click.stop
+                    />
+                    <!-- 重命名守卫：非法字符（含 / 与 Windows 保留字符）就地报错，
+                         不再静默建目录或落到底层 fs 的模糊报错 -->
+                    <span v-if="renameError" class="tree-rename-error" role="alert">
+                      {{ renameError }}
+                    </span>
+                  </template>
                 </div>
               </template>
 
@@ -542,6 +551,7 @@ import {
   isSupportedNoteFile,
   stripSupportedNoteExtension,
 } from '@/utils/note-files';
+import { invalidFileNameCharsIn } from '@/utils/draft-file-name';
 import { useDialogFocus } from '@/composables/useDialogFocus';
 import { createLocaleCollator, currentLocale } from '@/i18n';
 import { useI18n } from 'vue-i18n';
@@ -601,7 +611,12 @@ const searchQuery = ref('');
 const expandedDirs = ref<Set<string>>(new Set());
 const renamingPath = ref<string | null>(null);
 const renameValue = ref('');
+const renameError = ref('');
 const renameInputEl = ref<HTMLInputElement | null>(null);
+// 再编辑即撤销错误态：报错只对"当前这份输入"负责
+watch(renameValue, () => {
+  renameError.value = '';
+});
 const overlayRef = ref<HTMLDivElement | null>(null);
 useDialogFocus({
   visible: () => props.visible,
@@ -787,6 +802,7 @@ function onAfterLeave(): void {
   searchQuery.value = '';
   renamingPath.value = null;
   renameValue.value = '';
+  renameError.value = '';
   contextMenu.value.visible = false;
 }
 
@@ -916,6 +932,7 @@ function handleItemDblClick(node: FlatNode): void {
 function startRename(path: string, currentName: string): void {
   renamingPath.value = path;
   renameValue.value = currentName;
+  renameError.value = '';
   void nextTick(() => {
     const input = renameInputEl.value;
     if (input) {
@@ -938,8 +955,17 @@ function commitRename(): void {
   const oldName = oldPath.includes('/') ? oldPath.substring(oldPath.lastIndexOf('/') + 1) : oldPath;
   const newName = preserveSupportedExtension(oldName, renameValue.value.trim());
 
+  // 入口守卫：非法字符就地报具体错误并保留编辑态（/ 不再静默建目录）
+  const invalidChars = invalidFileNameCharsIn(newName);
+  if (invalidChars.length > 0) {
+    renameError.value = t('fileDrawer.renameInvalid', { chars: invalidChars.join(' ') });
+    renameInputEl.value?.focus();
+    return;
+  }
+
   renamingPath.value = null;
   renameValue.value = '';
+  renameError.value = '';
 
   if (newName.length === 0) return;
 
@@ -951,6 +977,7 @@ function commitRename(): void {
 function cancelRename(): void {
   renamingPath.value = null;
   renameValue.value = '';
+  renameError.value = '';
   // 取消重命名后 input DOM 移除 → 焦点丢失 → 重新聚焦 overlay 恢复键盘关闭能力
   nextTick().then(() => overlayRef.value?.focus());
 }
@@ -1556,6 +1583,29 @@ watch(
   outline: none;
   caret-color: var(--accent);
   min-width: 0;
+}
+
+.tree-rename-input--invalid {
+  border-color: var(--signal-error);
+}
+
+/* 重命名非法字符提示：绝对定位悬浮在行下方，不破坏单行树布局 */
+.tree-rename-error {
+  position: absolute;
+  top: 100%;
+  inset-inline-start: var(--space-12);
+  z-index: 2;
+  max-width: calc(100% - var(--space-16));
+  padding: 2px var(--space-4);
+  border-radius: var(--radius-xs);
+  background: var(--signal-error-soft);
+  color: var(--signal-error);
+  font-size: var(--text-xs);
+  line-height: var(--lh-ui);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
 }
 
 /* ============================================================

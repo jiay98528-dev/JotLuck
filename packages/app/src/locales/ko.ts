@@ -366,6 +366,7 @@ export const messages = {
     noMatchHint: '다른 검색어를 사용해 보세요',
     fileActions: '파일 작업',
     rename: '이름 바꾸기',
+    renameInvalid: '파일 이름에 사용할 수 없는 문자: {chars}',
     openReadonly: '읽기 전용으로 열기',
     delete: '삭제',
   },
@@ -1039,6 +1040,7 @@ export const messages = {
       workspaceBusy: '노트북을 전환 중이므로 {action} 작업을 잠시 사용할 수 없습니다.',
       chooseNotebookFirst: '노트북 폴더를 선택한 뒤 {action} 작업을 실행하세요.',
       unsupportedFiles: '{formats} 파일만 지원합니다',
+      invalidFileName: '파일 이름에 사용할 수 없는 문자: {chars}',
       noteNotFound: '노트를 찾을 수 없습니다: {title}',
     },
     toast: {

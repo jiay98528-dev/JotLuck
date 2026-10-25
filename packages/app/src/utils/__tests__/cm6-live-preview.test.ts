@@ -692,6 +692,55 @@ describe('cm6 live preview unified AST adapter', () => {
     expect(ordered[0]?.html).toContain('>1.</span>');
     expect(ordered[1]?.html).toContain('>1.</span>');
   });
+
+  it('renders GFM ordered tasks in the ordered family: 保序号+checkbox 且不拆组重排（E3）', () => {
+    const blocks = __parseLiveBlocksForTest('1. [x] 甲\n2. 乙');
+
+    expect(blocks).toHaveLength(2);
+    // 有序任务：taskListItem + 内联序号 1. + 复选框（checked 态）
+    expect(blocks[0]?.type).toBe('taskListItem');
+    expect(blocks[0]?.html).toContain('>1.</span>');
+    expect(blocks[0]?.html).toContain('cm-task-toggle');
+    expect(blocks[0]?.html).toContain('checked');
+    // 相邻纯有序项同组连续编号（旧实现拆组致其重排为 1.）
+    expect(blocks[1]?.type).toBe('orderedListItem');
+    expect(blocks[1]?.html).toContain('>2.</span>');
+  });
+
+  it('downgrades uppercase-X ordered tasks to plain ordered items（现行奇偶对称）', () => {
+    const blocks = __parseLiveBlocksForTest('1. [X] 大写\n2. 乙');
+
+    expect(blocks[0]?.type).toBe('orderedListItem');
+    expect(blocks[0]?.html).not.toContain('cm-task-toggle');
+    // marked 内联的 disabled 复选框须剥除，不残留只读控件
+    expect(blocks[0]?.html).not.toContain('<input');
+    expect(blocks[1]?.html).toContain('>2.</span>');
+  });
+});
+
+describe('cm6 live preview GFM ordered task widgets（E3 live 分派）', () => {
+  it('live 路径渲染保序号+checkbox，点击复选框切换 1. [x] ↔ 1. [ ]', async () => {
+    // 光标置于尾部段：两行列表均为非聚焦渲染块
+    const view = mountLiveEditor('1. [x] 甲\n2. 乙\n\n尾部', 15);
+
+    const task = await vi.waitFor(() => {
+      const block = findRenderedBlock(view, '甲');
+      expect(block).toBeDefined();
+      return block!;
+    });
+    expect(task.getAttribute('data-block-type')).toBe('taskListItem');
+    expect(task.textContent).toContain('1.');
+    const checkbox = task.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    expect(checkbox).not.toBeNull();
+
+    const ordered = findRenderedBlock(view, '乙');
+    expect(ordered?.getAttribute('data-block-type')).toBe('orderedListItem');
+    expect(ordered?.textContent).toContain('2.');
+
+    // 复选框点击切换源码勾选态（toggle 管线接纳有序任务行）
+    checkbox!.click();
+    expect(view.state.doc.toString()).toBe('1. [ ] 甲\n2. 乙\n\n尾部');
+  });
 });
 
 describe('cm6 live preview focused-line ghost syntax', () => {
