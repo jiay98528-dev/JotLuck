@@ -77,7 +77,7 @@ describe('computeReviewDiff', () => {
     expect(hunk.leftAnchor).toBe(0);
   });
 
-  it('整段删除 → 整块 delete hunk', () => {
+  it('整段删除 → 整块 delete hunk（带 blockLevelDelete 旗标）', () => {
     const source = 'para one\n\npara two\n\npara three';
     const working = 'para one\n\npara two';
     const hunks = computeReviewDiff(source, working);
@@ -87,6 +87,8 @@ describe('computeReviewDiff', () => {
     expect(hunk.leftText).toBe('para three');
     expect(hunk.rightText).toBe('');
     expect(hunk.rightRange).toBeUndefined();
+    // 块级整块删除：丢弃时按块语义补空行分隔（与 insert 侧 blockLevelInsert 对称）
+    expect(hunk.blockLevelDelete).toBe(true);
     expect(source.slice(hunk.leftRange!.from, hunk.leftRange!.to)).toBe('para three');
   });
 
@@ -144,11 +146,24 @@ describe('computeReviewDiff', () => {
     expect(hunk.leftText).toBe('');
     expect(hunk.rightText).toBe('（已修订）');
     expect(working.slice(hunk.rightRange!.from, hunk.rightRange!.to)).toBe('（已修订）');
-    // 块内纯新增段：锚点为近似值，但必须落在配对的左块（导语段落）区间内
+    // 块内纯新增段（段尾新增）：精确锚点 = 配对块起点 + 段级对齐下标，
+    // 段尾对齐点即块末尾（历史近似实现曾退化为块起点，采纳错位不收敛）
     const paraFrom = source.indexOf('导语段落');
     const paraTo = paraFrom + '导语段落'.length;
-    expect(hunk.leftAnchor).toBeGreaterThanOrEqual(paraFrom);
-    expect(hunk.leftAnchor).toBeLessThanOrEqual(paraTo);
+    expect(hunk.leftAnchor).toBe(paraTo);
+  });
+
+  it('块内段中词级新增 → leftAnchor = 块起点 + 段级对齐下标（精确插入位）', () => {
+    const source = '第一段甲乙\n\n第二段丙丁';
+    const working = '第一段甲新乙\n\n第二段丙丁';
+    const hunks = computeReviewDiff(source, working);
+    expect(hunks).toHaveLength(1);
+    const hunk = hunks[0]!;
+    expect(hunk.type).toBe('insert');
+    expect(hunk.rightText).toBe('新');
+    // 「新」在「甲」与「乙」之间：块起点 0 + 对齐下标 4（词级新增非块级）
+    expect(hunk.leftAnchor).toBe(4);
+    expect(hunk.blockLevelInsert).toBeUndefined();
   });
 
   it('frontmatter 变化 → 词级 modify', () => {

@@ -52,6 +52,93 @@ describe('块级新增采纳的收敛性（回归：e2e 05 幻影批注）', () 
   });
 });
 
+describe('词级新增采纳的精确锚点与收敛（回归：采纳错位永不收敛）', () => {
+  it('段中词级新增：采纳落在用户输入位置（非段首）且重算 diff 为空', () => {
+    const source = '甲乙丙丁戊己庚辛';
+    const working = '甲乙丙丁新戊己庚辛';
+    const hunks = computeReviewDiff(source, working);
+    expect(hunks).toHaveLength(1);
+    const ins = hunks[0]!;
+    expect(ins.type).toBe('insert');
+    expect(ins.rightText).toBe('新');
+    // 词级新增非块级：裸插入（不带块级旗标）
+    expect(ins.blockLevelInsert).toBeUndefined();
+    const adopted = applyHunkToSource(source, ins, hunks);
+    // 采纳逐字节还原工作稿（历史近似锚点=配对块起点，会得到「新甲乙丙丁…」）
+    expect(adopted).toBe(working);
+    expect(computeReviewDiff(adopted, working)).toEqual([]);
+  });
+
+  it('多块词级新增：按 adoptAll 降序口径全部采纳后逐字节还原工作稿', () => {
+    const source = '第一段甲乙\n\n第二段丙丁';
+    const working = '第一段甲新乙\n\n第二段丙丁末';
+    const hunks = computeReviewDiff(source, working);
+    expect(hunks.map((h) => h.type)).toEqual(['insert', 'insert']);
+    // 降序应用（源稿锚点从右向左）：左侧 hunk 坐标不因右侧改动漂移
+    let adopted = source;
+    for (const h of [...hunks].sort((a, b) => (b.leftAnchor ?? -1) - (a.leftAnchor ?? -1))) {
+      adopted = applyHunkToSource(adopted, h, hunks);
+    }
+    expect(adopted).toBe(working);
+    expect(computeReviewDiff(adopted, working)).toEqual([]);
+  });
+
+  it('拉丁词带空格新增：采纳文本保留边缘空格（insertText 未收缩字节）', () => {
+    const source = 'hello world';
+    const working = 'hello brave world';
+    const hunks = computeReviewDiff(source, working);
+    const ins = hunks.find((h) => h.type === 'insert');
+    expect(ins).toBeDefined();
+    const adopted = applyHunkToSource(source, ins!, hunks);
+    // 收缩文本（'brave'）会丢空格拼成 'hellobrave world' → 幻影批注不收敛
+    expect(adopted).toBe(working);
+    expect(computeReviewDiff(adopted, working)).toEqual([]);
+  });
+});
+
+describe('整块删除丢弃的块分隔（回归：段落粘连 + 幻影批注不收敛）', () => {
+  const source = 'P1 内容一\n\nP2 内容二\n\nP3 内容三';
+  const cases: Array<[string, string]> = [
+    ['丢弃中段', 'P1 内容一\n\nP3 内容三'],
+    ['丢弃首段', 'P2 内容二\n\nP3 内容三'],
+    ['丢弃末段', 'P1 内容一\n\nP2 内容二'],
+  ];
+  for (const [name, working] of cases) {
+    it(`${name}：回插原文、段落结构保持、重算 diff 为空`, () => {
+      const hunks = computeReviewDiff(source, working);
+      expect(hunks).toHaveLength(1);
+      const del = hunks[0]!;
+      expect(del.type).toBe('delete');
+      expect(del.blockLevelDelete).toBe(true);
+      const next = revertHunkInWorking(working, del, hunks);
+      // 逐字节还原源稿（裸回插会与相邻段粘连，如 'P1 内容一P2 内容二'）
+      expect(next).toBe(source);
+      expect(computeReviewDiff(source, next)).toEqual([]);
+    });
+  }
+
+  it('列表项整块删除：丢弃后即使分隔形态非原文也必须收敛（空块不产 hunk）', () => {
+    const source = '- 买酱油\n- 买食盐\n- 买醋';
+    const working = '- 买酱油\n- 买醋';
+    const hunks = computeReviewDiff(source, working);
+    expect(hunks).toHaveLength(1);
+    expect(hunks[0]!.blockLevelDelete).toBe(true);
+    const next = revertHunkInWorking(working, hunks[0]!, hunks);
+    expect(computeReviewDiff(source, next)).toEqual([]);
+  });
+
+  it('块内词级删除：不带块级旗标，裸回插原位收敛', () => {
+    const source = '今天天气真的很不错';
+    const working = '今天天气很不错';
+    const hunks = computeReviewDiff(source, working);
+    expect(hunks).toHaveLength(1);
+    const del = hunks[0]!;
+    expect(del.type).toBe('delete');
+    expect(del.blockLevelDelete).toBeUndefined();
+    expect(revertHunkInWorking(working, del, hunks)).toBe(source);
+  });
+});
+
 describe('review-session-store 持久化', () => {
   beforeEach(() => {
     localStorage.clear();

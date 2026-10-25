@@ -215,6 +215,9 @@ export function applyHunkToSource(
  *  - insert：rightRange 区间替换回空（纯删除新增内容）；
  *  - delete：源稿被删文本不在工作稿中 → 在推算的工作稿锚点重新插入 leftText
  *    （优先 hunk.rightRange 起点；缺失时用全集位移从 leftRange.from 反推）。
+ *    块级整块删除（blockLevelDelete）按锚点前后相邻文本补足空行分隔——
+ *    与 applyHunkToSource 的 insert 侧对称，否则回插段与相邻段粘连成一段，
+ *    重算 diff 产生幻影批注（无法收敛）。
  * 缺必要坐标抛 Error。
  *
  * @param allHunks 当前 diff 全集（delete 锚点推算用；缺省仅凭 hunk 自身坐标）
@@ -235,7 +238,13 @@ export function revertHunkInWorking(
       throw new Error(`review hunk ${hunk.id} (delete) missing working anchor`);
     }
     const at = clampPos(anchor, working.length);
-    return working.slice(0, at) + hunk.leftText + working.slice(at);
+    let insertion = hunk.leftText;
+    // 块级整块删除只携带段内文字：对称补足空行分隔（对照 adopt 侧
+    // blockLevelInsert 的 blockSeparatorBefore/After），词级删除裸回插
+    if (hunk.blockLevelDelete) {
+      insertion = blockSeparatorBefore(working, at) + insertion + blockSeparatorAfter(working, at);
+    }
+    return working.slice(0, at) + insertion + working.slice(at);
   }
 
   const range = hunk.rightRange;

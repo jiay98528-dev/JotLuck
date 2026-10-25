@@ -5,7 +5,12 @@ import { nextTick } from 'vue';
 const computeReviewDiffMock = vi.hoisted(() => vi.fn());
 vi.mock('@/utils/review-diff', () => ({ computeReviewDiff: computeReviewDiffMock }));
 
-import { useReviewSession, reviewHunksEqual } from '../useReviewSession';
+import {
+  mergeSameAnchorInserts,
+  resolveFreshHunk,
+  reviewHunksEqual,
+  useReviewSession,
+} from '../useReviewSession';
 import type { ReviewAdoptResult } from '../useReviewSession';
 import type { IFileSystemService } from '@/types/file-system';
 import type { ReviewHunk } from '@/utils/review-types';
@@ -299,6 +304,209 @@ describe('useReviewSession adoptAll/discardAll', () => {
     expect(session.hunks.value).toEqual([]);
     // 回滚后工作稿与源稿一致 → persistNow 清除暂存
     expect(loadReviewSession('rootA', 'notes/x.md')).toBeNull();
+  });
+});
+
+describe('useReviewSession adoptAll 同锚点多处 insert（原文档序拼接）', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    computeReviewDiffMock.mockReset();
+    computeReviewDiffMock.mockReturnValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // 真实 computeReviewDiff 对「同锚双整块新增」的产出形态（手工镜像）：
+  // 两个 insert 共享锚点 9（para one 后空行块 range.to），rightRange 按工作稿坐标
+  const SAME_ANCHOR_SOURCE = 'para one\n\npara two';
+  const SAME_ANCHOR_WORKING = 'para one\n\nNEW A\n\nNEW B\n\npara two';
+
+  function buildSameAnchorHunks(): ReviewHunk[] {
+    return [
+      makeHunk({
+        id: 'hunk-1',
+        type: 'insert',
+        leftAnchor: 9,
+        rightRange: { from: 10, to: 15 },
+        blockLevelInsert: true,
+        leftText: '',
+        rightText: 'NEW A',
+      }),
+      makeHunk({
+        id: 'hunk-2',
+        type: 'insert',
+        leftAnchor: 9,
+        rightRange: { from: 17, to: 22 },
+        blockLevelInsert: true,
+        leftText: '',
+        rightText: 'NEW B',
+      }),
+    ];
+  }
+
+  it('同锚双整块新增：一次写盘且终态=工作稿（段落顺序不颠倒）', async () => {
+    const hunks = buildSameAnchorHunks();
+    computeReviewDiffMock.mockReturnValue(hunks);
+    const write = vi.fn().mockResolvedValue({ status: 'saved', revision: 'sha256:order' });
+    const session = useReviewSession({
+      fs: createFsMock(write),
+      root: 'rootA',
+      path: 'notes/x.md',
+      initialSnapshot: { content: SAME_ANCHOR_SOURCE, revision: REVISION },
+    });
+    // 工作稿供拼接取块间真实间隙（'\n\n'）
+    session.workingText.value = SAME_ANCHOR_WORKING;
+
+    const result = await session.adoptAll();
+    expect(result).toEqual({ ok: true, revision: 'sha256:order' });
+    // 降序逐个裸插会得到倒序（'…NEW B\n\nNEW A…'）——必须拼接为一次插入
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(write).toHaveBeenCalledWith('notes/x.md', SAME_ANCHOR_WORKING, REVISION);
+    expect(session.sourceText.value).toBe(SAME_ANCHOR_WORKING);
+    session.dispose();
+  });
+
+  it('mergeSameAnchorInserts：rightText 以工作稿真实间隙相连，块级旗标全员才保留', () => {
+    const merged = mergeSameAnchorInserts(buildSameAnchorHunks(), 9, SAME_ANCHOR_WORKING);
+    expect(merged.type).toBe('insert');
+    expect(merged.leftAnchor).toBe(9);
+    expect(merged.rightRange).toEqual({ from: 10, to: 22 });
+    expect(merged.rightText).toBe('NEW A\n\nNEW B');
+    expect(merged.blockLevelInsert).toBe(true);
+    // 混入词级新增（无块级旗标）→ 整体按裸插入处理
+    const mixed = mergeSameAnchorInserts(
+      [
+        makeHunk({ id: 'a', type: 'insert', leftAnchor: 0, rightText: '甲' }),
+        makeHunk({ id: 'b', type: 'insert', leftAnchor: 0, rightText: '乙' }),
+      ],
+      0,
+      '',
+    );
+    expect(mixed.blockLevelInsert).toBeUndefined();
+    expect(mixed.rightText).toBe('甲乙');
+    // 单成员原样返回
+    const single = buildSameAnchorHunks()[0]!;
+    expect(mergeSameAnchorInserts([single], 9, '')).toBe(single);
+  });
+});
+
+describe('useReviewSession 裁决入口冲刷（防抖窗口内陈旧坐标）', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.useFakeTimers();
+    computeReviewDiffMock.mockReset();
+    computeReviewDiffMock.mockReturnValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('防抖窗口内编辑后 discard：先冲刷重算，以新 hunk 坐标裁决', async () => {
+    const source = 'Hello World';
+    // 初始批注（旧坐标：'Hallo' 在 [0,5)）；文首插入 '!!' 后重算，
+    // 同一批注 rightRange 漂移为 [2,7)（源稿侧字段稳定不变）
+    const staleHunk = makeHunk({
+      id: 'hunk-1',
+      type: 'modify',
+      leftRange: { from: 0, to: 5 },
+      rightRange: { from: 0, to: 5 },
+      leftText: 'Hello',
+      rightText: 'Hallo',
+    });
+    const freshHunk = makeHunk({
+      id: 'hunk-1',
+      type: 'modify',
+      leftRange: { from: 0, to: 5 },
+      rightRange: { from: 2, to: 7 },
+      leftText: 'Hello',
+      rightText: 'Hallo',
+    });
+    computeReviewDiffMock.mockReturnValueOnce([staleHunk]).mockReturnValue([freshHunk]);
+    const session = useReviewSession({
+      fs: createFsMock(),
+      root: 'rootA',
+      path: 'notes/x.md',
+      initialSnapshot: { content: source, revision: REVISION },
+    });
+    // 防抖窗口内编辑（400ms 计时未到，hunks 仍是旧坐标）
+    session.workingText.value = '!!Hallo World';
+    await nextTick();
+    computeReviewDiffMock.mockClear();
+
+    const next = session.discard(staleHunk);
+    // 冲刷：以最新 workingText 立即重算（不等 400ms 计时）
+    expect(computeReviewDiffMock).toHaveBeenCalledWith(source, '!!Hallo World');
+    // 以新坐标 [2,7) 回滚：保留 '!!' 前缀。陈旧坐标 [0,5) 会静默改坏成
+    // 'Hellolo World'（替换掉 '!','!','H','a' 并留下半个 'llo'）
+    expect(next).toBe('!!Hello World');
+    expect(session.workingText.value).toBe('!!Hello World');
+    session.dispose();
+  });
+
+  it('防抖窗口内编辑后 adopt：入口先冲刷（新 hunks 参与锚点推算与裁决）', async () => {
+    const write = vi.fn().mockResolvedValue({ status: 'saved', revision: 'sha256:bbb' });
+    const session = useReviewSession({
+      fs: createFsMock(write),
+      root: 'rootA',
+      path: 'notes/x.md',
+      initialSnapshot: { content: SOURCE, revision: REVISION },
+    });
+    session.workingText.value = 'Hallo Welt';
+    await nextTick();
+    computeReviewDiffMock.mockClear();
+
+    await session.adopt(MODIFY_HUNK);
+    // 入口冲刷：写盘前先以最新 workingText 重算
+    expect(computeReviewDiffMock).toHaveBeenCalledWith(SOURCE, 'Hallo Welt');
+    expect(write).toHaveBeenCalledWith('notes/x.md', 'Hallo World', REVISION);
+    session.dispose();
+  });
+
+  it('resolveFreshHunk：身份 / 源稿键 / 区间重叠兜底 / 无重叠兜底原对象', () => {
+    const stale = makeHunk({
+      id: 'hunk-1',
+      type: 'modify',
+      leftRange: { from: 0, to: 5 },
+      rightRange: { from: 0, to: 5 },
+      leftText: 'Hello',
+      rightText: 'Hallo',
+    });
+    const fresh = makeHunk({
+      id: 'hunk-1',
+      type: 'modify',
+      leftRange: { from: 0, to: 5 },
+      rightRange: { from: 2, to: 7 },
+      leftText: 'Hello',
+      rightText: 'Hallo',
+    });
+    expect(resolveFreshHunk(fresh, [fresh])).toBe(fresh);
+    // rightRange 漂移不影响匹配（工作稿侧坐标允许变）
+    expect(resolveFreshHunk(stale, [fresh])).toBe(fresh);
+    // 批注文本被用户新输入改写（'!!' 并入同一批注）→ 按重叠度定位最新批注：
+    // 裁决必须落在最新批注上才收敛（陈旧坐标会静默改坏）
+    const rewritten = makeHunk({
+      id: 'hunk-1',
+      type: 'modify',
+      leftRange: { from: 0, to: 5 },
+      rightRange: { from: 0, to: 7 },
+      leftText: 'Hello',
+      rightText: '!!Hallo',
+    });
+    expect(resolveFreshHunk(stale, [rewritten])).toBe(rewritten);
+    // 无任何重叠（或空集）→ 原样返回兜底
+    const elsewhere = makeHunk({
+      id: 'hunk-9',
+      type: 'modify',
+      leftRange: { from: 20, to: 25 },
+      rightRange: { from: 20, to: 25 },
+      leftText: 'other',
+      rightText: 'text',
+    });
+    expect(resolveFreshHunk(stale, [elsewhere])).toBe(stale);
+    expect(resolveFreshHunk(stale, [])).toBe(stale);
   });
 });
 

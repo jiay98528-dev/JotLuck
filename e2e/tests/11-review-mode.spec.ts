@@ -305,6 +305,17 @@ test.describe('改稿（审批/批注）模式', () => {
     await expect(
       page.locator('.cm-content', { hasText: '批量批准的第二处新增' }).first(),
     ).toBeVisible();
+    // 同锚点双新增必须按原文档序并入：降序逐个裸插会静默颠倒段落顺序
+    //（第一处/第二处对调）——钉 adoptAll 同锚拼接的顺序语义
+    const editorText = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.cm-content'))
+        .map((el) => el.textContent ?? '')
+        .join('\n'),
+    );
+    const firstAt = editorText.indexOf('批量批准的第一处新增');
+    const secondAt = editorText.indexOf('批量批准的第二处新增');
+    expect(firstAt).toBeGreaterThan(-1);
+    expect(secondAt).toBeGreaterThan(firstAt);
 
     // 全部丢弃：以已并入的源稿为新基线，再加一处改动后整体回滚
     await enterReviewMode(page);

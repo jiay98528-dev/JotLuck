@@ -85,6 +85,39 @@ describe('diffWordPaired', () => {
     expect(paired2[0]!.left).toBeUndefined();
     expect('甲乙丙丁'.slice(paired2[0]!.right!.from, paired2[0]!.right!.to)).toBe('乙丙');
   });
+
+  it('纯新增段附精确插入点与未收缩字节：insertAt 处裸插 insertText 逐字节还原 b', () => {
+    const a = '甲乙丙';
+    const b = '甲乙新丙';
+    const paired = diffWordPaired(a, b);
+    expect(paired).toHaveLength(1);
+    const p = paired[0]!;
+    expect(p.left).toBeUndefined();
+    // 对齐下标 = 「新」插入点（「乙」后 = a 偏移 2），insertText 为段内原文
+    expect(p.insertAt).toBe(2);
+    expect(p.insertText).toBe('新');
+    expect(a.slice(0, p.insertAt!) + p.insertText! + a.slice(p.insertAt!)).toBe(b);
+  });
+
+  it('带边缘空白的拉丁新增：right span 收缩贴词，insertText 保留空格', () => {
+    const a = 'hello world';
+    const b = 'hello  brave world';
+    const paired = diffWordPaired(a, b);
+    const p = paired.find((x) => x.insertText !== undefined)!;
+    expect(p).toBeDefined();
+    // 马克笔区间收缩（right 不含边缘空格），采纳文本不收缩（含全部空格）
+    expect(b.slice(p.right!.from, p.right!.to)).toBe('brave');
+    expect(p.insertText).toBe('  brave');
+    expect(a.slice(0, p.insertAt!) + p.insertText! + a.slice(p.insertAt!)).toBe(b);
+  });
+
+  it('replace 段不携带 insertAt/insertText（仅纯新增段暴露）', () => {
+    const paired = diffWordPaired('甲乙丙丁戊', '甲X丁戊');
+    expect(paired).toHaveLength(1);
+    expect(paired[0]!.left).toBeDefined();
+    expect(paired[0]!.insertAt).toBeUndefined();
+    expect(paired[0]!.insertText).toBeUndefined();
+  });
 });
 
 describe('diffSequences', () => {

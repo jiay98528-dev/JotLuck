@@ -156,6 +156,19 @@ function mergeAdjacent(segments: SeqDiffSegment[]): SeqDiffSegment[] {
 export interface PairedWordDiff {
   left?: WordDiffSpan;
   right?: WordDiffSpan;
+  /**
+   * 纯新增段（无 left）的 a 侧精确插入点（a 文本 UTF-16 偏移）：
+   * = 段级对齐下标处 a 侧 token 的起点（对齐点在 a 末尾时取 a.length）。
+   * 采纳（applyHunkToSource 的 insert 路径）用它把新增文字落在用户实际
+   * 输入位置，而不是退化为配对块起点（近似值会导致采纳错位、diff 不收敛）。
+   */
+  insertAt?: number;
+  /**
+   * 纯新增段的未收缩插入字节（含段边缘空白，b 文本原文切片）。
+   * right span 被 shrink 收缩掉边缘空白（马克笔贴词），采纳若用收缩文本
+   * 会丢失空白导致拼贴粘连；insertText 保证逐字节还原 b 侧 → 采纳收敛。
+   */
+  insertText?: string;
 }
 
 export function diffWordPaired(
@@ -237,7 +250,20 @@ function computePaired(a: string, b: string, mergeGap: number): PairedWordDiff[]
     if (seg.op === 0) continue;
     const left = shrink(tokensA, seg.aFrom, seg.aTo);
     const right = shrink(tokensB, seg.bFrom, seg.bTo);
-    if (left || right) paired.push({ left, right });
+    if (!left && !right) continue;
+    // 纯新增段（left 缺失，aFrom===aTo 恒成立——吸收过等价微段的段 a 侧
+    // 非退化、必然带上 left 走 modify 路径）：附精确插入点 + 未收缩字节。
+    // b = a 前缀 + insertText + a 后缀（dmp 等价段文本逐字相等），在
+    // insertAt 处裸插 insertText 可逐字节还原 b。
+    paired.push(
+      left
+        ? { left, right }
+        : {
+            right,
+            insertAt: seg.aFrom < tokensA.length ? tokensA[seg.aFrom]!.from : a.length,
+            insertText: b.slice(tokensB[seg.bFrom]!.from, tokensB[seg.bTo - 1]!.to),
+          },
+    );
   }
   return paired;
 }

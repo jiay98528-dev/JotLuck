@@ -28,6 +28,12 @@ export interface ReviewHunk {
    * （rightText 只是段内文字，不含块间空行）；块内词级新增为 false（裸插入）。
    */
   blockLevelInsert?: boolean;
+  /**
+   * 块级整块删除（type='delete'）：丢弃时需按 Markdown 块语义补足空行分隔
+   * （leftText 只是段内文字，不含块间空行），与 blockLevelInsert 对称；
+   * 块内词级删除为 false（裸回插，落在段内原位置）。
+   */
+  blockLevelDelete?: boolean;
   /** 展示用摘录（面板预览）；无该侧内容时为空串 */
   leftText: string;
   rightText: string;

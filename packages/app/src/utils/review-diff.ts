@@ -16,7 +16,8 @@
  *
  * insert 锚点（leftAnchor，采纳新增批注时在源稿中的插入位置）：
  *   - 块级整块新增 = 变更运行区前最后一个等价块的 range.to（无前块则 0）；
- *   - 块内纯新增段 = 配对块 range.from（近似值，见代码注释）。
+ *   - 块内纯新增段 = 配对块 range.from + 段级对齐下标（精确插入点，
+ *     见 review-worddiff 的 PairedWordDiff.insertAt/insertText 契约）。
  */
 
 import { parseDocument, type BlockNode } from '@jotluck/renderer';
@@ -125,12 +126,18 @@ export function computeReviewDiff(source: string, working: string): ReviewHunk[]
           type,
           ...(leftSpan ? { leftRange: toDocRange(leftBlock.range.from, leftSpan) } : {}),
           ...(rightSpan ? { rightRange: toDocRange(rightBlock.range.from, rightSpan) } : {}),
-          // 块内纯新增段的锚点：diffWordPaired 的配对结果不携带左块 token 对齐
-          // 下标（段级 aFrom），精确插入点拿不到，此处退化为配对块起点（近似值，
-          // 恒落在块区间内）；后续 review-worddiff 暴露段信息时再升级为精确锚点。
-          ...(type === 'insert' ? { leftAnchor: leftBlock.range.from } : {}),
+          // 块内纯新增段的精确锚点：diffWordPaired 暴露段级对齐下标（a 侧
+          // token 边界），leftAnchor = 配对块起点 + 对齐偏移；rightText 用
+          // 未收缩插入字节（含边缘空白），两者配合可逐字节还原工作稿 →
+          // 采纳后重算 diff 为 0 hunks（收敛）
+          ...(type === 'insert' ? { leftAnchor: leftBlock.range.from + (pair.insertAt ?? 0) } : {}),
           leftText: leftSpan ? leftBlockText.slice(leftSpan.from, leftSpan.to) : '',
-          rightText: rightSpan ? rightBlockText.slice(rightSpan.from, rightSpan.to) : '',
+          rightText:
+            type === 'insert' && pair.insertText !== undefined
+              ? pair.insertText
+              : rightSpan
+                ? rightBlockText.slice(rightSpan.from, rightSpan.to)
+                : '',
         });
       }
     }
@@ -142,6 +149,9 @@ export function computeReviewDiff(source: string, working: string): ReviewHunk[]
       pushHunk({
         type: 'delete',
         leftRange: { ...leftBlocks[li]!.range },
+        // 块级整块删除：丢弃（revertHunkInWorking）时需补足块间空行分隔，
+        // 与 insert 侧 blockLevelInsert 对称（leftText 只是段内文字）
+        blockLevelDelete: true,
         leftText: text,
         rightText: '',
       });
