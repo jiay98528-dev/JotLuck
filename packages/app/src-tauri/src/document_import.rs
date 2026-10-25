@@ -538,7 +538,7 @@ fn save_completed_document_to_target(
         .ok_or_else(|| "selected Markdown destination has no parent directory".to_string())?;
     fs::create_dir_all(parent)
         .map_err(|error| format!("unable to create Markdown destination directory: {error}"))?;
-    let (markdown, assets) = {
+    let (markdown, mut assets) = {
         let data = job
             .data
             .lock()
@@ -548,6 +548,8 @@ fn save_completed_document_to_target(
             data.assets.values().cloned().collect::<Vec<_>>(),
         )
     };
+    // HashMap values() 迭代序不确定：按 id 排序让引用重写与资产落盘的重名后缀分配确定且一致。
+    assets.sort_by(|a, b| a.id.cmp(&b.id));
     let assets_destination = (!assets.is_empty()).then(|| unique_assets_destination(target));
     let rendered_markdown =
         rewrite_asset_references(&markdown, assets_destination.as_deref(), &assets)?;
@@ -696,6 +698,14 @@ fn stage_converted_assets(
     Ok(staging)
 }
 
+/// 转换 Markdown 中的资产占位符 scheme 前缀，id 紧随其后直到首个非资产 id 字符。
+const ASSET_REFERENCE_PREFIX: &str = "jotluck-asset://";
+
+/// 资产 id 字符集（形如 asset-12：ASCII 字母数字与连字符/下划线）。
+fn is_asset_id_char(character: char) -> bool {
+    character.is_ascii_alphanumeric() || character == '-' || character == '_'
+}
+
 fn rewrite_asset_references(
     markdown: &str,
     destination: Option<&Path>,
@@ -709,14 +719,32 @@ fn rewrite_asset_references(
         .and_then(|value| value.to_str())
         .ok_or_else(|| "Markdown asset directory name is invalid Unicode".to_string())?;
     let mut used = HashMap::<String, usize>::new();
-    let mut output = markdown.to_string();
-    for asset in assets {
-        let saved_name = unique_saved_asset_name(&asset.file_name, &mut used);
-        output = output.replace(
-            &format!("jotluck-asset://{}", asset.id),
-            &format!("{directory_name}/{saved_name}"),
-        );
+    let replacements = assets
+        .iter()
+        .map(|asset| {
+            let saved_name = unique_saved_asset_name(&asset.file_name, &mut used);
+            (asset.id.as_str(), format!("{directory_name}/{saved_name}"))
+        })
+        .collect::<HashMap<&str, String>>();
+    // 单趟扫描按完整占位符 id 精确改写：旧实现逐资产裸子串 replace，asset-1 是
+    // asset-10/11/12 的前缀，先后处理序不同会互损引用；按 id 查表替换天然顺序无关。
+    let mut output = String::with_capacity(markdown.len());
+    let mut rest = markdown;
+    while let Some(offset) = rest.find(ASSET_REFERENCE_PREFIX) {
+        let id_start = offset + ASSET_REFERENCE_PREFIX.len();
+        let id_end = rest[id_start..]
+            .find(|character: char| !is_asset_id_char(character))
+            .map_or(rest.len(), |length| id_start + length);
+        let id = &rest[id_start..id_end];
+        output.push_str(&rest[..offset]);
+        match replacements.get(id) {
+            Some(rewritten) => output.push_str(rewritten),
+            // 未知 id 的占位符（前缀+完整 id）原样保留，不吞掉后续字符
+            None => output.push_str(&rest[offset..id_end]),
+        }
+        rest = &rest[id_end..];
     }
+    output.push_str(rest);
     Ok(output)
 }
 
@@ -3122,6 +3150,121 @@ mod tests {
             unique_assets_destination(&target),
             root.join("report-2.assets")
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rewrite_asset_references_is_order_independent_for_prefixed_ids() {
+        // 复刻审计探针：12 个 asset-N 引用里 asset-1 是 asset-10/11/12 的裸前缀，
+        // 旧实现逐资产裸子串 replace 在特定处理序下互损引用；正/逆传入序都必须零损坏。
+        let destination = Path::new("saved.assets");
+        let ascending: Vec<ConvertedAsset> = (1..=12)
+            .map(|index| ConvertedAsset {
+                id: format!("asset-{index}"),
+                file_name: format!("image-{index}.png"),
+                path: PathBuf::from(format!("ignored-{index}.png")),
+                bytes: 1,
+            })
+            .collect();
+        let descending: Vec<ConvertedAsset> = ascending.iter().rev().cloned().collect();
+        let markdown = (1..=12)
+            .map(|index| format!("![image-{index}](jotluck-asset://asset-{index})"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        for (order, assets) in [("ascending", &ascending), ("descending", &descending)] {
+            let output = rewrite_asset_references(&markdown, Some(destination), assets).unwrap();
+            assert!(!output.contains("jotluck-asset://"), "{order}: {output}");
+            let lines: Vec<&str> = output.lines().collect();
+            assert_eq!(lines.len(), 12, "{order}: {output}");
+            for (position, line) in lines.iter().enumerate() {
+                let index = position + 1;
+                assert_eq!(
+                    *line,
+                    format!("![image-{index}](saved.assets/image-{index}.png)"),
+                    "{order}: {output}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn completed_document_save_keeps_ten_plus_prefixed_asset_references_intact() {
+        // 全链路另存：HashMap 迭代序不确定（旧实现损坏面取决于当次迭代序），
+        // 12 个含前缀互损风险的 id 落盘后引用与资产文件必须一一对应、零残留占位符。
+        let root = temp_test_directory("save-prefixed-assets");
+        let source_path = root.join("source.docx");
+        fs::write(&source_path, b"source-remains-read-only").unwrap();
+        let sessions = WindowSessionRegistry::new();
+        sessions
+            .register_document_import("document-window", &source_path)
+            .unwrap();
+        let source = sessions.document_source_for("document-window").unwrap();
+
+        let temp_dir = root.join("conversion-temp");
+        let mut markdown = String::from("# Imported\n\n");
+        let mut assets = HashMap::<String, ConvertedAsset>::new();
+        for index in 1..=12 {
+            let asset_path = temp_dir.join("assets").join(format!("{index}.png"));
+            fs::create_dir_all(asset_path.parent().unwrap()).unwrap();
+            fs::write(&asset_path, format!("payload-{index}")).unwrap();
+            markdown.push_str(&format!("![image-{index}](jotluck-asset://asset-{index})\n"));
+            assets.insert(
+                format!("asset-{index}"),
+                ConvertedAsset {
+                    id: format!("asset-{index}"),
+                    file_name: format!("image-{index}.png"),
+                    path: asset_path,
+                    bytes: 10,
+                },
+            );
+        }
+        let job = ConversionJob {
+            id: "conversion-save-prefixed".to_string(),
+            owner_window_label: "document-window".to_string(),
+            source: source.clone(),
+            temp_dir,
+            cancelled: AtomicBool::new(false),
+            terminal: AtomicBool::new(true),
+            child: Mutex::new(None),
+            windows_job: Mutex::new(None),
+            data: Mutex::new(ConversionData {
+                markdown,
+                assets,
+                revision: Some(source.revision),
+                completed: true,
+                stale: false,
+            }),
+            channel: Channel::new(|_| Ok(())),
+            watcher: Mutex::new(None),
+        };
+        let target = root.join("saved-copy.md");
+        assert!(!target.exists());
+        let access = ExternalAccessGrants::new();
+        let coordinator = FileMutationCoordinator::new();
+
+        let handle = save_completed_document_to_target(
+            &job,
+            &target,
+            "document-window",
+            &sessions,
+            &access,
+            &coordinator,
+        )
+        .unwrap();
+
+        let saved_markdown = fs::read_to_string(&target).unwrap();
+        assert!(!saved_markdown.contains("jotluck-asset://"), "{saved_markdown}");
+        for index in 1..=12 {
+            let reference = format!("![image-{index}](saved-copy.assets/image-{index}.png)");
+            assert!(saved_markdown.contains(&reference), "{saved_markdown}");
+            assert_eq!(
+                fs::read(root.join("saved-copy.assets").join(format!("image-{index}.png"))).unwrap(),
+                format!("payload-{index}").into_bytes()
+            );
+        }
+        assert!(sessions
+            .assert_external_edit("document-window", &handle.access_token)
+            .is_ok());
         fs::remove_dir_all(root).unwrap();
     }
 
