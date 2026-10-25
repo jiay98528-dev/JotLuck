@@ -569,22 +569,27 @@ test.describe('41 统一验收 导出产物核对', () => {
 
   test('05-导出 CSV 表格矩阵与转义核对（管道保留为字面、值精确）', async ({ page }) => {
     const downloadPath = await exportAs(page, 'CSV');
-    const csv = await readFile(downloadPath, 'utf8');
+    const buf = await readFile(downloadPath);
+    // BOM 前缀（字节级，与单测 Exporter.test.ts:52-55 同口径）：exportCsv 自
+    // Exporter.ts:1017-1018 起前置 UTF-8 BOM（Excel 双击打开 CSV 需 BOM 才按 UTF-8 解码）。
+    expect(buf.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]))).toBe(true);
+    // Buffer.toString('utf8') 与 readFile(path,'utf8') 同口径：不剥 BOM，首字符保留 U+FEFF
+    const csv = buf.toString('utf8');
 
-    // Exporter.exportCsv（Exporter.ts:814-840）走与 XLSX 同源 extractMarkdownTables
-    // → escapeCsvCell（Exporter.ts:843-849）。fixture 单元格均不含 , " \n，
+    // Exporter.exportCsv（Exporter.ts:1020-1048）走与 XLSX 同源 extractMarkdownTables
+    // → escapeCsvCell（Exporter.ts:1051-1057）。fixture 单元格均不含 , " \n，
     // 故不触发引号包裹；protectCsvFormula 也不命中（无 = + - @ \t \r 前缀）。
-    // 行分隔符 '\n'，表之间 '\n\n'（Exporter.ts:836）。
+    // 行分隔符 '\n'，表之间 '\n\n'（Exporter.ts:1044）。
     const lines = csv.split('\n');
-    // 首行：表头
-    expect(lines[0]).toBe('名称,数量');
-    // 数据行：甲\|乙 在 CSV 里保留为字面（Exporter.equivalence.test.ts:289
+    // 首行：BOM 前缀 + 表头（BOM 为 CSV 导出新增的正确行为，见 Exporter.ts:1017 注释）
+    expect(lines[0]).toBe('\uFEFF名称,数量');
+    // 数据行：甲\|乙 在 CSV 里保留为字面（Exporter.equivalence.test.ts:298-313
     // 等价基线 fixture 'a\|b' → 'a\\|b'，与此处同口径）；2 / 丙 / 3 紧随其后
     expect(lines[1]).toBe('甲\\|乙,2');
     expect(lines[2]).toBe('丙,3');
     // 末尾无多余空行（trim 在 CSV 分支未调用但 join('\n') 自然边界）
     expect(csv.endsWith('\n')).toBe(false);
-    // CSV 不应混入表格外的散文（Exporter.ts:819 表格数为 0 才走整段导出分支）
+    // CSV 不应混入表格外的散文（Exporter.ts:1025 表格数为 0 才走整段导出分支）
     expect(csv).not.toContain('第一章');
     expect(csv).not.toContain('[[目标]]');
   });
