@@ -55,7 +55,8 @@
       }
     },
     "macOS": {
-      "minimumSystemVersion": "11.0",
+      "minimumSystemVersion": "13.3",
+      "infoPlist": "Info.plist",
       "dmg": {
         "appPosition": { "x": 180, "y": 170 },
         "applicationFolderPosition": { "x": 480, "y": 170 }
@@ -63,7 +64,7 @@
     },
     "linux": {
       "deb": {
-        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0", "libayatana-appindicator3-1"],
+        "depends": ["libwebkit2gtk-4.1-0 (>= 2.40)", "libgtk-3-0"],
         "desktopTemplate": "installer-assets/linux/jotluck.desktop"
       },
       "appimage": {

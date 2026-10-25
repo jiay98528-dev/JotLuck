@@ -81,6 +81,10 @@ if ! grep -q 'MimeType=text/markdown' "$desktop_tpl"; then
   echo "desktop template is missing markdown MimeType" >&2
   exit 1
 fi
+if ! grep -q '^Exec={{exec}} %f$' "$desktop_tpl"; then
+  echo "desktop template is missing the %f field code in Exec (GLib supports_files)" >&2
+  exit 1
+fi
 if grep -q '"fileAssociations"' "$tauri_conf"; then
   echo "tauri.conf.json must not set bundle.fileAssociations (Windows NSIS contract)" >&2
   exit 1

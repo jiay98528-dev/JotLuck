@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Common-Controls v6 应用清单，内容对齐 tauri-build 内置的
+  windows-app-manifest.xml。tauri-build 的 .res 清单只对 bin 目标生效，
+  而 lib 单测经 MockRuntime 窗口路径会把 TaskDialogIndirect（comctl32
+  v6 独有导出）链进测试 exe——无清单时加载器解析到 System32 v5 comctl32
+  → STATUS_ENTRYPOINT_NOT_FOUND（0xc0000139）。build.rs 关闭 .res 内置
+  清单后，改由 MSVC 链接器 /MANIFEST:EMBED + /MANIFESTINPUT 对本包全部
+  链接目标（bin/cdylib/单测 exe）统一内嵌本清单。 -->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity
+        type="win32"
+        name="Microsoft.Windows.Common-Controls"
+        version="6.0.0.0"
+        processorArchitecture="*"
+        publicKeyToken="6595b64144ccf1df"
+        language="*"
+      />
+    </dependentAssembly>
+  </dependency>
+</assembly>

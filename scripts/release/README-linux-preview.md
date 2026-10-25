@@ -12,7 +12,7 @@ Dependencies:
 
 ```bash
 sudo apt-get install -y \
-  libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+  libwebkit2gtk-4.1-dev libgtk-3-dev \
   librsvg2-dev patchelf pkg-config build-essential curl
 ```
 

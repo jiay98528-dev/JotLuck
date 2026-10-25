@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- macOS 文件关联声明（P1）：bundle.fileAssociations 被 Windows NSIS 契约
+  禁用（Tauri 内建注册会抢占默认 ProgID，且 linux-preview-pack.sh 有门禁），
+  macOS 侧改由本文件经 bundle.macOS.infoPlist 合并注入 CFBundleDocumentTypes，
+  仅声明「Open With」候选（LSHandlerRank=Alternate，不抢占默认应用），
+  与 Windows hooks.nsh 的 OpenWithProgids 契约同构。文件经 AppleEvent 投递
+  到 RunEvent::Opened，由 lib.rs handle_macos_opened_urls 接管。 -->
+<plist version="1.0">
+<dict>
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key>
+      <string>JotLuck Markdown Document</string>
+      <key>CFBundleTypeRole</key>
+      <string>Editor</string>
+      <key>LSHandlerRank</key>
+      <string>Alternate</string>
+      <key>CFBundleTypeExtensions</key>
+      <array>
+        <string>md</string>
+        <string>markdown</string>
+        <string>mdx</string>
+        <string>txt</string>
+      </array>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>net.daringfireball.markdown</string>
+        <string>public.plain-text</string>
+      </array>
+    </dict>
+    <dict>
+      <key>CFBundleTypeName</key>
+      <string>JotLuck Imported Document</string>
+      <key>CFBundleTypeRole</key>
+      <string>Viewer</string>
+      <key>LSHandlerRank</key>
+      <string>Alternate</string>
+      <key>CFBundleTypeExtensions</key>
+      <array>
+        <string>docx</string>
+        <string>pdf</string>
+        <string>xlsx</string>
+        <string>xls</string>
+      </array>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>org.openxmlformats.wordprocessingml.document</string>
+        <string>com.adobe.pdf</string>
+        <string>org.openxmlformats.spreadsheetml.sheet</string>
+        <string>com.microsoft.excel.xls</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>

@@ -20,7 +20,9 @@ serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 base64 = "0.22"
 log = "0.4"
-tauri = { version = "2.11.2", features = ["tray-icon"] }
+# P7：全项目（Rust/前端）零托盘调用，不启用托盘图标 feature——
+# 它还会让 deb 自动带上 libayatana-appindicator 装机依赖。
+tauri = { version = "2.11.2", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
@@ -46,6 +48,12 @@ zip = { version = "4.3", default-features = false, features = ["deflate"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
+
+[dev-dependencies]
+# tauri mock runtime（tauri::test）：lib.rs 的 setup 主窗口降级等
+# AppHandle 级单测用（P5）。仅测试构建启用 test feature，
+# 不参与 release 构建，不影响 Windows 产物。
+tauri = { version = "2.11.2", features = ["test"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

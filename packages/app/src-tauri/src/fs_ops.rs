@@ -776,7 +776,43 @@ fn replace_file(tmp_path: &Path, target: &Path) -> std::io::Result<()> {
 
 #[cfg(not(windows))]
 fn replace_file(tmp_path: &Path, target: &Path) -> std::io::Result<()> {
-    fs::rename(tmp_path, target)
+    fs::rename(tmp_path, target)?;
+    // rename 只改父目录的目录项，元数据缓冲不落盘时掉电可能让 rename 整体
+    // 回滚（目标文件消失）——fsync 父目录对齐 Windows WRITE_THROUGH 语义。
+    sync_parent_directory(target)
+}
+
+/// 同步目录条目变更落盘（P8 掉电耐久）。staged 文件内容已在
+/// stage_text_file 内 sync_all，此处只补目录项。Windows 生产路径不调用
+/// 本函数（MoveFileExW 已带 WRITE_THROUGH）；Windows 实现以
+/// backup-semantics 打开目录供单测跨平台执行，语义与 Unix fsync 对应。
+#[cfg_attr(all(windows, not(test)), allow(dead_code))]
+fn sync_parent_directory(target: &Path) -> std::io::Result<()> {
+    // 裸文件名（无目录前缀）的 parent() 是 Some("")——没有可 fsync 的
+    // 真实父目录，按成功跳过。
+    let parent = target
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty());
+    let Some(parent) = parent else {
+        return Ok(());
+    };
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // FILE_FLAG_BACKUP_SEMANTICS 是 Windows 打开目录句柄的必要标志；
+        // FlushFileBuffers（sync_all）要求句柄具备写访问。
+        const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+        fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(parent)?
+            .sync_all()
+    }
+    #[cfg(not(windows))]
+    {
+        File::open(parent)?.sync_all()
+    }
 }
 
 #[cfg(windows)]
@@ -2733,5 +2769,37 @@ mod tests {
         );
         assert!(!sample_root.join("Added Later.md").exists());
         std::fs::remove_dir_all(app_root).unwrap();
+    }
+
+    /// P8：staged → target 替换后目标内容就位、staged 消失（全平台执行，
+    /// Windows 分支 MoveFileExW、Unix 分支 rename+父目录 fsync）。
+    #[test]
+    fn replace_file_swaps_target_with_staged_content() {
+        let root = temp_notebook("replace-file");
+        let target = root.join("note.md");
+        std::fs::write(&target, "old").unwrap();
+        let staged = root.join(".note.md.staged");
+        std::fs::write(&staged, "new").unwrap();
+
+        replace_file(&staged, &target).unwrap();
+
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "new");
+        assert!(!staged.exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    /// P8：父目录 fsync（Unix rename 后的耐久动作本体）对真实目录成功、
+    /// 对无父目录的裸文件名跳过不报错。全平台执行：Windows 走
+    /// backup-semantics 目录句柄（仅测试用，生产路径不经此函数）。
+    #[test]
+    fn sync_parent_directory_flushes_real_directory_and_skips_bare_names() {
+        let root = temp_notebook("sync-parent");
+        let target = root.join("note.md");
+        std::fs::write(&target, "content").unwrap();
+
+        assert!(sync_parent_directory(&target).is_ok());
+        assert!(sync_parent_directory(Path::new("note.md")).is_ok());
+
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

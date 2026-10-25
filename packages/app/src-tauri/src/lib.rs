@@ -22,7 +22,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
 };
-use tauri::{Emitter, Manager, WebviewWindow, WebviewWindowBuilder, WindowEvent};
+use tauri::{Emitter, Manager, Runtime, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 use uuid::Uuid;
 
 /// Best-effort OS identity for the frontend: 'windows' | 'macos' | 'linux'.
@@ -114,7 +114,10 @@ fn write_startup_error(message: &str) {
     eprintln!("{message}");
 }
 
-fn report_window_error(app: &tauri::AppHandle, message: &str) {
+// 窗口辅助函数按 Runtime 泛化：setup 主窗口初始化（open_startup_main_window）
+// 需要在 cargo test 里用 tauri::test mock runtime 直接驱动（P5 单测），
+// 泛化后生产 Wry 与测试 MockRuntime 共用同一实现。
+fn report_window_error<R: Runtime>(app: &tauri::AppHandle<R>, message: &str) {
     write_startup_error(message);
     if let Some(window) = app.webview_windows().into_values().next() {
         let _ = window.emit("jotluck://startup-error", message.to_string());
@@ -127,7 +130,7 @@ fn install_panic_hook() {
     }));
 }
 
-fn attach_window_cleanup(window: &WebviewWindow) {
+fn attach_window_cleanup<R: Runtime>(window: &WebviewWindow<R>) {
     let label = window.label().to_string();
     let app = window.app_handle().clone();
     window.on_window_event(move |event| {
@@ -167,7 +170,10 @@ fn desktop_window_config(label: String) -> tauri::utils::config::WindowConfig {
     }
 }
 
-fn build_window(app: &tauri::AppHandle, label: &str) -> Result<WebviewWindow, String> {
+fn build_window<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    label: &str,
+) -> Result<WebviewWindow<R>, String> {
     let config = desktop_window_config(label.to_string());
     let builder =
         WebviewWindowBuilder::from_config(app, &config).map_err(|error| error.to_string())?;
@@ -215,7 +221,7 @@ fn allows_webview_navigation(url: &tauri::Url) -> bool {
         && matches!(host, "tauri.localhost" | "localhost")
 }
 
-fn focus_window(window: &WebviewWindow) {
+fn focus_window<R: Runtime>(window: &WebviewWindow<R>) {
     let _ = window.unminimize();
     let _ = window.show();
     let _ = window.set_focus();
@@ -228,7 +234,7 @@ fn focus_window(window: &WebviewWindow) {
 /// 直接取 screen frame，screen 无效时窗口会停留在 0×0 或离屏 frame，
 /// 且显示器唤醒后 AppKit 不会自动纠正——2026-09-09 安装版 P0 实锤。
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-fn window_geometry_is_sane(window: &WebviewWindow) -> bool {
+fn window_geometry_is_sane<R: Runtime>(window: &WebviewWindow<R>) -> bool {
     let Ok(size) = window.outer_size() else {
         return false;
     };
@@ -256,19 +262,21 @@ fn window_geometry_is_sane(window: &WebviewWindow) -> bool {
     })
 }
 
-/// macOS：启动后轮询主窗口几何，发现 0×0/离屏时重置为默认尺寸并居中。
+/// macOS：启动后轮询窗口几何，发现 0×0/离屏时重置为默认尺寸并居中。
 /// 覆盖「熄屏启动 → 用户稍后唤醒显示器」的时序：几何自愈会在显示器
 /// 恢复后的下一轮轮询生效。窗口销毁、几何恢复正常或 5 分钟超时即退出。
 /// 正常启动时首轮（1s 延迟后）检测即通过，此后零开销。
+/// label 按运行时 String 传入：除 main 外，file-* 外链窗口（运行时生成
+/// 的 UUID 标签）同样需要挂 guard（P6）。
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-fn spawn_window_geometry_guard(app: tauri::AppHandle, label: &'static str) {
+fn spawn_window_geometry_guard<R: Runtime>(app: tauri::AppHandle<R>, label: String) {
     std::thread::spawn(move || {
         // 首轮延迟 1s：tao 的 maximized zoom 异步派发到主队列，留出余量，
         // 避免窗口尚在初始正常 frame 时过早判定 sane 退出。
         std::thread::sleep(std::time::Duration::from_millis(1000));
         for _ in 0..600 {
             std::thread::sleep(std::time::Duration::from_millis(500));
-            let Some(window) = app.get_webview_window(label) else {
+            let Some(window) = app.get_webview_window(&label) else {
                 return;
             };
             if window_geometry_is_sane(&window) {
@@ -284,8 +292,8 @@ fn spawn_window_geometry_guard(app: tauri::AppHandle, label: &'static str) {
     });
 }
 
-fn open_external_file_in_window(
-    app: &tauri::AppHandle,
+fn open_external_file_in_window<R: Runtime>(
+    app: &tauri::AppHandle<R>,
     path: &Path,
     preferred_label: Option<&str>,
 ) -> Result<(), String> {
@@ -316,10 +324,10 @@ fn open_external_file_in_window(
         }
     }
 
-    let window = match existing_window {
-        Some(window) => window,
+    let (window, created_new_window) = match existing_window {
+        Some(window) => (window, false),
         None => match build_window(app, &label) {
-            Ok(window) => window,
+            Ok(window) => (window, true),
             Err(error) => {
                 sessions.remove(&label);
                 access.revoke_for_window(&label);
@@ -332,10 +340,26 @@ fn open_external_file_in_window(
     };
     attach_window_cleanup(&window);
     focus_window(&window);
+    // P6：新建的 file-* 外链窗口与主窗口共享同一套熄屏/锁屏启动几何
+    // 自愈 guard（见 spawn_window_geometry_guard 注释）；复用已存在
+    // 窗口（如冷启动复用 main）时该窗口已挂 guard，不重复。
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        if created_new_window {
+            spawn_window_geometry_guard(app.clone(), label);
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        let _ = created_new_window;
+    }
     Ok(())
 }
 
-fn create_workspace_window(app: &tauri::AppHandle, label: &str) -> Result<(), String> {
+fn create_workspace_window<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    label: &str,
+) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(label) {
         focus_window(&window);
         return Ok(());
@@ -348,7 +372,7 @@ fn create_workspace_window(app: &tauri::AppHandle, label: &str) -> Result<(), St
     Ok(())
 }
 
-fn open_secondary_invocation(app: tauri::AppHandle, files: Vec<PathBuf>) {
+fn open_secondary_invocation<R: Runtime>(app: tauri::AppHandle<R>, files: Vec<PathBuf>) {
     let schedule = app.clone();
     if let Err(error) = app.run_on_main_thread(move || {
         if files.is_empty() {
@@ -370,6 +394,66 @@ fn open_secondary_invocation(app: tauri::AppHandle, files: Vec<PathBuf>) {
     }
 }
 
+/// RunEvent::Opened 的 URL 列表 → 受支持的外部文件路径（复用命令行捕获
+/// 规则：扩展名白名单、canonicalize、去重）。在所有平台编译以供单测
+/// 钉住过滤规则，实际仅 macOS 事件回调消费（tauri 只在 macos/ios/
+/// android 编译 Opened 变体）。
+#[cfg_attr(all(not(target_os = "macos"), not(test)), allow(dead_code))]
+fn opened_files_from_urls(urls: Vec<tauri::Url>) -> Vec<PathBuf> {
+    let args = urls
+        .into_iter()
+        // 仅接受 file:// URL：http(s) 链接不是本地文件投递（to_file_path
+        // 对非 file scheme 返回 Err），并顺带完成百分号解码。
+        .filter_map(|url| url.to_file_path().ok())
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    capture_opened_files_from_args(&args, &cwd)
+}
+
+/// macOS AppleEvent 文件投递（Finder「打开方式」/双击/拖到 Dock 图标，
+/// P1）→ 既有 open_external_file_in_window 会话链。过滤后没有受支持
+/// 文件时不动任何窗口（应用重激活走 RunEvent::Reopen，不在此处理）。
+#[cfg(target_os = "macos")]
+fn handle_macos_opened_urls(app: &tauri::AppHandle, urls: Vec<tauri::Url>) {
+    let files = opened_files_from_urls(urls);
+    if files.is_empty() {
+        return;
+    }
+    open_secondary_invocation(app.clone(), files);
+}
+
+/// setup 阶段主窗口初始化（P5）：冷启动首外链文件复用 main 窗口打开；
+/// 打开失败时优雅降级——report_window_error 报错并回退
+/// ensure_workspace(main)，与二次唤起路径（open_secondary_invocation）
+/// 一致。该错误绝不能以 ? 传给 setup：那会使 Builder 整体退出、应用
+/// 拒启（外链打不开是文件级故障，不应升级为应用级故障）。仅 main
+/// 窗口本身创建失败仍向上传播——没有主窗口就无可降级。
+fn open_startup_main_window<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    startup_files: &[PathBuf],
+) -> Result<(), String> {
+    let main = build_window(app, "main")?;
+    if let Some(first) = startup_files.first() {
+        if let Err(error) = open_external_file_in_window(app, first, Some("main")) {
+            report_window_error(app, &error);
+            app.state::<window_session::WindowSessionRegistry>()
+                .ensure_workspace("main");
+            attach_window_cleanup(&main);
+            focus_window(&main);
+        }
+    } else {
+        app.state::<window_session::WindowSessionRegistry>()
+            .ensure_workspace("main");
+        attach_window_cleanup(&main);
+        // 对齐 create_workspace_window / open_external_file_in_window：
+        // setup 建主窗口后同样显式 show + set_focus（Windows 上对已
+        // 可见的前台窗口为幂等 no-op，行为不变）。
+        focus_window(&main);
+    }
+    Ok(())
+}
+
 /// Initialize all IPC commands and plugins.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -379,7 +463,7 @@ pub fn run() {
     let startup_args: Vec<String> = std::env::args().collect();
     let startup_files = capture_opened_files_from_args(&startup_args, &cwd);
 
-    if let Err(error) = tauri::Builder::default()
+    let app = match tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
             let cwd = PathBuf::from(cwd);
             let files = capture_opened_files_from_args(&argv, &cwd);
@@ -404,22 +488,15 @@ pub fn run() {
             // 主窗口在 setup 内经 build_window 创建（tauri.conf.json 不再自动创建），
             // 使 additional_browser_args 重注入覆盖主窗口——config 自动创建路径
             // 会绕过注入（2026-08-09 CI 探针实锤：浏览器进程命令行无调试端口）。
-            let main = build_window(app.handle(), "main")?;
-            if let Some(first) = startup_files.first() {
-                open_external_file_in_window(app.handle(), first, Some("main"))?;
-            } else {
-                app.state::<window_session::WindowSessionRegistry>()
-                    .ensure_workspace("main");
-                attach_window_cleanup(&main);
-                // 对齐 create_workspace_window / open_external_file_in_window：
-                // setup 建主窗口后同样显式 show + set_focus（Windows 上对已
-                // 可见的前台窗口为幂等 no-op，行为不变）。
-                focus_window(&main);
-            }
+            // 外链文件打开失败在 open_startup_main_window 内部优雅降级（P5），
+            // 不再以 ? 传播令 setup Err、Builder 退出。
+            open_startup_main_window(app.handle(), &startup_files)?;
             // macOS 熄屏/锁屏启动时窗口 frame 可能损坏且不会自愈（见上），
             // 挂几何 guard 兜底；其他平台无此故障路径，零影响。
             #[cfg(any(target_os = "macos", target_os = "linux"))]
-            spawn_window_geometry_guard(app.handle().clone(), "main");
+            {
+                spawn_window_geometry_guard(app.handle().clone(), "main".to_string());
+            }
             for path in startup_files.iter().skip(1) {
                 if let Err(error) = open_external_file_in_window(app.handle(), path, None) {
                     report_window_error(app.handle(), &error);
@@ -491,10 +568,32 @@ pub fn run() {
             file_watcher::start_file_watcher,
             file_watcher::stop_file_watcher,
         ])
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
     {
-        write_startup_error(&format!("error while running jotluck: {error:?}"));
-    }
+        Ok(app) => app,
+        Err(error) => {
+            write_startup_error(&format!("error while running jotluck: {error:?}"));
+            return;
+        }
+    };
+    // 以 build + 事件回调替代 Builder::run 的空回调（P1）：macOS 上
+    // Finder「打开方式」/双击/拖拽投递的文件经 AppleEvent 到达
+    // RunEvent::Opened，空回调会把事件整批丢弃（文件打开全链缺失），
+    // 此处接入既有 open_external_file_in_window 会话链。Windows/Linux
+    // 无 Opened 事件（命令行与二次唤起走 single-instance 插件），回调
+    // 保持占位。App::run 阻塞至事件循环退出。
+    app.run(|app_handle, event| {
+        #[cfg(target_os = "macos")]
+        {
+            if let tauri::RunEvent::Opened { urls } = event {
+                handle_macos_opened_urls(app_handle, urls);
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (app_handle, event);
+        }
+    });
 }
 
 #[cfg(test)]
@@ -562,5 +661,79 @@ mod tests {
                 "expected blocked: {source}"
             );
         }
+    }
+
+    #[test]
+    fn opened_files_from_urls_keeps_supported_local_files_only() {
+        let root = std::env::temp_dir().join(format!("JotLuck-urls-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let markdown = root.join("note.md");
+        fs::write(&markdown, "content").unwrap();
+        // 带空格文件名：URL 百分号编码（%20）必须还原后再定位文件。
+        let spaced = root.join("with space.md");
+        fs::write(&spaced, "content").unwrap();
+
+        let markdown_url = tauri::Url::from_file_path(&markdown).unwrap();
+        let files = opened_files_from_urls(vec![
+            markdown_url.clone(),
+            // 同一文件重复投递 → 去重
+            markdown_url,
+            // http(s) 链接不是本地文件投递 → 过滤
+            tauri::Url::parse("https://example.com/note.md").unwrap(),
+            // 不受支持的扩展名 → 过滤
+            tauri::Url::from_file_path(root.join("tool.exe")).unwrap(),
+            // 本地文件但不存在 → 过滤
+            tauri::Url::from_file_path(root.join("missing.pdf")).unwrap(),
+            // 空格路径经百分号解码后正常命中
+            tauri::Url::from_file_path(&spaced).unwrap(),
+        ]);
+        assert_eq!(files.len(), 2);
+        assert_eq!(files[0], markdown.canonicalize().unwrap());
+        assert_eq!(files[1], spaced.canonicalize().unwrap());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// P5：冷启动外链打开失败只降级为工作区主窗口，不得把错误传给
+    /// setup（原 ? 传播会使 Builder 退出、应用拒启）。用 tauri::test
+    /// mock runtime 驱动与生产同一份 open_startup_main_window 实现。
+    #[test]
+    fn startup_main_window_survives_external_file_open_failure() {
+        let root = std::env::temp_dir().join(format!("JotLuck-startup-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let external = root.join("external.md");
+        fs::write(&external, "# external").unwrap();
+        let missing = root.join("missing.md");
+
+        // 对照组：存在的 .md 正常把 main 注册为外部只读会话（证明下方
+        // 失败用例的 Ok 不是空转）。
+        let ok_app = tauri::test::mock_builder()
+            .manage(fs_ops::ExternalAccessGrants::new())
+            .manage(window_session::WindowSessionRegistry::new())
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        assert!(open_startup_main_window(ok_app.handle(), &[external]).is_ok());
+        assert!(matches!(
+            ok_app
+                .state::<window_session::WindowSessionRegistry>()
+                .payload_for("main"),
+            window_session::WindowBootstrapPayload::ExternalReadonly { .. }
+        ));
+
+        // 失败组：文件不存在 → 授权报错 → 降级 ensure_workspace(main)，
+        // 返回 Ok 而非把错误抛给 setup。
+        let failing_app = tauri::test::mock_builder()
+            .manage(fs_ops::ExternalAccessGrants::new())
+            .manage(window_session::WindowSessionRegistry::new())
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        assert!(open_startup_main_window(failing_app.handle(), &[missing]).is_ok());
+        assert!(matches!(
+            failing_app
+                .state::<window_session::WindowSessionRegistry>()
+                .payload_for("main"),
+            window_session::WindowBootstrapPayload::Workspace { .. }
+        ));
+
+        fs::remove_dir_all(root).unwrap();
     }
 }
