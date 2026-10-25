@@ -55,13 +55,28 @@ function migrateLegacyTrainingMeta(scopedKey: string): void {
   localStorage.removeItem(TRAINING_META_KEY);
 }
 
-export function loadTrainingMeta(scope = 'unscoped'): CompletionTrainingMeta {
+/** loadTrainingMeta 的载入口径选项 */
+export interface LoadTrainingMetaOptions {
+  /**
+   * 跨窗口 storage 事件路径置 true：storage 事件只由「其他存活窗口刚写入」
+   * 触发（本窗口写入走 CustomEvent detail，写入窗口自身不收 storage 事件），
+   * 持久化读到的 training 态是在途运行的实时广播，须如实保留——同进程多窗口
+   * 下另一窗口的设置页要显示「训练中」而非「未训练」。默认 false：启动/
+   * 常规载入把陈旧 training 复位 idle（进程内运行时状态不可能跨会话存活）。
+   */
+  keepTrainingStatus?: boolean;
+}
+
+export function loadTrainingMeta(
+  scope = 'unscoped',
+  options: LoadTrainingMetaOptions = {},
+): CompletionTrainingMeta {
   const scopedKey = trainingMetaKeyForScope(scope);
   try {
     migrateLegacyTrainingMeta(scopedKey);
     const raw = localStorage.getItem(scopedKey);
     if (!raw) return createDefaultTrainingMeta();
-    const parsed = parseTrainingMeta(raw);
+    const parsed = parseTrainingMeta(raw, options);
     if (parsed) return parsed;
   } catch {
     // Corrupt or inaccessible storage must never block completion.
@@ -78,7 +93,10 @@ function createDefaultTrainingMeta(): CompletionTrainingMeta {
   return { ...DEFAULT_TRAINING_META, trainedPaths: {}, failedPaths: {} };
 }
 
-function parseTrainingMeta(raw: string): CompletionTrainingMeta | null {
+function parseTrainingMeta(
+  raw: string,
+  options: LoadTrainingMetaOptions = {},
+): CompletionTrainingMeta | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw) as unknown;
@@ -106,9 +124,10 @@ function parseTrainingMeta(raw: string): CompletionTrainingMeta | null {
     version: TRAINING_META_VERSION,
     // 陈旧 training 态复位：training 是进程内运行时状态，不可能跨会话存活——
     // 上次运行随窗口关闭中断后，持久化的 training 会让设置页永久显示
-    // 「训练中」。载入即归位 idle（trainedPaths 等事实保留）；在途运行的状态
-    // 由内存对象直写，不经此路径。
-    status: parsed.status === 'training' ? 'idle' : parsed.status,
+    // 「训练中」。常规载入即归位 idle（trainedPaths 等事实保留）；在途运行
+    // 的状态由内存对象直写（本窗口 CustomEvent detail / 其他窗口 storage
+    // 事件经 keepTrainingStatus 保留，见 LoadTrainingMetaOptions）。
+    status: parsed.status === 'training' && !options.keepTrainingStatus ? 'idle' : parsed.status,
     trainedPaths,
     fileCount: Object.keys(trainedPaths).length,
     updatedAt: parsed.updatedAt,
@@ -192,7 +211,12 @@ export function subscribeTrainingMeta(
   window.addEventListener(TRAINING_META_EVENT, handler);
   const storageHandler = (event: StorageEvent) => {
     const scope = normalizeTrainingScope(getScope());
-    if (event.key === trainingMetaKeyForScope(scope)) listener(loadTrainingMeta(scope));
+    // storage 事件仅由其他存活窗口的实时写入触发（写入窗口自身走上方
+    // CustomEvent detail 路径）：读到的 training 是在途运行的广播，保留
+    // 显示——无条件复位会让并行窗口的设置页在训练期间显示「未训练」
+    if (event.key === trainingMetaKeyForScope(scope)) {
+      listener(loadTrainingMeta(scope, { keepTrainingStatus: true }));
+    }
   };
   window.addEventListener('storage', storageHandler);
   return () => {

@@ -54,6 +54,14 @@ behavior boundaries.
   `WEBKIT_DISABLE_DMABUF_RENDERER=1` (the Linux binary sets this when unset).
 - macOS packages still need host-specific packaging, signing, and
   release validation.
+- Building the Windows desktop app from source requires a checkout path
+  without spaces (e.g. avoid `C:\Users\John Smith\MarkLuck`).
+  `packages/app/src-tauri/build.rs` embeds the Common-Controls v6 manifest
+  through MSVC `/MANIFESTINPUT` and intentionally fails fast with a clear
+  panic when the manifest path contains a space: quoting of that flag is not
+  reliably preserved across the rustc/cargo link-arg chain, and a loud build
+  failure is preferred over a broken binary. Move or clone the repository to
+  a space-free path before building; released installers are unaffected.
 
 ## Rust Dependency Audit Warnings
 

@@ -118,6 +118,32 @@ describe('diffWordPaired', () => {
     expect(paired[0]!.insertAt).toBeUndefined();
     expect(paired[0]!.insertText).toBeUndefined();
   });
+
+  it('a 侧全空白删除段：退化为整段替换而非纯新增裸插（空白不重复）', () => {
+    // 删除段（全空白 token）与插入段合并后 a 侧 shrink 为空但区间非零宽
+    //（aFrom<aTo）——注释不变量「纯新增段 aFrom===aTo」的反例。旧路径按
+    // 纯新增裸插 insertText，被删空白仍留在源稿，采纳得 'A x   B'（空白
+    // 重复、违背逐字节还原契约）；修复后按替换处理，左右均取未收缩区间。
+    const a = 'A  B';
+    const b = 'A x B';
+    const paired = diffWordPaired(a, b);
+    expect(paired).toHaveLength(1);
+    const p = paired[0]!;
+    expect(p.left).toEqual({ from: 1, to: 3 });
+    expect(p.right).toEqual({ from: 1, to: 4 });
+    expect(p.insertAt).toBeUndefined();
+    expect(p.insertText).toBeUndefined();
+    // 替换语义逐字节还原 b
+    expect(
+      a.slice(0, p.left!.from) + b.slice(p.right!.from, p.right!.to) + a.slice(p.left!.to),
+    ).toBe(b);
+  });
+
+  it('双侧全空白差异段仍不出对（纯空白改动对批注不可见）', () => {
+    // 'A  B' → 'A B'：删除双空格 + 插入单空格，两侧 shrink 皆空 → 无配对
+    const paired = diffWordPaired('A  B', 'A B');
+    expect(paired).toEqual([]);
+  });
 });
 
 describe('diffSequences', () => {

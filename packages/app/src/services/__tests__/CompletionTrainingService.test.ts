@@ -4,6 +4,7 @@ import {
   DEFAULT_TRAINING_META,
   loadTrainingMeta,
   stripUntrainableMarkdown,
+  subscribeTrainingMeta,
   TRAINING_META_KEY,
   trainingMetaKeyForScope,
 } from '../CompletionTrainingService';
@@ -399,6 +400,36 @@ describe('CompletionTrainingService', () => {
     expect(meta.trainedPaths['/a.md']).toEqual({ mtime: 1, size: 10 });
     expect(meta.lastRunId).toBe('run-1');
     expect(meta.successCount).toBe(2);
+  });
+
+  it('跨窗口 storage 事件路径：在途 training 态如实保留（不复位 idle）', () => {
+    // 同进程多窗口：窗口 A 训练期间落盘 status='training'，窗口 B 收到
+    // storage 事件（仅由其他存活窗口的实时写入触发）→ B 的设置页应显示
+    // 「训练中」；无条件复位会让 B 显示「未 trained」
+    localStorage.setItem(
+      trainingMetaKeyForScope(),
+      JSON.stringify({ ...DEFAULT_TRAINING_META, status: 'training', updatedAt: 5 }),
+    );
+    // 常规载入（启动口径）仍复位 idle——上一用例语义不回归
+    expect(loadTrainingMeta().status).toBe('idle');
+
+    const received: string[] = [];
+    const unsubscribe = subscribeTrainingMeta((meta) => received.push(meta.status));
+    try {
+      window.dispatchEvent(new StorageEvent('storage', { key: trainingMetaKeyForScope() }));
+      expect(received).toEqual(['training']);
+
+      // 其他 key 的 storage 事件不触发回调
+      received.length = 0;
+      window.dispatchEvent(new StorageEvent('storage', { key: 'unrelated-key' }));
+      expect(received).toEqual([]);
+    } finally {
+      unsubscribe();
+    }
+
+    // 退订后不再收事件
+    window.dispatchEvent(new StorageEvent('storage', { key: trainingMetaKeyForScope() }));
+    expect(received).toEqual([]);
   });
 
   it('rejects a delayed training read after the predictor changes workspace without an explicit cancel', async () => {

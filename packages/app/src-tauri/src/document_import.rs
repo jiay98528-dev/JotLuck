@@ -683,6 +683,12 @@ fn stage_converted_assets(
                 .and_then(|file| file.sync_all())
                 .map_err(|error| format!("unable to sync converted asset: {error}"))?;
         }
+        // 逐文件 sync_all 只持久化文件内容；staging 目录自身的目录项（文件名
+        // dirent）仍未落盘——无日志文件系统（exFAT/FAT，docx 另存到 U 盘的
+        // 常见场景）掉电后 rename 出的目标 .assets 可能存在但内部缺文件，
+        // 而已落盘的 markdown 已按文件名引用这些资产。rename 前补目录 fsync。
+        sync_directory_entries(&staging)
+            .map_err(|error| format!("unable to sync staged asset directory: {error}"))?;
         Ok::<(), String>(())
     })();
     if let Err(error) = result {
@@ -694,6 +700,28 @@ fn stage_converted_assets(
         return Err("selected Markdown asset directory already exists".to_string());
     }
     Ok(staging)
+}
+
+/// fsync 目录自身，持久化目录内部文件名条目（P8 掉电耐久）。与
+/// fs_ops::sync_parent_directory 同法：Windows 以 backup-semantics 打开
+/// 目录句柄（FlushFileBuffers 要求写访问），Unix 直接 fsync 目录 fd。
+fn sync_directory_entries(directory: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // FILE_FLAG_BACKUP_SEMANTICS 是 Windows 打开目录句柄的必要标志
+        const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+        OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(directory)?
+            .sync_all()
+    }
+    #[cfg(not(windows))]
+    {
+        File::open(directory)?.sync_all()
+    }
 }
 
 /// 转换 Markdown 中的资产占位符 scheme 前缀，id 紧随其后直到首个非资产 id 字符。
@@ -3501,5 +3529,18 @@ mod tests {
         let mut oversized_frames = Vec::new();
         let mut emitter = WorkerEmitter::new(&mut oversized_frames);
         assert!(emitter.chunk("x".repeat(MAX_MARKDOWN_BYTES + 1)).is_err());
+    }
+
+    #[test]
+    fn sync_directory_entries_persists_real_directory() {
+        // staged 资产目录 rename 前补目录项 fsync（P8 掉电耐久）：真实目录
+        // （含至少一个文件条目）可跨平台打开并 sync 成功——Windows 须走
+        // backup-semantics 打开目录（普通 File::open 目录会拒绝访问），
+        // Unix 直接 fsync 目录 fd。fsync 的掉电语义本身无法在单测验证，
+        // 此处钉「staging 目录句柄打开路径两平台可用、不误报错误」。
+        let root = temp_test_directory("sync-dir-entries");
+        fs::write(root.join("asset.png"), b"png").unwrap();
+        assert!(sync_directory_entries(&root).is_ok());
+        fs::remove_dir_all(root).unwrap();
     }
 }

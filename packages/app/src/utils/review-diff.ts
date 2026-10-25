@@ -15,7 +15,10 @@
  *     shrink 已保证不会给出双侧皆空的区间，此处口径对齐）。
  *
  * insert 锚点（leftAnchor，采纳新增批注时在源稿中的插入位置）：
- *   - 块级整块新增 = 变更运行区前最后一个等价块的 range.to（无前块则 0）；
+ *   - 块级整块新增 = 运行区内最后一个配对块（源稿侧）的 range.to；运行区
+ *     内无配对块（纯插入区）时 = 运行区前最后一个等价块的 range.to（无前
+ *     块则 0）。工作稿序中多余新增块紧随末配对块之后，锚在区首会把新块
+ *     插到被改块之前、与工作稿顺序相悖（重算 diff 幻影批注不收敛）；
  *   - 块内纯新增段 = 配对块 range.from + 段级对齐下标（精确插入点，
  *     见 review-worddiff 的 PairedWordDiff.insertAt/insertText 契约）。
  */
@@ -89,7 +92,8 @@ export function computeReviewDiff(source: string, working: string): ReviewHunk[]
   // 变更运行区累计：连续 delete/insert 段的两侧块下标（各自按文档序）
   let regionLeft: number[] = [];
   let regionRight: number[] = [];
-  // 最近一个等价段末块的 range.to（文档开头无等价块时为 0）→ 新区运行区的插入锚点
+  // 最近一个等价段末块的 range.to（文档开头无等价块时为 0）→ 纯插入
+  // 运行区（区内无配对块）的整块新增插入锚点兜底
   let lastEqualLeftTo = 0;
   let regionAnchor = 0;
 
@@ -156,8 +160,14 @@ export function computeReviewDiff(source: string, working: string): ReviewHunk[]
         rightText: '',
       });
     }
-    // 多余被插入块：整块 insert（同样跳过空行块）。锚点 = 运行区前最后
-    // 一个等价块的 range.to（文档开头新增时无前块 → 0）。
+    // 多余被插入块：整块 insert（同样跳过空行块）。运行区两侧下标各自按
+    // 文档序，多余块恒为 regionRight 尾部——工作稿序中紧随末配对块之后，
+    // 锚点取末配对块（源稿侧）的 range.to；运行区内无配对块（纯插入区，
+    // pairCount === 0）时退回运行区前最后一个等价块的 range.to（文档开头
+    // 新增时无前块 → 0）。锚在区首（regionAnchor）会把新块插到被改块
+    // 之前，与工作稿顺序相悖，采纳后重算 diff 产生幻影批注不收敛。
+    const extraInsertAnchor =
+      pairCount > 0 ? leftBlocks[regionLeft[pairCount - 1]!]!.range.to : regionAnchor;
     for (let i = pairCount; i < regionRight.length; i++) {
       const ri = regionRight[i]!;
       const text = rightTexts[ri]!;
@@ -165,7 +175,7 @@ export function computeReviewDiff(source: string, working: string): ReviewHunk[]
       pushHunk({
         type: 'insert',
         rightRange: { ...rightBlocks[ri]!.range },
-        leftAnchor: regionAnchor,
+        leftAnchor: extraInsertAnchor,
         // 块级新增：采纳时需补足块间空行分隔（见 review-session-store）
         blockLevelInsert: true,
         leftText: '',

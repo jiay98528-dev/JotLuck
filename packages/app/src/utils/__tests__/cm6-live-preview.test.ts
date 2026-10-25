@@ -716,6 +716,34 @@ describe('cm6 live preview unified AST adapter', () => {
     expect(blocks[0]?.html).not.toContain('<input');
     expect(blocks[1]?.html).toContain('>2.</span>');
   });
+
+  it('accepts whitespace-run ordered task markers：双空格/制表形态也判任务（与 AST 语法同口径）', () => {
+    // AST orderedTask 允许标记内任意 [ \t\u3000]+ 空白 run（continuation.ts）；
+    // 单空格字面正则会把 `1.  [x]`/`1.\t[x]` 漏判成 orderedListItem——
+    // 复选框消失，live 与静态渲染两视图不一致
+    const blocks = __parseLiveBlocksForTest('1.  [x] 双空格\n2.\t[x] 制表');
+
+    expect(blocks).toHaveLength(2);
+    for (const block of blocks) {
+      expect(block?.type).toBe('taskListItem');
+      expect(block?.html).toContain('cm-task-toggle');
+      expect(block?.html).toContain('checked');
+    }
+  });
+
+  it('treats empty-content checked tasks as checked：] 后行尾不要求尾随空白', () => {
+    // 空内容行 `1. [x]`（与无序 `- [x]` 同理）：checked 正则旧要求 ] 后必有
+    // 空白，会把静态渲染判已勾选的任务在 live 侧渲染成未勾选
+    const ordered = __parseLiveBlocksForTest('1. [x]');
+    expect(ordered).toHaveLength(1);
+    expect(ordered[0]?.type).toBe('taskListItem');
+    expect(ordered[0]?.html).toContain('checked');
+
+    const dash = __parseLiveBlocksForTest('- [x]');
+    expect(dash).toHaveLength(1);
+    expect(dash[0]?.type).toBe('taskListItem');
+    expect(dash[0]?.html).toContain('checked');
+  });
 });
 
 describe('cm6 live preview GFM ordered task widgets（E3 live 分派）', () => {

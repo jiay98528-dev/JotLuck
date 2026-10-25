@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { computeReviewDiff } from '../review-diff';
+import { applyHunkToSource } from '../../services/review-session-store';
 
 describe('computeReviewDiff', () => {
   it('完全相同 → 空数组', () => {
@@ -264,6 +265,64 @@ describe('computeReviewDiff', () => {
         expect(working.slice(hunk.rightRange.from, hunk.rightRange.to)).toBe(hunk.rightText);
       }
     }
+  });
+
+  it('混合运行区（改一段+加一段）→ 整块新增锚点 = 末配对块 range.to 而非区首', () => {
+    const source = '甲段落\n\n末段落';
+    const working = '乙段落\n\n新增段落\n\n末段落';
+    const hunks = computeReviewDiff(source, working);
+    // 运行区：配对（甲段落↔乙段落）出词级 modify，多余整块「新增段落」出 insert
+    expect(hunks.map((h) => h.type)).toEqual(['modify', 'insert']);
+    const insertHunk = hunks[1]!;
+    expect(insertHunk.rightText).toBe('新增段落');
+    expect(insertHunk.blockLevelInsert).toBe(true);
+    // 锚点 = 末配对块（甲段落）的 range.to（=3），而非运行区起点（regionAnchor=0）：
+    // 锚在区首会把新块插到被改块之前，与工作稿顺序（乙段落在新增段落之前）相悖
+    expect(insertHunk.leftAnchor).toBe('甲段落'.length);
+  });
+
+  it('混合运行区（前有等价块）：整块新增锚点仍 = 末配对块 range.to', () => {
+    const source = '前段落\n\n甲段落\n\n末段落';
+    const working = '前段落\n\n乙段落\n\n新增段落\n\n末段落';
+    const hunks = computeReviewDiff(source, working);
+    expect(hunks.map((h) => h.type)).toEqual(['modify', 'insert']);
+    const insertHunk = hunks[1]!;
+    // 末配对块 = 甲段落（而非运行区前等价块「前段落」）→ 锚点为甲段落 range.to
+    const pairedFrom = source.indexOf('甲段落');
+    expect(insertHunk.leftAnchor).toBe(pairedFrom + '甲段落'.length);
+    expect(insertHunk.leftAnchor).not.toBe(source.indexOf('前段落') + '前段落'.length);
+  });
+
+  it('混合运行区整块新增：按锚点降序采纳全部 hunk → 逐字节还原工作稿且重算 diff 收敛', () => {
+    const source = '甲段落\n\n末段落';
+    const working = '乙段落\n\n新增段落\n\n末段落';
+    const hunks = computeReviewDiff(source, working);
+    // adoptAll 口径：按源稿锚点降序（从右向左）应用，左侧坐标不因右侧改动漂移
+    const anchorOf = (hunk: (typeof hunks)[number]): number =>
+      hunk.leftRange?.from ?? hunk.leftAnchor ?? 0;
+    const sorted = [...hunks].sort((a, b) => anchorOf(b) - anchorOf(a));
+    let adopted = source;
+    for (const hunk of sorted) adopted = applyHunkToSource(adopted, hunk, hunks);
+    expect(adopted).toBe(working);
+    // 收敛承诺：采纳后重算 diff 为 0 hunks（旧区首锚点会得到「NEW 在前」
+    // 的错序源稿，重算产生幻影批注不收敛）
+    expect(computeReviewDiff(adopted, working)).toEqual([]);
+  });
+
+  it('块内空白区间被改写 → modify hunk 替换保真（非纯新增裸插），采纳后收敛', () => {
+    // 双空格 → 「 x 」：删除侧全空白，词级配对退化为整段替换（见
+    // review-worddiff 的全空白删除段分支），采纳逐字节还原工作稿
+    const source = 'A  B';
+    const working = 'A x B';
+    const hunks = computeReviewDiff(source, working);
+    expect(hunks).toHaveLength(1);
+    const hunk = hunks[0]!;
+    expect(hunk.type).toBe('modify');
+    expect(hunk.leftText).toBe('  ');
+    expect(hunk.rightText).toBe(' x ');
+    const adopted = applyHunkToSource(source, hunk, hunks);
+    expect(adopted).toBe(working);
+    expect(computeReviewDiff(adopted, working)).toEqual([]);
   });
 
   it('单块文本超过 20000 字符 → 整块退化为单个 modify hunk', () => {

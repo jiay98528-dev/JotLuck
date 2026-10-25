@@ -21,7 +21,9 @@ fn main() {
 /// 链接器 /MANIFEST:EMBED 对所有目标统一内嵌同款清单（内容与 tauri
 /// 内置 windows-app-manifest.xml 一致），并关闭 .res 内置清单避免重复。
 /// 最小 cargo 探针已验证：bin（含 .res 版本信息）/cdylib/lib 单测均可
-/// 链接并正常运行。注意 /MANIFESTINPUT 需绝对路径且不含空格。
+/// 链接并正常运行。注意 /MANIFESTINPUT 需绝对路径且不含空格——路径含
+/// 空格时下方响亮 panic（宁可不构建也不产出损坏二进制；该可移植性限制
+/// 已登记于仓库根 KNOWN_LIMITATIONS.md「Desktop App Limits」）。
 fn embed_common_controls_manifest() {
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();

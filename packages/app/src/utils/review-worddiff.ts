@@ -251,10 +251,24 @@ function computePaired(a: string, b: string, mergeGap: number): PairedWordDiff[]
     const left = shrink(tokensA, seg.aFrom, seg.aTo);
     const right = shrink(tokensB, seg.bFrom, seg.bTo);
     if (!left && !right) continue;
-    // 纯新增段（left 缺失，aFrom===aTo 恒成立——吸收过等价微段的段 a 侧
-    // 非退化、必然带上 left 走 modify 路径）：附精确插入点 + 未收缩字节。
-    // b = a 前缀 + insertText + a 后缀（dmp 等价段文本逐字相等），在
-    // insertAt 处裸插 insertText 可逐字节还原 b。
+    // 纯新增段（left 缺失且 a 侧运行区零宽，aFrom===aTo）：附精确插入点 +
+    // 未收缩字节。b = a 前缀 + insertText + a 后缀（dmp 等价段文本逐字相等），
+    // 在 insertAt 处裸插 insertText 可逐字节还原 b。
+    // 例外：a 侧运行区全为空白 token 时 shrink 也给出 undefined，但区间
+    // 非零宽（aFrom<aTo）——不是纯新增，是「空白区间被改写」；若走裸插
+    // 路径，被删空白仍留在源稿，采纳结果空白重复、不再逐字节还原 b。
+    // 此时退化为整段替换（左右都取未收缩区间：右侧含边缘空白，替换后
+    // b 侧逐字节保真）。
+    if (!left && right && seg.aFrom < seg.aTo) {
+      paired.push({
+        left: { from: tokensA[seg.aFrom]!.from, to: tokensA[seg.aTo - 1]!.to },
+        right: {
+          from: tokensB[seg.bFrom]!.from,
+          to: tokensB[seg.bTo - 1]!.to,
+        },
+      });
+      continue;
+    }
     paired.push(
       left
         ? { left, right }

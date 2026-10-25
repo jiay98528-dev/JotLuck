@@ -659,7 +659,7 @@ function parseLiveBlocks(
         family === 'ordered'
           ? node.delimiter === ')'
             ? 'paragraph'
-            : node.kind === 'task' && /^\d+[.)] \[[ x]\]$/.test(markerSlice)
+            : node.kind === 'task' && /^\d+[.)][ \t\u3000]+\[[ x]\]$/.test(markerSlice)
               ? 'taskListItem'
               : 'orderedListItem'
           : node.kind === 'task' && /^[-－] \[[ x]\]$/.test(markerSlice)
@@ -738,10 +738,12 @@ function parseLiveBlocks(
         itemIndex++;
         let blockType: BlockType = 'unorderedListItem';
         if (family === 'ordered') {
-          // 有序任务（`1. [x]` 小写 x/空格）渲染为带序号的任务项；其余为纯有序项
+          // 有序任务（`1. [x]` 小写 x）渲染为带序号的任务项；其余为纯有序项。
+          // 标记内空白与 AST 语法同口径（[ \t\u3000]+ 任意 run，双空格/制表
+          // /全角空格形态均判任务——单空格字面正则会漏判使复选框消失）
           const markerSlice = ast.source.slice(item.markerRange.from, item.markerRange.to);
           blockType =
-            item.kind === 'task' && /^\d+[.)] \[[ x]\]$/.test(markerSlice)
+            item.kind === 'task' && /^\d+[.)][ \t\u3000]+\[[ x]\]$/.test(markerSlice)
               ? 'taskListItem'
               : 'orderedListItem';
         } else if (item.kind === 'task') {
@@ -894,9 +896,12 @@ function renderBlockHtml(
         // Strip outer list wrapper — each item is independently rendered,
         // CSS ::before pseudo-elements + adjacent selectors connect them visually.
         const raw = renderBlock(block.raw, block.type, refDefs, options);
-        // 勾选态两形：无序 `- [x]` 与有序 `1. [x]`（有序任务同型分派见 parseLiveBlocks）
+        // 勾选态两形：无序 `- [x]` 与有序 `1. [x]`（有序任务同型分派见 parseLiveBlocks）。
+        // `]` 后允许行尾（空内容行 `1. [x]` 也判已勾选——静态渲染同口径，
+        // 要求尾随空白会把空内容任务渲染成未勾选）
         const checked =
-          /^\s*[-*+]\s+\[[xX]\]\s/.test(block.raw) || /^\s*\d+[.)]\s+\[[xX]\]\s/.test(block.raw);
+          /^\s*[-*+]\s+\[[xX]\](?:\s|$)/.test(block.raw) ||
+          /^\s*\d+[.)]\s+\[[xX]\](?:\s|$)/.test(block.raw);
         const toggleLabel = checked
           ? translate('program.taskIncomplete')
           : translate('program.taskComplete');
