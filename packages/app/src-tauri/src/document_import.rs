@@ -1,4 +1,4 @@
-use crate::command_error::{CommandErrorPayload, CommandResult};
+use crate::command_error::{CommandErrorPayload, CommandResult, CONVERSION_STALE_MESSAGE};
 use crate::fs_ops::{
     commit_staged_text_file, stage_text_file, ExternalAccessGrants, ExternalFileHandle,
     FileMutationCoordinator,
@@ -307,9 +307,7 @@ impl DocumentImportState {
             return Err("document conversion has not completed".to_string());
         }
         if data.stale {
-            return Err(
-                "document conversion is stale; reconvert the source before editing".to_string(),
-            );
+            return Err(CONVERSION_STALE_MESSAGE.to_string());
         }
         drop(data);
         Ok(job)
@@ -1219,9 +1217,7 @@ fn verify_job_source_is_current(job: &ConversionJob) -> Result<SourceRevision, S
     let current = source_revision(&job.source.absolute_path)?;
     if current != expected {
         job.mark_stale(current);
-        return Err(
-            "document conversion is stale; reconvert the source before editing".to_string(),
-        );
+        return Err(CONVERSION_STALE_MESSAGE.to_string());
     }
     Ok(expected)
 }

@@ -3,7 +3,7 @@
 // Tauri IPC commands for reading, writing, deleting, and listing note files.
 // All operations go through path::resolve_safe_path for security.
 
-use crate::command_error::CommandResult;
+use crate::command_error::{CommandResult, EXTERNAL_GRANT_EXPIRED_MESSAGE};
 use crate::path::{is_ignored_notebook_directory_name, resolve_safe_path};
 use crate::window_session::WindowSessionRegistry;
 use base64::{engine::general_purpose, Engine as _};
@@ -328,7 +328,7 @@ impl ExternalAccessGrants {
             .map_err(|_| "external access state lock poisoned".to_string())?;
         let grant = grants
             .get(access_token)
-            .ok_or_else(|| "external access grant is invalid or expired".to_string())?;
+            .ok_or_else(|| EXTERNAL_GRANT_EXPIRED_MESSAGE.to_string())?;
         if grant.owner_window_label != window_label {
             return Err("external access grant belongs to another window".to_string());
         }
@@ -349,10 +349,10 @@ impl ExternalAccessGrants {
             .map_err(|_| "external access state lock poisoned".to_string())?;
         let grant = grants
             .get_mut(access_token)
-            .ok_or_else(|| "external access grant is invalid or expired".to_string())?;
+            .ok_or_else(|| EXTERNAL_GRANT_EXPIRED_MESSAGE.to_string())?;
         if grant.expires_at <= Instant::now() {
             grants.remove(access_token);
-            return Err("external access grant is invalid or expired".to_string());
+            return Err(EXTERNAL_GRANT_EXPIRED_MESSAGE.to_string());
         }
         if grant.owner_window_label != window_label
             || external_path_to_slash(&grant.file) != absolute_path
@@ -388,10 +388,10 @@ impl ExternalAccessGrants {
             .map_err(|_| "external access state lock poisoned".to_string())?;
         let grant = grants
             .get_mut(access_token)
-            .ok_or_else(|| "external access grant is invalid or expired".to_string())?;
+            .ok_or_else(|| EXTERNAL_GRANT_EXPIRED_MESSAGE.to_string())?;
         if grant.expires_at <= Instant::now() {
             grants.remove(access_token);
-            return Err("external access grant is invalid or expired".to_string());
+            return Err(EXTERNAL_GRANT_EXPIRED_MESSAGE.to_string());
         }
         if !capability(grant.capabilities) {
             return Err("external access grant does not allow this operation".to_string());
@@ -535,10 +535,10 @@ impl ExternalAccessGrants {
                 .map_err(|_| "external access state lock poisoned".to_string())?;
             let grant = grants
                 .get(access_token)
-                .ok_or_else(|| "external access grant is invalid or expired".to_string())?;
+                .ok_or_else(|| EXTERNAL_GRANT_EXPIRED_MESSAGE.to_string())?;
             if grant.expires_at <= Instant::now() {
                 grants.remove(access_token);
-                return Err("external access grant is invalid or expired".to_string());
+                return Err(EXTERNAL_GRANT_EXPIRED_MESSAGE.to_string());
             }
             if grant.owner_window_label != owner_window_label {
                 return Err("external access grant belongs to another window".to_string());
@@ -572,10 +572,10 @@ impl ExternalAccessGrants {
             .map_err(|_| "external access state lock poisoned".to_string())?;
         let grant = grants
             .get_mut(&prepared.access_token)
-            .ok_or_else(|| "external access grant is invalid or expired".to_string())?;
+            .ok_or_else(|| EXTERNAL_GRANT_EXPIRED_MESSAGE.to_string())?;
         if grant.expires_at <= Instant::now() {
             grants.remove(&prepared.access_token);
-            return Err("external access grant is invalid or expired".to_string());
+            return Err(EXTERNAL_GRANT_EXPIRED_MESSAGE.to_string());
         }
         if grant.owner_window_label != prepared.owner_window_label
             || grant.root != prepared.original_root
@@ -612,7 +612,7 @@ impl ExternalAccessGrants {
                 .map_err(|_| "external access state lock poisoned".to_string())?;
             grants
                 .get(access_token)
-                .ok_or_else(|| "external access grant is invalid or expired".to_string())?
+                .ok_or_else(|| EXTERNAL_GRANT_EXPIRED_MESSAGE.to_string())?
                 .owner_window_label
                 .clone()
         };

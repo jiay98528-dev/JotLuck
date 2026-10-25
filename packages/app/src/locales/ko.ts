@@ -1181,6 +1181,8 @@ export const messages = {
     diskFull: '디스크 공간이 부족하여 파일을 저장할 수 없습니다.',
     notebookNotOpen: '먼저 노트북을 여세요.',
     indexUnavailable: '검색을 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도하세요.',
+    conversionStale:
+      '원본 문서가 변경되어 현재 변환 결과가 만료되었습니다. 다시 변환한 후 시도하세요.',
     operationFailed: '작업에 실패했습니다. 다시 시도하세요.',
     openExternalLink: '외부 링크를 열 수 없습니다: {url}',
   },

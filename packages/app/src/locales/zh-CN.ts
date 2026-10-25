@@ -1143,6 +1143,7 @@ export const messages = {
     diskFull: '磁盘空间不足，无法保存文件。',
     notebookNotOpen: '请先打开一个笔记本。',
     indexUnavailable: '搜索索引暂不可用，请稍后重试。',
+    conversionStale: '源文件已变化，当前转换结果已过期，请重新转换后再试。',
     operationFailed: '操作失败，请重试。',
     openExternalLink: '无法打开外部链接：{url}',
   },

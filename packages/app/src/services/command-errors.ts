@@ -13,6 +13,9 @@ const messageKeys: Record<AppErrorCode, string> = {
   disk_full: 'errors.diskFull',
   notebook_not_open: 'errors.notebookNotOpen',
   index_unavailable: 'errors.indexUnavailable',
+  // 外部文件授权失效接通既有五语言文案；转换过期使用 errors.conversionStale。
+  external_grant_expired: 'notebook.toast.externalAccessExpired',
+  conversion_stale: 'errors.conversionStale',
   operation_failed: 'errors.operationFailed',
 };
 

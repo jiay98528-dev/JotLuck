@@ -1206,6 +1206,8 @@ export const messages = {
     diskFull: 'There is not enough disk space to save this file.',
     notebookNotOpen: 'Open a notebook first.',
     indexUnavailable: 'Search is temporarily unavailable. Try again shortly.',
+    conversionStale:
+      'The source document changed; the current conversion is stale. Reconvert it and try again.',
     operationFailed: 'The operation failed. Try again.',
     openExternalLink: 'Could not open the external link: {url}',
   },

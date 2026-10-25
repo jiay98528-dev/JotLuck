@@ -1239,6 +1239,8 @@ export const messages = {
     diskFull: 'L’espace disque est insuffisant pour enregistrer ce fichier.',
     notebookNotOpen: 'Ouvrez d’abord un carnet.',
     indexUnavailable: 'La recherche est momentanément indisponible. Réessayez dans un instant.',
+    conversionStale:
+      'Le document source a changé ; la conversion actuelle est obsolète. Reconvertissez-la.',
     operationFailed: 'L’opération a échoué. Réessayez.',
     openExternalLink: 'Impossible d’ouvrir le lien externe : {url}',
   },
