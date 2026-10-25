@@ -9,7 +9,8 @@
  * - 全角 ＃ 标题 → 带 id 的 h1（既有全角闭环不被破坏）
  */
 import { describe, expect, it } from 'vitest';
-import { renderMarkdown } from '../index';
+import { renderMarkdown, finalizePreparedHtml } from '../index';
+import { parseDocument, type HeadingNode } from '../ast';
 
 describe('tag 边界（renderer 复用 findTagStart）', () => {
   it('abc#def 不渲染 md-tag（# 紧跟 \\w 不算边界）', () => {
@@ -74,6 +75,26 @@ describe('wiki-link token 形状（renderer 复用 parseWikiLinkTarget）', () =
       '<a class="wikilink wikilink--dead" data-note="a" data-anchor="b">c</a>',
     );
   });
+
+  it('[[#同页锚点]]：空 note 形态渲染活链（可见锚文本、data-anchor 保留）', () => {
+    const html = renderMarkdown('[[#同页锚点]]');
+    // 修复前：text 空 → 空 <a> 死链；修复后：活链样式 + 可见锚文本
+    expect(html).toContain('<a class="wikilink" data-note="" data-anchor="同页锚点">#同页锚点</a>');
+    expect(html).not.toContain('wikilink--dead');
+  });
+
+  it('[[#同页锚点|别名]]：alias 可见文本 + 活链样式', () => {
+    const html = renderMarkdown('[[#同页锚点|别名]]');
+    expect(html).toContain('<a class="wikilink" data-note="" data-anchor="同页锚点">别名</a>');
+  });
+
+  it('wikiLinkExists resolver 不把同页锚点判死（存在性按 note 判定）', () => {
+    const html = finalizePreparedHtml('<a class="wikilink" data-note="" data-anchor="锚">x</a>', {
+      wikiLinkExists: () => false,
+    });
+    expect(html).toContain('class="wikilink"');
+    expect(html).not.toContain('wikilink--dead');
+  });
 });
 
 describe('addHeadingIds 消费 AST', () => {
@@ -110,6 +131,60 @@ describe('addHeadingIds 消费 AST', () => {
     expect(html).not.toContain('id="heading-notareal"');
     // fence 内的伪标题保留字面量在 <code> 中
     expect(html).toMatch(/<code[^>]*>[\s\S]*?# NotAReal[\s\S]*?<\/code>/);
+  });
+
+  it('AST heading id 与渲染 id 严格一致（同名 occurrence 同步）', () => {
+    const source = '# 基础\n\n正文\n\n# 基础\n\n## 其他';
+    const html = renderMarkdown(source);
+    const astIds = parseDocument(source)
+      .blocks.filter((block) => block.type === 'heading')
+      .map((block) => (block as HeadingNode).id);
+    expect(astIds).toEqual(['heading-基础', 'heading-基础-2', 'heading-其他']);
+    for (const id of astIds) expect(html).toContain(`id="${id}"`);
+  });
+});
+
+describe('原生 HTML 标题不抢 markdown 标题 id（LA 回归）', () => {
+  it('网页粘贴的裸 <h2> 不抢后续 markdown 标题 id，自身不注入 id', () => {
+    const source = '<h2>网页粘贴标题</h2>\n\n## 真标题';
+    const html = renderMarkdown(source);
+    // markdown 标题拿到自己的 id（修复前被 html h2 抢走、只能拿 fallback）
+    expect(html).toContain('<h2 id="heading-真标题">真标题</h2>');
+    // 原生 HTML 标题保持源码原样，不注入任何 id
+    expect(html).toContain('<h2>网页粘贴标题</h2>');
+    expect(html).not.toContain('heading-网页粘贴标题');
+  });
+
+  it('带属性/自带 id 的原生 HTML 标题：属性保留且同样不抢配对位', () => {
+    const source = '<h2 class="pasted">带属性</h2>\n\n<h3 id="自有">自带锚</h3>\n\n## 真标题';
+    const html = renderMarkdown(source);
+    expect(html).toContain('<h2 class="pasted">带属性</h2>');
+    expect(html).toContain('id="自有"'); // 自带 id 不被覆写
+    expect(html).toContain('<h2 id="heading-真标题">真标题</h2>');
+  });
+
+  it('引用块内混排：引用内 markdown 标题、引用内网页标题与顶层标题按文档序配对', () => {
+    const source = ['> ## 引用内标题', '>', '> <h3>引用内网页标题</h3>', '', '## 顶层标题'].join(
+      '\n',
+    );
+    const html = renderMarkdown(source);
+    expect(html).toContain('<h2 id="heading-引用内标题">引用内标题</h2>');
+    expect(html).toContain('<h3>引用内网页标题</h3>');
+    expect(html).toContain('<h2 id="heading-顶层标题">顶层标题</h2>');
+    expect(html).not.toContain('id="heading-引用内网页标题"');
+  });
+
+  it('原生 HTML 标题在前不推移同名 markdown 标题的 occurrence（与 AST 一致）', () => {
+    const source = '<h2>概要</h2>\n\n## 概要\n\n## 概要';
+    const html = renderMarkdown(source);
+    // occurrence 只按 markdown 标题累计（AST 不感知 html 标题）：
+    // 两个 markdown 概要分别是 1 号与 2 号，不被前面的 html 概要推移。
+    expect(html).toContain('<h2 id="heading-概要">概要</h2>');
+    expect(html).toContain('<h2 id="heading-概要-2">概要</h2>');
+    const astIds = parseDocument(source)
+      .blocks.filter((block) => block.type === 'heading')
+      .map((block) => (block as HeadingNode).id);
+    expect(astIds).toEqual(['heading-概要', 'heading-概要-2']);
   });
 });
 describe('R1 互审修复回归', () => {

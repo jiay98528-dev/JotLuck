@@ -65,11 +65,14 @@ export const wikiLinkExtension: TokenizerAndRendererExtension = {
     if (!match) return undefined;
     const inner = match[1] ?? '';
     const { note, anchor, alias } = parseWikiLinkTarget(inner);
+    // 空 note + 锚文本 = 同页锚点（[[#锚]]）：可见文本取 alias 或 `#锚` 锚文本
+    // 形态，不再是空 <a> 死链（三视图消失）。
+    const samePageAnchor = note === '' && anchor !== null;
     return {
       type: 'wikiLink',
       raw: match[0],
-      // 渲染文本 = alias ?? note（note 已 trim；alias 原样）
-      text: alias ?? note,
+      // 渲染文本 = alias ?? note（note 已 trim；alias 原样）；同页锚点回落 `#锚`
+      text: alias ?? (samePageAnchor ? `#${anchor}` : note),
       note,
       anchor,
       exists: false, // resolved at render time
@@ -77,7 +80,10 @@ export const wikiLinkExtension: TokenizerAndRendererExtension = {
   },
   renderer(token) {
     const t = token as unknown as WikiLinkToken;
-    const exists = wikiLinkExistsResolver?.(t.note) ?? t.exists;
+    // 同页锚点目标恒在本文档（跳转由宿主按标题锚点解析）：恒活链样式，
+    // 不随 note 存在性 resolver 落 dead。
+    const samePageAnchor = t.note === '' && t.anchor !== null;
+    const exists = samePageAnchor || (wikiLinkExistsResolver?.(t.note) ?? t.exists);
     const cls = exists ? 'wikilink' : 'wikilink wikilink--dead';
     return `<a class="${cls}" data-note="${escapeAttr(t.note)}" data-anchor="${escapeAttr(t.anchor || '')}">${escapeHtml(t.text)}</a>`;
   },

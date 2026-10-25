@@ -14,7 +14,11 @@ import { marked, Lexer, type Token } from 'marked';
 import { jotluckExtensions, setWikiLinkExistsResolver } from './marked-extensions';
 import { sanitize } from './sanitize';
 import { highlightCodeBlocks } from './highlight';
-import { normalizeFullwidthMarkdownSyntaxForRender, headingIdFromText } from './syntax';
+import {
+  normalizeFullwidthMarkdownSyntaxForRender,
+  headingIdFromText,
+  RAW_HTML_HEADING_OPEN_RE,
+} from './syntax';
 import { protectBareJsonBlocks } from './bare-json';
 import type { RemoteImageLabels, RemoteImagePolicy, RendererOptions } from './types';
 
@@ -34,6 +38,7 @@ export {
   TAG_TOKEN_RE,
   WIKI_LINK_GLOBAL_RE,
   WIKI_LINK_TOKEN_RE,
+  RAW_HTML_HEADING_OPEN_RE,
 } from './syntax';
 export type { WikiLinkTarget } from './syntax';
 export { findBareJsonBlockLineRanges } from './bare-json';
@@ -246,22 +251,43 @@ function applyImagePolicy(html: string, options?: RendererOptions): string {
   return template.innerHTML;
 }
 
-function addHeadingIds(html: string, source: string): string {
-  // 锚点 id 注入的是 marked 产出的 HTML，必须跟随渲染引擎自己的 token 序列
-  //（含引用/列表内嵌标题、缩进 ATX 等边界形态），否则配对错位、张冠李戴。
-  // 结构性消费（大纲/索引/编辑器）走 AST；此处与渲染同引擎是刻意取舍（R1-C3）。
-  const headings: string[] = [];
+/** 标题配对位：markdown 标题注入渲染 id；原生 HTML 标题仅占位（保留源码原样）。 */
+type HeadingSlot = { markdown: true; text: string } | { markdown: false };
+
+/**
+ * 按渲染引擎 token 序列收集标题配对位：markdown heading token 与 html token
+ * 内的 hN 开标签（含引用/列表内嵌、缩进 ATX 等边界形态）按文档序交错成队。
+ * 网页粘贴的 <h2> 若不计数，会在消费端抢走后续 markdown 标题的 id（张冠李戴）。
+ */
+function collectHeadingSlots(source: string): HeadingSlot[] {
+  const slots: HeadingSlot[] = [];
   marked.walkTokens(marked.lexer(source), (token) => {
-    if (token.type === 'heading') headings.push(token.text);
+    if (token.type === 'heading') slots.push({ markdown: true, text: token.text });
+    else if (token.type === 'html') {
+      for (const _open of token.text.matchAll(RAW_HTML_HEADING_OPEN_RE))
+        slots.push({ markdown: false });
+    }
   });
+  return slots;
+}
+
+function addHeadingIds(html: string, source: string): string {
+  // 锚点 id 注入的是 marked 产出的 HTML，必须跟随渲染引擎自己的 token 序列；
+  // 原生 HTML 标题同样占用配对位但不注入 id（AST 不感知 html 标题，occurrence
+  // 只按 markdown 标题累计，与 AST 的 id 分配严格一致）。结构性消费（大纲/索引/
+  // 编辑器）走 AST；此处与渲染同引擎是刻意取舍（R1-C3）。
+  const slots = collectHeadingSlots(source);
   const occurrences = new Map<string, number>();
   let index = 0;
-  return html.replace(/<h([1-6])>/g, (_match, depth: string) => {
-    const text = headings[index++] ?? `heading-${index}`;
-    const base = headingIdFromText(text);
+  // 消费端与收集端共用同一正则常量（matchAll/replace 均不遗留 lastIndex）。
+  return html.replace(RAW_HTML_HEADING_OPEN_RE, (match, depth: string, _attrs: string) => {
+    const slot = slots[index++];
+    // 非 markdown 标题位（原生 HTML/配对耗尽的兜底）：保持原标签，不抢 id。
+    if (!slot || !slot.markdown) return match;
+    const base = headingIdFromText(slot.text);
     const occurrence = (occurrences.get(base) ?? 0) + 1;
     occurrences.set(base, occurrence);
-    return `<h${depth} id="${headingIdFromText(text, occurrence)}">`;
+    return `<h${depth} id="${headingIdFromText(slot.text, occurrence)}">`;
   });
 }
 
@@ -313,7 +339,11 @@ export function finalizePreparedHtml(rawHtml: string, options?: RendererOptions)
     const template = document.createElement('template');
     template.innerHTML = initiallyCleanHtml;
     for (const link of template.content.querySelectorAll<HTMLElement>('a.wikilink[data-note]')) {
-      link.classList.toggle('wikilink--dead', !options.wikiLinkExists(link.dataset.note ?? ''));
+      const note = link.dataset.note ?? '';
+      // 空 note = 同页锚点（[[#锚]]）：存在性不按笔记索引判定（目标在本文档
+      // 标题集内），保持扩展渲染端的活链样式，不再被此处翻转成死链。
+      if (note === '') continue;
+      link.classList.toggle('wikilink--dead', !options.wikiLinkExists(note));
     }
     initiallyCleanHtml = template.innerHTML;
   }

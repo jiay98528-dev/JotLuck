@@ -17,6 +17,12 @@ export function isMarkdownEscaped(source: string, position: number): boolean {
   return slashes % 2 === 1;
 }
 
+/**
+ * 原生 HTML 标题开标签（含属性/大小写形态）：heading id 配对在 html token
+ * 收集端与输出 HTML 消费端使用同一形态计数，保证两侧计数严格对齐。
+ */
+export const RAW_HTML_HEADING_OPEN_RE = /<h([1-6])([^>]*)>/gi;
+
 /** 将中文输入法常见全角 Markdown 定界符规范化为等长半角字符。 */
 export function normalizeFullwidthMarkdownSyntax(source: string): string {
   return source

@@ -1,7 +1,11 @@
 /** DOM-free render preparation. The host MUST sanitize every returned fragment. */
 import { Marked, type Token, type TokensList, type Tokens } from 'marked';
 import { jotluckExtensions } from './marked-extensions';
-import { normalizeFullwidthMarkdownSyntaxForRender, headingIdFromText } from './syntax';
+import {
+  normalizeFullwidthMarkdownSyntaxForRender,
+  headingIdFromText,
+  RAW_HTML_HEADING_OPEN_RE,
+} from './syntax';
 import { findBareJsonBlockLineRanges } from './bare-json';
 
 const parser = new Marked({ gfm: true, breaks: false });
@@ -87,20 +91,33 @@ export async function preparePreviewFragments(
       const list = [part] as TokensList;
       list.links = tokens.links;
       const headings: string[] = [];
+      // 配对位与 index.ts addHeadingIds 同策略：markdown 标题（注入渲染 id，
+      // occurrence 跨片段按文档序累计——与 AST 分配一致）与 html token 内
+      // hN 开标签（仅占位）交错成队；消费端逐一对号，杜绝 undefined 注入。
+      const slots: Array<{ markdown: true; id: string } | { markdown: false }> = [];
       parser.walkTokens(list, (item) => {
-        if (item.type !== 'heading') return;
-        const base = headingIdFromText(item.text);
-        const count = (occurrences.get(base) ?? 0) + 1;
-        occurrences.set(base, count);
-        headings.push(headingIdFromText(item.text, count));
+        if (item.type === 'heading') {
+          const base = headingIdFromText(item.text);
+          const count = (occurrences.get(base) ?? 0) + 1;
+          occurrences.set(base, count);
+          const id = headingIdFromText(item.text, count);
+          headings.push(id);
+          slots.push({ markdown: true, id });
+        } else if (item.type === 'html') {
+          for (const _open of item.text.matchAll(RAW_HTML_HEADING_OPEN_RE))
+            slots.push({ markdown: false });
+        }
       });
-      let heading = 0;
+      let slotIndex = 0;
       let html = parser
         .parser(list)
-        .replace(
-          /<h([1-6])>/g,
-          (_match, level: string) => `<h${level} id="${headings[heading++]!}">`,
-        );
+        .replace(RAW_HTML_HEADING_OPEN_RE, (match, level: string, _attrs: string) => {
+          const slot = slots[slotIndex++];
+          // 非 markdown 标题位（原生 HTML 保留原样）/配对耗尽兜底：不注入 id，
+          // 旧实现此处会注入字符串 "undefined"。
+          if (!slot || !slot.markdown) return match;
+          return `<h${level} id="${slot.id}">`;
+        });
       if (token.type === 'table' && parts.length > 1) {
         html = html.replace('<table>', '<table class="progressive-table">');
         if (partIndex > 0) html = html.replace(/<thead>[\s\S]*?<\/thead>\n?/, '');

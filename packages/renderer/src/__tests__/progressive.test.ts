@@ -84,6 +84,27 @@ describe('progressive render semantics', () => {
     expect(actualDom.querySelector('script')).toBeNull();
     expect(actualDom.querySelector('img[src^="https:"]')).toBeNull();
   });
+
+  it('raw HTML headings occupy pairing slots without stealing ids or injecting undefined', async () => {
+    // 网页粘贴的 <h2> 在 markdown 标题之前：配对位计数包含 html 标题，
+    // markdown 标题 id 不被抢占；html 标题保持原样，任何片段不出现
+    // id="undefined"（旧实现 headings[heading++] 越界直取 undefined）。
+    const source = '<h2>网页粘贴标题</h2>\n\n## 真标题\n\n> ## 引用内标题';
+    const parts = await preparePreviewFragments(source);
+    const combined = parts.map((part) => finalizePreparedHtml(part.html)).join('');
+    expect(combined).not.toContain('undefined');
+    expect(combined).toContain('<h2 id="heading-真标题">真标题</h2>');
+    expect(combined).toContain('<h2 id="heading-引用内标题">引用内标题</h2>');
+    expect(combined).toContain('<h2>网页粘贴标题</h2>');
+    // 与整文渲染的 markdown 标题 id 逐一对齐（渐进/静态双路径一致）
+    const expectedDom = document.createElement('div');
+    expectedDom.innerHTML = renderMarkdown(source);
+    const actualDom = document.createElement('div');
+    actualDom.innerHTML = combined;
+    expect([...actualDom.querySelectorAll('h2[id]')].map((el) => el.id)).toEqual(
+      [...expectedDom.querySelectorAll('h2[id]')].map((el) => el.id),
+    );
+  });
   it('keeps every large-table row exactly once, without repeated header text', async () => {
     const source =
       '| Header A | Header B |\n| --- | --- |\n' +
