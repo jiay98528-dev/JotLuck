@@ -46,6 +46,16 @@ describe('NotebookHome 编辑壳「加入笔记」失败反馈链', () => {
       } as JotLuckE2EOpenedFile & { accessToken: string },
       externalFiles: { [NOTE_ABSOLUTE_PATH]: '# 授权过期\n\n正文内容。\n' },
     };
+    // jsdom 无 ResizeObserver；整页挂载会异步拉起 MarkdownCheatSheet，
+    // 其 onMounted 裸用 new ResizeObserver 会以未处理 rejection 打红整轮。
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
     wrapper = mount(NotebookHome, {
       global: {
         plugins: [createPinia()],
