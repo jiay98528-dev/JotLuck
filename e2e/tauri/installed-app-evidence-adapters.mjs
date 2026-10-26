@@ -338,9 +338,13 @@ $entries = @(
   Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue
   Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue
   Get-ItemProperty 'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue
-) | Where-Object { $_.DisplayName -eq 'JotLuck' }
-if ($entries.Count -ne 1) { throw "expected one JotLuck uninstall entry, found $($entries.Count)" }
-$entries[0] | Select-Object DisplayName,DisplayVersion,InstallLocation,DisplayIcon,UninstallString | ConvertTo-Json -Compress
+)
+# Where-Object 结果必须 @() 包裹：单匹配是标量 PSCustomObject，其裸
+# .Count 在 PS 5.1 不可靠（实测 null/0，非内在 1）——原版此处恒 throw
+# 「found (空)」。包裹后 0/1/N 语义全部正确。
+$matches = @($entries | Where-Object { $_.DisplayName -eq 'JotLuck' })
+if ($matches.Count -ne 1) { throw "expected one JotLuck uninstall entry, found $($matches.Count)" }
+$matches[0] | Select-Object DisplayName,DisplayVersion,InstallLocation,DisplayIcon,UninstallString | ConvertTo-Json -Compress
 `;
   return JSON.parse(runPowerShell(script));
 }
@@ -405,9 +409,22 @@ if (Test-Path -LiteralPath $exe) {
 }
 
 function runPowerShell(script, extraEnv = {}) {
+  // 脚本必须经 -EncodedCommand（base64 UTF-16LE）传输：含双引号字符串的
+  // 多行脚本走 -Command 会被 Windows argv 重组破坏（实证：带 throw "..."
+  // 的探针在 node spawn 通道下 Where-Object 行失效、$entries 恒空，而全
+  // 单引号脚本同通道正常——引号边界在命令行重组时被吃掉）。
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
   const result = spawnSyncChecked(
     'powershell.exe',
-    ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
+    [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-EncodedCommand',
+      encoded,
+    ],
     120_000,
     extraEnv,
   );
