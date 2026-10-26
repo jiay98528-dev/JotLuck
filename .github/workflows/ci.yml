@@ -227,13 +227,33 @@ jobs:
             throw 'RUSTSEC-2026-0235 is reachable; remove the audit exception and upgrade rkyv.'
           }
 
+      - name: Verify ignored zip advisories stay confined to docx-rs
+        shell: pwsh
+        run: |
+          $zipTree = @(cargo tree --manifest-path packages/app/src-tauri/Cargo.toml --target all -i zip@8.6.0 2>$null)
+          # RUSTSEC-2026-0367..0369 只影响 zip 9 以下的 extract/symlink 落盘路径；
+          # 直接依赖已升 zip 9.1，残留的 8.6.0 仅 docx-rs 一条传递链（read_docx 纯内存解析）。
+          $outside = $zipTree | Where-Object {
+            $_ -notmatch '^zip v8\.6\.0' -and
+            $_ -notmatch 'docx-rs v' -and
+            $_ -notmatch 'jotluck v'
+          }
+          if ($zipTree.Count -eq 0 -or $outside.Count -ne 0) {
+            $zipTree | Write-Output
+            throw 'zip@8.6.0 disappeared or gained a new parent; re-review the RUSTSEC-2026-0367..0369 audit ignores.'
+          }
+
       - name: Install cargo-audit
         uses: taiki-e/install-action@cargo-audit
 
       - name: Audit Rust dependencies
         # rkyv is present only as rust_decimal's optional metadata dependency; no selected
         # JotLuck feature enables it (`cargo tree --target all -i rkyv` is empty).
-        run: cargo audit --file packages/app/src-tauri/Cargo.lock --ignore RUSTSEC-2026-0235
+        # zip@8.6.0 remains solely as docx-rs' transitive (calamine 0.37 and the direct
+        # dependency moved to zip 9.1); RUSTSEC-2026-0367..0369 cover extract()-style
+        # unpacking paths that neither docx-rs' in-memory read_docx nor JotLuck's
+        # by_name/by_index reader invoke (guarded by the tree check above).
+        run: cargo audit --file packages/app/src-tauri/Cargo.lock --ignore RUSTSEC-2026-0235 --ignore RUSTSEC-2026-0367 --ignore RUSTSEC-2026-0368 --ignore RUSTSEC-2026-0369
 
   tauri-build-windows:
     name: Windows Tauri Build
