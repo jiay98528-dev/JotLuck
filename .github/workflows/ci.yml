@@ -535,10 +535,14 @@ jobs:
         run: |
           cargo install tauri-driver --version 2.0.6 --locked
           $tauriDriver = (Resolve-Path "$env:USERPROFILE\.cargo\bin\tauri-driver.exe" -ErrorAction Stop).Path
-          $tauriDriverVersion = & $tauriDriver --version
-          if ($tauriDriverVersion -notmatch '(^|\s)2\.0\.6($|\s)') {
-            throw "unexpected tauri-driver version: $tauriDriverVersion"
+          # tauri-driver 的 pico-args CLI 不支持 --version（"unused arguments
+          # left"）；版本由 cargo install 的 --version 2.0.6 --locked 固定，以
+          # 安装清单核对、--help 验证可启动（与 Windows Tauri Build 同款步骤同口径）。
+          $installedText = (cargo install --list) -join "`n"
+          if ($installedText -notmatch 'tauri-driver v2\.0\.6:') {
+            throw "unexpected tauri-driver install state: $installedText"
           }
+          & $tauriDriver --help | Out-Null
           "JOTLUCK_TAURI_DRIVER=$tauriDriver" >> $env:GITHUB_ENV
 
       - name: Install matching Microsoft Edge Driver
