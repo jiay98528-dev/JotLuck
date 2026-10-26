@@ -63,7 +63,8 @@ describe('installed-app evidence capture entrypoint', () => {
       2,
     );
     expect(workflow).toContain('$env:USERPROFILE\\.cargo\\bin\\tauri-driver.exe');
-    expect(workflow).toContain('unexpected tauri-driver version');
+    // pico-args 无 --version：校验口径为 cargo 安装清单核对（与 Build 步同款）
+    expect(workflow).toContain('unexpected tauri-driver install state');
     expect(workflow).toContain('expected exactly one candidate jotluck.exe');
     expect(workflow).toContain('JOTLUCK_CANDIDATE_APPLICATION_PATH');
   });
