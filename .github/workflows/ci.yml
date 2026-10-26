@@ -110,8 +110,9 @@ jobs:
   e2e:
     name: E2E Tests
     runs-on: ubuntu-latest
-    # webkit 实测需要 16 分钟以上（chromium 11.1 / firefox 12.1 分钟通过），15 分钟连续两次撞线。
-    timeout-minutes: 25
+    # webkit 实测 22.6 分钟通过、下一轮 25 分钟撞线被杀（chromium/firefox 12-18 分钟）；
+    # 免费队列负载波动大，阈值给足余量，避免边缘性取消导致整轮作废。
+    timeout-minutes: 40
     needs: [lint-and-typecheck, test]
 
     strategy:
