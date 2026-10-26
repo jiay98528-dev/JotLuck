@@ -257,15 +257,25 @@ async function ensureInstalledCandidate(candidateRoot) {
   state.installEvents.push({ action: 'install', ...install });
   if (install.exitCode !== 0)
     throw new Error(`candidate installer failed with ${install.exitCode}`);
-  let entry;
-  try {
-    entry = queryInstalledEntry();
-  } catch (error) {
-    // 卸载键探针失败自带现场：安装子进程事件（时长/stdout/stderr）与三 hive
-    // 全量卸载项清单随错误消息进入失败日志——CI runner 上安装 exit 0 却查无
-    // 条目时（2026-10-26 两例），靠它区分「未写入」与「写入异名/异 hive」。
+  // NSIS 父进程 exit 0 后注册表写入仍异步落定约 1 秒（tauri 模板再拉起子
+  // 进程；2026-10-26 runner 实证：exit 后立即探针 0 条、1 秒后采集 1 条）。
+  // 轮询收敛到恰好 1 条：期间接受 0 条（写入未落定）与 2 条（上一用例
+  // 卸载残留未清）的过渡态，60 秒内未收敛才判失败。
+  let entry = null;
+  let lastError = null;
+  for (let attempt = 0; attempt < 60 && entry === null; attempt += 1) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      entry = queryInstalledEntry();
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (entry === null) {
+    // 收敛失败自带现场：安装子进程事件（时长/stdout/stderr）与三 hive
+    // 全量卸载项清单随错误消息进入失败日志，区分「未写入」与「异名/异 hive」。
     throw new Error(
-      `${error.message}\n[diag] installEvent=${JSON.stringify(
+      `${lastError?.message ?? 'uninstall entry never settled'}\n[diag] installEvent=${JSON.stringify(
         state.installEvents.at(-1),
       )}\n[diag] uninstallInventory=${collectUninstallInventory()}`,
     );
