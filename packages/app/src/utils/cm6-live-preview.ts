@@ -1431,19 +1431,24 @@ function liveCacheKey(block: LiveBlock): string {
 }
 
 /**
- * 兼容 click 抑制状态挂 EditorView 而非插件实例：手势结束时
- * finishTouch 广播 editor-touch-finished → flushPreviewRefresh 会在微任务中
- * livePreviewCompartment.reconfigure(...)，销毁并重建本插件实例——挂在实例
- * 字段上的抑制标志随重建归零，随后的兼容 click 落到新实例上被放行（37 号
- * spec 实证：外链误开 popup；真实触摸设备同样暴露）。view 级存储在重建间
- * 保留语义，且随 view 销毁一同释放。
+ * 兼容 click 抑制的事件序标志（nextClick）挂 EditorView 而非插件实例：
+ * 手势结束时 finishTouch 广播 editor-touch-finished → flushPreviewRefresh
+ * 会在微任务中 livePreviewCompartment.reconfigure(...)，销毁并重建本插件
+ * 实例——挂在实例字段上的标志随重建归零，随后的兼容 click 落到新实例上
+ * 被放行（37 号 spec 实证：外链误开 popup；真实触摸设备同样暴露）。
+ *
+ * 仅 nextClick 迁 view 键控；800ms 墙钟后备（suppressClickUntil）保持
+ * 实例字段：重建即归零是历史语义——重建后首个无 nextClick 的兼容 click
+ * 放行，承担了「手势中重建导致 finishTouch 早退（touchPending 随实例
+ * 丢失）时由兼容 click 补落光标」的补救路径（37 号 :57 连续点按用例
+ * 依赖此行为，实证 until 持久化会误吞该补救 click 使光标停在旧位）。
  */
-const touchSuppressionStore = new WeakMap<EditorView, { nextClick: boolean; until: number }>();
+const touchSuppressionStore = new WeakMap<EditorView, { nextClick: boolean }>();
 
-function touchSuppression(view: EditorView): { nextClick: boolean; until: number } {
+function touchSuppression(view: EditorView): { nextClick: boolean } {
   let state = touchSuppressionStore.get(view);
   if (!state) {
-    state = { nextClick: false, until: 0 };
+    state = { nextClick: false };
     touchSuppressionStore.set(view, state);
   }
   return state;
@@ -1460,9 +1465,10 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
       currentBlocks: LiveBlock[] = [];
       touchPending = false;
       touchDoc: Text | null = null;
-      // 取消/完成手势后的兼容 click 抑制：状态位 + 下一个 pointerdown 才解除。
-      // 单靠 800ms 墙钟窗在负载下会漏抑制（click 迟到即误勾选任务——37 号
-      // 共享指针用例实证），改为事件序语义；状态本体在 touchSuppressionStore。
+      // 取消/完成手势后的兼容 click 抑制：nextClick 事件序状态位（下一个
+      // pointerdown 才解除）本体在 touchSuppressionStore（view 键控）；
+      // suppressClickUntil 为 800ms 墙钟后备，保持实例字段（见 store 注释）。
+      suppressClickUntil = 0;
       interactionCleanup: Array<() => void> = [];
       hitMaps = new WeakMap<HTMLElement, { doc: Text; nodes: WeakMap<Node, number[]> }>();
       renderMore(view: EditorView): void {
@@ -1557,7 +1563,10 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         // cursor to a wrong line, which is especially disruptive for IME input.
         const onClick = (e: MouseEvent, tapTarget?: HTMLElement) => {
           const suppression = touchSuppression(view);
-          if (!tapTarget && (suppression.nextClick || performance.now() < suppression.until)) {
+          if (
+            !tapTarget &&
+            (suppression.nextClick || performance.now() < this.suppressClickUntil)
+          ) {
             suppression.nextClick = false;
             e.preventDefault();
             e.stopPropagation();
@@ -1664,9 +1673,8 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           this.touchPending = false;
           gesture.reset();
           if (touchTarget) {
-            const suppression = touchSuppression(view);
-            suppression.until = performance.now() + 800;
-            suppression.nextClick = true;
+            this.suppressClickUntil = performance.now() + 800;
+            touchSuppression(view).nextClick = true;
             if (valid && !this.isImeActive(view)) onClick(event, touchTarget);
           }
           touchTarget = null;
@@ -1682,7 +1690,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           touchSuppression(view).nextClick = true;
         };
         const mouseDown = (event: MouseEvent) => {
-          if (this.touchPending || performance.now() < touchSuppression(view).until) {
+          if (this.touchPending || performance.now() < this.suppressClickUntil) {
             event.preventDefault();
             event.stopPropagation();
           }
@@ -1788,9 +1796,8 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         const onPointerDownCapture = (e: PointerEvent) => {
           if (this.destroyed) return;
           if (e.pointerType === 'mouse') {
-            const suppression = touchSuppression(view);
-            suppression.until = 0;
-            suppression.nextClick = false;
+            this.suppressClickUntil = 0;
+            touchSuppression(view).nextClick = false;
           }
           const target = e.target as HTMLElement;
           if (e.pointerType === 'touch') return;
@@ -1836,7 +1843,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
             suppression.nextClick = false;
             return;
           }
-          if (performance.now() < suppression.until) return;
+          if (performance.now() < this.suppressClickUntil) return;
           const target = e.target as HTMLElement;
           const checkbox = target.closest('input[type="checkbox"], .cm-task-toggle');
           if (!checkbox) return;
