@@ -2,6 +2,7 @@
 import { createHash } from 'node:crypto';
 import {
   copyFileSync,
+  cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -144,7 +145,10 @@ if (captureError) {
       error: { name: captureError.name, message: captureError.message },
     });
     mkdirSync(path.dirname(diagnosticRoot), { recursive: true });
-    renameSync(sourceRoot, diagnosticRoot);
+    // 失败轨迹常落系统盘 Temp、诊断目标在工作区盘——跨盘 rename 必 EXDEV
+    // （Windows runner 实测），改递归复制后删除源。
+    cpSync(sourceRoot, diagnosticRoot, { recursive: true });
+    rmSync(sourceRoot, { recursive: true, force: true });
   } catch (diagnosticError) {
     fail(
       `${captureError.message}; diagnostic preservation failed: ${

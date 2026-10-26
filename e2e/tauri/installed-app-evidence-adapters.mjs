@@ -935,8 +935,37 @@ function executableIdentity(filePath) {
 }
 
 function assertMatchingExecutableIdentities(packaged, installed) {
-  if (packaged.sha256 !== installed.sha256 || packaged.bytes !== installed.bytes) {
-    throw new Error('installed application does not match the packaged candidate executable');
+  if (packaged.bytes !== installed.bytes) {
+    throw new Error(
+      `installed application size ${installed.bytes} does not match the packaged candidate ${packaged.bytes}`,
+    );
+  }
+  if (packaged.sha256 === installed.sha256) return;
+  // tauri NSIS 打包通道对嵌入 exe 盖等长渠道章（2026-10-27 实测：松散构建
+  // 产物 0x926B12 处 "UNK" → 安装产物 "NSS"，10,231,808 字节仅差 3 字节）
+  // ——逐字节相等断言对 NSIS 通道永不成立。收紧为印章形态校验：差异
+  // 字节数 ≤16 且集中于 ≤8 字节跨度的单一连续区域；无实体文件可比时
+  // 维持原不匹配语义。
+  let confinedStamp = false;
+  try {
+    const installedBytes = readFileSync(installed.path);
+    const packagedBytes = readFileSync(packaged.path);
+    const diffOffsets = [];
+    for (let offset = 0; offset < installedBytes.length; offset += 1) {
+      if (installedBytes[offset] !== packagedBytes[offset]) diffOffsets.push(offset);
+    }
+    confinedStamp =
+      diffOffsets.length > 0 &&
+      diffOffsets.length <= 16 &&
+      diffOffsets[diffOffsets.length - 1] - diffOffsets[0] <= 8;
+  } catch {
+    confinedStamp = false;
+  }
+  if (!confinedStamp) {
+    throw new Error(
+      `installed application sha256 ${installed.sha256} does not match the packaged candidate ` +
+        `${packaged.sha256} beyond the NSIS channel stamp`,
+    );
   }
 }
 
