@@ -75,8 +75,23 @@ function installRuntimeObservationGate(page: Page, browserName = '') {
         }
         if (
           event.type === 'requestfailed' &&
-          /(net::ERR_ABORTED|NS_BINDING_ABORTED)/i.test(event.text) &&
+          /(net::ERR_ABORTED|NS_BINDING_ABORTED|Load request cancelled)/i.test(event.text) &&
           isExpectedAssetUrl(event.url, /^\/(?:src|@vite|node_modules|@fs|assets)\//u)
+        ) {
+          return false;
+        }
+        // WebKit 把「reload 中止在途 module-worker fetch」先以不可捕获的
+        // pageerror（... due to access control checks）上报——与上面
+        // requestfailed 的 ERR_ABORTED/NS_BINDING_ABORTED 同根同族：
+        // B4 快速切换后 reload，懒起的 hybrid worker 脚本 fetch 被导航
+        // 取消。应用侧经 worker onerror 降级，无产品缺陷；仅 WebKit 会
+        // 把装载失败额外冒泡为页面级异常，按 firefox vendor 先例放行。
+        if (
+          event.type === 'pageerror' &&
+          browserName === 'webkit' &&
+          /\/assets\/hybrid-retrieval\.worker-[A-Za-z0-9_-]+\.js[^]*due to access control checks/u.test(
+            event.text,
+          )
         ) {
           return false;
         }
