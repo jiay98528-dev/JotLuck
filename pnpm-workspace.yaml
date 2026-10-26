@@ -15,8 +15,10 @@ minimumReleaseAgeExclude:
 overrides:
   # GHSA-jmr9-qjv8-65gv：新版浏览器管理模块已移除受影响的 extract-zip 依赖
   '@puppeteer/browsers': 3.2.0
-  brace-expansion: 5.0.9
-  fast-uri@^3.0.0: 3.1.6
+  # GHSA-qhr7-859c-m2p7 / GHSA-6j4f-fj2g-mc7p（high）：brace-expansion 递归 DoS，5.0.11 起修复
+  brace-expansion: 5.0.11
+  # GHSA-qw65-cvwx-89v3（high）：fast-uri authority 注入，3.1.7 起修复
+  fast-uri@^3.0.0: 3.1.7
   fast-xml-parser@^5.0.0: 5.10.1
   ip-address: ^10.3.1
   # GHSA-8x5v-wxc8-hprp（high）：@wdio 链 deepmerge-ts <8.0.0 原型污染，v8 为官方补丁线
@@ -30,8 +32,20 @@ overrides:
   nanoid@^5.0.0: 5.1.16
   postcss@^8.0.0: 8.5.23
   serialize-javascript: ^7.0.3
-  undici: ^7.29.0
-  vite: 6.4.3
+  # GHSA-rfgv-xxqx-mfg5 / GHSA-w293-vg96-wgc3 / GHSA-xjj6-f33q-929c（high）：undici DoS 与 TLS 校验绕过，7.30.1 起修复
+  undici: ^7.30.1
+  # GHSA-68fv-2mgg-jv7q（high）：source-map-js 事件循环 DoS，1.2.2 起修复
+  source-map-js: ^1.2.2
+  # GHSA-587h-7wmj-h5pm（high）：vite→launch-editor 存在性探测，6.4.4 起修复
+  vite: 6.4.4
+auditConfig:
+  ignoreGhsas:
+    # tinypool 两个 critical：vitest 3.x 锁 ^1.x，修复版 2.1.2 跨 major 强升有破坏风险；
+    # 仅 dev 测试池，无不可信输入路径，待 vitest 4 迁移时随依赖一并消除
+    - GHSA-5gmw-xhrv-c9v3
+    - GHSA-85c8-ppgw-ccpr
+    # fast-uri host confusion：官方暂无修复版本（unknown），仅 dev 工具链传递依赖
+    - GHSA-58mr-gqgx-xq4g
 patchedDependencies:
   minimatch@5.1.9: patches/minimatch@5.1.9.patch
   minimatch@9.0.9: patches/minimatch@9.0.9.patch
