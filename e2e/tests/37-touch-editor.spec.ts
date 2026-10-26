@@ -167,7 +167,25 @@ test('shared pointer cancellation, IME guards and compatibility clicks preserve 
     // 合成事件间给挂起的 rAF 重渲染一个落定窗口：pointercancel 后的兼容
     // click 若赶在 live 块重建中间态派发，目标节点瞬时脱离会使抑制链失效
     // （真实浏览器的兼容 click 与手势同帧，不存在此窗口——纯合成事件暴露）。
+    // 双向夹住时序窗：80ms 底噪防过早命中重建中间态，双 rAF + 锚点身份
+    // 稳定防慢 runner 上重建压线（两者都远在 800ms 抑制窗内）。
     await page.waitForTimeout(80);
+    await page.waitForFunction(
+      () =>
+        new Promise<boolean>((resolve) => {
+          const anchor = document.querySelector('.cm-live-block a');
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() =>
+              resolve(
+                document.querySelector('.cm-live-block a') === anchor &&
+                  anchor?.isConnected === true,
+              ),
+            ),
+          );
+        }),
+      undefined,
+      { timeout: 5_000 },
+    );
     await control.dispatchEvent('click', { detail: 1 });
   }
   expect(popups).toBe(0);
