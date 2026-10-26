@@ -257,7 +257,19 @@ async function ensureInstalledCandidate(candidateRoot) {
   state.installEvents.push({ action: 'install', ...install });
   if (install.exitCode !== 0)
     throw new Error(`candidate installer failed with ${install.exitCode}`);
-  const entry = queryInstalledEntry();
+  let entry;
+  try {
+    entry = queryInstalledEntry();
+  } catch (error) {
+    // 卸载键探针失败自带现场：安装子进程事件（时长/stdout/stderr）与三 hive
+    // 全量卸载项清单随错误消息进入失败日志——CI runner 上安装 exit 0 却查无
+    // 条目时（2026-10-26 两例），靠它区分「未写入」与「写入异名/异 hive」。
+    throw new Error(
+      `${error.message}\n[diag] installEvent=${JSON.stringify(
+        state.installEvents.at(-1),
+      )}\n[diag] uninstallInventory=${collectUninstallInventory()}`,
+    );
+  }
   state.installed = parseInstalledEntry(entry);
   assertNonEmptyRegularFile(state.installed.application, 'installed application');
   const packagedApplication = executableIdentity(state.candidate.packagedApplication);
@@ -321,6 +333,23 @@ if ($entries.Count -ne 1) { throw "expected one JotLuck uninstall entry, found $
 $entries[0] | Select-Object DisplayName,DisplayVersion,InstallLocation,DisplayIcon,UninstallString | ConvertTo-Json -Compress
 `;
   return JSON.parse(runPowerShell(script));
+}
+
+/** 探针失败时的现场采集：三 hive 全量 DisplayName 清单 + 当前用户上下文。 */
+function collectUninstallInventory() {
+  const script = String.raw`
+$rows = @(
+  Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue
+  Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue
+  Get-ItemProperty 'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue
+) | Select-Object @{n='hive';e={$_.PSPath -replace '.*::(HKEY_[^\\]+).*','$1'}}, DisplayName, InstallLocation
+@{ user = [Environment]::UserName; entries = @($rows) } | ConvertTo-Json -Compress -Depth 3
+`;
+  try {
+    return runPowerShell(script);
+  } catch (error) {
+    return `inventory-failed: ${error instanceof Error ? error.message : String(error)}`;
+  }
 }
 
 function parseInstalledEntry(entry) {
