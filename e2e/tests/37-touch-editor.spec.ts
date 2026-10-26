@@ -145,48 +145,9 @@ test('shared pointer cancellation, IME guards and compatibility clicks preserve 
   await seed(page, '[链接](https://example.com)\n\n- [ ] 任务');
   const original = await getEditorContentFromBridge(page);
   let popups = 0;
-  const popupUrls: string[] = [];
   page.on('popup', (popup) => {
     popups++;
-    popupUrls.push(popup.url());
     void popup.close();
-  });
-  // CI chromium 专项诊断仪表（根因定位后移除）：捕获 pointer/click 序列、
-  // 包装 window.open、记录 popup——区分「应用 openExternalUrl 弹窗」与
-  // 「默认动作导航」，以及抑制链各标志位是否如预期置位。
-  await page.evaluate(() => {
-    type Diag = { pd: number; pc: number; clicks: string[]; opens: string[] };
-    const host = window as typeof window & { __clickDiag?: Diag };
-    host.__clickDiag = { pd: 0, pc: 0, clicks: [], opens: [] };
-    const diag = host.__clickDiag;
-    const rawOpen = window.open.bind(window);
-    window.open = ((url?: string | URL, target?: string, features?: string) => {
-      diag.opens.push(String(url));
-      return rawOpen(url, target, features);
-    }) as typeof window.open;
-    document.addEventListener(
-      'pointerdown',
-      () => {
-        diag.pd += 1;
-      },
-      true,
-    );
-    document.addEventListener(
-      'pointercancel',
-      () => {
-        diag.pc += 1;
-      },
-      true,
-    );
-    document.addEventListener(
-      'click',
-      (event) => {
-        const el = event.target as HTMLElement;
-        const label = (el.className || el.nodeName).toString().slice(0, 24);
-        diag.clicks.push(`${label}/trusted=${event.isTrusted}/prevented=${event.defaultPrevented}`);
-      },
-      true,
-    );
   });
   for (const selector of ['.cm-live-block a', '.cm-task-toggle']) {
     const control = page.locator(selector).first();
@@ -227,13 +188,7 @@ test('shared pointer cancellation, IME guards and compatibility clicks preserve 
     );
     await control.dispatchEvent('click', { detail: 1 });
   }
-  const diag = await page
-    .evaluate(() => (window as typeof window & { __clickDiag?: unknown }).__clickDiag)
-    .catch((error: unknown) => `diag-fetch-failed: ${String(error).slice(0, 80)}`);
-  expect(
-    popups,
-    `page.url=${page.url()} popups=${popups} urls=${popupUrls.join('|')} diag=${JSON.stringify(diag)}`,
-  ).toBe(0);
+  expect(popups).toBe(0);
   expect(await getEditorContentFromBridge(page)).toBe(original);
   const toggle = page.locator('.cm-task-toggle');
   await page.locator('.cm-content').dispatchEvent('compositionstart', { data: '中' });

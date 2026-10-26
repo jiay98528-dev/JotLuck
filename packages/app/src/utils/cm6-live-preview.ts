@@ -1430,6 +1430,25 @@ function liveCacheKey(block: LiveBlock): string {
   ].join('\u0000');
 }
 
+/**
+ * 兼容 click 抑制状态挂 EditorView 而非插件实例：手势结束时
+ * finishTouch 广播 editor-touch-finished → flushPreviewRefresh 会在微任务中
+ * livePreviewCompartment.reconfigure(...)，销毁并重建本插件实例——挂在实例
+ * 字段上的抑制标志随重建归零，随后的兼容 click 落到新实例上被放行（37 号
+ * spec 实证：外链误开 popup；真实触摸设备同样暴露）。view 级存储在重建间
+ * 保留语义，且随 view 销毁一同释放。
+ */
+const touchSuppressionStore = new WeakMap<EditorView, { nextClick: boolean; until: number }>();
+
+function touchSuppression(view: EditorView): { nextClick: boolean; until: number } {
+  let state = touchSuppressionStore.get(view);
+  if (!state) {
+    state = { nextClick: false, until: 0 };
+    touchSuppressionStore.set(view, state);
+  }
+  return state;
+}
+
 function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
   return ViewPlugin.fromClass(
     class {
@@ -1441,11 +1460,9 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
       currentBlocks: LiveBlock[] = [];
       touchPending = false;
       touchDoc: Text | null = null;
-      suppressClickUntil = 0;
       // 取消/完成手势后的兼容 click 抑制：状态位 + 下一个 pointerdown 才解除。
-      // 单靠 suppressClickUntil 的 800ms 墙钟窗在负载下会漏抑制（click 迟到
-      // 即误勾选任务——37 号共享指针用例实证），改为事件序语义。
-      suppressNextClick = false;
+      // 单靠 800ms 墙钟窗在负载下会漏抑制（click 迟到即误勾选任务——37 号
+      // 共享指针用例实证），改为事件序语义；状态本体在 touchSuppressionStore。
       interactionCleanup: Array<() => void> = [];
       hitMaps = new WeakMap<HTMLElement, { doc: Text; nodes: WeakMap<Node, number[]> }>();
       renderMore(view: EditorView): void {
@@ -1539,11 +1556,9 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         // Relying on CM6's default DOM mapping for replaced widgets can move the
         // cursor to a wrong line, which is especially disruptive for IME input.
         const onClick = (e: MouseEvent, tapTarget?: HTMLElement) => {
-          if (
-            !tapTarget &&
-            (this.suppressNextClick || performance.now() < this.suppressClickUntil)
-          ) {
-            this.suppressNextClick = false;
+          const suppression = touchSuppression(view);
+          if (!tapTarget && (suppression.nextClick || performance.now() < suppression.until)) {
+            suppression.nextClick = false;
             e.preventDefault();
             e.stopPropagation();
             return;
@@ -1624,7 +1639,7 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         let touchTarget: HTMLElement | null = null;
         const touchDown = (event: PointerEvent) => {
           if (event.pointerType !== 'touch') return;
-          this.suppressNextClick = false;
+          touchSuppression(view).nextClick = false;
           if (this.touchPending) {
             gesture.cancel();
             return;
@@ -1649,8 +1664,9 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           this.touchPending = false;
           gesture.reset();
           if (touchTarget) {
-            this.suppressClickUntil = performance.now() + 800;
-            this.suppressNextClick = true;
+            const suppression = touchSuppression(view);
+            suppression.until = performance.now() + 800;
+            suppression.nextClick = true;
             if (valid && !this.isImeActive(view)) onClick(event, touchTarget);
           }
           touchTarget = null;
@@ -1663,10 +1679,10 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
           // 硬防御：pointercancel 时若手势未被跟踪（如目标已瞬时脱离
           // contentDOM），finishTouch 不会置位——任何 pointercancel 后的
           // 兼容 click 一律抑制，鼠标 pointerdown 会解除。
-          this.suppressNextClick = true;
+          touchSuppression(view).nextClick = true;
         };
         const mouseDown = (event: MouseEvent) => {
-          if (this.touchPending || performance.now() < this.suppressClickUntil) {
+          if (this.touchPending || performance.now() < touchSuppression(view).until) {
             event.preventDefault();
             event.stopPropagation();
           }
@@ -1772,8 +1788,9 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
         const onPointerDownCapture = (e: PointerEvent) => {
           if (this.destroyed) return;
           if (e.pointerType === 'mouse') {
-            this.suppressClickUntil = 0;
-            this.suppressNextClick = false;
+            const suppression = touchSuppression(view);
+            suppression.until = 0;
+            suppression.nextClick = false;
           }
           const target = e.target as HTMLElement;
           if (e.pointerType === 'touch') return;
@@ -1811,14 +1828,15 @@ function createLivePreviewPlugin(options: LivePreviewOptions = {}) {
 
         const onChangeCapture = (e: Event) => {
           if (this.destroyed || view.state.readOnly || this.isImeActive(view)) return;
-          if (this.suppressNextClick) {
+          const suppression = touchSuppression(view);
+          if (suppression.nextClick) {
             // 键盘路径（Tab 聚焦复选框 + Space）触发 change 而无 click 可消耗
             // 标志——命中即清除，避免触摸点按后标志残留把键盘勾选永久误抑制。
             // 真实兼容 click 先于 change，不会因此漏抑制（click 阶段已自行消耗）。
-            this.suppressNextClick = false;
+            suppression.nextClick = false;
             return;
           }
-          if (performance.now() < this.suppressClickUntil) return;
+          if (performance.now() < suppression.until) return;
           const target = e.target as HTMLElement;
           const checkbox = target.closest('input[type="checkbox"], .cm-task-toggle');
           if (!checkbox) return;
