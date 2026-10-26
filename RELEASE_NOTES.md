@@ -1,8 +1,10 @@
 # JotLuck v0.3.0-preview — Preview Release Notes
 
 > Date: 2026-10-07
-> The complete V0.2 editor generation. Version numbering now tracks the app
-> generation (0.14.0 → 0.2.0 → 0.3.0), not the old preview counter.
+> Current source version: `v0.3.2` (0.3.1 and 0.3.2 are repair-line patches
+> on this generation). The complete V0.2 editor generation. Version numbering
+> now tracks the app generation (0.14.0 → 0.2.0 → 0.3.0), not the old
+> preview counter.
 > Windows x64 round; Linux packages are unchanged from v0.14.0-preview.
 
 ## What's new in 0.3.0 — the editor generation
