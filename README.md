@@ -38,9 +38,9 @@ It opens and renders Markdown in seconds, beautifully. Read-only preview or full
 
 For everyone who works with text, and everyone who works with AI.
 
-Current source version: `v0.3.2`, a public Windows preview (the published installers are still the `v0.14.0-preview` release). Tested and usable. Windows code signing is in progress.
+Current source version: `v0.3.3`, a public Windows preview (the published installer is the `v0.3.3` release). Tested and usable. Windows code signing is in progress.
 
-> **Download notice:** Official installers appear only on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases). The `v0.14.0-preview` installer is published and unsigned — verify the SHA-256 (`d78a8a0e601154c3f9c79021ffe853c1f4925866fba2f4119cbf64adef08b8f4`) before installing. Please don't download JotLuck from anywhere else.
+> **Download notice:** Official installers appear only on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases). The `v0.3.3` installer is published and unsigned — verify the SHA-256 (`fd2c8c85ea4a0d3c650de73bc8054bc2720bfb51460e4206e617a35898816ac9`) before installing. Please don't download JotLuck from anywhere else.
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck workspace with recent notes, a Markdown editor, outline, and backlinks">
@@ -97,7 +97,7 @@ See the full [Privacy Policy](./PRIVACY.md) and the identity and integrity proce
 
 | Item                     | Current scope                                                                                                                 |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| Current source version   | `v0.3.2`                                                                                                                      |
+| Current source version   | `v0.3.3`                                                                                                                      |
 | Release stage            | Public preview, unsigned; not a stable release                                                                                |
 | Candidate platform       | Windows x64 and Linux x86_64 unsigned previews on GitHub Releases; macOS not yet packaged                                     |
 | Desktop runtime          | Tauri 2; WebView2 on Windows, WebKitGTK 4.1 on Linux                                                                          |

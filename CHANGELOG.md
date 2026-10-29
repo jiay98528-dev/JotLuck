@@ -1,5 +1,57 @@
 # Changelog
 
+## [0.3.3] - 2026-10-29
+
+Quality release on the 0.3 editor generation — the audit-and-repair
+campaign landing. Two comprehensive audit rounds (77 findings, all
+independently re-verified), a 43-defect repair batch, dependency-audit
+cleanup, and a repaired CI evidence pipeline. First release resolvable via
+GitHub `releases/latest` (in-app update check now works end to end).
+Windows x64 round; Linux packages unchanged from v0.14.0-preview.
+
+### Fixed
+
+- Review mode: diff anchor system rebuilt — word-level adopt precision,
+  batch-approve ordering at shared anchors, discard restores block
+  separation, decisions flush stale debounced diffs first; mixed
+  change regions converge to zero annotations.
+- Images/links: double-click Markdown renders images in every session and
+  view; external sessions and DOCX imports resolve local images (zero-copy
+  binary asset pipeline); pasted native HTML headings no longer steal
+  heading ids; `[[#same-page anchors]]` work in all views; progressive
+  preview resolves anchor links; wiki anchor misses report instead of
+  silently doing nothing.
+- DOCX: "save as Markdown copy" no longer intermittently corrupts
+  documents with ≥10 images (asset-id prefix collision + unordered
+  iteration; regression-tested both orderings).
+- Settings: the six editor & autosave controls are wired, persisted, and
+  honored (font size, line height, tab width, word wrap, autosave
+  on/off + delay).
+- Updates: CSP allows the GitHub release lookup; settings page and
+  background check share one semver comparison.
+- Cross-platform: macOS Open events consumed (file handoff was dropped);
+  geometry self-healing for external-file windows; graceful cold start
+  when the opened file vanished; minimum macOS 13.3 declared; Linux
+  `.desktop` `%f` field code; deb requires WebKitGTK ≥ 2.40; unused tray
+  dependency dropped; Unix saves fsync the parent directory after rename.
+- Editor/search/export: ordered task items keep number + checkbox in live
+  view; command palette IME guards; note switch resets scroll; template
+  timezones unified to local; filename sanitization at all create/rename
+  entries; index failures surface in the palette; clearing search clears
+  results; share dialog no longer emits broken pseudo-PDFs; CSV BOM for
+  Excel; semantic IPC error codes (grant expiry, stale conversion) with
+  five-language messages.
+- Completion: one-unit engine no longer discards whole responses on an
+  invalid visibility threshold (per-candidate skip); learning signals
+  persist in batches instead of full localStorage rewrites per keystroke.
+- Touch: suppression state survives live-preview rebuilds (real-device
+  link mis-open fixed via CI instrumentation).
+- Dependencies: zip 9.1.1, calamine 0.37, vite 6.4.4, transitive pins with
+  documented exemptions; six-week CI red streak ended; installed-app
+  evidence pipeline repaired end to end.
+
+---
+
 ## [0.3.0-preview] - 2026-10-07
 
 The V0.2 editor generation, complete. This release ships the whole editor

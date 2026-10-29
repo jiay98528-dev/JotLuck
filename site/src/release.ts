@@ -3,16 +3,16 @@ export const SITE_URL = 'https://jotluck.com';
 
 export const RELEASE = {
   platform: 'Windows x64',
-  /** preview = 预览版已上架 GitHub Releases（当前 2026-10-07 v0.3.0-preview，公开 Pre-release）；下载按钮点亮；Linux 区块本轮隐藏 */
+  /** preview = 预览版已上架 GitHub Releases（当前 2026-10-29 v0.3.3，公开 release）；下载按钮点亮；Linux 区块本轮隐藏 */
   state: 'preview' as const,
   /** Preview 事实（裁决 33）：版本/链接/校验的唯一事实源，下载页模板引用；事实值不进五语 content */
   preview: {
-    version: '0.3.0-preview',
-    dateISO: '2026-10-07',
+    version: '0.3.3',
+    dateISO: '2026-10-29',
     downloadUrl:
-      'https://github.com/jiay98528-dev/JotLuck/releases/download/v0.3.0-preview/JotLuck_0.3.0_x64-setup.exe',
-    tagUrl: 'https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.3.0-preview',
-    sha256: '342df185d2024b3c5bdd119f382ce0cb19b880d8dabe3423bdcc67369251ba18',
+      'https://github.com/jiay98528-dev/JotLuck/releases/download/v0.3.3/JotLuck_0.3.3_x64-setup.exe',
+    tagUrl: 'https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.3.3',
+    sha256: 'fd2c8c85ea4a0d3c650de73bc8054bc2720bfb51460e4206e617a35898816ac9',
     /** 本轮为 Windows x64 专项构建；Linux 包维持 v0.14.0-preview 不动，模板对 null 隐藏 Linux 区块 */
     linuxDeb: null as { downloadUrl: string; sha256: string } | null,
   },

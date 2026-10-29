@@ -2,8 +2,8 @@
 
 ## Supported Versions
 
-JotLuck `v0.3.2` is the current source version; the public preview installer
-on GitHub Releases (`v0.14.0-preview`) is unsigned. It is not a stable
+JotLuck `v0.3.3` is the current source version; the public preview installer
+on GitHub Releases (`v0.3.3`) is unsigned. It is not a stable
 release or an RC support line. Windows code signing is in progress. Security
 reports for the source tree and the preview installer are handled on a
 best-effort basis.

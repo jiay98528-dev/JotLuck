@@ -38,9 +38,9 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 适合所有与文字打交道的人，也适合与 AI 协作的你。
 
-当前源码版本：`v0.3.2`，Windows 公开预览版（已上架的安装包仍为 `v0.14.0-preview` 发行）。经过完整测试，代码签名正在处理中。
+当前源码版本：`v0.3.3`，Windows 公开预览版（已上架的安装包为 `v0.3.3` 发行）。经过完整测试，代码签名正在处理中。
 
-> **下载提示：** 官方安装包只会出现在 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases)。`v0.14.0-preview` 安装包已上架，尚未签名——安装前请核对 SHA-256（`d78a8a0e601154c3f9c79021ffe853c1f4925866fba2f4119cbf64adef08b8f4`）。请勿从其他任何渠道下载 JotLuck。
+> **下载提示：** 官方安装包只会出现在 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases)。`v0.3.3` 安装包已上架，尚未签名——安装前请核对 SHA-256（`fd2c8c85ea4a0d3c650de73bc8054bc2720bfb51460e4206e617a35898816ac9`）。请勿从其他任何渠道下载 JotLuck。
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck 工作区，左侧是最近笔记，中间是 Markdown 编辑器，右侧是大纲与反向链接">
@@ -97,7 +97,7 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 | 项目         | 当前范围                                                                                   |
 | ------------ | ------------------------------------------------------------------------------------------ |
-| 当前源码版本 | `v0.3.2`                                                                                   |
+| 当前源码版本 | `v0.3.3`                                                                                   |
 | 发行阶段     | 公开预览版，未签名；不是稳定版                                                             |
 | 候选平台     | Windows x64 与 Linux x86_64 未签名预览已上架 GitHub Releases；macOS 尚未打包               |
 | 桌面运行时   | Tauri 2；Windows 为 WebView2，Linux 为 WebKitGTK 4.1                                       |

@@ -1,3 +1,145 @@
+# JotLuck v0.3.3 — Preview Release Notes
+
+> Date: 2026-10-29
+> Quality release on the 0.3 editor generation. v0.3.3 ships the outcome of
+> a full audit-and-repair campaign: two comprehensive audit rounds (77
+> findings, every one independently re-verified), a 43-defect repair batch,
+> a rendering-matrix repair wave, dependency-audit cleanup, and a repaired
+> CI evidence pipeline. This is also the first release resolvable via
+> GitHub `releases/latest`, so the in-app update check now works end to end.
+> Windows x64 round; Linux packages are unchanged from v0.14.0-preview.
+
+## What's new in 0.3.3 — trust, correctness, cross-platform groundwork
+
+### Review mode (改稿) made trustworthy
+
+- The diff anchor system was rebuilt. Word-level insertions now adopt at the
+  exact spot you typed (previously they landed at the start of the
+  paragraph), "approve all" keeps your paragraph order when several new
+  blocks share one anchor, and discarding a deleted-block note restores
+  proper blank-line separation. Every decision recomputes against a fresh
+  diff first — a 400 ms stale-coordinates window that could silently corrupt
+  the working text is closed. Mixed regions (edit one paragraph, add
+  another) adopt in working order, and annotations converge to zero instead
+  of oscillating forever.
+
+### Images, links, and external files — end to end
+
+- Double-clicked Markdown files render their images in every session and
+  view combination. The original "images show as the word 图片" report is
+  fixed across read-only, editing, external-file, review-mode, and
+  large-document paths.
+- External editing sessions resolve local images; DOCX imports render their
+  bundled images through a new zero-copy binary pipeline (no JSON byte
+  arrays over IPC).
+- Remote images load only after an explicit per-note choice; a single
+  failed retry stays per-image.
+- Native HTML headings pasted from the web no longer steal heading anchor
+  ids; same-page `[[#anchor]]` links work in all three views;
+  large-document progressive preview resolves in-note anchor links; a wiki
+  link whose anchor cannot be found now tells you instead of doing nothing.
+
+### DOCX import at scale
+
+- "Save as Markdown copy" no longer intermittently corrupts documents with
+  ten or more images (an asset-id prefix collision combined with unordered
+  iteration; both fixed, with a regression test that exercises both
+  orderings).
+
+### Settings that take effect
+
+- The six editor & autosave controls — font size, line height, tab width,
+  word wrap, autosave on/off, autosave delay — are now wired, persisted
+  across restarts, and honored by the editor and the save pipeline.
+
+### Update check works again
+
+- The security policy now allows the GitHub release lookup, and the settings
+  page and the background check share one semver comparison (preview
+  suffixes compare correctly). v0.3.3 is the first release reachable
+  through `releases/latest`.
+
+### Cross-platform groundwork
+
+- macOS: the file-open chain consumes Open events (Finder/`open -a` file
+  handoff was silently dropped); window geometry self-healing covers
+  external-file windows; a vanished cold-start file degrades gracefully
+  instead of aborting launch. Declared minimum system version is now 13.3,
+  matching the WebKit feature baseline the UI actually uses.
+- Linux: the `.desktop` launcher carries a `%f` field code so JotLuck
+  appears in "Open With"; the deb now requires WebKitGTK ≥ 2.40 (the
+  color-mix baseline); an unused tray dependency was dropped from the
+  package.
+- Durability: Unix saves fsync the parent directory after the atomic
+  rename, closing a power-loss gap versus the Windows WRITE_THROUGH path.
+
+### Editor, search, and export polish
+
+- Ordered task items (`1. [x]`) keep their number and checkbox in live
+  preview.
+- The command palette is IME-safe: composition-period Enter/Escape no
+  longer misfire.
+- Switching notes in reading and split views resets scroll to the top.
+- Template placeholders use one timezone (local) everywhere — no more
+  off-by-one-day dates between midnight and 8 a.m. (UTC+8).
+- Filenames are sanitized at every create/rename/template entry; `/` no
+  longer silently creates subfolders.
+- Index failures surface in the palette instead of masquerading as "no
+  results"; clearing the search box clears the results.
+- The share dialog no longer produces broken pseudo-PDFs through system
+  share channels; CSV exports carry a BOM so Excel opens Chinese text
+  correctly.
+- IPC errors carry semantic codes (expired external-file grants, stale
+  document conversions) with dedicated five-language messages.
+
+### Completion engine
+
+- A one-unit writing engine no longer wastes a decoder inference on every
+  keystroke inside code fences (an invalid visibility threshold now skips
+  candidates instead of discarding the whole response).
+- Learning signals persist in batches instead of rewriting a ~230 KB
+  localStorage blob on every keystroke.
+
+### Touch reliability
+
+- Touch suppression state survives live-preview refreshes (a plugin rebuild
+  dropped the flag; real touch devices could mis-open links). Found and
+  fixed through CI instrumentation.
+
+## Fixed since v0.3.0-preview
+
+Beyond the highlights above, this line (0.3.1–0.3.3) closed roughly 130
+defects across five audit-and-repair waves: the rendering/interaction
+matrix (images, external links, backlinks across every view and session),
+two review batches of static and Flash audits, a six-dimension
+maintainability/robustness pass (global error handling, 2× faster search,
+save-floor semantics, editor chunk −37%), dependency-audit cleanup
+(zip 9.1.1, calamine 0.37, vite 6.4.4 with documented transitive pins),
+and an evidence-pipeline repair that ended a six-week CI red streak.
+
+## 中文摘要
+
+v0.3.3 是 0.3 编辑器代际的质量收口版本：改稿模式的 diff 锚点体系重建（词级精确采纳、
+批量批准保序、丢弃恢复段落分隔、裁决前冲刷防陈旧坐标）；图片/外链/反链在全部视图与会话
+组合下端到端可用（含 DOCX 资产零拷贝与 ≥10 图另存损坏修复）；设置页编辑器/自动保存六控件
+真正接线生效；更新检查修复并首次可经 releases/latest 解析；跨平台地基补齐（macOS 文件打开
+链、Linux 打开方式注册、引擎基线声明、掉电耐久）；另有时区统一、文件名消毒、IME 守卫、
+索引错误出口、CSV BOM、语义化错误码等一批修复。本轮代码经两轮全面审计（77 项发现全部独立
+复核）与全量 E2E 门禁验证。
+
+## Important — Unsigned Preview
+
+The official Windows installer for v0.3.3 is published on GitHub Releases.
+Verify the SHA-256 before installing:
+fd2c8c85ea4a0d3c650de73bc8054bc2720bfb51460e4206e617a35898816ac9
+Code signing follows the pipeline documented in
+[CODE_SIGNING.md](./CODE_SIGNING.md).
+
+Linux x86_64 packages are unchanged in this round and remain available at
+v0.14.0-preview.
+
+---
+
 # JotLuck v0.3.0-preview — Preview Release Notes
 
 > Date: 2026-10-07

@@ -1,14 +1,14 @@
 # Known Limitations
 
-This document describes limitations for JotLuck `v0.3.2`. These are not
+This document describes limitations for JotLuck `v0.3.3`. These are not
 marketing claims; they are the remaining release constraints and expected
 behavior boundaries.
 
 ## Preview Status
 
-- `v0.3.2` is the current source line in public, unsigned preview of the
-  source, and is not a stable release. The published installers
-  on GitHub Releases are still the `v0.14.0-preview` round; they may trigger a
+- `v0.3.3` is the current source line in public, unsigned preview of the
+  source, and is not a stable release. The published installer
+  on GitHub Releases is the `v0.3.3` round; it may trigger a
   Windows SmartScreen warning. Windows code signing is in progress.
 - This preview does not claim complete installed-app release evidence, final
   Rust audit evidence, signing, notarization, or host-specific validation for
