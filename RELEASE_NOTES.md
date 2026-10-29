@@ -1,5 +1,17 @@
 # JotLuck v0.3.3 — Preview Release Notes
 
+## In plain words / 一句话
+
+This release is about trust. Approving or discarding a review suggestion now
+lands exactly where you made the change; images render in every way you open
+a note; the editor and autosave settings take effect and persist; and the
+in-app update check now works — this is the first release it can see.
+Recommended for everyone.
+
+这是一个以「可靠」为主题的版本：改稿的批准/丢弃精确落位、图片在任何打开方式下都能显示、
+编辑器与自动保存设置真正生效、软件内更新检查可用（本版本是它首个能发现的版本）。
+推荐所有用户升级。
+
 > Date: 2026-10-29
 > Quality release on the 0.3 editor generation. v0.3.3 ships the outcome of
 > a full audit-and-repair campaign: two comprehensive audit rounds (77

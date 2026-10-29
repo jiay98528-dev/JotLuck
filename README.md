@@ -38,9 +38,11 @@ It opens and renders Markdown in seconds, beautifully. Read-only preview or full
 
 For everyone who works with text, and everyone who works with AI.
 
-Current source version: `v0.3.3`, a public Windows preview (the published installer is the `v0.3.3` release). Tested and usable. Windows code signing is in progress.
+Current version: `v0.3.3` — a public Windows preview, tested and usable. Windows code signing is in progress.
 
 > **Download notice:** Official installers appear only on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases). The `v0.3.3` installer is published and unsigned — verify the SHA-256 (`fd2c8c85ea4a0d3c650de73bc8054bc2720bfb51460e4206e617a35898816ac9`) before installing. Please don't download JotLuck from anywhere else.
+
+> **What's new in v0.3.3 — the reliability round.** Review-mode approve/discard now lands exactly where you made the change; images render in every way you open a note (double-clicked file, external file, DOCX import, large documents); the editor & autosave settings take effect and persist across restarts; the in-app update check works — this is the first release it can see. Plus ordered task lists (`1. [x]`) in live preview, an IME-safe search palette, scroll reset when switching notes, and Excel-friendly CSV export. [Full release notes →](https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.3.3)
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck workspace with recent notes, a Markdown editor, outline, and backlinks">
@@ -95,16 +97,16 @@ See the full [Privacy Policy](./PRIVACY.md) and the identity and integrity proce
 
 ## Current release scope
 
-| Item                     | Current scope                                                                                                                 |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| Current source version   | `v0.3.3`                                                                                                                      |
-| Release stage            | Public preview, unsigned; not a stable release                                                                                |
-| Candidate platform       | Windows x64 and Linux x86_64 unsigned previews on GitHub Releases; macOS not yet packaged                                     |
-| Desktop runtime          | Tauri 2; WebView2 on Windows, WebKitGTK 4.1 on Linux                                                                          |
-| Editable note formats    | `.md`, `.markdown`, `.mdx`, `.txt`                                                                                            |
-| Read-only import formats | `.docx`, `.pdf`, `.xlsx`, `.xls`; semantic Markdown preview, not pixel-perfect Office/PDF layout                              |
-| File associations        | All eight extensions are optional Open With choices; installation and upgrade never replace the user's Windows default choice |
-| License                  | MIT                                                                                                                           |
+| Item                     | Current scope                                                                                                                    |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| Current version          | `v0.3.3`                                                                                                                         |
+| Release stage            | Public preview, unsigned; not a stable release                                                                                   |
+| Platforms                | Windows x64 preview installer (`v0.3.3`); Linux x86_64 `.deb` stays on the older `v0.14.0-preview` round; macOS not yet packaged |
+| Desktop runtime          | Tauri 2; WebView2 on Windows, WebKitGTK 4.1 on Linux                                                                             |
+| Editable note formats    | `.md`, `.markdown`, `.mdx`, `.txt`                                                                                               |
+| Read-only import formats | `.docx`, `.pdf`, `.xlsx`, `.xls`; semantic Markdown preview, not pixel-perfect Office/PDF layout                                 |
+| File associations        | All eight extensions are optional Open With choices; installation and upgrade never replace the user's Windows default choice    |
+| License                  | MIT                                                                                                                              |
 
 Linux x86_64 unsigned `.deb` is published on the `v0.14.0-preview` GitHub Release (`JotLuck_0.14.0_amd64.deb`, SHA-256 `3d5f7b709c0eaf9fea2877593696c30cbc15f0a640733d208a040d8fc3a3ed77`). Rebuild on a Debian/Ubuntu 24.04-family host with [`scripts/release/linux-preview-pack.sh`](./scripts/release/README-linux-preview.md). macOS packages have not completed host-specific packaging, signing, or release validation. Read [Known Limitations](./KNOWN_LIMITATIONS.md) and the notes attached to each release before installing.
 

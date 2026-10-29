@@ -38,9 +38,11 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 适合所有与文字打交道的人，也适合与 AI 协作的你。
 
-当前源码版本：`v0.3.3`，Windows 公开预览版（已上架的安装包为 `v0.3.3` 发行）。经过完整测试，代码签名正在处理中。
+当前版本：`v0.3.3` —— Windows 公开预览版，经过完整测试，可用。代码签名正在处理中。
 
 > **下载提示：** 官方安装包只会出现在 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases)。`v0.3.3` 安装包已上架，尚未签名——安装前请核对 SHA-256（`fd2c8c85ea4a0d3c650de73bc8054bc2720bfb51460e4206e617a35898816ac9`）。请勿从其他任何渠道下载 JotLuck。
+
+> **v0.3.3 更新了什么——「可靠」主题版。** 改稿模式的批准/丢弃从此精确落在你修改的位置；图片在任何打开方式下都能显示（双击文件、外部文件、DOCX 导入、大文档）；编辑器与自动保存设置真正生效并跨重启保留；软件内更新检查可用——本版本是它首个能发现的版本。另有实时预览中的有序任务列表（`1. [x]`）、输入法安全的搜索面板、切笔记自动回顶、Excel 友好的 CSV 导出等。[完整发布说明 →](https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.3.3)
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck 工作区，左侧是最近笔记，中间是 Markdown 编辑器，右侧是大纲与反向链接">
@@ -95,16 +97,16 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 ## 当前发行范围
 
-| 项目         | 当前范围                                                                                   |
-| ------------ | ------------------------------------------------------------------------------------------ |
-| 当前源码版本 | `v0.3.3`                                                                                   |
-| 发行阶段     | 公开预览版，未签名；不是稳定版                                                             |
-| 候选平台     | Windows x64 与 Linux x86_64 未签名预览已上架 GitHub Releases；macOS 尚未打包               |
-| 桌面运行时   | Tauri 2；Windows 为 WebView2，Linux 为 WebKitGTK 4.1                                       |
-| 可编辑格式   | `.md`、`.markdown`、`.mdx`、`.txt`                                                         |
-| 只读导入格式 | `.docx`、`.pdf`、`.xlsx`、`.xls`；提供 Markdown 语义预览，不承诺 Office/PDF 像素级版式复刻 |
-| 文件关联     | 八种扩展名均为可选“打开方式”；安装和升级都不替换用户在 Windows 中的默认选择                |
-| 许可证       | MIT                                                                                        |
+| 项目         | 当前范围                                                                                           |
+| ------------ | -------------------------------------------------------------------------------------------------- |
+| 当前版本     | `v0.3.3`                                                                                           |
+| 发行阶段     | 公开预览版，未签名；不是稳定版                                                                     |
+| 候选平台     | Windows x64 预览安装包（`v0.3.3`）；Linux x86_64 `.deb` 维持旧轮 `v0.14.0-preview`；macOS 尚未打包 |
+| 桌面运行时   | Tauri 2；Windows 为 WebView2，Linux 为 WebKitGTK 4.1                                               |
+| 可编辑格式   | `.md`、`.markdown`、`.mdx`、`.txt`                                                                 |
+| 只读导入格式 | `.docx`、`.pdf`、`.xlsx`、`.xls`；提供 Markdown 语义预览，不承诺 Office/PDF 像素级版式复刻         |
+| 文件关联     | 八种扩展名均为可选“打开方式”；安装和升级都不替换用户在 Windows 中的默认选择                        |
+| 许可证       | MIT                                                                                                |
 
 Linux x86_64 未签名 `.deb` 已随 `v0.14.0-preview` 发布到 GitHub Releases（`JotLuck_0.14.0_amd64.deb`，SHA-256 `3d5f7b709c0eaf9fea2877593696c30cbc15f0a640733d208a040d8fc3a3ed77`）。本机构建请用 [`scripts/release/linux-preview-pack.sh`](./scripts/release/README-linux-preview.md)。macOS 版本尚未完成对应主机的打包、签名与发行验证。完整边界请阅读 [已知限制](./KNOWN_LIMITATIONS.md) 和每次发布附带的说明。
 
