@@ -69,9 +69,9 @@ const EXPECTED_ORG_ALT = 'LeankomStudio';
 
 /** (k) 下载页 Preview 事实期望（裁决 33，与 src/release.ts RELEASE.preview 同源；改版本须同步——护栏意义即在此） */
 const EXPECTED_PREVIEW = {
-  exe: 'https://github.com/jiay98528-dev/JotLuck/releases/download/v0.3.0-preview/JotLuck_0.3.0_x64-setup.exe',
-  tag: 'https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.3.0-preview',
-  sha: '342df185d2024b3c5bdd119f382ce0cb19b880d8dabe3423bdcc67369251ba18',
+  exe: 'https://github.com/jiay98528-dev/JotLuck/releases/download/v0.3.3/JotLuck_0.3.3_x64-setup.exe',
+  tag: 'https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.3.3',
+  sha: 'fd2c8c85ea4a0d3c650de73bc8054bc2720bfb51460e4206e617a35898816ac9',
   policy: 'https://github.com/jiay98528-dev/JotLuck/blob/main/CODE_SIGNING.md',
   releases: 'https://github.com/jiay98528-dev/JotLuck/releases',
 };
