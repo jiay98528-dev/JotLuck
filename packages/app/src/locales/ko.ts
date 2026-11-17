@@ -274,12 +274,18 @@ export const messages = {
     gate: {
       kicker: '로컬 우선 · 폴더가 곧 노트북',
       title: '폴더를 열고 글쓰기를 시작하세요',
-      description:
-        'JotLuck은 선택한 폴더를 직접 읽고 씁니다. 노트를 독점 데이터베이스에 가두지 않습니다.',
+      description: '로컬 폴더를 노트북으로 선택하세요. 새 노트는 이 폴더에 바로 저장됩니다.',
+      createHint: '노트북이 없나요? 아래 버튼을 누르고 열린 창에서 새 폴더를 만든 다음 선택하세요.',
       formats: '{formats} 지원',
       opening: '여는 중…',
       choose: '노트북 폴더 선택',
       shortcut: '기존 작업 공간은 언제든 Ctrl/Cmd + O로 전환할 수 있습니다',
+    },
+    start: {
+      title: '노트 쓰기 시작',
+      description: '새 노트를 만들거나 기존 노트를 열어 이어서 작성하세요. 저장 위치',
+      browse: '기존 노트 열기',
+      changeFolder: '노트북 폴더 변경',
     },
   },
   dialogs: {

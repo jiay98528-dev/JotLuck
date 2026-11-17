@@ -151,7 +151,7 @@
           :note-title="shellNoteTitle"
           :notebook-name="shellNotebookName"
           :show-top-bar="true"
-          :show-right-wing="showRightWing && !isWorkspaceUnbound"
+          :show-right-wing="showRightWing && !isWorkspaceUnbound && !needsNoteSelection"
           :headings="headings"
           :backlinks="shellBacklinks"
           :tags="[]"
@@ -208,6 +208,7 @@
                 <StudioRail
                   v-if="
                     !isWorkspaceUnbound &&
+                    !needsNoteSelection &&
                     chrome.editorControlLayout === 'studio-rail' &&
                     !isSinglePageLayout
                   "
@@ -221,6 +222,7 @@
                   <ThemeSlotBoundary
                     v-if="
                       !isWorkspaceUnbound &&
+                      !needsNoteSelection &&
                       chrome.editorControlLayout !== 'studio-rail' &&
                       !isSinglePageLayout
                     "
@@ -258,6 +260,28 @@
                       :formats-label="supportedNoteExtensionsText"
                       @open-notebook="requestOpenNotebook"
                     />
+
+                    <section
+                      v-else-if="needsNoteSelection"
+                      class="notebook-start"
+                      aria-labelledby="notebook-start-title"
+                      data-testid="notebook-start"
+                    >
+                      <h1 id="notebook-start-title">{{ t('workspace.start.title') }}</h1>
+                      <p>{{ t('workspace.start.description') }}</p>
+                      <p class="notebook-start__path">{{ activeNotebookRoot }}</p>
+                      <div class="notebook-start__actions">
+                        <button class="btn btn--primary" @click="onShellCreateNote">
+                          {{ t('notebook.actions.newNote') }}
+                        </button>
+                        <button class="btn btn--secondary" @click="onToggleLeftDrawer">
+                          {{ t('workspace.start.browse') }}
+                        </button>
+                        <button class="btn btn--secondary" @click="requestOpenNotebook">
+                          {{ t('workspace.start.changeFolder') }}
+                        </button>
+                      </div>
+                    </section>
 
                     <ReviewWorkbench
                       v-else-if="reviewSession"
@@ -1279,7 +1303,22 @@ const isNotebookOpening = ref(false);
 const isNoteSwitching = ref(false);
 const isInteractionLocked = computed(() => isNotebookOpening.value || isNoteSwitching.value);
 const notebookOpenGateRef = ref<NotebookOpenGateExposed | null>(null);
-const isWorkspaceUnbound = computed(() => workspaceGateStatus.value !== null);
+const isWorkspaceUnbound = computed(
+  () =>
+    workspaceGateStatus.value !== null ||
+    (!activeNotebookRoot.value &&
+      !isExternalSession.value &&
+      !isScratchSession.value &&
+      !isGuidedSampleSession.value),
+);
+const needsNoteSelection = computed(
+  () =>
+    Boolean(activeNotebookRoot.value) &&
+    !activePath.value &&
+    !isExternalSession.value &&
+    !isScratchSession.value &&
+    !isGuidedSampleSession.value,
+);
 const customTemplates = ref<TemplateItem[]>([]);
 const showScratchExitDialog = ref(false);
 const pendingDeletePath = ref<string | null>(null);
@@ -2218,6 +2257,7 @@ function scheduleSplitEditorMountForCurrentMode(): void {
 
 // --- Split Pane ---
 function onSplitContentUpdate(content: string): void {
+  if (needsNoteSelection.value) return;
   if (
     !isScratchSession.value &&
     !isGuidedSampleSession.value &&
@@ -2471,7 +2511,11 @@ const imageUploadStatusNote = computed(() =>
     ? t('notebook.status.imageUploading', { count: imageUploadPendingCount.value })
     : null,
 );
-const statusBarNote = computed(() => imageUploadStatusNote.value ?? guidedStatusNote.value);
+const statusBarNote = computed(() => {
+  if (isWorkspaceUnbound.value) return t('workspace.gate.choose');
+  if (needsNoteSelection.value) return t('workspace.start.title');
+  return imageUploadStatusNote.value ?? guidedStatusNote.value;
+});
 const shellRecentNotesWithColors = computed(() => {
   if (isGuidedSampleSession.value) return guidedRecentNotesWithColors.value;
   return isExternalEditing.value
@@ -4669,6 +4713,7 @@ async function hydrateMockNotebookFromExternalFiles(rootPath: string): Promise<v
 
 // --- Content Updates ---
 function onContentUpdate(content: string): void {
+  if (needsNoteSelection.value) return;
   if (
     !isScratchSession.value &&
     !isGuidedSampleSession.value &&
@@ -5823,6 +5868,45 @@ function onDismissVersion(version: string) {
   grid-template-rows: minmax(0, 1fr);
   height: 100vh;
   min-height: 0;
+}
+
+.notebook-start {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-16);
+  padding: var(--space-32) var(--space-24);
+  background: var(--paper-bg);
+  color: var(--ink-secondary);
+  text-align: center;
+}
+
+.notebook-start h1 {
+  margin: 0;
+  color: var(--ink-primary);
+  font-size: var(--text-xl);
+  line-height: var(--lh-heading);
+}
+
+.notebook-start p {
+  max-width: 52ch;
+  margin: 0;
+  line-height: var(--lh-body);
+}
+
+.notebook-start__path {
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.notebook-start__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-12);
 }
 
 .workspace-opening-overlay {

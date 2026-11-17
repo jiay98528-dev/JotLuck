@@ -6,6 +6,7 @@
 import { test, expect } from '@playwright/test';
 import {
   waitForAppReady,
+  ensureEditorReady,
   getEditorContentFromBridge,
   typeInEditor,
   appendInEditor,
@@ -58,6 +59,7 @@ test.describe('Wiki-Link 输入与渲染', () => {
 test.describe('反向链接面板', () => {
   test.beforeEach(async ({ page }) => {
     await waitForAppReady(page);
+    await ensureEditorReady(page);
   });
 
   test('05-右翼面板显示反链区域', async ({ page }) => {

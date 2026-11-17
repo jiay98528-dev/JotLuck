@@ -279,11 +279,18 @@ export const messages = {
       kicker: 'Local-first · A folder is a notebook',
       title: 'Open a folder to start writing',
       description:
-        'JotLuck reads and writes the folder you choose directly. Your notes are never locked in a proprietary database.',
+        'Choose a local folder as your notebook. New notes are saved directly in this folder.',
+      createHint: 'No notebook yet? Click below, create a folder in the dialog, then select it.',
       formats: 'Supports {formats}',
       opening: 'Opening…',
       choose: 'Choose notebook folder',
       shortcut: 'You can switch workspaces at any time with Ctrl/Cmd + O',
+    },
+    start: {
+      title: 'Start a note',
+      description: 'Create a note or open an existing one to keep writing. Saving to',
+      browse: 'Open existing note',
+      changeFolder: 'Change notebook folder',
     },
   },
   dialogs: {

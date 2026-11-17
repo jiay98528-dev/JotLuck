@@ -103,6 +103,7 @@ async function bootPersistedHaloCanvas(page: Page): Promise<void> {
   }, HALO_THEME_ID);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppReady(page);
+  await ensureEditorReady(page);
   await expect(page.locator('html')).toHaveAttribute('data-theme-id', HALO_THEME_ID);
   await expect(page.locator('.halo-frame--topbar')).toBeVisible();
 }
@@ -788,8 +789,14 @@ test.describe('Halo Canvas official theme', () => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await resetAppState(page);
     await activateHaloCanvas(page, testInfo);
+    // An empty inspector belongs to an opened, saved empty file; the former
+    // writable surface without any file is no longer a valid startup state.
+    await page.evaluate(async () => {
+      await window.__jotluck_e2e?.writeNoteFileExternally?.('/无标题.md', '');
+      await window.__jotluck_e2e?.selectNote?.('/无标题.md');
+    });
+    await expect(page.locator('.halo-frame--right-wing')).toContainText('无反链');
     await waitForHaloPaint(page);
-
     await expect(page.locator('.halo-frame--topbar')).toHaveScreenshot(
       'halo-canvas-topbar-detail.png',
       {

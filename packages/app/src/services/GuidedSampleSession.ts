@@ -29,7 +29,7 @@ export function decideEmptyWorkspaceFallback(input: {
   recentCount: number;
 }): EmptyWorkspaceFallback {
   if (input.forceGate || input.recentCount > 0) return 'gate';
-  return input.isDesktop ? 'guided-sample' : 'web-default';
+  return input.isDesktop ? 'gate' : 'web-default';
 }
 
 export function createGuidedSampleSession(

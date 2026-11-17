@@ -146,12 +146,35 @@ export async function switchToNote(page: Page, noteLabel: string): Promise<void>
 
 /** 确保编辑器处于可交互状态；若当前停留在首页主题展柜，则打开一个样例笔记。 */
 export async function ensureEditorReady(page: Page, noteLabel: string = '快速入门'): Promise<void> {
+  // A note click returns before its async file read mounts the editor. Wait for
+  // that selection instead of opening the default sample over the user's target.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const state = window.__jotluck_e2e?.debugState?.();
+          return !state?.isNoteSwitching && !state?.isNotebookOpening;
+        }),
+      { timeout: 10000 },
+    )
+    .toBe(true);
   const editor = page.locator('.cm-content');
   if (await editor.isVisible().catch(() => false)) return;
 
-  const bookmark = page.locator(`.wing-bookmark-dot[aria-label="${noteLabel}"]`);
-  await expect(bookmark).toBeVisible({ timeout: 5000 });
-  await bookmark.click();
+  const reader = page.locator('.reader-workbench');
+  const start = page.getByTestId('notebook-start');
+  if (await reader.isVisible()) {
+    await reader.locator('.reader-workbench__bar .shell-action--view-toggle').click();
+  } else if (await start.isVisible()) {
+    // The empty selection has the same entry point in all themes, including
+    // themes that keep bookmark controls inside a closed drawer.
+    await start.getByRole('button', { name: '打开已有笔记', exact: true }).click();
+    await page.locator('.file-drawer').getByText(`${noteLabel}.md`, { exact: true }).click();
+  } else {
+    const bookmark = page.locator(`.wing-bookmark-dot[aria-label="${noteLabel}"]`);
+    await expect(bookmark).toBeVisible({ timeout: 5000 });
+    await bookmark.click();
+  }
   await expect(page.locator('.cm-editor')).toBeVisible({ timeout: 10000 });
   await expect(editor).toBeVisible({ timeout: 10000 });
   await page.waitForTimeout(300);
@@ -394,7 +417,7 @@ async function waitForShellReady(page: Page): Promise<void> {
             (() => {
               const startupReady = performance.getEntriesByName('jotluck:shell-ready').length > 0;
               const terminalRoute = document.querySelector(
-                '[data-testid="notebook-open-gate"], [data-testid="external-file-session"]',
+                '[data-testid="notebook-open-gate"], [data-testid="notebook-start"], [data-testid="external-file-session"]',
               );
               if (terminalRoute) return startupReady;
               const editorSurface = document.querySelector('.cm-content');

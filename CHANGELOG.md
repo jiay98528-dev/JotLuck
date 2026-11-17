@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.4] - 2026-11-17
+
+- Guide desktop users to select or create a notebook folder on first launch.
+- Show the notebook path and actions for creating or opening a note when no document is selected.
+- Avoid showing an editor without a save target or a misleading saved status.
+- Provide the new guidance in all five supported languages.
+
 ## [0.3.3] - 2026-10-29
 
 Quality release on the 0.3 editor generation — the audit-and-repair

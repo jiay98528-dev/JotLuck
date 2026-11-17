@@ -38,11 +38,11 @@ It opens and renders Markdown in seconds, beautifully. Read-only preview or full
 
 For everyone who works with text, and everyone who works with AI.
 
-Current version: `v0.3.3` — a public Windows preview, tested and usable. Windows code signing is in progress.
+Current version: `v0.3.4` — a public Windows preview. Windows code signing is in progress.
 
-> **Download notice:** Official installers appear only on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases). The `v0.3.3` installer is published and unsigned — verify the SHA-256 (`fd2c8c85ea4a0d3c650de73bc8054bc2720bfb51460e4206e617a35898816ac9`) before installing. Please don't download JotLuck from anywhere else.
+> **Download notice:** Official installers appear on [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases). The `v0.3.4` installer is unsigned; its SHA-256 is `715d135876cb5169e02a8f305cc6aa76f82b4738670053f6567439fbd8ee0d2f`.
 
-> **What's new in v0.3.3 — the reliability round.** Review-mode approve/discard now lands exactly where you made the change; images render in every way you open a note (double-clicked file, external file, DOCX import, large documents); the editor & autosave settings take effect and persist across restarts; the in-app update check works — this is the first release it can see. Plus ordered task lists (`1. [x]`) in live preview, an IME-safe search palette, scroll reset when switching notes, and Excel-friendly CSV export. [Full release notes →](https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.3.3)
+> **What's new in v0.3.4.** Choose or create a notebook folder when starting JotLuck, then create or open a note from the start screen. [Full release notes →](https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.3.4)
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck workspace with recent notes, a Markdown editor, outline, and backlinks">
@@ -99,9 +99,9 @@ See the full [Privacy Policy](./PRIVACY.md) and the identity and integrity proce
 
 | Item                     | Current scope                                                                                                                    |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| Current version          | `v0.3.3`                                                                                                                         |
+| Current version          | `v0.3.4`                                                                                                                         |
 | Release stage            | Public preview, unsigned; not a stable release                                                                                   |
-| Platforms                | Windows x64 preview installer (`v0.3.3`); Linux x86_64 `.deb` stays on the older `v0.14.0-preview` round; macOS not yet packaged |
+| Platforms                | Windows x64 preview installer (`v0.3.4`); Linux x86_64 `.deb` stays on the older `v0.14.0-preview` round; macOS not yet packaged |
 | Desktop runtime          | Tauri 2; WebView2 on Windows, WebKitGTK 4.1 on Linux                                                                             |
 | Editable note formats    | `.md`, `.markdown`, `.mdx`, `.txt`                                                                                               |
 | Read-only import formats | `.docx`, `.pdf`, `.xlsx`, `.xls`; semantic Markdown preview, not pixel-perfect Office/PDF layout                                 |

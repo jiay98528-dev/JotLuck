@@ -14,6 +14,9 @@
       <p class="notebook-open-gate__description">
         {{ t('workspace.gate.description') }}
       </p>
+      <p class="notebook-open-gate__description">
+        {{ t('workspace.gate.createHint') }}
+      </p>
       <p class="notebook-open-gate__formats">
         {{ t('workspace.gate.formats', { formats: formatsLabel }) }}
       </p>

@@ -38,11 +38,11 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 适合所有与文字打交道的人，也适合与 AI 协作的你。
 
-当前版本：`v0.3.3` —— Windows 公开预览版，经过完整测试，可用。代码签名正在处理中。
+当前版本：`v0.3.4` —— Windows 公开预览版。代码签名正在处理中。
 
-> **下载提示：** 官方安装包只会出现在 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases)。`v0.3.3` 安装包已上架，尚未签名——安装前请核对 SHA-256（`fd2c8c85ea4a0d3c650de73bc8054bc2720bfb51460e4206e617a35898816ac9`）。请勿从其他任何渠道下载 JotLuck。
+> **下载提示：** 官方安装包可从 [GitHub Releases](https://github.com/jiay98528-dev/JotLuck/releases) 获取。`v0.3.4` 安装包尚未签名，SHA-256 为 `715d135876cb5169e02a8f305cc6aa76f82b4738670053f6567439fbd8ee0d2f`。
 
-> **v0.3.3 更新了什么——「可靠」主题版。** 改稿模式的批准/丢弃从此精确落在你修改的位置；图片在任何打开方式下都能显示（双击文件、外部文件、DOCX 导入、大文档）；编辑器与自动保存设置真正生效并跨重启保留；软件内更新检查可用——本版本是它首个能发现的版本。另有实时预览中的有序任务列表（`1. [x]`）、输入法安全的搜索面板、切笔记自动回顶、Excel 友好的 CSV 导出等。[完整发布说明 →](https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.3.3)
+> **v0.3.4 更新了什么。** 启动时选择或新建笔记本文件夹，再从起始页新建或打开笔记。[完整更新日志 →](https://github.com/jiay98528-dev/JotLuck/releases/tag/v0.3.4)
 
 <p align="center">
   <img src="./packages/app/src/assets/theme-assets/halo-canvas-preview.png" width="100%" alt="JotLuck 工作区，左侧是最近笔记，中间是 Markdown 编辑器，右侧是大纲与反向链接">
@@ -99,9 +99,9 @@ JotLuck 是一个本地优先的 Windows Markdown 笔记本。
 
 | 项目         | 当前范围                                                                                           |
 | ------------ | -------------------------------------------------------------------------------------------------- |
-| 当前版本     | `v0.3.3`                                                                                           |
+| 当前版本     | `v0.3.4`                                                                                           |
 | 发行阶段     | 公开预览版，未签名；不是稳定版                                                                     |
-| 候选平台     | Windows x64 预览安装包（`v0.3.3`）；Linux x86_64 `.deb` 维持旧轮 `v0.14.0-preview`；macOS 尚未打包 |
+| 候选平台     | Windows x64 预览安装包（`v0.3.4`）；Linux x86_64 `.deb` 维持旧轮 `v0.14.0-preview`；macOS 尚未打包 |
 | 桌面运行时   | Tauri 2；Windows 为 WebView2，Linux 为 WebKitGTK 4.1                                               |
 | 可编辑格式   | `.md`、`.markdown`、`.mdx`、`.txt`                                                                 |
 | 只读导入格式 | `.docx`、`.pdf`、`.xlsx`、`.xls`；提供 Markdown 语义预览，不承诺 Office/PDF 像素级版式复刻         |

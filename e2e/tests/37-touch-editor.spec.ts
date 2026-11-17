@@ -195,6 +195,21 @@ test('shared pointer cancellation, IME guards and compatibility clicks preserve 
   await toggle.tap();
   expect(await getEditorContentFromBridge(page)).toBe(original);
   await page.locator('.cm-content').dispatchEvent('compositionend', { data: '中' });
+  // Synthetic compositionend queues the live widgets' next-frame rebuild.
+  // Start a separate tap only once its target survives that repaint.
+  await page.waitForFunction(
+    () =>
+      new Promise<boolean>((resolve) => {
+        const target = document.querySelector('.cm-task-toggle');
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() =>
+            resolve(
+              target?.isConnected === true && document.querySelector('.cm-task-toggle') === target,
+            ),
+          ),
+        );
+      }),
+  );
   await expect(toggle).toBeVisible();
   await toggle.tap();
   await toggle.dispatchEvent('click', { detail: 1 });

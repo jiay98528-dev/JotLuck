@@ -12,10 +12,10 @@ import {
 } from '../GuidedSampleSession';
 
 describe('decideEmptyWorkspaceFallback', () => {
-  it('opens an in-memory guided session on an empty desktop launch', () => {
+  it('asks for a notebook folder before editing on an empty desktop launch', () => {
     expect(
       decideEmptyWorkspaceFallback({ isDesktop: true, forceGate: false, recentCount: 0 }),
-    ).toBe('guided-sample');
+    ).toBe('gate');
   });
 
   it('keeps the web MockFS default and the explicit gate paths', () => {

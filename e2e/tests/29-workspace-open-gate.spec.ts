@@ -6,7 +6,11 @@ async function openWithMockNotebook(page: Page, config: MockNotebookConfig): Pro
   await page.addInitScript((mockNotebook) => {
     localStorage.setItem('jotluck:welcome:completed', '1');
     localStorage.setItem('jotluck:locale:v1', 'zh-CN');
-    window.__jotluck_e2e = { mockNotebook };
+    window.__jotluck_e2e = {
+      mockNotebook: localStorage.getItem('jotluck-mockfs')
+        ? { ...mockNotebook, initialFiles: undefined }
+        : mockNotebook,
+    };
   }, config);
   await page.goto('/', { waitUntil: 'domcontentloaded' });
 }
@@ -34,6 +38,8 @@ test.describe('workspace open gate', () => {
     const gate = page.getByTestId('notebook-open-gate');
     const openButton = page.getByTestId('open-notebook-button');
     await expect(gate).toBeVisible();
+    await expect(gate).toContainText('新建文件夹');
+    await expect(page.locator('.status-bar')).not.toContainText('已保存');
     await expect(openButton).toBeFocused();
     await expect(page.locator('.cm-content')).toHaveCount(0);
     await expect(page.getByRole('button', { name: '新建笔记' }).first()).toBeDisabled();
@@ -71,7 +77,9 @@ test.describe('workspace open gate', () => {
 
     await page.getByTestId('open-notebook-button').click();
     await expect(page.getByTestId('notebook-open-gate')).toHaveCount(0);
-    await expect(page.locator('.cm-content')).toBeVisible();
+    await expect(page.getByTestId('notebook-start')).toBeVisible();
+    await expect(page.getByTestId('notebook-start')).toContainText('D:/审计夹具/中文 笔记本');
+    await expect(page.locator('.cm-content')).toHaveCount(0);
     await expect
       .poll(() => page.evaluate(() => window.__jotluck_e2e?.debugState?.().activeNotebookRoot))
       .toBe('D:/审计夹具/中文 笔记本');
@@ -86,8 +94,6 @@ test.describe('workspace open gate', () => {
     await openWithMockNotebook(page, {
       pickerOutcome: 'cancel',
     });
-    await expect(page.locator('.cm-content')).toBeVisible();
-
     await selectFirstNote(page);
 
     await page.evaluate(() => window.__jotluck_e2e?.editor?.setContent('# 取消切换仍保留'));
@@ -107,8 +113,6 @@ test.describe('workspace open gate', () => {
       pickerRoot: 'D:/e2e-second-notebook',
       pickerName: 'Second Notebook',
     });
-    await expect(page.locator('.cm-content')).toBeVisible();
-
     const oldPath = await selectFirstNote(page);
     const storedBefore = await page.evaluate((path) => {
       const raw = localStorage.getItem('jotluck-mockfs');
@@ -154,8 +158,6 @@ test.describe('workspace open gate', () => {
       pickerRoot: 'D:/should-not-open',
       pickerName: 'Should Not Open',
     });
-    await expect(page.locator('.cm-content')).toBeVisible();
-
     await selectFirstNote(page);
 
     await page.evaluate(() => {
@@ -189,5 +191,50 @@ test.describe('workspace open gate', () => {
       '最近使用的笔记本不可用',
     );
     await expect(page.locator('.cm-content')).toHaveCount(0);
+  });
+
+  test('an empty notebook guides creation, saves edits and reopens the saved file', async ({
+    page,
+  }) => {
+    await openWithMockNotebook(page, {
+      forceGate: true,
+      recentRoots: [],
+      initialFiles: {},
+      pickerOutcome: 'success',
+      pickerRoot: 'D:/我的笔记',
+      pickerName: '我的笔记',
+    });
+
+    await page.getByTestId('open-notebook-button').click();
+    const start = page.getByTestId('notebook-start');
+    await expect(start).toContainText('D:/我的笔记');
+    await expect(page.locator('.status-bar')).not.toContainText('已保存');
+    await expect(page.locator('.cm-content')).toHaveCount(0);
+    await start.getByRole('button', { name: '新建笔记', exact: true }).click();
+    await page.locator('.tpl-card.blank-card').click();
+    const editor = page.locator('.cm-content');
+    await expect(editor).toBeVisible();
+    await editor.click();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.insertText('首次启动创建的笔记，必须保存这段内容。');
+    await page.keyboard.press('Control+s');
+
+    let savedPath = '';
+    await expect
+      .poll(async () => {
+        const state = await page.evaluate(() => window.__jotluck_e2e?.debugState?.());
+        savedPath = state?.activePath ?? '';
+        return Boolean(savedPath) && state?.isDirty === false;
+      })
+      .toBe(true);
+    await expect
+      .poll(() => page.evaluate((path) => window.__jotluck_e2e?.readNoteFile?.(path), savedPath))
+      .toBe('首次启动创建的笔记，必须保存这段内容。');
+
+    await page.reload();
+    await page.getByTestId('open-notebook-button').click();
+    await page.getByTestId('notebook-start').getByRole('button', { name: '打开已有笔记' }).click();
+    await page.locator('.file-drawer').getByText(savedPath.slice(1), { exact: true }).click();
+    await expect(editor).toContainText('首次启动创建的笔记，必须保存这段内容。');
   });
 });

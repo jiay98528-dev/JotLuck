@@ -2220,7 +2220,7 @@ dependencies = [
 
 [[package]]
 name = "jotluck"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "base64 0.22.1",
  "calamine",

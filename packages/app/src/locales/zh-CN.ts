@@ -278,11 +278,18 @@ export const messages = {
     gate: {
       kicker: '本地优先 · 文件夹就是笔记本',
       title: '打开一个文件夹开始写作',
-      description: 'JotLuck 会直接读写你选择的文件夹，不会把笔记锁进专有数据库。',
+      description: '选择一个本地文件夹作为笔记本。新建的笔记会直接保存到这里。',
+      createHint: '还没有笔记本？点击下方按钮，在弹出的窗口中新建文件夹，再选中它。',
       formats: '支持 {formats}',
       opening: '正在打开…',
       choose: '选择笔记本文件夹',
       shortcut: '已有工作区也可随时按 Ctrl/Cmd + O 切换',
+    },
+    start: {
+      title: '开始写一篇笔记',
+      description: '新建笔记，或打开已有笔记继续编辑。当前保存位置',
+      browse: '打开已有笔记',
+      changeFolder: '更换笔记本文件夹',
     },
   },
   dialogs: {

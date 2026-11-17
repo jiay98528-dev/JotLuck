@@ -98,12 +98,14 @@ test.describe('编辑器核心', () => {
   // ==========================================================
   // Test 4: 状态栏显示已保存状态
   // ==========================================================
-  test('should have status bar showing saved state', async ({ page }) => {
+  test('should show saved state only after opening a note', async ({ page }) => {
     // V1: 验证状态栏存在
     const statusBar = page.locator('.status-bar');
     await expect(statusBar).toBeVisible();
 
-    // 验证已保存状态指示器
+    await expect(page.locator('.status-saved')).toHaveCount(0);
+    await ensureEditorReady(page);
+    // 实际笔记打开后才显示已保存，空工作台不可误报。
     await expect(page.locator('.status-saved')).toBeVisible();
   });
 

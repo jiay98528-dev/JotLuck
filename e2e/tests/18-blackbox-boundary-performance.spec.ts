@@ -237,6 +237,7 @@ async function closeOverlayIfOpen(page: Page): Promise<void> {
 async function waitForEditableShell(page: Page): Promise<void> {
   await expect(page.locator('.welcome-overlay')).toHaveCount(0);
   await expect(page.locator('#jotluck-app')).toBeVisible({ timeout: 10000 });
+  await ensureEditorReady(page);
   await expect(page.locator('.cm-content')).toBeVisible({ timeout: 10000 });
 }
 

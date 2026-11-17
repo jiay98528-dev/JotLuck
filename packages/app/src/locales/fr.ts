@@ -283,11 +283,20 @@ export const messages = {
       kicker: 'Priorité au local · Un dossier est un carnet',
       title: 'Ouvrez un dossier pour commencer à écrire',
       description:
-        'JotLuck lit et écrit directement dans le dossier choisi. Vos notes ne sont jamais enfermées dans une base propriétaire.',
+        'Choisissez un dossier local comme carnet. Les nouvelles notes y seront enregistrées directement.',
+      createHint:
+        'Pas encore de carnet ? Cliquez ci-dessous, créez un dossier dans la fenêtre qui apparaît, puis sélectionnez-le.',
       formats: 'Formats pris en charge : {formats}',
       opening: 'Ouverture…',
       choose: 'Choisir le dossier du carnet',
       shortcut: 'Vous pouvez changer d’espace de travail à tout moment avec Ctrl/Cmd + O',
+    },
+    start: {
+      title: 'Commencer une note',
+      description:
+        'Créez une note ou ouvrez une note existante pour continuer à écrire. Dossier de sauvegarde',
+      browse: 'Ouvrir une note existante',
+      changeFolder: 'Changer de dossier',
     },
   },
   dialogs: {
